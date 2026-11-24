@@ -9,7 +9,7 @@ import type {
   HostServerOnConnectResult,
   HostServerTerminalVerdict
 } from './ssh-host-server-on-connect'
-import { isBridgedTerminalLinkConflict } from './orcad-migration-conflict-guidance'
+import { isBridgedTerminalLinkConflict } from './quirkyd-migration-conflict-guidance'
 
 export function relayTerminalReason(verdict: 'live' | 'unverifiable'): SshManagedServerRelayReason {
   return verdict === 'live' ? 'relay_terminals_live' : 'relay_terminals_unverifiable'

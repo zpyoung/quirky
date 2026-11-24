@@ -116,21 +116,21 @@ Identity anchors the rename must land on (each currently Orca or Orca Dev):
 
 CONFIG: target identity values. The rename script applies these explicit mappings before its generic ones, because the generic mapping would produce wrong values (`Quirky Dev`, `com.stablyai.quirky`).
 
-| Anchor | Today | Target |
-|---|---|---|
-| `productName`, About name | `Orca Dev` | `Quirky` |
-| `package.json` `name` (sets userData and the keychain item) | `orca` | `quirky` → `Application Support/quirky`, keychain `quirky Safe Storage` |
-| `appId` | `com.zpyoung.orca` | `com.zpyoung.quirky` |
-| `BASE_APP_NAME`, `BASE_APP_USER_MODEL_ID` | `Orca`, `com.stablyai.orca` | `Quirky`, `com.zpyoung.quirky` |
-| Any `com.stablyai.orca*` / `com.stably.orca*` id (helpers, computer use, launchd prefixes, dev bundle) | `com.stablyai.orca.<x>` | `com.zpyoung.quirky.<x>` |
-| Dev runner | `com.stablyai.orca.dev`, `orca-dev` userData, `orca-dev` bin | `com.zpyoung.quirky.dev`, `quirky-dev`, `quirky-dev` |
-| CLI | `orca`, `/usr/local/bin/orca` | `quirky`, `/usr/local/bin/quirky` |
-| Home dir | `~/.orca` | `~/.quirky` |
-| URL schemes | `orca`, `orca-preview`, `orca-media`, … | `quirky`, `quirky-preview`, `quirky-media`, … |
-| Runtime WebSocket ports | `6768` default, `6769` dev pin | `6778` default, `6779` dev pin, so Quirky and Orca Dev never race for one port |
-| Mobile | name `Orca`, slug `orca-mobile`, scheme `orca`, `com.stably.orca.mobile` | `Quirky`, `quirky-mobile`, `quirky`, `com.zpyoung.quirky.mobile` |
-| Update feed, skills source, `homepage` | `zpyoung/orca`, `github.com/stablyai/orca` | `zpyoung/quirky`, `github.com/zpyoung/quirky` |
-| About credit | none | `setAboutPanelOptions` in `src/main/startup/gpu-lifecycle.ts` gains "Based on Orca by Lovecast Inc. (MIT)" |
+| Anchor                                                                                                 | Today                                                                    | Target                                                                                                     |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `productName`, About name                                                                              | `Orca Dev`                                                               | `Quirky`                                                                                                   |
+| `package.json` `name` (sets userData and the keychain item)                                            | `orca`                                                                   | `quirky` → `Application Support/quirky`, keychain `quirky Safe Storage`                                    |
+| `appId`                                                                                                | `com.zpyoung.orca`                                                       | `com.zpyoung.quirky`                                                                                       |
+| `BASE_APP_NAME`, `BASE_APP_USER_MODEL_ID`                                                              | `Orca`, `com.stablyai.orca`                                              | `Quirky`, `com.zpyoung.quirky`                                                                             |
+| Any `com.stablyai.orca*` / `com.stably.orca*` id (helpers, computer use, launchd prefixes, dev bundle) | `com.stablyai.orca.<x>`                                                  | `com.zpyoung.quirky.<x>`                                                                                   |
+| Dev runner                                                                                             | `com.stablyai.orca.dev`, `orca-dev` userData, `orca-dev` bin             | `com.zpyoung.quirky.dev`, `quirky-dev`, `quirky-dev`                                                       |
+| CLI                                                                                                    | `orca`, `/usr/local/bin/orca`                                            | `quirky`, `/usr/local/bin/quirky`                                                                          |
+| Home dir                                                                                               | `~/.orca`                                                                | `~/.quirky`                                                                                                |
+| URL schemes                                                                                            | `orca`, `orca-preview`, `orca-media`, …                                  | `quirky`, `quirky-preview`, `quirky-media`, …                                                              |
+| Runtime WebSocket ports                                                                                | `6768` default, `6769` dev pin                                           | `6778` default, `6779` dev pin, so Quirky and Orca Dev never race for one port                             |
+| Mobile                                                                                                 | name `Orca`, slug `orca-mobile`, scheme `orca`, `com.stably.orca.mobile` | `Quirky`, `quirky-mobile`, `quirky`, `com.zpyoung.quirky.mobile`                                           |
+| Update feed, skills source, `homepage`                                                                 | `zpyoung/orca`, `github.com/stablyai/orca`                               | `zpyoung/quirky`, `github.com/zpyoung/quirky`                                                              |
+| About credit                                                                                           | none                                                                     | `setAboutPanelOptions` in `src/main/startup/gpu-lifecycle.ts` gains "Based on Orca by Lovecast Inc. (MIT)" |
 
 Repo config fallback (owner decision `repo-config`, 2026-11-24): readers of per-repo config try the Quirky name first and fall back to the Orca name. Readers: `src/main/hooks.ts` (`orca.yaml` reads at ~l.120, 137, 153), `src/main/effective-hook-config.ts`, `src/main/worktree-runner-script.ts`, `src/cli/handlers/vm.ts` (l.47, 264), `src/main/issue-command-file.ts` (`ORCA_DIR = '.orca'`). Home-dir strings `~/.orca/` are not repo config; they rename to `~/.quirky/` like any other match. New files are always written under the Quirky name. Agent hook files Quirky installs into other tools' homes (for example Copilot's `hooks/orca.json` in `src/main/copilot/hook-service.ts`) are renamed outright; they are Quirky's own installs, not the owner's repo files.
 
@@ -165,11 +165,13 @@ Before the week starts (SC-11), the orchestrator makes these edits outside the r
 - Memory notes in `~/.claude/projects/-Users-zpyoung-PycharmProjects-PERSONAL-quirky/memory/` that name the `orca` CLI (5 files today): switch to `quirky`.
 
 COMMAND: the week's label, created once.
+
 ```
 gh label create sends-me-back -R zpyoung/quirky --description "Something sent the owner back to Orca Dev"
 ```
 
 COMMAND: archive (SC-10), after the owner confirms the week passed.
+
 ```
 gh workflow disable release-cut.yml -R zpyoung/orca
 gh workflow disable hourly-mac-build.yml -R zpyoung/orca
@@ -186,6 +188,7 @@ Back-link: [SC-12](logic.md#scenarios). Create `.claude/skills/upstream-review/S
 ### Split
 
 COMMAND: run in a fresh worktree; `orca-fork` is a remote for `git@github.com:zpyoung/orca.git`.
+
 ```
 git fetch origin && git fetch orca-fork main
 git tag quirky-v1-final origin/main
@@ -195,6 +198,7 @@ git merge -s ours --allow-unrelated-histories origin/main -m "chore: Quirky cont
 ```
 
 COMMAND: move main by direct push, never through a PR (a squash or rebase merge would drop old Quirky from main's ancestry). Main has no branch protection or rulesets today.
+
 ```
 git push origin zpyoung/flip:main
 ```
@@ -203,6 +207,7 @@ git push origin zpyoung/flip:main
 - Push size: Orca's packed objects are ~1.5 GiB across all refs, under GitHub's 2 GB per-push limit. If the push is rejected for size, push ancestors first.
 
 COMMAND: chunked fallback, only on a size rejection.
+
 ```
 for n in 12000 8000 4000; do git push origin "orca-fork/main~$n:refs/heads/tmp/orca-import-$n"; done
 git push origin zpyoung/flip:main
@@ -240,6 +245,7 @@ CONTRACT: `importFromOrcaDev(options: { mode: 'first-run' | 'rerun' }): Promise<
 - Errors: `SOURCE_MISSING`, `SOURCE_INCOMPATIBLE` (profile-state build compatibility or schema version mismatch), `KEYCHAIN_DENIED` (import continues without secrets), `WRITE_FAILED` (rolls back everything written in this run).
 
 PSEUDOCODE (justified, ≤3 lines): OSCrypt on macOS is undocumented by Electron, so the derivation is pinned here.
+
 ```
 key = PBKDF2-HMAC-SHA1(password=<keychain password>, salt="saltysalt", iterations=1003, length=16)
 plaintext = AES-128-CBC-decrypt(key, iv=16 x 0x20, ciphertext=value[3:])  # value starts with "v10"
@@ -252,6 +258,7 @@ CONFIG: Quirky versions start at `2.0.0` (today's Quirky never shipped a 2.x) an
 ## Data models / schemas
 
 SCHEMA: `config/rename-allowlist.json`
+
 ```
 {
   "version": 1,
@@ -263,25 +270,27 @@ SCHEMA: `config/rename-allowlist.json`
                   { "path": "src/main/startup/gpu-lifecycle.ts", "match": "Based on Orca" }]
 }
 ```
+
 `keepTokens` is literal and case-sensitive. The guard and the script read the same file. Legacy names the app still needs at runtime (`orca.yaml`, `.orca/`, Orca Dev's data folder and keychain item) live only in the two skipped modules, never as keep-tokens, so every other reader is renamed.
 
 SCHEMA: import field mapping (source `PersistedState` domain → Quirky)
 
-| Domain | Action |
-|---|---|
-| `repos`, `projects`, `projectHostSetups`, `folderWorkspaces`, `projectGroups` | copy |
-| `worktreeMeta`, `worktreeMetaByIdentity`, `worktreeIdentityAliases`, `worktreeLineageById`, `retiredWorktreeNamesByRepo` | copy |
-| `settings` | copy, then: set `workspaceDir` to `~/quirky/workspaces` so new worktrees land there (existing worktrees are found from git wherever they are); drop secret slots that failed to decrypt; rewrite `claudeManagedAccounts[].managedAuthPath` into Quirky's userData; drop `wslLinuxAuthPath` |
-| `automations` | copy with `enabled: false`; `automationRuns` not copied |
-| `sshTargets`, `sshTargetGenerationCounter`, `deletedSshConfigAliases`, `removedSshTargetTombstones` | copy; SSH remotes stay and copied repos reference them |
-| `ui`, `onboarding`, `sparsePresetsByRepo`, `folderWorkspaceDiffComments`, `retiredWorktreeNamesByNamespace`, `workspaceLineageByChildKey` | copy |
-| `sshRemotePtyLeases`, `sshPtyConsumerRecoveries`, `workspaceSession` (including its `localOnlyScrollbackByTabId`), `workspaceSessionsByHostId`, `remoteLayoutSnapshots`, `legacyPaneKeyAliasEntries`, `githubCache`, `nativeChatUpgradeTipAudience`, `orcadMigration*`, `migrationUnsupportedPtyEntries`, `featureInteractionTelemetryBuckets`, `codexResetCreditAttemptLedger`, `mobileClientTabSelectionsByDeviceId` | not copied |
-| any domain not named in this table | not copied, and listed by name in the report so a later import version can add it |
-| any domain naming a removed provider or host kind (wsl, bitbucket, gitea, azure) | normalized away |
+| Domain                                                                                                                                                                                                                                                                                                                                                                                                                 | Action                                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `repos`, `projects`, `projectHostSetups`, `folderWorkspaces`, `projectGroups`                                                                                                                                                                                                                                                                                                                                          | copy                                                                                                                                                                                                                                                                                       |
+| `worktreeMeta`, `worktreeMetaByIdentity`, `worktreeIdentityAliases`, `worktreeLineageById`, `retiredWorktreeNamesByRepo`                                                                                                                                                                                                                                                                                               | copy                                                                                                                                                                                                                                                                                       |
+| `settings`                                                                                                                                                                                                                                                                                                                                                                                                             | copy, then: set `workspaceDir` to `~/quirky/workspaces` so new worktrees land there (existing worktrees are found from git wherever they are); drop secret slots that failed to decrypt; rewrite `claudeManagedAccounts[].managedAuthPath` into Quirky's userData; drop `wslLinuxAuthPath` |
+| `automations`                                                                                                                                                                                                                                                                                                                                                                                                          | copy with `enabled: false`; `automationRuns` not copied                                                                                                                                                                                                                                    |
+| `sshTargets`, `sshTargetGenerationCounter`, `deletedSshConfigAliases`, `removedSshTargetTombstones`                                                                                                                                                                                                                                                                                                                    | copy; SSH remotes stay and copied repos reference them                                                                                                                                                                                                                                     |
+| `ui`, `onboarding`, `sparsePresetsByRepo`, `folderWorkspaceDiffComments`, `retiredWorktreeNamesByNamespace`, `workspaceLineageByChildKey`                                                                                                                                                                                                                                                                              | copy                                                                                                                                                                                                                                                                                       |
+| `sshRemotePtyLeases`, `sshPtyConsumerRecoveries`, `workspaceSession` (including its `localOnlyScrollbackByTabId`), `workspaceSessionsByHostId`, `remoteLayoutSnapshots`, `legacyPaneKeyAliasEntries`, `githubCache`, `nativeChatUpgradeTipAudience`, `orcadMigration*`, `migrationUnsupportedPtyEntries`, `featureInteractionTelemetryBuckets`, `codexResetCreditAttemptLedger`, `mobileClientTabSelectionsByDeviceId` | not copied                                                                                                                                                                                                                                                                                 |
+| any domain not named in this table                                                                                                                                                                                                                                                                                                                                                                                     | not copied, and listed by name in the report so a later import version can add it                                                                                                                                                                                                          |
+| any domain naming a removed provider or host kind (wsl, bitbucket, gitea, azure)                                                                                                                                                                                                                                                                                                                                       | normalized away                                                                                                                                                                                                                                                                            |
 
 Files copied from the source root: `claude-accounts/<id>/`, `codex-accounts/<id>/`, `claude-profiles/<id>/`. From `~/.orca`: `keybindings.json` to `~/.quirky/keybindings.json`; encrypted credential files (`*.enc`, Linear, Jira site, API keys) decrypted and re-sealed into `~/.quirky`. Not copied: daemon, terminal history, agent-session journal and recovery, mobile pairing (`orca-devices.json`, `orca-e2ee-keypair.json`), `orca-profile-index.json` cloud link, Chromium dirs, logs, backups, fork stores (heimdall, loops, objective, pipelines, sitter ledger, project ledgers).
 
 SCHEMA: `orca-import-receipt.json`
+
 ```
 { "version": 1, "sourceRoot": string, "runs": [{ "at": ISO8601, "mode": "first-run"|"rerun",
   "imported": { "<domain>": [<id>, ...] }, "skippedSecrets": [<slot or file>, ...] }] }

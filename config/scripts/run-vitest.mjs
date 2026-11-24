@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 
 const root = resolve(import.meta.dirname, '../..')
 try {
@@ -9,9 +9,9 @@ try {
     cwd: root,
     env: {
       ...process.env,
-      ORCA_BACKGROUND_LAUNCH: '1',
-      ORCA_TEST_NODE_EXECUTABLE: process.execPath,
-      ORCA_TEST_NODE_VERSION: process.versions.node
+      QUIRKY_BACKGROUND_LAUNCH: '1',
+      QUIRKY_TEST_NODE_EXECUTABLE: process.execPath,
+      QUIRKY_TEST_NODE_VERSION: process.versions.node
     },
     stdio: 'inherit',
     timeoutMs: null

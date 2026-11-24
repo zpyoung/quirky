@@ -8,7 +8,7 @@ const tailByTomlPath = new Map<string, Promise<void>>()
 const heldKeys = new AsyncLocalStorage<ReadonlySet<string>>()
 
 /**
- * Serializes Orca's own multi-step mutations of one Codex `config.toml` — hook
+ * Serializes Quirky's own multi-step mutations of one Codex `config.toml` — hook
  * installs and their trust fallbacks, trust moves, and project trust — as a
  * single lane per file. A Codex trust session holds no lane: Codex writes its
  * own records.

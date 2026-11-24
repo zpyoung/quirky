@@ -5,8 +5,8 @@ import { parse } from 'yaml'
 it('runs full native checks and collects failures on pull requests and main', () => {
   const workflow = parse(readFileSync('.github/workflows/mobile.yml', 'utf8'))
   for (const job of [workflow.jobs.verify, workflow.jobs['main-tests']]) {
-    expect(job.env.ORCA_MOBILE_TYPECHECK_COMPILER).toBe('native')
-    expect(job.env.ORCA_MOBILE_TYPECHECK_CACHE_DIR).toBeUndefined()
+    expect(job.env.QUIRKY_MOBILE_TYPECHECK_COMPILER).toBe('native')
+    expect(job.env.QUIRKY_MOBILE_TYPECHECK_CACHE_DIR).toBeUndefined()
     const steps = job.steps
     expect(
       steps.some(

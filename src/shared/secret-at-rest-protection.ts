@@ -1,5 +1,5 @@
 /**
- * How a credential Orca already wrote is protected on disk.
+ * How a credential Quirky already wrote is protected on disk.
  *
  * Why this is about the stored bytes and not `isEncryptionAvailable()`: the two disagree
  * exactly when it matters. A key saved on a host with no usable keyring stays plaintext

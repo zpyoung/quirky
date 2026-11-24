@@ -51,7 +51,7 @@ import {
 // Main and the frame applier run as in a layout-owner build; the restore they match runs as today's.
 const layoutOwner = vi.hoisted(() => ({ isMain: true }))
 vi.mock('../../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return layoutOwner.isMain
   }
 }))
@@ -129,9 +129,9 @@ function groupsWithoutSelection(): WorkspaceSessionState {
   return session
 }
 
-/** An editor tab Orca moved to the workspace owning its file: saved under the file's owned id. */
+/** An editor tab Quirky moved to the workspace owning its file: saved under the file's owned id. */
 function movedEditorTab(): WorkspaceSessionState {
-  const filePath = '/Users/dev/orca/docs/readme.md'
+  const filePath = '/Users/dev/quirky/docs/readme.md'
   const session = addWorkspace(emptySession(), GIT_KEY, [
     {
       id: 'group-m',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SetTabProps } from '../../../../../shared/rpc-contract/session-tabs-schemas-params'
-import { OrcaRuntimeService } from '../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../quirky-runtime'
 import {
   DEFAULT_TERMINAL_DOCK_GUTTER_ROWS,
   MAX_TERMINAL_DOCK_PANE_ENTRIES,
@@ -286,7 +286,7 @@ describe('terminalDockByPaneKey publication (D3: write-only field)', () => {
   }
 
   it('echoes a terminalDock patch back on the published mobile session snapshot', async () => {
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       getWorkspaceSession: () => makePersistedSession()
     } as never)
 
@@ -304,7 +304,7 @@ describe('terminalDockByPaneKey publication (D3: write-only field)', () => {
 
   it('removes the named key, persists, and republishes, leaving other panes untouched', async () => {
     const otherPaneKey = makePaneKey(DOCK_TAB_ID, '22222222-2222-4222-a222-222222222222')
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       getWorkspaceSession: () => makePersistedSession()
     } as never)
 
@@ -329,7 +329,7 @@ describe('terminalDockByPaneKey publication (D3: write-only field)', () => {
   })
 
   it('removing a key that is not present is a no-op, never an error', async () => {
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       getWorkspaceSession: () => makePersistedSession()
     } as never)
 
@@ -356,7 +356,7 @@ describe('terminalDockByPaneKey publication (D3: write-only field)', () => {
     // Repro (task description): P0 stays docked while P1..P64 are created, docked, and
     // closed one at a time. Before the removal path existed, each churned pane grew the
     // record and the cap eventually evicted P0 by insertion order, not liveness.
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       getWorkspaceSession: () => makePersistedSession()
     } as never)
     await runtime.listMobileSessionTabs(`id:${DOCK_WORKTREE_ID}`)
@@ -387,7 +387,7 @@ describe('terminalDockByPaneKey publication (D3: write-only field)', () => {
   })
 
   it('a flood of fabricated pane keys cannot evict a host-verified live pane, and legitimate updates for known panes still persist (M2)', async () => {
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       getWorkspaceSession: () => makePersistedSession()
     } as never)
     // Why: registerPty is the host's own PTY-binding record, independent of any
@@ -444,7 +444,7 @@ describe('terminalDockByPaneKey publication (D3: write-only field)', () => {
       createdAt: 1,
       terminalDockByPaneKey: { [DOCK_PANE_KEY]: { docked: true, gutterRows: 6 } }
     }
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       getWorkspaceSession: () =>
         makePersistedSession({ unifiedTabs: { [DOCK_WORKTREE_ID]: [unifiedTab] } })
     } as never)
@@ -459,7 +459,7 @@ describe('terminalDockByPaneKey publication (D3: write-only field)', () => {
 
 describe('renderer graph publication merges terminalDockByPaneKey per pane (r2-7)', () => {
   it("preserves another client's newer per-pane patch when the desktop renderer republishes a record that never touched that pane", async () => {
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       getWorkspaceSession: () => makeDockWorktreeSession()
     } as never)
     await runtime.listMobileSessionTabs(`id:${DOCK_WORKTREE_ID}`)
@@ -510,7 +510,7 @@ describe('renderer graph publication merges terminalDockByPaneKey per pane (r2-7
   })
 
   it('still adopts a genuine local edit from the renderer, even for a pane the renderer had published before', async () => {
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       getWorkspaceSession: () => makeDockWorktreeSession()
     } as never)
     await runtime.listMobileSessionTabs(`id:${DOCK_WORKTREE_ID}`)

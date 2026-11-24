@@ -46,7 +46,7 @@ let now: number
 let initialAttach: ReturnType<typeof hostTestAttachParams>
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-stop-exit-ends-record-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-stop-exit-ends-record-'))
   resetHostTestOperationIds()
   now = NOW
   log = recordingStructuredAgentSessionLogger()
@@ -368,7 +368,7 @@ it('ends the record when the root exits after its close gave up, with no one ask
   await stopWithUnprovenClose(1)
   childWork.length = 0
 
-  // The connection reports the root's exit as the end of the close Orca began.
+  // The connection reports the root's exit as the end of the close Quirky began.
   connection.handlers.onExit?.(new Error('claude exited'), { expected: true })
 
   await eventually(() => expect(child()).toBeNull())

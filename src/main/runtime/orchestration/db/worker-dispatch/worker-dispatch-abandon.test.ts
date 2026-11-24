@@ -152,7 +152,7 @@ describe('worker-abandon settles a stuck worker', () => {
     expect(db.getWorkerTerminalResourceByOwner(dispatch.id)?.release_state).toBe('requested')
   })
 
-  it('keeps a committed release and a terminal Orca does not own as they are', () => {
+  it('keeps a committed release and a terminal Quirky does not own as they are', () => {
     const releasing = readyWorker(undefined, 'releasing')
     setReleaseState(releasing.dispatch.id, 'releasing')
     const unknown = readyWorker(undefined, 'unknown')

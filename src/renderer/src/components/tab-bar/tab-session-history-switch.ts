@@ -73,7 +73,7 @@ function canHostOfferTabSessionMove(
     return true
   }
   // Resume-in-chat refuses any row not recorded on this machine. A chat's row is owned only where an
-  // Orca host projects chat ownership: this machine or a runtime server, never an SSH relay.
+  // Quirky host projects chat ownership: this machine or a runtime server, never an SSH relay.
   return kind === 'chat' && parseExecutionHostId(hostScope)?.kind === 'runtime'
 }
 

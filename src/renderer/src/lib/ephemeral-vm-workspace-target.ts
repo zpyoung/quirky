@@ -37,7 +37,7 @@ export type PrepareEphemeralVmWorkspaceTargetResult =
       ok: true
       setup: ProjectHostSetupResult
       runtimeId: string
-      checkoutMode: 'orca-worktree' | 'provisioned-root'
+      checkoutMode: 'quirky-worktree' | 'provisioned-root'
       environmentId?: string
       expectedRefHead?: string
       stderr: string
@@ -85,13 +85,13 @@ export async function prepareEphemeralVmWorkspaceTarget(
       await assertRuntimeEnvironmentCapability(
         environmentId,
         PROJECT_HOST_SETUP_RUNTIME_CAPABILITY,
-        'The recipe-created Orca server does not support project setup.'
+        'The recipe-created Quirky server does not support project setup.'
       )
       if (checkoutMode === 'provisioned-root') {
         await assertRuntimeEnvironmentCapability(
           environmentId,
           WORKTREE_PROVISIONED_ROOT_RUNTIME_CAPABILITY,
-          'The Orca server on this VM cannot adopt a provisioned root. Update Orca on the VM.'
+          'The Quirky server on this VM cannot adopt a provisioned root. Update Quirky on the VM.'
         )
       }
     } catch (error) {
@@ -167,7 +167,7 @@ function recipeWorkspaceHost(provisioned: ProvisionedVm): {
   hostId: ExecutionHostId
   environmentId?: string
 } {
-  if (provisioned.connectionType === 'orca-server') {
+  if (provisioned.connectionType === 'quirky-server') {
     const environmentId = provisioned.environment.id
     return { hostId: toRuntimeExecutionHostId(environmentId), environmentId }
   }

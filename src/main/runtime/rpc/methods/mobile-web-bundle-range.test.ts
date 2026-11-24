@@ -62,7 +62,7 @@ const INCOMPRESSIBLE: SyntheticAsset = (() => {
 })()
 
 beforeEach(() => {
-  scratch = mkdtempSync(join(tmpdir(), 'orca-mobile-web-bundle-range-'))
+  scratch = mkdtempSync(join(tmpdir(), 'quirky-mobile-web-bundle-range-'))
   installMobileWebBundleAppPath(scratch)
   resetBundledMobileWebBundleCacheForTests()
   resetMobileWebBundleAssetVerdictsForTests()

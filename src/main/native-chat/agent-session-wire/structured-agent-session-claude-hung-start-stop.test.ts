@@ -42,7 +42,7 @@ let claude: ReturnType<typeof fakeClaude>
 let answerInitialize: () => void = () => {}
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-hung-start-stop-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-hung-start-stop-'))
   resetHostTestOperationIds()
   // Alive, and silent: no initialize answer, no start frame, no echo of what it is sent.
   claude = fakeClaude({ initProof: 'none', replayUuid: null })

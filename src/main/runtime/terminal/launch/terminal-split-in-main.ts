@@ -1,9 +1,9 @@
 // Layout-owner build: a split of a pane in main's layout is written and started by main, under the
 // caller's proposed pane id; every view, the window's included, attaches to the terminal it starts.
-import { OrcaRuntimeWithSplitPtyBackedTerminal } from './terminal-split-surface'
+import { QuirkyRuntimeWithSplitPtyBackedTerminal } from './terminal-split-surface'
 import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { recordPtySurface, spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
 import { runtimeSplitPlacement } from '../../runtime-terminal-spawn-placement'
 import { spawnInAdmittedPane } from '../../runtime-pane-admission'
@@ -30,7 +30,7 @@ export type SplitPaneInMainOptions = {
   keepPaneOnStartFailure?: boolean
 }
 
-export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSplitPtyBackedTerminal {
+export abstract class QuirkyRuntimeWithSplitPaneInMain extends QuirkyRuntimeWithSplitPtyBackedTerminal {
   /** Whether main's layout holds the tab, so main writes and starts its splits. */
   protected ownsTabLayout(worktreeId: string, tabId: string): boolean {
     const [hostId] = this.getWorkspaceSessionHostIdsForTab(worktreeId, tabId)
@@ -76,7 +76,7 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
     source: SplitPaneSource,
     opts: SplitPaneInMainOptions
   ): Promise<RuntimeTerminalSplit> {
-    if (!ORCA_LAYOUT_OWNER_IS_MAIN || !this.ownsTabLayout(source.worktreeId, source.tabId)) {
+    if (!QUIRKY_LAYOUT_OWNER_IS_MAIN || !this.ownsTabLayout(source.worktreeId, source.tabId)) {
       // The window then splits it as before (a paired server's tab, or the window-owned build).
       throw new Error('host_not_owned')
     }

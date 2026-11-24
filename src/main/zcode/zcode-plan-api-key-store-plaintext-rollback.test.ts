@@ -48,15 +48,15 @@ vi.mock('../../shared/secure-path-windows-acl', () => ({
 const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!
 const realFs = await vi.importActual<typeof fs>('node:fs')
 const envelope = (value: string): string =>
-  `orca-zcode-plan-api-key:v1:plaintext:${Buffer.from(value).toString('base64')}`
+  `quirky-zcode-plan-api-key:v1:plaintext:${Buffer.from(value).toString('base64')}`
 let store: typeof ZcodePlanApiKeyStore
 let writer: typeof SecureFile
 let keyPath: string
 
 beforeEach(async () => {
-  mocks.home = realFs.mkdtempSync(join(os.tmpdir(), 'orca-glm-plaintext-rollback-'))
-  keyPath = join(mocks.home, '.orca', 'zcode-plan-api-key.enc')
-  realFs.mkdirSync(join(mocks.home, '.orca'))
+  mocks.home = realFs.mkdtempSync(join(os.tmpdir(), 'quirky-glm-plaintext-rollback-'))
+  keyPath = join(mocks.home, '.quirky', 'zcode-plan-api-key.enc')
+  realFs.mkdirSync(join(mocks.home, '.quirky'))
   mocks.write.mockReset().mockImplementation(realFs.writeFileSync)
   mocks.rename.mockReset().mockImplementation(realFs.renameSync)
   mocks.restrict.mockReset().mockReturnValue(false)
@@ -91,7 +91,7 @@ describe('plaintext rollback through the secure-file writer', () => {
     expect(mocks.write).toHaveBeenCalledTimes(2)
     expect(realFs.existsSync(keyPath)).toBe(false)
     expect(store.readZcodePlanApiKey()).toBeNull()
-    expect(realFs.readdirSync(join(mocks.home, '.orca'))).toEqual([])
+    expect(realFs.readdirSync(join(mocks.home, '.quirky'))).toEqual([])
   })
 
   // Windows has no post-rename restriction any more; the published path is next restricted by
@@ -198,7 +198,7 @@ describe('conditional rollback publication through the real writer', () => {
       expect(realFs.readFileSync(keyPath, 'utf8')).toBe(envelope('other-writer-key'))
       expect(store.readZcodePlanApiKey()).toBe('other-writer-key')
       expect(mocks.rename).toHaveBeenCalledTimes(1)
-      expect(realFs.readdirSync(join(mocks.home, '.orca'))).toEqual(['zcode-plan-api-key.enc'])
+      expect(realFs.readdirSync(join(mocks.home, '.quirky'))).toEqual(['zcode-plan-api-key.enc'])
     }
   )
 
@@ -234,7 +234,7 @@ describe('conditional rollback publication through the real writer', () => {
     expect(realFs.readFileSync(keyPath, 'utf8')).toBe(envelope('other-writer-key'))
     expect(store.readZcodePlanApiKey()).toBe('other-writer-key')
     expect(mocks.rename).toHaveBeenCalledTimes(1)
-    expect(realFs.readdirSync(join(mocks.home, '.orca'))).toEqual(['zcode-plan-api-key.enc'])
+    expect(realFs.readdirSync(join(mocks.home, '.quirky'))).toEqual(['zcode-plan-api-key.enc'])
   })
 
   it('removes only the owned rejected plaintext when rollback rename fails', () => {
@@ -247,7 +247,7 @@ describe('conditional rollback publication through the real writer', () => {
 
     expect(realFs.existsSync(keyPath)).toBe(false)
     expect(store.readZcodePlanApiKey()).toBeNull()
-    expect(realFs.readdirSync(join(mocks.home, '.orca'))).toEqual([])
+    expect(realFs.readdirSync(join(mocks.home, '.quirky'))).toEqual([])
   })
 
   it.each([false, true])(
@@ -268,7 +268,7 @@ describe('conditional rollback publication through the real writer', () => {
       expect(shouldPublish).toHaveBeenCalledTimes(1)
       expect(mocks.rename).not.toHaveBeenCalled()
       expect(realFs.existsSync(keyPath)).toBe(previous)
-      expect(realFs.readdirSync(join(mocks.home, '.orca'))).toEqual(
+      expect(realFs.readdirSync(join(mocks.home, '.quirky'))).toEqual(
         previous ? ['zcode-plan-api-key.enc'] : []
       )
       if (previous) {
@@ -290,7 +290,7 @@ describe('conditional rollback publication through the real writer', () => {
 
     expect(mocks.rename).not.toHaveBeenCalled()
     expect(realFs.readFileSync(keyPath, 'utf8')).toBe(envelope('previous-key'))
-    expect(realFs.readdirSync(join(mocks.home, '.orca'))).toEqual(['zcode-plan-api-key.enc'])
+    expect(realFs.readdirSync(join(mocks.home, '.quirky'))).toEqual(['zcode-plan-api-key.enc'])
   })
 
   it('retains best-effort restriction outcomes when guarded publication is allowed', () => {
@@ -307,7 +307,7 @@ describe('conditional rollback publication through the real writer', () => {
     expect(shouldPublish).toHaveBeenCalledTimes(1)
     expect(mocks.rename).toHaveBeenCalledTimes(1)
     expect(realFs.readFileSync(keyPath, 'utf8')).toBe(envelope('candidate-key'))
-    expect(realFs.readdirSync(join(mocks.home, '.orca'))).toEqual(['zcode-plan-api-key.enc'])
+    expect(realFs.readdirSync(join(mocks.home, '.quirky'))).toEqual(['zcode-plan-api-key.enc'])
   })
 
   it('checks publication immediately after staged hardening and before rename', () => {
@@ -347,6 +347,6 @@ describe('conditional rollback publication through the real writer', () => {
     ).toThrow('Synthetic guarded rename failure')
 
     expect(realFs.readFileSync(keyPath, 'utf8')).toBe(envelope('previous-key'))
-    expect(realFs.readdirSync(join(mocks.home, '.orca'))).toEqual(['zcode-plan-api-key.enc'])
+    expect(realFs.readdirSync(join(mocks.home, '.quirky'))).toEqual(['zcode-plan-api-key.enc'])
   })
 })

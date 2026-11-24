@@ -1,4 +1,4 @@
-// Counts a layout-owner run's save-divergence reports (ORCA_LAYOUT_SAVE_DIVERGENCE_LOG) by kind
+// Counts a layout-owner run's save-divergence reports (QUIRKY_LAYOUT_SAVE_DIVERGENCE_LOG) by kind
 // and by the spec that was running when each was written.
 // Usage: node layout-save-divergence-summary.mjs <divergence.jsonl> <summary.json> [playwright.json...]
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'

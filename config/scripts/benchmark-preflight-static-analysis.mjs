@@ -28,7 +28,7 @@ const command = (program, args, label) =>
     label,
     root,
     output,
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
     timeoutMs: 180_000
   })
 async function requireSuccess(program, args, label) {
@@ -38,7 +38,7 @@ async function requireSuccess(program, args, label) {
   }
   return result
 }
-const bun = process.env.ORCA_BENCHMARK_BUN ?? 'bun'
+const bun = process.env.QUIRKY_BENCHMARK_BUN ?? 'bun'
 report.host.bun = (await requireSuccess(bun, ['--version'], 'bun-version')).stdout.trim()
 if (report.host.bun !== '1.4.3') {
   throw new Error('Pin Bun 1.4.3')

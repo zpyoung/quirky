@@ -23,8 +23,8 @@ const { persistMirrored, readMirroredStorage } = await import('./mirrored-storag
 
 const HOST_ID = 'host-1'
 const ROUTE = '/h/host-1/session/wt-1'
-const DOCK_WIDTH = 'orca:hostDockWidth'
-const OTHER_HOST_PIN = 'orca:pins:host-2'
+const DOCK_WIDTH = 'quirky:hostDockWidth'
+const OTHER_HOST_PIN = 'quirky:pins:host-2'
 
 /** What the shell would put in the next `init` for this route, which is the mirror's one reader. */
 function initStorage(): Readonly<Record<string, string>> {

@@ -1,5 +1,5 @@
 /**
- * Answers the non-session Codex invocations Orca makes before a launch, so a fake
+ * Answers the non-session Codex invocations Quirky makes before a launch, so a fake
  * Codex only records the real agent spawn: the shared app-server is refused, and the
  * `--no-daemon` support probe (`codex --help`) exits without advertising the flag.
  */

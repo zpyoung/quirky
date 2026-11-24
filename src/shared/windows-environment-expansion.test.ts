@@ -35,9 +35,9 @@ describe('expandWindowsEnvironmentVariables', () => {
   it('expands names case-insensitively and preserves unknown variables', () => {
     expect(
       expandWindowsEnvironmentVariables('%localappdata%\\agy\\bin;%MISSING%\\bin', {
-        LOCALAPPDATA: 'C:\\Users\\orca\\AppData\\Local'
+        LOCALAPPDATA: 'C:\\Users\\quirky\\AppData\\Local'
       })
-    ).toBe('C:\\Users\\orca\\AppData\\Local\\agy\\bin;%MISSING%\\bin')
+    ).toBe('C:\\Users\\quirky\\AppData\\Local\\agy\\bin;%MISSING%\\bin')
   })
 
   it('expands variables with empty values', () => {
@@ -103,21 +103,21 @@ describe('expandWindowsEnvironmentVariables', () => {
 describe('expandWindowsPathEnvironmentVariables', () => {
   it('expands every Windows PATH casing without changing other variables', () => {
     const env = {
-      ORCA_PATH_ROOT: 'C:\\Users\\orca',
-      Path: '%ORCA_PATH_ROOT%\\bin',
-      PATH: '%orca_path_root%\\tools',
-      TEMPLATE: '%ORCA_PATH_ROOT%\\template'
+      QUIRKY_PATH_ROOT: 'C:\\Users\\quirky',
+      Path: '%QUIRKY_PATH_ROOT%\\bin',
+      PATH: '%quirky_path_root%\\tools',
+      TEMPLATE: '%QUIRKY_PATH_ROOT%\\template'
     }
 
     expandWindowsPathEnvironmentVariables(env, 'win32')
 
-    expect(env.Path).toBe('C:\\Users\\orca\\bin')
-    expect(env.PATH).toBe('C:\\Users\\orca\\tools')
-    expect(env.TEMPLATE).toBe('%ORCA_PATH_ROOT%\\template')
+    expect(env.Path).toBe('C:\\Users\\quirky\\bin')
+    expect(env.PATH).toBe('C:\\Users\\quirky\\tools')
+    expect(env.TEMPLATE).toBe('%QUIRKY_PATH_ROOT%\\template')
   })
 
   it('leaves non-Windows PATH values unchanged', () => {
-    const env = { ROOT: '/opt/orca', PATH: '%ROOT%/bin:/usr/bin' }
+    const env = { ROOT: '/opt/quirky', PATH: '%ROOT%/bin:/usr/bin' }
 
     expandWindowsPathEnvironmentVariables(env, 'linux')
 

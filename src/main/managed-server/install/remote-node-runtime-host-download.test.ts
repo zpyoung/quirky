@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { NODE_RUNTIME_ASSETS, NODE_RUNTIME_PIN } from '../../../shared/node-runtime-pin'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 import {
@@ -37,7 +37,7 @@ function which(tool: string): string | null {
 
 /** A host whose PATH holds only the shell basics plus the given download-tool shims. */
 function fakeHost(tools: Record<string, string>): { bin: string; stage: string } {
-  const root = mkdtempSync(join(tmpdir(), 'orca-host-download-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-host-download-'))
   directories.push(root)
   const bin = join(root, 'bin')
   const stage = join(root, 'stage')
@@ -159,7 +159,7 @@ describe.skipIf(process.platform === 'win32')('the host-side pinned Node downloa
     expect(read(bin, 'urls')).toEqual([mirrored('https://desk.example/dist')])
   })
 
-  it("ignores the host's own mirror variables, so only URLs Orca validated are fetched", () => {
+  it("ignores the host's own mirror variables, so only URLs Quirky validated are fetched", () => {
     const { bin, stage } = fakeHost({ curl: curlServing('https://nodejs.org/') })
     const output = runOnHost(bin, stage, {
       mirror: 'https://desk.example/dist',

@@ -24,7 +24,7 @@ describe('Codex account switch recheck against main', () => {
             id: 'tab-1',
             ptyId: 'pty-1',
             worktreeId: 'wt1',
-            title: 'orca-1',
+            title: 'quirky-1',
             customTitle: null,
             color: null,
             sortOrder: 0,

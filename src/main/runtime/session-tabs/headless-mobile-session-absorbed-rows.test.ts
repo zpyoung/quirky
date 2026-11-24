@@ -11,14 +11,14 @@ import {
 import { leaf } from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { deriveHeadlessLegacyTerminalLeafId } from '../mobile-session-layout-projection'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 
 const repos = [
   { id: 'repo-1', path: '/repos', displayName: 'repo-1', badgeColor: 'blue', addedAt: 1 }
 ]
 
 function hydratedRuntime(session: WorkspaceSessionState) {
-  const runtime = new OrcaRuntimeService({
+  const runtime = new QuirkyRuntimeService({
     getRepo: (id: string) => repos.find((repo) => repo.id === id),
     getRepos: () => repos,
     getAllWorktreeMeta: () => ({}),

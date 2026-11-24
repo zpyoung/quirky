@@ -3,7 +3,7 @@
 // into an xterm) and the daemon (seeding a cold-restored session) must clear
 // the same mode bits, and duplicating the literals drifted them apart (#12101).
 
-// Why: SerializeAddon replays mode bits assuming reattach to a live TUI, but Orca restores against a fresh shell with none, so stale bits (e.g. focus reporting rings the bell on click) must be reset.
+// Why: SerializeAddon replays mode bits assuming reattach to a live TUI, but Quirky restores against a fresh shell with none, so stale bits (e.g. focus reporting rings the bell on click) must be reset.
 export const RESET_TERMINAL_CURSOR_STYLE = '\x1b[0 q'
 export const RESET_KITTY_KEYBOARD_PROTOCOL = '\x1b[<99u\x1b[=0u'
 // Why beside kitty: a dead pi leaves modifyOtherKeys armed, and the shell would get `CSI 27;2;13~` for Shift+Enter.
@@ -69,7 +69,7 @@ export const ABORT_TRUNCATED_CONTROL_STRING = '\x18'
 // Why this is grounded everywhere a byte gap or a repaint happens: xterm renders
 // NOTHING while DEC 2026 is open and only force-flushes after 1000ms, so a gap
 // that swallowed a TUI's closing \x1b[?2026l leaves the pane blank for a full
-// second per frame — and Orca is otherwise incapable of closing a latch it
+// second per frame — and Quirky is otherwise incapable of closing a latch it
 // opened. Unlike the modes deliberately left ungrounded below, a snapshot never
 // re-asserts 2026, and closing a frame early costs one premature repaint against
 // a second of frozen, increasingly stale output.

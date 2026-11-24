@@ -542,7 +542,7 @@ describe('Accepted structured history read retirement', () => {
   )
 
   it('retries a failed local desktop relay withdrawal on a later explicit read', async () => {
-    const relayDirectory = mkdtempSync(join(tmpdir(), 'orca-relay-read-retry-'))
+    const relayDirectory = mkdtempSync(join(tmpdir(), 'quirky-relay-read-retry-'))
     const relay = new RuntimeMobileNotificationController()
     try {
       addPrompt('A')

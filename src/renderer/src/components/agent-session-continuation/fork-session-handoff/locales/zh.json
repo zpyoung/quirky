@@ -17,7 +17,7 @@
         "createUnavailable": "没有可用于创建工作树的 Git 仓库。",
         "createWorktree": "创建新工作树",
         "createdTargetUnavailable": "无法解析新工作树。",
-        "deliveryAutomaticRetrySucceeded": "首次发送失败，Orca 随后重新发送了摘要。",
+        "deliveryAutomaticRetrySucceeded": "首次发送失败，Quirky 随后重新发送了摘要。",
         "deliveryFailedRetry": "摘要发送和自动重试均失败。",
         "deliverySucceeded": "交接摘要已发送。",
         "deliveryUnconfirmed": "无法确认摘要是否送达。",

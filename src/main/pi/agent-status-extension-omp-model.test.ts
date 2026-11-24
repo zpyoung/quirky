@@ -40,12 +40,12 @@ describe('OMP model reporting', () => {
       {
         hook_event_name: 'agent_start',
         model: 'deepseek/deepseek-v4-pro',
-        model_switch_command: 'orca-model'
+        model_switch_command: 'quirky-model'
       },
       {
         hook_event_name: 'tool_call',
         model: 'deepseek/deepseek-v4-pro',
-        model_switch_command: 'orca-model',
+        model_switch_command: 'quirky-model',
         tool_name: 'bash',
         tool_input: { command: 'ls' }
       }
@@ -108,7 +108,7 @@ describe('OMP model reporting', () => {
         session_id: 'omp-a',
         session_file: '/tmp/omp-a.jsonl',
         model: 'deepseek/deepseek-v4-pro',
-        model_switch_command: 'orca-model'
+        model_switch_command: 'quirky-model'
       },
       { hook_event_name: 'agent_start', session_id: 'omp-b', session_file: '/tmp/omp-b.jsonl' },
       {
@@ -116,7 +116,7 @@ describe('OMP model reporting', () => {
         session_id: 'omp-b',
         session_file: '/tmp/omp-b.jsonl',
         model: 'minimax-cn/MiniMax-M3',
-        model_switch_command: 'orca-model'
+        model_switch_command: 'quirky-model'
       }
     ])
   })
@@ -135,7 +135,7 @@ describe('OMP model reporting', () => {
       {
         hook_event_name: 'model_select',
         model: 'minimax-cn/MiniMax-M3',
-        model_switch_command: 'orca-model'
+        model_switch_command: 'quirky-model'
       }
     ])
   })

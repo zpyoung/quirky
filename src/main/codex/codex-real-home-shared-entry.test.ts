@@ -30,10 +30,10 @@ import {
   reconcileCodexHooks,
   startCodexHooks
 } from './codex-hook-reconcile'
-import { getOrcaManagedCodexHomePath } from './codex-home-paths'
+import { getQuirkyManagedCodexHomePath } from './codex-home-paths'
 import { resolveStartupManagedHookAction } from '../agent-hooks/managed-agent-hook-controls'
 
-// Why this file: every Orca on one HOME shares the current entry in ~/.codex.
+// Why this file: every Quirky on one HOME shares the current entry in ~/.codex.
 // Opening any pane once stripped it (4139 -> 18 bytes) and its trust; only the
 // user's explicit opt-out may remove it now.
 
@@ -44,7 +44,7 @@ function systemCodexHome(): string {
   return join(homes.tmpHome, '.codex')
 }
 
-/** The real home as the real-home lane (or another Orca) leaves it, trust and ledger included. */
+/** The real home as the real-home lane (or another Quirky) leaves it, trust and ledger included. */
 function seedSharedEntry(): void {
   const material = getCodexManagedHookInstallMaterial()
   const hooksPath = join(systemCodexHome(), 'hooks.json')
@@ -144,7 +144,7 @@ describe('the shared real-home Codex entry', () => {
     // First pane: both lanes run with hooks off.
     await reconcileWithHooksOff()
     await new CodexHookService().prepareRuntimeHomeForLaunch(
-      getOrcaManagedCodexHomePath(),
+      getQuirkyManagedCodexHomePath(),
       () => false,
       false
     )
@@ -152,7 +152,7 @@ describe('the shared real-home Codex entry', () => {
     expect(snapshotRealCodexHome()).toEqual(before)
   })
 
-  it("is removed, with Orca's trust, only by the user's explicit opt-out", async () => {
+  it("is removed, with Quirky's trust, only by the user's explicit opt-out", async () => {
     seedSharedEntry()
 
     await new CodexHookService().remove()

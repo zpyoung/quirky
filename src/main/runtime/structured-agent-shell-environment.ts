@@ -19,7 +19,7 @@ function definedEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   return defined
 }
 
-/** Overlays shell variables on Orca's env; win32 names are case-insensitive, so drop the base spelling. */
+/** Overlays shell variables on Quirky's env; win32 names are case-insensitive, so drop the base spelling. */
 function overlayShellVariables(
   base: Record<string, string>,
   shellVariables: Record<string, string>,
@@ -55,7 +55,7 @@ function pickShellVariables(
 
 /**
  * The env every structured chat child starts from, before its provider pins an account.
- * Inheriting everything is the login-shell snapshot as-is; otherwise Orca's own env plus
+ * Inheriting everything is the login-shell snapshot as-is; otherwise Quirky's own env plus
  * the baseline and listed shell variables.
  */
 export function structuredAgentBaseEnvironment(input: {

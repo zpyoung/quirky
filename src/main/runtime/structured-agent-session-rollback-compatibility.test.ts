@@ -78,7 +78,7 @@ afterEach(async () => {
 
 describe('structured session rollback compatibility', () => {
   it('keeps the visible session reference through target → base → target', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-structured-rollback-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-structured-rollback-'))
     const record = agentSessionRecordFixture({
       ...agentSessionRecordFixture().lease,
       sessionId: SESSION,

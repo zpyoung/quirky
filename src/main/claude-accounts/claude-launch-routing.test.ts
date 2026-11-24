@@ -66,7 +66,7 @@ function coveredAccount() {
   return { router, settings, accountHome, systemHome: join(userHome, '.claude') }
 }
 
-/** Where every Orca-started Claude would run right now, read through each entry point. */
+/** Where every Quirky-started Claude would run right now, read through each entry point. */
 async function launchHomes(f: ReturnType<typeof coveredAccount>) {
   const chatEnv: Record<string, string> = {}
   return {

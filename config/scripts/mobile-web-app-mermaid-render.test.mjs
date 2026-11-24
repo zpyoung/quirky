@@ -60,7 +60,7 @@ const ENGINES = [
     // CI runs this against the runner's Google Chrome rather than paying for a download, the same
     // override shape as every other render check here.
     launch: () => {
-      const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+      const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
       return chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
     }
   },
@@ -82,7 +82,7 @@ import { MermaidDiagram } from './MermaidDiagram'
 function Harness() {
   const [state, setState] = useState({ mounted: false, source: '' })
   useEffect(() => {
-    globalThis.__orcaMermaidSet = setState
+    globalThis.__quirkyMermaidSet = setState
     document.body.setAttribute('data-ready', 'yes')
   }, [])
   return state.mounted ? createElement(MermaidDiagram, { source: state.source, base: 15 }) : null
@@ -167,11 +167,11 @@ afterAll(async () => {
  * this list are mostly the harness's, and only the ones from the bundle's scripts are the page's.
  */
 function installJitRecorder() {
-  globalThis.__orcaJit = []
+  globalThis.__quirkyJit = []
   const record = (kind, source) => {
     // Line 0 is the error's own header and line 1 is this recorder; the rest is whoever asked.
     const stack = (new Error('jit').stack ?? '').split('\n').slice(2).join(' | ')
-    globalThis.__orcaJit.push({ kind, source: String(source).slice(0, 60), stack })
+    globalThis.__quirkyJit.push({ kind, source: String(source).slice(0, 60), stack })
   }
   // oxlint-disable-next-line eslint/no-eval -- SAFETY: the recorder holds the real eval so it can count and forward calls; naming it is this function's whole purpose.
   const realEval = globalThis.eval
@@ -192,11 +192,11 @@ function installJitRecorder() {
 /**
  * The JIT calls that came from the bundle rather than from the harness driving it.
  *
- * `__orcaJit` being non-empty is the precondition: an attribution filter over a list nothing ever
+ * `__quirkyJit` being non-empty is the precondition: an attribution filter over a list nothing ever
  * wrote to answers "none from the page" for a recorder that was never installed.
  */
 async function pageJitCalls(page) {
-  const all = await page.evaluate(() => globalThis.__orcaJit)
+  const all = await page.evaluate(() => globalThis.__quirkyJit)
   expect(all.length).toBeGreaterThan(0)
   return all.filter((one) => /mermaid-check\.js|\/chunk-/.test(one.stack))
 }
@@ -243,7 +243,7 @@ async function openPage(browser) {
  */
 async function show(page, source, contains = null) {
   await page.evaluate(
-    (next) => globalThis.__orcaMermaidSet({ mounted: true, source: next }),
+    (next) => globalThis.__quirkyMermaidSet({ mounted: true, source: next }),
     source
   )
   await page.waitForFunction((needle) => {
@@ -260,7 +260,7 @@ async function show(page, source, contains = null) {
 }
 
 async function unmount(page) {
-  await page.evaluate(() => globalThis.__orcaMermaidSet({ mounted: false, source: '' }))
+  await page.evaluate(() => globalThis.__quirkyMermaidSet({ mounted: false, source: '' }))
   await page.waitForFunction(
     () => document.querySelector('[data-testid="mermaid-diagram"]') === null
   )
@@ -300,7 +300,7 @@ describeMermaid(
             // The precondition the absences below need: a diagram rendered, and it is mermaid's.
             expect(shown.html).toContain('aria-roledescription="flowchart-v2"')
             expect(await pageJitCalls(page)).toEqual([])
-            expect(await page.evaluate(() => globalThis.__orcaCspViolations)).toEqual([])
+            expect(await page.evaluate(() => globalThis.__quirkyCspViolations)).toEqual([])
             expect(consoleErrors).toEqual([])
             // A CSS identifier, because mermaid writes `#<id>` into the stylesheet it puts inside
             // the SVG; an id spelled `«r0»` would leave every one of those rules inert.
@@ -318,7 +318,7 @@ describeMermaid(
 
         it('leaves one SVG across a source change, an unmount and a remount', async () => {
           const { page, consoleErrors } = await openPage(browser)
-          const listeners = () => page.evaluate(() => globalThis.__orcaListeners.snapshot())
+          const listeners = () => page.evaluate(() => globalThis.__quirkyListeners.snapshot())
           try {
             const beforeAnyMount = await listeners()
             await show(page, FIXTURE)
@@ -358,7 +358,7 @@ describeMermaid(
             expect(again.inFrame).toBe(1)
             expect(again.inDocument).toBe(1)
             expect(normaliseSvg(again.html, again.id)).toBe(normaliseSvg(first.html, first.id))
-            expect(await page.evaluate(() => globalThis.__orcaCspViolations)).toEqual([])
+            expect(await page.evaluate(() => globalThis.__quirkyCspViolations)).toEqual([])
             expect(consoleErrors).toEqual([])
           } finally {
             await page.close()

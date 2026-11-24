@@ -18,7 +18,7 @@ import { buildDetectedGitWorktrees } from '../../src/main/ipc/worktrees/listing/
 import { resolveRepoWorktreeRows } from '../../src/main/runtime/repo-worktree-row-resolution'
 
 beforeEach(() => {
-  testState.dir = mkdtempSync(join(tmpdir(), 'orca-folder-upgrade-store-'))
+  testState.dir = mkdtempSync(join(tmpdir(), 'quirky-folder-upgrade-store-'))
 })
 afterEach(() => {
   rmSync(testState.dir, { recursive: true, force: true })

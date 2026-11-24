@@ -17,7 +17,7 @@ const fixture = [
   '    - "zeta" # last alphabetically',
   '    - alpha # first occurrence',
   '    - alpha # duplicate belongs to user',
-  '  disabled: [orca-status, blocked] # disabled choices',
+  '  disabled: [quirky-status, blocked] # disabled choices',
   '  custom: "off" # unrelated plugin setting',
   '# End documentation',
   ''
@@ -33,7 +33,7 @@ describe('Hermes YAML document edits', () => {
     expect(parse(enabled)).toEqual({
       ...parse(initial),
       plugins: {
-        enabled: ['zeta', 'alpha', 'alpha', 'orca-status'],
+        enabled: ['zeta', 'alpha', 'alpha', 'quirky-status'],
         disabled: ['blocked'],
         custom: 'off'
       }
@@ -58,8 +58,8 @@ describe('Hermes YAML document edits', () => {
   })
 
   it.each([
-    '# existing\r\nplugins:\r\n  enabled: [zeta, orca-status, alpha, alpha]\r\n',
-    'plugins: &plugins\n  enabled: [orca-status]\nother: *plugins\n'
+    '# existing\r\nplugins:\r\n  enabled: [zeta, quirky-status, alpha, alpha]\r\n',
+    'plugins: &plugins\n  enabled: [quirky-status]\nother: *plugins\n'
   ])('returns exact bytes for a semantic no-op', (input) => {
     expect(updateConfigContent(input, enablePlugin)).toEqual({ content: input })
   })
@@ -69,9 +69,9 @@ describe('Hermes YAML document edits', () => {
     (input) => expect(updateConfigContent(input, disablePlugin)).toEqual({ content: input })
   )
 
-  it('retains comments attached to removed Orca entries', () => {
+  it('retains comments attached to removed Quirky entries', () => {
     const input =
-      'plugins:\n  enabled:\n    # keep this note\n    - orca-status # managed entry\n    - other\n'
+      'plugins:\n  enabled:\n    # keep this note\n    - quirky-status # managed entry\n    - other\n'
     const output = updateConfigContent(input, disablePlugin).content ?? ''
     expect(parse(output).plugins.enabled).toEqual(['other'])
     expect(output).toContain('# keep this note')
@@ -110,7 +110,7 @@ describe('Hermes YAML document edits', () => {
     expect(output).toContain(`long: ${'word '.repeat(30).trimEnd()}\n`)
     expect(parse(output)).toEqual({
       ...parse(input),
-      plugins: { enabled: ['other', 'orca-status'] }
+      plugins: { enabled: ['other', 'quirky-status'] }
     })
   })
 
@@ -146,7 +146,7 @@ describe('Hermes YAML document edits', () => {
     const parsed = parse(input)
     expect(parse(output)).toEqual({
       ...parsed,
-      plugins: { ...parsed.plugins, enabled: ['orca-status'] }
+      plugins: { ...parsed.plugins, enabled: ['quirky-status'] }
     })
     for (const comment of input.match(/#[^\r\n]*/g) ?? []) {
       expect(output).toContain(comment)
@@ -158,7 +158,7 @@ describe('Hermes YAML document edits', () => {
 
   it.each(['', '# empty document\n', 'null\n'])('enables a plugin in an empty config', (input) => {
     const output = updateConfigContent(input, enablePlugin).content ?? ''
-    expect(parse(output)).toEqual({ plugins: { enabled: ['orca-status'] } })
+    expect(parse(output)).toEqual({ plugins: { enabled: ['quirky-status'] } })
     if (input.includes('#')) {
       expect(output).toContain('# empty document')
     }

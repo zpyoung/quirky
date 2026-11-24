@@ -6,7 +6,7 @@ import { parseWslUncPath } from '../../shared/wsl-paths'
 import { withManagedHookInstallLock } from '../agent-hooks/managed-hook-install-lock'
 import { readManagedHookHostIdentity } from '../agent-hooks/managed-hook-owner-identity'
 import { resolveCodexCommand } from '../codex-cli/command'
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import type { ChildProcessHandle } from '@quirky/process-host/process-spec'
 import {
   spawnCodexAppServerProcess,
   type CodexAppServerSpawn
@@ -15,7 +15,7 @@ import {
   spawnCodexBackfillRecoveryProcess,
   stopCodexBackfillRecoveryProcess
 } from './codex-state-db-backfill-recovery-process'
-import { getOrcaUserDataPath } from './codex-home-paths'
+import { getQuirkyUserDataPath } from './codex-home-paths'
 import {
   BACKFILL_PENDING_MIN_SESSION_FILES,
   countCodexSessionFilesUpTo,
@@ -159,7 +159,7 @@ export async function runCodexStateDbBackfillRecovery(
 export function resolveCodexBackfillSupervisorLockRoot(codexHomePath: string): string {
   const homeKey = normalizeRuntimePathForComparison(codexHomePath)
   const digest = createHash('sha256').update(homeKey).digest('hex')
-  return join(getOrcaUserDataPath(), 'codex-state-db-backfill-locks', digest)
+  return join(getQuirkyUserDataPath(), 'codex-state-db-backfill-locks', digest)
 }
 
 function scopeRecoveryHostIdentity(hostIdentity: string, codexHomePath: string): string {

@@ -1,12 +1,12 @@
---- a/src/main/runtime/orca-runtime-close-mobile-session-tab.ts
-+++ b/src/main/runtime/orca-runtime-close-mobile-session-tab.ts
+--- a/src/main/runtime/quirky-runtime-close-mobile-session-tab.ts
++++ b/src/main/runtime/quirky-runtime-close-mobile-session-tab.ts
 @@ -20,6 +20,7 @@
- import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
+ import type { RuntimeCommandSurfaceHost } from './quirky-runtime-core'
  import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
  import { SESSION_TAB_NOT_FOUND_ERROR } from '../../shared/session-tab-close'
 +import { captureAcknowledgedTerminalTabRetirement } from './workspace-session-terminal-tab-retirement-identity'
  
- export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseUnattributedMobileSessionTabClose {
+ export class QuirkyRuntimeWithCloseMobileSessionTab extends QuirkyRuntimeWithRefuseUnattributedMobileSessionTabClose {
    async closeMobileSessionTab(
 @@ -177,8 +178,18 @@
          return finishCommittedClose()

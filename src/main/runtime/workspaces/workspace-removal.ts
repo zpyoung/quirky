@@ -1,6 +1,6 @@
 import type { RuntimeStore } from '../runtime-store-contract'
 import type { GitWorktreeInfo } from '../../../shared/worktree/types'
-import { OrcaRuntimeWithCreateManagedRemoteWorktree } from './workspace-metadata'
+import { QuirkyRuntimeWithCreateManagedRemoteWorktree } from './workspace-metadata'
 import {
   resolveWorktreeRemovalMetadata,
   resolveWorktreeRemovalRepoOwner
@@ -40,7 +40,7 @@ import {
   isWslMoveSourceHost
 } from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
-export abstract class OrcaRuntimeWithRemoveManagedWorktree extends OrcaRuntimeWithCreateManagedRemoteWorktree {
+export abstract class QuirkyRuntimeWithRemoveManagedWorktree extends QuirkyRuntimeWithCreateManagedRemoteWorktree {
   abstract removeWorktreeMetadataAndHistory(
     store: RuntimeStore,
     worktreeId: string,

@@ -10,11 +10,11 @@ import {
   findWorkspace,
   mirrorWorkspaceFromActivePage
 } from '../browser-page-records'
-import { ORCA_BROWSER_BLANK_URL } from '../../../../../shared/constants'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../../../../shared/constants'
 import { closeRemoteBrowserPageInOwningEnvironment } from './browser-remote-close'
 import { releaseDocPreviewGrant } from '@/lib/doc-preview-grants'
 import { admitBrowserPageMount } from '@/components/browser-pane/host-guest/browser-page-mount-admission'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { recordLayoutApply } from '@/runtime/layout-apply-send'
 
 export function createBrowserPageCreateActions(
@@ -59,7 +59,7 @@ export function createBrowserPageCreateActions(
         const shouldFocusAddressBar =
           shouldUpdateGlobalActiveSurface &&
           !page.docLocation &&
-          (page.url === 'about:blank' || page.url === ORCA_BROWSER_BLANK_URL)
+          (page.url === 'about:blank' || page.url === QUIRKY_BROWSER_BLANK_URL)
 
         return {
           browserPagesByWorkspace: {
@@ -88,7 +88,7 @@ export function createBrowserPageCreateActions(
       })
 
       // Switch point: main records the page under its id before any later command names it.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         recordLayoutApply(get(), workspace.worktreeId, {
           type: 'openBrowserPage',
           browserTabId: workspaceId,
@@ -209,7 +209,7 @@ export function createBrowserPageCreateActions(
       }
       const workspace = findWorkspace(get().browserTabsByWorktree, closedWorkspaceId)
       // Switch point: main drops the page from its tab.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN && workspace) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN && workspace) {
         recordLayoutApply(get(), workspace.worktreeId, {
           type: 'closeBrowserPage',
           browserTabId: closedWorkspaceId,

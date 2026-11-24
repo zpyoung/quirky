@@ -12,7 +12,7 @@ const readProject = (file) => readFileSync(join(projectDir, file), 'utf8')
 const packageJson = JSON.parse(readProject('package.json'))
 const pnpmWorkspace = parse(readProject('pnpm-workspace.yaml'))
 // Why not process.platform: the win32 plan resolves wherever its os-gated npm addon is
-// installed; @orca/windows-registry is a workspace link and present everywhere.
+// installed; @quirky/windows-registry is a workspace link and present everywhere.
 const windowsAddonsInstalled = existsSync(
   join(projectDir, 'node_modules', '@vscode', 'windows-process-tree', 'package.json')
 )
@@ -25,14 +25,14 @@ describe('Electron runtime package contract', () => {
   }
 
   it('keeps the native Windows registry addon optional and platform-gated', () => {
-    expect(packageJson.optionalDependencies['@orca/windows-registry']).toBe('workspace:*')
+    expect(packageJson.optionalDependencies['@quirky/windows-registry']).toBe('workspace:*')
     // Why: allowBuilds stops pnpm running node-gyp at install time -- the root
     // Windows-only rebuild owns this addon so it is built against the right runtime ABI.
-    expect(pnpmWorkspace.allowBuilds['@orca/windows-registry']).toBe(false)
+    expect(pnpmWorkspace.allowBuilds['@quirky/windows-registry']).toBe(false)
     if (windowsAddonsInstalled) {
       expect(packageTargets.win32).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ to: join('node_modules', '@orca', 'windows-registry') }),
+          expect.objectContaining({ to: join('node_modules', '@quirky', 'windows-registry') }),
           expect.objectContaining({ to: join('node_modules', 'node-addon-api') })
         ])
       )
@@ -40,27 +40,27 @@ describe('Electron runtime package contract', () => {
     for (const platform of ['darwin', 'linux']) {
       expect(packageTargets[platform]).not.toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ to: join('node_modules', '@orca', 'windows-registry') })
+          expect.objectContaining({ to: join('node_modules', '@quirky', 'windows-registry') })
         ])
       )
     }
   })
 
-  // Without it the secure-file writes report unrestricted and orcad's privacy check fails closed.
+  // Without it the secure-file writes report unrestricted and quirkyd's privacy check fails closed.
   it('ships the native Windows ACL addon on Windows only, built by the Windows rebuild', () => {
-    expect(packageJson.optionalDependencies['@orca/windows-security']).toBe('workspace:*')
-    expect(pnpmWorkspace.allowBuilds['@orca/windows-security']).toBe(false)
+    expect(packageJson.optionalDependencies['@quirky/windows-security']).toBe('workspace:*')
+    expect(pnpmWorkspace.allowBuilds['@quirky/windows-security']).toBe(false)
     if (windowsAddonsInstalled) {
       expect(packageTargets.win32).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ to: join('node_modules', '@orca', 'windows-security') })
+          expect.objectContaining({ to: join('node_modules', '@quirky', 'windows-security') })
         ])
       )
     }
     for (const platform of ['darwin', 'linux']) {
       expect(packageTargets[platform]).not.toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ to: join('node_modules', '@orca', 'windows-security') })
+          expect.objectContaining({ to: join('node_modules', '@quirky', 'windows-security') })
         ])
       )
     }

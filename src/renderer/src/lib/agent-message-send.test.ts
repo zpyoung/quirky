@@ -66,7 +66,7 @@ it.each([
 
 it('words unconfirmed notes as the chat does', () => {
   expect(activeAgentNotesSendFailureMessage('unconfirmed', { explicitTarget: true })).toBe(
-    "Orca couldn't confirm your message reached the agent. Check the chat, then send it again if needed."
+    "Quirky couldn't confirm your message reached the agent. Check the chat, then send it again if needed."
   )
 })
 

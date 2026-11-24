@@ -18,9 +18,9 @@ type DivProps = ComponentPropsWithoutRef<'div'> & ExtraProps
 /** The placeholder's attributes, as react-markdown passed them (absent on an ordinary div). */
 function placeholderAttributes(props: DivProps): { nonce: unknown; file: unknown; title: unknown } {
   return {
-    nonce: 'data-orca-visual' in props ? props['data-orca-visual'] : undefined,
-    file: 'data-orca-visual-file' in props ? props['data-orca-visual-file'] : undefined,
-    title: 'data-orca-visual-title' in props ? props['data-orca-visual-title'] : undefined
+    nonce: 'data-quirky-visual' in props ? props['data-quirky-visual'] : undefined,
+    file: 'data-quirky-visual-file' in props ? props['data-quirky-visual-file'] : undefined,
+    title: 'data-quirky-visual-title' in props ? props['data-quirky-visual-title'] : undefined
   }
 }
 

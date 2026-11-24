@@ -17,7 +17,7 @@ const { compile } = require('@tailwindcss/node')
 const { Scanner } = require('@tailwindcss/oxide')
 
 it('generates renderer CSS from production files while excluding test and spec files', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-tailwind-sources-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-tailwind-sources-'))
   try {
     const renderer = join(root, 'src', 'renderer', 'src')
     const assets = join(renderer, 'assets')

@@ -41,7 +41,7 @@ export async function describeClaudeUsageBenchmarkTooling() {
 }
 
 export async function readClaudeUsageBenchmarkBaselineSources() {
-  const { runProcessSync } = await import('@orca/process-host')
+  const { runProcessSync } = await import('@quirky/process-host')
   const readGit = (args) => {
     const result = runProcessSync({
       program: 'git',
@@ -49,12 +49,12 @@ export async function readClaudeUsageBenchmarkBaselineSources() {
       cwd: ROOT,
       timeoutMs: 10_000,
       maxOutputBytes: MIB,
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
     })
     assert.equal(result.code, 0, `Git baseline read failed: ${result.stderr}`)
     return result.stdout
   }
-  const baselineRef = process.env.ORCA_CLAUDE_USAGE_APPEND_BENCH_BASELINE ?? 'HEAD'
+  const baselineRef = process.env.QUIRKY_CLAUDE_USAGE_APPEND_BENCH_BASELINE ?? 'HEAD'
   const baselineCommit = readGit(['rev-parse', '--verify', `${baselineRef}^{commit}`]).trim()
   const sources = new Map(
     BASELINE_MODULES.map((modulePath) => [
@@ -72,11 +72,11 @@ export async function loadClaudeUsageBenchmarkScanner(
   baselineCommit = null
 ) {
   const sourceFingerprints = {}
-  const { runProcessSync } = await import('@orca/process-host')
+  const { runProcessSync } = await import('@quirky/process-host')
   const result = await build({
     stdin: {
       contents: `export { scanClaudeUsageFiles } from './src/main/claude-usage/scanner';
-        export { resetReadMetrics, readMetrics } from 'orca-benchmark-fs';
+        export { resetReadMetrics, readMetrics } from 'quirky-benchmark-fs';
         export { open as openForBenchmark } from 'node:fs/promises';
         export { createReadStream as createReadStreamForBenchmark } from 'node:fs';`,
       resolveDir: ROOT,
@@ -102,7 +102,7 @@ export async function loadClaudeUsageBenchmarkScanner(
                 cwd: ROOT,
                 timeoutMs: 10_000,
                 maxOutputBytes: MIB,
-                env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+                env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
               })
               assert.equal(pinned.code, 0, `Pinned source read failed: ${pinned.stderr}`)
               assert.equal(pinned.outputTruncated, false, `Pinned source truncated: ${modulePath}`)
@@ -129,9 +129,9 @@ export async function loadClaudeUsageBenchmarkScanner(
             return { contents, loader, resolveDir: dirname(args.path) }
           })
           bundler.onResolve(
-            { filter: /^node:(fs(?:\/promises)?|os)$|^orca-benchmark-fs$/ },
+            { filter: /^node:(fs(?:\/promises)?|os)$|^quirky-benchmark-fs$/ },
             (args) => {
-              if (args.path === 'orca-benchmark-fs') {
+              if (args.path === 'quirky-benchmark-fs') {
                 return { path: 'node:fs', namespace: 'benchmark' }
               }
               if (args.namespace === 'benchmark') {
@@ -157,7 +157,7 @@ export async function loadClaudeUsageBenchmarkScanner(
             if (args.path === 'node:fs/promises') {
               return {
                 contents: `import * as fs from 'node:fs/promises';
-                  import { recordStream, recordRead } from 'orca-benchmark-fs';
+                  import { recordStream, recordRead } from 'quirky-benchmark-fs';
                   export * from 'node:fs/promises';
                   export function readFile() {
                     throw new Error('Extend benchmark accounting before using fs.promises.readFile');

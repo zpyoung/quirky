@@ -22,7 +22,7 @@ export class ElectronSecretStore implements SecretStore {
   describeProtectionGap(): string | null {
     const withheld = safeStorageWithheldReason()
     if (withheld !== null) {
-      return `The OS keychain is unavailable for this run (${withheld}), so secrets are stored unencrypted. Start orca serve from a logged-in desktop session, or unlock the login keychain, to seal them.`
+      return `The OS keychain is unavailable for this run (${withheld}), so secrets are stored unencrypted. Start quirky serve from a logged-in desktop session, or unlock the login keychain, to seal them.`
     }
     // Why availability first: it is the call that actually probes the keyring, so every
     // backend read below is free and cannot change which call blocks.
@@ -37,7 +37,7 @@ export class ElectronSecretStore implements SecretStore {
           // tiling compositors, so it never asks the secret service that is usually running
           // the whole time. Telling these users to install a keyring sends them after one
           // they already have.
-          `Orca could not tell which keyring service this desktop uses${describeDesktop()}, so secrets are stored unencrypted — even if a secret service is already running. Start Orca with --password-store=gnome-libsecret (or --password-store=kwallet6 on KDE) to name one.`
+          `Quirky could not tell which keyring service this desktop uses${describeDesktop()}, so secrets are stored unencrypted — even if a secret service is already running. Start Quirky with --password-store=gnome-libsecret (or --password-store=kwallet6 on KDE) to name one.`
         : 'The OS keyring is unavailable, so secrets are stored unencrypted. Install and unlock gnome-keyring or kwallet to seal them.'
     }
     // Why this is not folded into isEncryptionAvailable(): `basic_text` "encrypts" with a
@@ -75,6 +75,6 @@ function readLinuxBackend(): string | null {
 
 function describeLinuxBackendGap(): string | null {
   return readLinuxBackend() === 'basic_text'
-    ? 'Secrets are obfuscated with a built-in key, not protected by the OS keyring. Install and unlock gnome-keyring or kwallet, then restart Orca, to seal them properly.'
+    ? 'Secrets are obfuscated with a built-in key, not protected by the OS keyring. Install and unlock gnome-keyring or kwallet, then restart Quirky, to seal them properly.'
     : null
 }

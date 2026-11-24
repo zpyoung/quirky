@@ -1,7 +1,7 @@
 import { REMOTE_BUNDLE_PLATFORMS, type RemoteBundlePlatform } from './remote-bundle-artifacts'
 
 /**
- * Orca ships its own ripgrep for every relay platform (from @vscode/ripgrep-universal), so local,
+ * Quirky ships its own ripgrep for every relay platform (from @vscode/ripgrep-universal), so local,
  * WSL, and SSH searches never depend on the user having installed `rg`.
  */
 export const BUNDLED_RIPGREP_PLATFORMS: readonly RemoteBundlePlatform[] = REMOTE_BUNDLE_PLATFORMS

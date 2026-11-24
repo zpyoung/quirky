@@ -69,7 +69,7 @@ export function launchRacePane(tag: string, leafId: string) {
       worktreeId,
       tabId,
       leafId,
-      env: { ORCA_PANE_KEY: paneKey, ORCA_TAB_ID: tabId, ORCA_WORKTREE_ID: worktreeId }
+      env: { QUIRKY_PANE_KEY: paneKey, QUIRKY_TAB_ID: tabId, QUIRKY_WORKTREE_ID: worktreeId }
     }
   }
 }

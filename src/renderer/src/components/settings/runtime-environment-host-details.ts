@@ -54,7 +54,7 @@ export function getHostDetailsSummary(details: RuntimeHostDetails | undefined): 
   if (details.runtimeStatus === null && details.compatibility === null) {
     return translate(
       'auto.components.settings.RuntimeEnvironmentsPane.serverRuntimeUnavailable',
-      'Orca unavailable'
+      'Quirky unavailable'
     )
   }
   if (details.compatibility?.kind === 'blocked') {
@@ -78,7 +78,7 @@ export function getHostDetailsDescription(details: RuntimeHostDetails | undefine
   if (details.runtimeStatus === null && details.compatibility === null) {
     const unavailableDescription = translate(
       'auto.components.settings.RuntimeEnvironmentsPane.serverRuntimeUnavailableDescription',
-      'SSH transport is connected, but the Orca runtime did not answer. The host may still be running.'
+      'SSH transport is connected, but the Quirky runtime did not answer. The host may still be running.'
     )
     return details.error ? `${unavailableDescription} ${details.error}` : unavailableDescription
   }
@@ -216,7 +216,7 @@ export function getRuntimeServerConnectionLabel(state: RuntimeServerConnectionSt
     case 'runtime-unavailable':
       return translate(
         'auto.components.settings.RuntimeEnvironmentsPane.serverRuntimeUnavailable',
-        'Orca unavailable'
+        'Quirky unavailable'
       )
     case 'workspace-window-closed':
       return translate(

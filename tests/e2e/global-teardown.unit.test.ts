@@ -23,7 +23,7 @@ afterEach(() => {
 
 describe('E2E global teardown ownership', () => {
   it('cleans orphaned worker publications while preserving another run', () => {
-    const root = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-worker-teardown-'))
+    const root = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-worker-teardown-'))
     roots.push(root)
     const runPathFile = path.join(root, 'run.txt')
     const ownedRepositories = ['seed', 'worker-0', 'worker-3'].map((name) => {
@@ -50,12 +50,12 @@ describe('E2E global teardown ownership', () => {
   })
 
   it('removes every linked run worktree and preserves unrelated siblings', () => {
-    const root = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-teardown-contract-'))
+    const root = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-teardown-contract-'))
     roots.push(root)
-    const repoPath = path.join(root, 'orca-e2e-repo-run')
-    const firstWorktreePath = path.join(root, 'orca-e2e-worktree-owned')
+    const repoPath = path.join(root, 'quirky-e2e-repo-run')
+    const firstWorktreePath = path.join(root, 'quirky-e2e-worktree-owned')
     const secondWorktreePath = path.join(root, 'e2e-test-owned')
-    const concurrentWorktreePath = path.join(root, 'orca-e2e-worktree-concurrent')
+    const concurrentWorktreePath = path.join(root, 'quirky-e2e-worktree-concurrent')
     const unrelatedTestPath = path.join(root, 'e2e-test-unrelated')
     mkdirSync(repoPath)
     mkdirSync(concurrentWorktreePath)

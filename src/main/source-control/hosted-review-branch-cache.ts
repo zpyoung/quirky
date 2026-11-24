@@ -46,7 +46,7 @@ import {
  * Process-wide cache for branch review lookups (#11532).
  *
  * `hostedReview:forBranch` is polled by every desktop window, the mobile client
- * and `orca serve` alike, and each one used to reach the provider directly. The
+ * and `quirky serve` alike, and each one used to reach the provider directly. The
  * host's API quota is per user, so the only place that can pace them together is
  * here — the single funnel they all pass through.
  *
@@ -141,7 +141,7 @@ function storeEntry(key: string, entry: CacheEntry): void {
 }
 
 /**
- * Drops every cached answer for a repo. Called when Orca itself opens a review,
+ * Drops every cached answer for a repo. Called when Quirky itself opens a review,
  * so the new one is visible immediately instead of after the no-review interval.
  */
 export function invalidateHostedReviewBranchCache(

@@ -2,7 +2,7 @@ import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './dispatcher'
 import { TERMINAL_METHODS } from './methods/terminal'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { makeRequest, stubRuntime } from './terminal-multiplex-test-harness'
 
 async function subscribe(client: { id: string; type: 'mobile' | 'desktop' }, binary: boolean) {
@@ -13,7 +13,7 @@ async function subscribe(client: { id: string; type: 'mobile' | 'desktop' }, bin
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the attach hook reads only terminalUse.noteTerminalUse.
     sidebarFacts: {
       terminalUse: { noteTerminalUse }
-    } as unknown as OrcaRuntimeService['sidebarFacts']
+    } as unknown as QuirkyRuntimeService['sidebarFacts']
   })
   const controller = new AbortController()
   const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })

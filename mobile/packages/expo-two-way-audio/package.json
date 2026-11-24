@@ -1,5 +1,5 @@
 {
-  "name": "@orca/expo-two-way-audio",
+  "name": "@quirky/expo-two-way-audio",
   "version": "0.0.1",
   "private": true,
   "description": "Native module for two way audio streaming",
@@ -14,7 +14,7 @@
     "url": "https://github.com/stablyai/orca/issues"
   },
   "license": "MIT",
-  "author": "Orca contributors",
+  "author": "Quirky contributors",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stablyai/orca.git",

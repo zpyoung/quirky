@@ -22,7 +22,7 @@ async function writeJson(pathValue: string, value: unknown): Promise<void> {
 }
 
 async function fixture(): Promise<Fixture> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-live-plugins-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-live-plugins-'))
   created.push(root)
   const homeDir = join(root, 'home')
   const cwd = join(root, 'workspace')

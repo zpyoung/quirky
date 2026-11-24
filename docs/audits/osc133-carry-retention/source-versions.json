@@ -64,12 +64,12 @@
       ]
     },
     {
-      "path": "src/main/runtime/orca-runtime-apply-tracked-pty-title.ts",
+      "path": "src/main/runtime/quirky-runtime-apply-tracked-pty-title.ts",
       "sha256": "3c2ba07ff330875c5a9a07e44c0ffbcb1ebee1ae4af1952502ec733d6c7f7bea",
       "acceptedSha256": ["3c2ba07ff330875c5a9a07e44c0ffbcb1ebee1ae4af1952502ec733d6c7f7bea"]
     },
     {
-      "path": "src/main/runtime/orca-runtime-get-unpersisted-tracked-title-for-pty.ts",
+      "path": "src/main/runtime/quirky-runtime-get-unpersisted-tracked-title-for-pty.ts",
       "sha256": "107666bcc7e4bc744db51e9a023d659425947b134b9f420a0f11fb9ff0a7ba33",
       "acceptedSha256": ["107666bcc7e4bc744db51e9a023d659425947b134b9f420a0f11fb9ff0a7ba33"]
     },
@@ -161,7 +161,7 @@
       "auditedBeforeSha256": "ddd71285f6e72bcee012e7a9955170be4fb59c8e41e70971bc629c13504a4338"
     },
     {
-      "path": "src/main/runtime/orca-runtime-apply-tracked-pty-title.ts",
+      "path": "src/main/runtime/quirky-runtime-apply-tracked-pty-title.ts",
       "namedRefs": {
         "main291b": {
           "commit": "291b4ddd6f1c1af480169885e0fda7f9c78ff053",
@@ -177,7 +177,7 @@
       "auditedBeforeSha256": "3c2ba07ff330875c5a9a07e44c0ffbcb1ebee1ae4af1952502ec733d6c7f7bea"
     },
     {
-      "path": "src/main/runtime/orca-runtime-get-unpersisted-tracked-title-for-pty.ts",
+      "path": "src/main/runtime/quirky-runtime-get-unpersisted-tracked-title-for-pty.ts",
       "namedRefs": {
         "main291b": {
           "commit": "291b4ddd6f1c1af480169885e0fda7f9c78ff053",

@@ -3,14 +3,14 @@ import { argvRequestsServeMode } from './serve-mode-argv'
 import { writeStartupDiagnosticLine, type StartupDiagnosticSink } from './startup-diagnostics'
 
 export const SINGLE_INSTANCE_LOCK_FAILURE_MESSAGE =
-  '[single-instance] Another Orca instance is already running for this userData profile; exiting this launch after requesting the existing window. If no Orca process is running, this may be an Electron/macOS single-instance lock failure.'
-export const SINGLE_INSTANCE_LOCK_BYPASS_ENV = 'ORCA_BYPASS_SINGLE_INSTANCE_LOCK'
-export const SINGLE_INSTANCE_LOCK_E2E_ENFORCE_ENV = 'ORCA_E2E_ENFORCE_SINGLE_INSTANCE_LOCK'
+  '[single-instance] Another Quirky instance is already running for this userData profile; exiting this launch after requesting the existing window. If no Quirky process is running, this may be an Electron/macOS single-instance lock failure.'
+export const SINGLE_INSTANCE_LOCK_BYPASS_ENV = 'QUIRKY_BYPASS_SINGLE_INSTANCE_LOCK'
+export const SINGLE_INSTANCE_LOCK_E2E_ENFORCE_ENV = 'QUIRKY_E2E_ENFORCE_SINGLE_INSTANCE_LOCK'
 export const SINGLE_INSTANCE_LOCK_BYPASS_MESSAGE =
-  '[single-instance] ORCA_BYPASS_SINGLE_INSTANCE_LOCK=1 is set; bypassing the packaged macOS single-instance lock for diagnostics. Do not use this with another Orca instance running for the same profile.'
+  '[single-instance] QUIRKY_BYPASS_SINGLE_INSTANCE_LOCK=1 is set; bypassing the packaged macOS single-instance lock for diagnostics. Do not use this with another Quirky instance running for the same profile.'
 export { SINGLE_INSTANCE_ALREADY_RUNNING_EXIT_CODE } from '../../shared/single-instance-exit-code'
 
-// Why: a duplicate `orca serve` is a supervisor artifact, not a user asking for a window; fail open when argv is unavailable.
+// Why: a duplicate `quirky serve` is a supervisor artifact, not a user asking for a window; fail open when argv is unavailable.
 // Why not `argv.includes('--serve')`: the documented systemd unit runs `<binary> serve --port …`, so a
 // duplicate start hands this handler CLI-form argv the CLI redirect never rewrote (#12677) — matching only
 // the flag form would promote the live headless server to a desktop window, un-fixing #11935.
@@ -19,12 +19,12 @@ export function shouldActivateDesktopForSecondInstance(argv: readonly string[] =
 }
 
 /**
- * Why: Orca writes two canonical discovery files into `<userData>/`:
- * `orca-runtime.json` (RPC endpoint + authToken for the bundled CLI) and
+ * Why: Quirky writes two canonical discovery files into `<userData>/`:
+ * `quirky-runtime.json` (RPC endpoint + authToken for the bundled CLI) and
  * `agent-hooks/endpoint.env` (hook port + token for cursor-agent/claude/codex
  * scripts). Without a single-instance lock, every AppImage/.app double-click
  * boots a fresh Electron main that clobbers both files. When the most recent
- * instance quits, metadata points at a dead pid and `orca status` reports
+ * instance quits, metadata points at a dead pid and `quirky status` reports
  * `stale_bootstrap` even though the original process is still running.
  *
  * This helper centralises the lock gate so it is testable in isolation and
@@ -33,7 +33,7 @@ export function shouldActivateDesktopForSecondInstance(argv: readonly string[] =
  *
  * Electron derives the lock identity from the current `userData` path, so
  * callers MUST invoke this AFTER `configureDevUserDataPath(is.dev)` — that
- * way dev (`orca-dev` userData) and packaged (`orca` userData) runs lock in
+ * way dev (`quirky-dev` userData) and packaged (`quirky` userData) runs lock in
  * separate namespaces instead of serialising against each other.
  */
 export function acquireSingleInstanceLock(
@@ -74,7 +74,7 @@ export function shouldSkipSingleInstanceLock(options: {
   return (
     options.isDev &&
     !options.isServeMode &&
-    Boolean(env.ORCA_E2E_USER_DATA_DIR) &&
+    Boolean(env.QUIRKY_E2E_USER_DATA_DIR) &&
     env[SINGLE_INSTANCE_LOCK_E2E_ENFORCE_ENV] !== '1'
   )
 }
@@ -86,7 +86,7 @@ export function singleInstanceLockFailureMessage(options: {
   if (!options.isDevDesktop) {
     return SINGLE_INSTANCE_LOCK_FAILURE_MESSAGE
   }
-  return `[single-instance] Another Orca dev instance is already running on the profile at ${options.userDataPath}; exiting this launch after passing it this launch's request. To run another dev copy at the same time, give it its own profile: ORCA_DEV_USER_DATA_PATH=<another directory> pnpm dev`
+  return `[single-instance] Another Quirky dev instance is already running on the profile at ${options.userDataPath}; exiting this launch after passing it this launch's request. To run another dev copy at the same time, give it its own profile: QUIRKY_DEV_USER_DATA_PATH=<another directory> pnpm dev`
 }
 
 export function logSingleInstanceLockFailure(

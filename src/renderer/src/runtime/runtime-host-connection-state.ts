@@ -10,7 +10,7 @@ export type RuntimeHostTransportState = 'connected' | 'checking' | 'disconnected
 // work — connected for counting purposes, but not interchangeable with 'connected'.
 export type RuntimeHostConnectionState =
   | 'connected'
-  // The SSH/control transport is up, but the Orca runtime did not answer its
+  // The SSH/control transport is up, but the Quirky runtime did not answer its
   // status probe. This is distinct from a disconnected transport.
   | 'runtime-unavailable'
   | 'workspace-window-closed'

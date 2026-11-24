@@ -83,7 +83,7 @@ async function launch(profileDirectory: string): Promise<void> {
 /** Reports the identity a client host of the current launch attaches under. */
 async function hostingIdentity(): Promise<string> {
   const runtime = await import('./paired-runtime-browser-client-host-runtime')
-  runtime.configurePairedRuntimeBrowserClientHostsForOrcaProfile({ orcaProfileId: 'profile-a' })
+  runtime.configurePairedRuntimeBrowserClientHostsForQuirkyProfile({ quirkyProfileId: 'profile-a' })
   await runtime.startPairedRuntimeBrowserClientHost({
     environment: pairedEnvironment('environment-a'),
     authorityRuntimeId: 'runtime-a'
@@ -111,7 +111,7 @@ afterEach(() => {
 
 describe('client host hosting identity wiring', () => {
   it('attaches under the same identity after the desktop relaunches', async () => {
-    const profileDirectory = mkdtempSync(join(tmpdir(), 'orca-host-wiring-'))
+    const profileDirectory = mkdtempSync(join(tmpdir(), 'quirky-host-wiring-'))
 
     // Why: a per-process id made the server treat every relaunch as a new host and drop its tabs.
     expect(await hostingIdentityForLaunch(profileDirectory)).toBe(
@@ -119,14 +119,14 @@ describe('client host hosting identity wiring', () => {
     )
   })
 
-  it('attaches under a different identity for a different Orca profile', async () => {
+  it('attaches under a different identity for a different Quirky profile', async () => {
     expect(
-      await hostingIdentityForLaunch(mkdtempSync(join(tmpdir(), 'orca-host-wiring-')))
-    ).not.toBe(await hostingIdentityForLaunch(mkdtempSync(join(tmpdir(), 'orca-host-wiring-'))))
+      await hostingIdentityForLaunch(mkdtempSync(join(tmpdir(), 'quirky-host-wiring-')))
+    ).not.toBe(await hostingIdentityForLaunch(mkdtempSync(join(tmpdir(), 'quirky-host-wiring-'))))
   })
 
   it('attaches under the identity already stamped into the first window', async () => {
-    await launch(mkdtempSync(join(tmpdir(), 'orca-host-wiring-')))
+    await launch(mkdtempSync(join(tmpdir(), 'quirky-host-wiring-')))
 
     // Why the stamp is read first: window creation puts the id in the renderer's argv long before
     // any environment pairs, and a renderer holding a different id than the lease stops

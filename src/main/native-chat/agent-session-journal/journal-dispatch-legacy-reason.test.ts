@@ -39,7 +39,7 @@ describe("a dispatch row's reason", () => {
     const reason = reasonAfter(`Write failed: ${'x'.repeat(4 * 1024 * 1024)}`)
 
     expect(reason?.startsWith('Write failed: ')).toBe(true)
-    expect(reason).toContain('[Orca: output truncated')
+    expect(reason).toContain('[Quirky: output truncated')
     expect(Buffer.byteLength(reason ?? '')).toBeLessThan(
       JOURNAL_DISPATCH_REASON_LIMITS.inlineHeadBytes + 1024
     )

@@ -20,7 +20,7 @@ afterEach(async () => {
   handlers.clear()
 })
 async function fixture() {
-  root = await mkdtemp(join(tmpdir(), 'orca-link-batch-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-link-batch-'))
   const paths = Array.from({ length: 8 }, (_, i) => join(root!, `file-${i}.ts`))
   await Promise.all(paths.map((path) => writeFile(path, 'fixture')))
   return paths

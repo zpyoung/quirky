@@ -14,7 +14,7 @@ import {
 } from './codex-app-server-process-tree-kill'
 import { createProviderRecordReader } from '../provider-process/provider-record-reader'
 
-// Why: `codex app-server` is Orca's sanctioned RPC surface into Codex-owned
+// Why: `codex app-server` is Quirky's sanctioned RPC surface into Codex-owned
 // state (hook trust hashes, the sqlite thread index). This module owns the
 // stdio JSONL transport — spawn, handshake, framing, deadline, reap — so every
 // RPC consumer (trust grant, session index heal) shares one hardened lifecycle.
@@ -108,7 +108,7 @@ export function isCodexMethodNotFoundError(error: unknown): boolean {
  * Runs one short-lived `codex app-server` session over stdio JSON-RPC (JSONL):
  * spawn → initialize → initialized → body(rpc) → EOF/reap. The child is reaped
  * on every path; the session deadline stops it. On POSIX it runs under the provider
- * supervisor, so an Orca that quits or dies mid-session still stops its group.
+ * supervisor, so an Quirky that quits or dies mid-session still stops its group.
  */
 export async function runCodexAppServerSession<T>(
   invocation: CodexAppServerInvocation,
@@ -322,7 +322,7 @@ export async function runCodexAppServerSession<T>(
   try {
     const session = async (): Promise<T> => {
       await requestRpc('initialize', {
-        clientInfo: { name: 'orca_desktop', title: 'Orca', version: '0.0.0' }
+        clientInfo: { name: 'quirky_desktop', title: 'Quirky', version: '0.0.0' }
       })
       notify('initialized')
       return body({ request: requestRpc, notify })

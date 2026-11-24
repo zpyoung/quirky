@@ -20,7 +20,7 @@ let root: string
 let journal: AgentSessionJournal
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-send-idempotency-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-send-idempotency-'))
   journal = await journals.open({
     identity: {
       sessionId: 'session-1',
@@ -43,7 +43,7 @@ describe('structured send idempotency', () => {
     ['a refused write', 'provider_write_failed: broken pipe'],
     ['a dead host', 'host_restarted_before_acknowledgement'],
     [
-      'a codex turn an older Orca could not name',
+      'a codex turn an older Quirky could not name',
       'codex app-server started a turn it did not name in time'
     ]
   ])('never puts an unknown back on the wire after %s', async (_case, reason) => {

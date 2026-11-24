@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { runProcess } from '@orca/process-host'
-import { test as base, expect } from './helpers/orca-app'
+import { runProcess } from '@quirky/process-host'
+import { test as base, expect } from './helpers/quirky-app'
 import { openFileExplorer } from './helpers/file-explorer'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
@@ -16,7 +16,7 @@ async function git(cwd: string, args: string[]): Promise<void> {
 const test = base.extend({
   minimumSeededWorktreeCount: 1,
   seededRepoPath: async ({ testRepoPath }, provideFixture) => {
-    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), 'orca-sparse-proof-'))
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), 'quirky-sparse-proof-'))
     const sparseRepo = path.join(fixtureRoot, 'repo')
     await git(fixtureRoot, ['clone', '--local', testRepoPath, sparseRepo])
     await git(sparseRepo, ['config', 'user.email', 'sparse-proof@example.invalid'])
@@ -44,10 +44,10 @@ const test = base.extend({
   }
 })
 
-test('sparse explorer defaults and outside reveal', async ({ orcaPage }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  const activeWorkspace = await orcaPage.evaluate(() => {
+test('sparse explorer defaults and outside reveal', async ({ quirkyPage }, testInfo) => {
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  const activeWorkspace = await quirkyPage.evaluate(() => {
     const s = window.__store!.getState()
     const w = Object.values(s.worktreesByRepo)
       .flat()
@@ -60,8 +60,8 @@ test('sparse explorer defaults and outside reveal', async ({ orcaPage }, testInf
     packagesPath: path.join(activeWorkspace.path, 'packages'),
     readmePath: path.join(activeWorkspace.path, 'README.md')
   }
-  await orcaPage.setViewportSize({ width: 1440, height: 960 })
-  await orcaPage.evaluate(
+  await quirkyPage.setViewportSize({ width: 1440, height: 960 })
+  await quirkyPage.evaluate(
     ({ workspace }) => {
       const store = window.__store!
       const s = store.getState()
@@ -81,30 +81,30 @@ test('sparse explorer defaults and outside reveal', async ({ orcaPage }, testInf
     },
     { workspace }
   )
-  const board = orcaPage.getByRole('button', { name: 'Workspace board', exact: true })
+  const board = quirkyPage.getByRole('button', { name: 'Workspace board', exact: true })
   await board.click()
   await board.click()
-  await openFileExplorer(orcaPage)
-  const picker = orcaPage.getByRole('button', { name: 'Explorer root', exact: true })
+  await openFileExplorer(quirkyPage)
+  const picker = quirkyPage.getByRole('button', { name: 'Explorer root', exact: true })
   await expect(picker).toContainText('apps/web')
-  const rows = orcaPage.locator('[data-file-explorer-row]')
+  const rows = quirkyPage.locator('[data-file-explorer-row]')
   await expect(rows.filter({ hasText: 'package.json' })).toBeVisible()
-  const proofDir = process.env.ORCA_SPARSE_PROOF_DIR
+  const proofDir = process.env.QUIRKY_SPARSE_PROOF_DIR
   const capture = async (name: string) => {
     const file = proofDir
       ? path.resolve(proofDir, `${name}.png`)
       : testInfo.outputPath(`${name}.png`)
     mkdirSync(path.dirname(file), { recursive: true })
-    await orcaPage.mouse.move(700, 500)
+    await quirkyPage.mouse.move(700, 500)
     await expect(
-      orcaPage.getByRole('tooltip').filter({ hasText: 'Workspace board moved to the bottom bar' })
+      quirkyPage.getByRole('tooltip').filter({ hasText: 'Workspace board moved to the bottom bar' })
     ).toBeHidden({ timeout: 20000 })
-    await orcaPage.screenshot({ path: file, animations: 'disabled' })
+    await quirkyPage.screenshot({ path: file, animations: 'disabled' })
     await testInfo.attach(name, { path: file, contentType: 'image/png' })
   }
   await capture('single-folder')
   await git(workspace.path, ['sparse-checkout', 'set', '--', 'apps/web', 'packages/ui'])
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     ({ workspace }) => {
       const store = window.__store!
       const s = store.getState()
@@ -122,7 +122,7 @@ test('sparse explorer defaults and outside reveal', async ({ orcaPage }, testInf
     },
     { workspace }
   )
-  const baseline = process.env.ORCA_SPARSE_PROOF_BASELINE === '1'
+  const baseline = process.env.QUIRKY_SPARSE_PROOF_BASELINE === '1'
   await expect(picker).toContainText(baseline ? 'apps/web' : 'Repository root')
   if (!baseline) {
     await expect(rows.filter({ hasText: 'README.md' })).toBeVisible()
@@ -131,9 +131,9 @@ test('sparse explorer defaults and outside reveal', async ({ orcaPage }, testInf
   }
   await capture('multiple-folders')
   await picker.click()
-  await orcaPage.getByRole('menuitemradio', { name: 'apps/web', exact: true }).click()
+  await quirkyPage.getByRole('menuitemradio', { name: 'apps/web', exact: true }).click()
   await expect(picker).toContainText('apps/web')
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     ({ workspace }) => {
       window.__store!.getState().revealInExplorer(workspace.id, workspace.readmePath)
     },
@@ -141,58 +141,60 @@ test('sparse explorer defaults and outside reveal', async ({ orcaPage }, testInf
   )
   await expect(picker).toContainText(baseline ? 'Full repo root' : 'Repository root')
   await expect(rows.filter({ hasText: 'README.md' })).toBeVisible()
-  await orcaPage.keyboard.press('Escape')
+  await quirkyPage.keyboard.press('Escape')
   await capture('outside-reveal')
   if (!baseline) {
-    await orcaPage.getByRole('button', { name: 'Back to apps/web', exact: true }).click()
+    await quirkyPage.getByRole('button', { name: 'Back to apps/web', exact: true }).click()
     await expect(picker).toContainText('apps/web')
     await expect(rows.filter({ hasText: 'README.md' })).toHaveCount(0)
     await capture('returned-to-folder')
-    await orcaPage.getByRole('button', { name: 'Repository root', exact: true }).click()
+    await quirkyPage.getByRole('button', { name: 'Repository root', exact: true }).click()
     await expect(picker).toContainText('Repository root')
     await picker.click()
-    await orcaPage.getByRole('menuitemradio', { name: 'apps/web', exact: true }).click()
+    await quirkyPage.getByRole('menuitemradio', { name: 'apps/web', exact: true }).click()
     await expect(picker).toContainText('apps/web')
-    await orcaPage.getByLabel('Search file contents', { exact: true }).click()
-    await expect(orcaPage.getByText('Search scope: workspace files', { exact: true })).toBeVisible()
-    await expect(orcaPage.getByLabel('Search file contents', { exact: true })).toHaveAttribute(
+    await quirkyPage.getByLabel('Search file contents', { exact: true }).click()
+    await expect(
+      quirkyPage.getByText('Search scope: workspace files', { exact: true })
+    ).toBeVisible()
+    await expect(quirkyPage.getByLabel('Search file contents', { exact: true })).toHaveAttribute(
       'data-state',
       'on'
     )
-    await orcaPage
+    await quirkyPage
       .getByRole('textbox', { name: 'Search files', exact: true })
       .fill('sparse-proof-marker')
-    await expect(orcaPage.getByText('App.tsx', { exact: true })).toBeVisible()
-    await expect(orcaPage.getByText('Button.tsx', { exact: true })).toBeVisible()
-    await expect(orcaPage.getByText('private.txt', { exact: true })).toHaveCount(0)
+    await expect(quirkyPage.getByText('App.tsx', { exact: true })).toBeVisible()
+    await expect(quirkyPage.getByText('Button.tsx', { exact: true })).toBeVisible()
+    await expect(quirkyPage.getByText('private.txt', { exact: true })).toHaveCount(0)
     await capture('content-search')
-    await orcaPage.getByRole('textbox', { name: 'Search files', exact: true }).fill('')
-    await orcaPage.getByLabel('Filter files by name', { exact: true }).click()
+    await quirkyPage.getByRole('textbox', { name: 'Search files', exact: true }).fill('')
+    await quirkyPage.getByLabel('Filter files by name', { exact: true }).click()
     await expect(picker).toContainText('apps/web')
     await picker.click()
-    await orcaPage.getByRole('menuitemradio', { name: 'packages/ui', exact: true }).click()
+    await quirkyPage.getByRole('menuitemradio', { name: 'packages/ui', exact: true }).click()
     await expect(picker).toContainText('packages/ui')
     await expect(
-      orcaPage.getByRole('button', { name: 'Back to apps/web', exact: true })
+      quirkyPage.getByRole('button', { name: 'Back to apps/web', exact: true })
     ).toHaveCount(0)
-    await orcaPage.evaluate(async () => {
+    await quirkyPage.evaluate(async () => {
       await window.__store!.getState().updateSettingsOrThrow({ theme: 'dark' })
     })
-    await expect(orcaPage.locator('html')).toHaveClass(/dark/)
-    await orcaPage.keyboard.press('Escape')
+    await expect(quirkyPage.locator('html')).toHaveClass(/dark/)
+    await quirkyPage.keyboard.press('Escape')
     await capture('saved-choice-dark')
-    await orcaPage.getByRole('button', { name: 'About sparse checkout scope' }).click()
+    await quirkyPage.getByRole('button', { name: 'About sparse checkout scope' }).click()
     await capture('scope-details')
-    await orcaPage.keyboard.press('Escape')
-    await orcaPage.evaluate(() => window.__store!.setState({ rightSidebarWidth: 220 }))
+    await quirkyPage.keyboard.press('Escape')
+    await quirkyPage.evaluate(() => window.__store!.setState({ rightSidebarWidth: 220 }))
     await capture('narrow-explorer')
     await picker.click()
     await capture('root-menu')
-    await orcaPage.keyboard.press('Escape')
-    await orcaPage.evaluate(() => window.__store!.setState({ rightSidebarWidth: 430 }))
+    await quirkyPage.keyboard.press('Escape')
+    await quirkyPage.evaluate(() => window.__store!.setState({ rightSidebarWidth: 430 }))
     await git(workspace.path, ['sparse-checkout', 'disable'])
     expect(existsSync(path.join(workspace.path, 'omitted', 'private.txt'))).toBe(true)
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       ({ workspace }) => {
         const store = window.__store!
         const s = store.getState()

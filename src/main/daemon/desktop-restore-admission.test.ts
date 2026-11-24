@@ -27,7 +27,7 @@ describe('desktop restore admission', () => {
 
   beforeEach(() => {
     vi.useFakeTimers({ now: 1_000_000 })
-    dir = mkdtempSync(join(tmpdir(), 'orca-desktop-restore-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-desktop-restore-'))
     spawned = []
     exits = new Map()
     nextPid = 2000

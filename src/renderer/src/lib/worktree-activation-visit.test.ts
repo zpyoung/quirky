@@ -4,7 +4,7 @@ import type { AppState } from '@/store/types'
 import { markVisited } from './worktree-activation-visit'
 import { revealWorkspaceSurface } from './workspace-surface-reveal'
 
-vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+vi.mock('../../../shared/sidebar-inputs-switch', () => ({ QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true }))
 
 beforeEach(() => {
   vi.useFakeTimers({ now: 50_000, toFake: ['Date'] })

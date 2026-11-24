@@ -1,15 +1,15 @@
 /**
  * A chat as a Dispatch assignee. Its Dispatch row names it by its `/clear` root address,
- * `orca_session_id:<root>`, and holds no pane or process: whether it can still work is read off the
+ * `quirky_session_id:<root>`, and holds no pane or process: whether it can still work is read off the
  * session records the same way mail to it is, so the two can never disagree.
  */
 
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import {
-  ORCA_SESSION_ADDRESS_PREFIX,
-  parseOrcaSessionAddress,
-  type OrcaSessionId
-} from '../../../shared/orca-session-address'
+  QUIRKY_SESSION_ADDRESS_PREFIX,
+  parseQuirkySessionAddress,
+  type QuirkySessionId
+} from '../../../shared/quirky-session-address'
 import type { OrchestrationDb } from './db'
 import { DISPATCH_CONTEXT_COLUMN_LIST } from './db/row-column-lists'
 import type { DispatchContextRow } from './types'
@@ -23,8 +23,8 @@ import {
 /** The chat a Dispatch assignee handle names; null for a terminal or a structured worker. */
 export function chatAssigneeSessionId(
   assigneeHandle: string | null | undefined
-): OrcaSessionId | null {
-  return assigneeHandle ? parseOrcaSessionAddress(assigneeHandle) : null
+): QuirkySessionId | null {
+  return assigneeHandle ? parseQuirkySessionAddress(assigneeHandle) : null
 }
 
 export type ChatAssigneeObservation =
@@ -38,7 +38,7 @@ export type ChatAssigneeObservation =
  * exited; a record this host lacks, or another host, is unverifiable: missing evidence is no exit.
  */
 export function observeChatAssignee(
-  sessionId: OrcaSessionId,
+  sessionId: QuirkySessionId,
   db: OrchestrationDb | null | undefined,
   store: AgentSessionRecordReader | null = readAgentSessionRecordStore()
 ): ChatAssigneeObservation {
@@ -96,7 +96,7 @@ export function exitedChatDispatchesForSession(
       `SELECT ${DISPATCH_CONTEXT_COLUMN_LIST} FROM dispatch_contexts
         WHERE status IN ('pending', 'dispatched') AND substr(assignee_handle, 1, ?) = ?`
     )
-    .all(ORCA_SESSION_ADDRESS_PREFIX.length, ORCA_SESSION_ADDRESS_PREFIX)
+    .all(QUIRKY_SESSION_ADDRESS_PREFIX.length, QUIRKY_SESSION_ADDRESS_PREFIX)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The schema-pinned complete Dispatch projection returns Dispatch rows; the adapter exposes unknown.
   return (rows as DispatchContextRow[]).filter(
     (dispatch): dispatch is DispatchContextRow & { assignee_handle: string } => {

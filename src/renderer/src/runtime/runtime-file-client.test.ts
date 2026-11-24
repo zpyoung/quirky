@@ -534,7 +534,7 @@ describe('runtime file client', () => {
       result: { content: 'base64', isBinary: true, isImage: true, mimeType: 'image/png' },
       _meta: { runtimeId: 'remote-runtime' }
     })
-    const storedPath = '/srv/orca/agent-session-attachments/abc/u1/shot.png'
+    const storedPath = '/srv/quirky/agent-session-attachments/abc/u1/shot.png'
 
     await expect(
       readRuntimeFilePreview(

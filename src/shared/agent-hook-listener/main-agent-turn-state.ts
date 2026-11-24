@@ -7,7 +7,7 @@ export type ClaudeLeadTurnState = {
   /** A known background task opened this foreground finishing turn. */
   taskWakeupTurn?: true
   /** The recorded verdict on the turn this record closed (the provider's, or a `cancellation`
-   *  Orca inferred from the interrupt keystroke, or whatever a persisted row it was seeded from
+   *  Quirky inferred from the interrupt keystroke, or whatever a persisted row it was seeded from
    *  held); only meaningful while `state` is done. `cancellation` is what the fold reads as an
    *  interrupt. */
   outcome?: AgentTurnOutcome

@@ -1,10 +1,10 @@
 import { app } from 'electron'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { registerAppHandlers } from '../app'
 import { registerCliHandlers } from '../cli'
 import { registerPreflightHandlers } from '../preflight'
 import type { Store } from '../../persistence'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { StatsCollector } from '../../stats/collector'
 import { registerFilesystemHandlers } from '../filesystem'
 import type { CommitMessageAgentEnvironmentResolvers } from '../../text-generation/commit-message-agent-environment'
@@ -57,7 +57,7 @@ import { registerEmulatorFrameStreamHandlers } from '../emulator-frame-stream'
 import { registerEmulatorVideoStreamHandlers } from '../emulator-video-stream'
 import { registerSpeechHandlers } from '../speech'
 import { registerTerminalRenderDesyncEvidenceHandler } from '../terminal-render-desync-evidence'
-import { registerOrcaProfileHandlers } from '../orca-profiles'
+import { registerQuirkyProfileHandlers } from '../quirky-profiles'
 import { registerCodexAccountHandlers } from '../codex-accounts'
 import { registerAgentHookHandlers } from '../agent-hooks'
 import { registerCodexConfigSyncHandlers } from '../codex-config-sync'
@@ -107,7 +107,7 @@ let registered = false
 const RELAUNCH_DISMISSAL_CLOSE_TIMEOUT_MS = 2_000
 
 async function closeNotificationDismissalsBeforeRelaunch(
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
 ): Promise<void> {
   const result = await settleWithinMs(
     runtime.closeNotificationDismissals(),
@@ -128,7 +128,7 @@ type CoreHandlerLifecycleOptions = {
 
 export function registerCoreHandlers(
   store: Store,
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   stats: StatsCollector,
   claudeUsage: ClaudeUsageStore,
   codexUsage: CodexUsageStore,
@@ -163,7 +163,7 @@ export function registerCoreHandlers(
   registerAppHandlers(store, {
     quitResumeRecordsFor: (session) => runtime.quitResumeRecordsFor(session),
     // Switch point: main derives what the next startup reconnects instead of taking the window's.
-    ...(ORCA_LAYOUT_OWNER_IS_MAIN
+    ...(QUIRKY_LAYOUT_OWNER_IS_MAIN
       ? {
           reconnectFactsFor: (session, partition) =>
             runtime.shutdownReconnectFactsFor(session, partition)
@@ -223,7 +223,7 @@ export function registerCoreHandlers(
   if (pluginService) {
     registerPluginHandlers(store, pluginService, runtime, marketplaceServices)
   }
-  registerOrcaProfileHandlers(store, {
+  registerQuirkyProfileHandlers(store, {
     onBeforeRelaunch: lifecycleOptions.onBeforeRelaunch
   })
   registerBrowserHandlers()

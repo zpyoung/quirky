@@ -182,7 +182,7 @@ const MERMAID_PACKAGE = 'node_modules/mermaid/'
  * `src/platform/dictation-capture-contract.ts`, and the verb shapes in
  * `src/mobile-web-shell/bridge/bridge-audio-verbs.ts` — and eight vendored ones leave, because the
  * capture seam is what stops the page importing a microphone it does not have. Five are
- * `@orca/expo-two-way-audio` (its web module, `core`, `events`, `hooks` and the index) and three
+ * `@quirky/expo-two-way-audio` (its web module, `core`, `events`, `hooks` and the index) and three
  * are `expo-keep-awake`; the page asks the shell for the microphone over
  * `native.audio.start|read|stop` instead, and never asks about the screen at all — an open mic
  * holds it on the device side. The native halves of the seam resolve out of this closure entirely,

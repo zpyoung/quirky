@@ -19,9 +19,9 @@ describe('nativeChatNoticeLook', () => {
     ],
     [{ presentation: 'plan-document' }, { kind: 'plan' }],
     [{ presentation: 'stopped-before-start' }, { kind: 'aside' }],
-    // Stored red for clients that predate the orca-stop row; Orca stopped it, nothing failed.
+    // Stored red for clients that predate the quirky-stop row; Quirky stopped it, nothing failed.
     [
-      { presentation: 'orca-stop', tone: 'error' },
+      { presentation: 'quirky-stop', tone: 'error' },
       { kind: 'line', tone: 'notice' }
     ],
     [

@@ -150,7 +150,7 @@ describe('codex item identity', () => {
     expect(ordinals.ordinalFor(THREAD_ID, 'turn-2', 'item-1')).toBe(0)
   })
 
-  it('keys a non-message item and a turnless message in the orca namespace', () => {
+  it('keys a non-message item and a turnless message in the quirky namespace', () => {
     const ordinals = new CodexTurnOrdinals()
     const command = codexItemIdentity({
       threadId: THREAD_ID,
@@ -165,8 +165,8 @@ describe('codex item identity', () => {
       ordinals
     })
 
-    expect(command).toEqual({ provider: 'orca', clientMessageId: 'codex-item:thread-abc:item-2' })
-    expect(orphan).toEqual({ provider: 'orca', clientMessageId: 'codex-item:thread-abc:item-1' })
+    expect(command).toEqual({ provider: 'quirky', clientMessageId: 'codex-item:thread-abc:item-2' })
+    expect(orphan).toEqual({ provider: 'quirky', clientMessageId: 'codex-item:thread-abc:item-1' })
   })
 })
 
@@ -754,8 +754,8 @@ describe('codex item bodies', () => {
       codexItemBody({
         type: 'webSearch',
         id: 'w',
-        query: 'orca release notes',
-        action: { type: 'search', query: 'orca release notes', queries: null },
+        query: 'quirky release notes',
+        action: { type: 'search', query: 'quirky release notes', queries: null },
         results: null
       })
     ).toEqual({
@@ -763,22 +763,22 @@ describe('codex item bodies', () => {
       name: 'web_search',
       callId: 'w',
       input: {
-        query: 'orca release notes',
+        query: 'quirky release notes',
         description: 'search',
-        action: { type: 'search', query: 'orca release notes', queries: null }
+        action: { type: 'search', query: 'quirky release notes', queries: null }
       },
       state: 'completed'
     })
   })
 
   it('carries the web search hits as the call output', () => {
-    const results = [{ title: 'Orca 1.0', url: 'https://example.com/notes' }]
+    const results = [{ title: 'Quirky 1.0', url: 'https://example.com/notes' }]
     expect(
       codexItemBody({
         type: 'webSearch',
         id: 'w',
-        query: 'orca release notes',
-        action: { type: 'search', query: 'orca release notes', queries: null },
+        query: 'quirky release notes',
+        action: { type: 'search', query: 'quirky release notes', queries: null },
         results
       })
     ).toMatchObject({

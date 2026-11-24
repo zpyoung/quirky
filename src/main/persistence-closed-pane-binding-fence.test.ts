@@ -15,7 +15,7 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const WORKTREE = 'repo1::/worktree'
 const TAB = 'host-tab'
@@ -93,7 +93,7 @@ function leafIds(store: TestStore): string[] {
 
 describe('a pane main closed or took back is not brought back by its late terminal binding', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-closed-pane-fence-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-closed-pane-fence-'))
   })
 
   afterEach(async () => {

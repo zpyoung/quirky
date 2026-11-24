@@ -26,8 +26,9 @@ import { getCodexSettingsBaselinePath } from './config-settings-baseline'
 import { extractOrdinaryCodexSettings } from './config-toml-runtime-owned-sections'
 
 const UUID = '9dd962e2-449d-44c4-9733-0633f255064a'
-const MAC_MANAGED_HOME = `/Users/john/Library/Application Support/orca/codex-accounts/${UUID}/home`
-const OVERRIDE_LINE = 'daemon_auto_start = false # orca: CODEX_HOME too long for the daemon socket'
+const MAC_MANAGED_HOME = `/Users/john/Library/Application Support/quirky/codex-accounts/${UUID}/home`
+const OVERRIDE_LINE =
+  'daemon_auto_start = false # quirky: CODEX_HOME too long for the daemon socket'
 
 // The socket suffix is 43 bytes: sun_path 104 (macOS) / 108 (Linux) leaves 60 / 64 for the home.
 function homeOfLength(length: number): string {
@@ -56,17 +57,17 @@ describe('codexDaemonSocketPathExceedsLimit', () => {
   })
 
   it('measures WSL homes by their Linux path and limit', () => {
-    const shortWsl = '\\\\wsl.localhost\\Ubuntu\\home\\u\\.codex-orca'
+    const shortWsl = '\\\\wsl.localhost\\Ubuntu\\home\\u\\.codex-quirky'
     expect(codexDaemonSocketPath(shortWsl, 'win32')).toBe(
-      '/home/u/.codex-orca/app-server-control/app-server-control.sock'
+      '/home/u/.codex-quirky/app-server-control/app-server-control.sock'
     )
     expect(codexDaemonSocketPathExceedsLimit(shortWsl, 'win32')).toBe(false)
-    const managedWsl = `\\\\wsl.localhost\\Ubuntu\\home\\u\\.local\\share\\orca\\codex-accounts\\${UUID}\\home`
+    const managedWsl = `\\\\wsl.localhost\\Ubuntu\\home\\u\\.local\\share\\quirky\\codex-accounts\\${UUID}\\home`
     expect(codexDaemonSocketPathExceedsLimit(managedWsl, 'win32')).toBe(true)
   })
 
   it('flags the Windows managed home against the 108-byte uds_windows limit', () => {
-    const home = `C:\\Users\\neil\\AppData\\Roaming\\orca\\codex-accounts\\${UUID}\\home`
+    const home = `C:\\Users\\neil\\AppData\\Roaming\\quirky\\codex-accounts\\${UUID}\\home`
     expect(codexDaemonSocketPathExceedsLimit(home, 'win32')).toBe(true)
     expect(codexDaemonSocketPathExceedsLimit('C:\\Users\\neil\\.codex', 'win32')).toBe(false)
   })
@@ -157,7 +158,7 @@ describe('syncSystemConfigIntoManagedCodexHome daemon guard', () => {
   }
 
   const longHome = (): string =>
-    makeHome(join('Library', 'Application Support', 'orca', 'codex-accounts', UUID, 'home'))
+    makeHome(join('Library', 'Application Support', 'quirky', 'codex-accounts', UUID, 'home'))
 
   it('turns daemon auto-start off in a long managed home without touching ~/.codex', () => {
     const systemConfig = 'model = "gpt-5"\n'

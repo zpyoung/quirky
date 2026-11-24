@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { GITLAB_METHODS } from './gitlab'
 import { WorkItemDetails } from '../../../../shared/rpc-contract/gitlab-params'
 
@@ -19,7 +19,7 @@ describe('gitlab RPC methods', () => {
     const runtime = { getRuntimeId: () => 'test-runtime', listGitLabRepoAssignableUsers }
     const dispatcher = new RpcDispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these methods dispatch only listGitLabRepoAssignableUsers.
-      runtime: runtime as unknown as OrcaRuntimeService,
+      runtime: runtime as unknown as QuirkyRuntimeService,
       methods: GITLAB_METHODS
     })
 
@@ -55,7 +55,7 @@ describe('gitlab RPC methods', () => {
       updateGitLabRepoMRReviewers: vi.fn().mockResolvedValue({ ok: true, reviewers: [] }),
       getGitLabRepoWorkItemDetails: vi.fn().mockResolvedValue({ body: 'Details' }),
       getGitLabRepoWorkItemByPath: vi.fn().mockResolvedValue({ id: 'gitlab-issue-7' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GITLAB_METHODS })
     const projectRef = { host: 'gitlab.example.com', path: 'group/project' }
 
@@ -310,7 +310,7 @@ describe('gitlab RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getGitLabRepoWorkItemDetails
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GITLAB_METHODS })
     const params = { repo: 'id:repo-1', iid: 8, type: 'mr', includeReviewDetails: false }
     await dispatcher.dispatch(makeRequest('gitlab.workItemDetails', params))
@@ -338,7 +338,7 @@ describe('gitlab RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       updateGitLabRepoMR: vi.fn().mockResolvedValue({ ok: true })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GITLAB_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -362,7 +362,7 @@ describe('gitlab RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       listGitLabRepoIssues: vi.fn().mockResolvedValue({ items: [] })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GITLAB_METHODS })
 
     await dispatcher.dispatch(
@@ -411,7 +411,7 @@ describe('gitlab RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getGitLabRepoJobTrace: vi.fn().mockResolvedValue({ ok: true, trace: noisyTrace })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GITLAB_METHODS })
 
     const raw = await dispatcher.dispatch(

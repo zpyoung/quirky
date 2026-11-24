@@ -16,7 +16,7 @@ const scopeAlpha = '1'.repeat(64)
 const scopeBeta = '2'.repeat(64)
 
 function partitionName(marker: string): string {
-  return `persist:orca-browser-v1-${marker.repeat(64)}`
+  return `persist:quirky-browser-v1-${marker.repeat(64)}`
 }
 
 function createStore(): {
@@ -24,7 +24,7 @@ function createStore(): {
   partitionDataRoot: string
   store: BrowserRoutePartitionBindingStore
 } {
-  const root = realpathSync(mkdtempSync(join(realpathSync(tmpdir()), 'orca-browser-storage-gc-')))
+  const root = realpathSync(mkdtempSync(join(realpathSync(tmpdir()), 'quirky-browser-storage-gc-')))
   const filePath = join(root, 'bindings.json')
   const partitionDataRoot = join(root, 'Partitions')
   mkdirSync(partitionDataRoot, { recursive: true })

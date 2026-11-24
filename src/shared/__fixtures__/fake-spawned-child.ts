@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import type { ChildProcess } from 'node:child_process'
 import { PassThrough } from 'node:stream'
-import type { PipedChildProcess } from '@orca/process-host/process-spec'
+import type { PipedChildProcess } from '@quirky/process-host/process-spec'
 import { vi } from 'vitest'
 
 /**

@@ -1,11 +1,11 @@
 /**
- * #29973: a phone paired straight to a headless `orca serve` sees the Claude chat in Session
- * History, but not the one-shot request Orca ran in the same folder to name that chat.
+ * #29973: a phone paired straight to a headless `quirky serve` sees the Claude chat in Session
+ * History, but not the one-shot request Quirky ran in the same folder to name that chat.
  */
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { pairMobileClient } from './helpers/paired-mobile-client'
 import { buildConversationNamePrompt } from '../../src/shared/conversation-name-generation'

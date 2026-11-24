@@ -107,7 +107,7 @@ describe('nativeChatTurnMembership', () => {
   it('anchors a command turn on its /compact entry, and leaves the turn before it alone', () => {
     const compactKey = agentJournalSubmissionKey('cmd-1')
     const commandTurn = agentJournalItemKey({
-      provider: 'orca',
+      provider: 'quirky',
       clientMessageId: 'command-turn:cmd-1'
     })
     const items = [

@@ -16,7 +16,7 @@ import {
   generatePullRequestFieldsFromContext
 } from './commit-message-text-generation'
 
-const folder = mkdtempSync(join(tmpdir(), 'orca-command-env-'))
+const folder = mkdtempSync(join(tmpdir(), 'quirky-command-env-'))
 const script = join(folder, 'agent.cjs')
 const literal = 'spaces $HOME;$(echo unsafe) `echo unsafe` * = value'
 writeFileSync(
@@ -25,7 +25,7 @@ writeFileSync(
 let prompt = ''
 process.stdin.on('data', chunk => prompt += chunk)
 process.stdin.on('end', () => {
-  if (process.env.ORCA_COMMAND_VALUE !== ${JSON.stringify(literal)}) {
+  if (process.env.QUIRKY_COMMAND_VALUE !== ${JSON.stringify(literal)}) {
     console.error('command environment missing or expanded')
     process.exitCode = 3
     return
@@ -41,11 +41,11 @@ process.stdin.on('end', () => {
 afterAll(() => rmSync(folder, { recursive: true, force: true }))
 
 // Forward slashes remain valid Windows paths and avoid POSIX command-template escaping.
-const override = `ORCA_COMMAND_VALUE='${literal}' "${process.execPath.replaceAll('\\', '/')}" "${script.replaceAll('\\', '/')}"`
+const override = `QUIRKY_COMMAND_VALUE='${literal}' "${process.execPath.replaceAll('\\', '/')}" "${script.replaceAll('\\', '/')}"`
 const target = {
   kind: 'local',
   cwd: folder,
-  env: { ...process.env, ORCA_COMMAND_VALUE: 'base' }
+  env: { ...process.env, QUIRKY_COMMAND_VALUE: 'base' }
 } as const
 const params = { agentId: 'custom', model: '', customAgentCommand: override } as const
 

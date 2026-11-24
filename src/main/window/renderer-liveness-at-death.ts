@@ -5,9 +5,9 @@ import { recordCoalescedDurableCrashBreadcrumb } from '../crash-reporting/durabl
  * What the main window looked like to the user when its renderer died.
  *
  * Why: Windows `killed`/exit 1 reports are identical whether Task Manager, an EDR or
- * Orca held the knife. A renderer that had been hung for minutes, or a document
+ * Quirky held the knife. A renderer that had been hung for minutes, or a document
  * that never loaded (the post-update blank frame), turns "outside kill" into "the
- * user ended a frozen Orca" — and that is an Orca bug to chase, not noise.
+ * user ended a frozen Quirky" — and that is an Quirky bug to chase, not noise.
  */
 export type RendererLivenessAtDeath = {
   /** Set only while Chromium flags the renderer hung (needs ~15s of unacknowledged input); absent = not detected hung. */

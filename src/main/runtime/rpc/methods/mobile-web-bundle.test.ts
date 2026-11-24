@@ -12,7 +12,10 @@ import {
 } from '../../../../shared/mobile-web-bundle/bundle-rpc-contract'
 import { MOBILE_RPC_METHOD_ALLOWLIST } from '../../runtime-rpc/runtime-rpc-mobile-method-allowlist'
 import type { RpcRequest, RpcResponse } from '../core'
-import { ORCAD_MOBILE_WEB_DIR, ORCAD_MOBILE_WEB_MANIFEST } from '../../../../shared/orcad-artifacts'
+import {
+  QUIRKYD_MOBILE_WEB_DIR,
+  QUIRKYD_MOBILE_WEB_MANIFEST
+} from '../../../../shared/quirkyd-artifacts'
 import type { RpcDispatcher } from '../dispatcher'
 
 import {
@@ -85,7 +88,7 @@ async function download(buildId: string, path: string): Promise<{ bytes: Buffer;
 }
 
 beforeEach(() => {
-  scratch = mkdtempSync(join(tmpdir(), 'orca-mobile-web-bundle-'))
+  scratch = mkdtempSync(join(tmpdir(), 'quirky-mobile-web-bundle-'))
   installMobileWebBundleAppPath(scratch)
   resetBundledMobileWebBundleCacheForTests()
   resetMobileWebBundleAssetVerdictsForTests()
@@ -343,16 +346,16 @@ describe('where the resolver probes', () => {
     expect(getBundledMobileWebBundleRoot()).toBe(bundle.root)
   })
 
-  // orcad's appPath is its slot root, and the slot ships the page at ORCAD_MOBILE_WEB_DIR.
-  it('finds the page an orcad slot ships, without a resolver of its own', () => {
+  // quirkyd's appPath is its slot root, and the slot ships the page at QUIRKYD_MOBILE_WEB_DIR.
+  it('finds the page an quirkyd slot ships, without a resolver of its own', () => {
     const bundle = writeSyntheticMobileWebBundle(
-      join(scratch, ...ORCAD_MOBILE_WEB_DIR.split('/')),
+      join(scratch, ...QUIRKYD_MOBILE_WEB_DIR.split('/')),
       2
     )
 
     expect(getBundledMobileWebBundleRoot()).toBe(bundle.root)
     expect(join(bundle.root, 'manifest.json')).toBe(
-      join(scratch, ...ORCAD_MOBILE_WEB_MANIFEST.split('/'))
+      join(scratch, ...QUIRKYD_MOBILE_WEB_MANIFEST.split('/'))
     )
   })
 

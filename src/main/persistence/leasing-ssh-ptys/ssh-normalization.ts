@@ -11,7 +11,7 @@ import {
   SSH_REMOTE_RUNTIMES
 } from '../../../shared/ssh-types'
 import { normalizeSshPendingPtyKill } from '../../../shared/ssh-pending-pty-kill'
-import { getLegacyManagedOrcadOwnerEnvironmentId } from '../../../shared/managed-orcad-ssh-owner'
+import { getLegacyManagedQuirkydOwnerEnvironmentId } from '../../../shared/managed-quirkyd-ssh-owner'
 
 export type LegacySshTarget = SshTarget & {
   remoteWorkspaceSyncEnabled?: unknown
@@ -73,7 +73,7 @@ export function normalizeSshTarget(t: SshTarget): SshTarget {
     normalizeManagedServerMoveOffered(
       normalizeAppVersionNote(
         normalizeAppVersionNote(
-          migrateLegacyManagedOrcadOwner(normalized),
+          migrateLegacyManagedQuirkydOwner(normalized),
           'managedServerUnavailable'
         ),
         'managedServerUpdateFailure'
@@ -84,17 +84,17 @@ export function normalizeSshTarget(t: SshTarget): SshTarget {
 
 /**
  * Phase-3 builds fenced a managed host through `owner`, which shipped builds hide. Moving the fence
- * to `orcadFence` keeps the host visible, and reachable over its relay, after a downgrade.
+ * to `quirkydFence` keeps the host visible, and reachable over its relay, after a downgrade.
  */
-function migrateLegacyManagedOrcadOwner(target: SshTarget): SshTarget {
-  const environmentId = getLegacyManagedOrcadOwnerEnvironmentId(target.owner)
+function migrateLegacyManagedQuirkydOwner(target: SshTarget): SshTarget {
+  const environmentId = getLegacyManagedQuirkydOwnerEnvironmentId(target.owner)
   if (!environmentId) {
-    return normalizeOrcadFence(target)
+    return normalizeQuirkydFence(target)
   }
   const { owner: _legacyOwner, ...rest } = target
-  const fenced = normalizeOrcadFence(rest)
+  const fenced = normalizeQuirkydFence(rest)
   // A malformed fence must not discard the owner's valid environment id.
-  return fenced.orcadFence ? fenced : { ...fenced, orcadFence: { environmentId } }
+  return fenced.quirkydFence ? fenced : { ...fenced, quirkydFence: { environmentId } }
 }
 
 // Unknown keys pass through every note below, so a newer build's optional fields survive this one.
@@ -141,24 +141,24 @@ function normalizeManagedServerLeaveBehind(target: SshTarget): SshTarget {
   return rest
 }
 
-function normalizeOrcadFence(target: SshTarget): SshTarget {
-  if (target.orcadFence === undefined) {
+function normalizeQuirkydFence(target: SshTarget): SshTarget {
+  if (target.quirkydFence === undefined) {
     return target
   }
-  const fence = noteFields(target.orcadFence)
+  const fence = noteFields(target.quirkydFence)
   const environmentId = fence?.environmentId
   if (fence && typeof environmentId === 'string' && environmentId.length > 0) {
     const { sourceChangedAt, ...unknownAndId } = fence
     return {
       ...target,
-      orcadFence: {
+      quirkydFence: {
         ...unknownAndId,
         environmentId,
         ...(typeof sourceChangedAt === 'string' ? { sourceChangedAt } : {})
       }
     }
   }
-  const { orcadFence: _malformed, ...rest } = target
+  const { quirkydFence: _malformed, ...rest } = target
   return rest
 }
 
@@ -173,7 +173,7 @@ const SshRemoteRuntimeResolutionSchema = z
       .regex(/^\d+\.\d+$/)
       .nullable(),
     runtimeSha256: z.string().regex(/^[0-9a-f]{64}$/),
-    orcaMajor: z.number().int().nonnegative()
+    quirkyMajor: z.number().int().nonnegative()
   })
   .strict()
 

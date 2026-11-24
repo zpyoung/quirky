@@ -26,7 +26,7 @@ describe('verifyImeEngagementReceipts', () => {
   })
 
   // The failure this whole mechanism exists for: Playwright reports a skipped test as a pass, so
-  // an unset ORCA_E2E_NATIVE_IBUS_HANGUL produces exit code 0 and an empty receipt file.
+  // an unset QUIRKY_E2E_NATIVE_IBUS_HANGUL produces exit code 0 and an empty receipt file.
   it('rejects an empty receipt, which is what a fully skipped run leaves behind', () => {
     const problems = verifyImeEngagementReceipts('')
     expect(problems).toHaveLength(EXPECTED_NATIVE_IME_TESTS.length)

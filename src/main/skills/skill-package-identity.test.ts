@@ -15,7 +15,7 @@ const temporaryDirectories: string[] = []
 const execFileAsync = promisify(execFile)
 
 async function temporarySkill(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-skill-freshness-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-skill-freshness-'))
   temporaryDirectories.push(root)
   return root
 }

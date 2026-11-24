@@ -33,7 +33,7 @@ vi.mock('node:os', async (importOriginal) => {
   return { ...actual, default: actual, homedir: () => state.home }
 })
 
-vi.mock('electron', () => ({ app: { getPath: () => '/tmp/orca-user-data' } }))
+vi.mock('electron', () => ({ app: { getPath: () => '/tmp/quirky-user-data' } }))
 
 import { MANAGED_AGENT_HOOK_SCRIPT_REFRESHERS } from './managed-agent-hook-registry'
 
@@ -45,7 +45,7 @@ function syncCallsUnderHome(): string[] {
 
 describe('managed hook script refresh stays off the main thread', () => {
   beforeEach(async () => {
-    state.home = await mkdtemp(join(tmpdir(), 'orca-hook-refresh-main-thread-'))
+    state.home = await mkdtemp(join(tmpdir(), 'quirky-hook-refresh-main-thread-'))
     state.syncCalls = []
   })
 
@@ -54,7 +54,7 @@ describe('managed hook script refresh stays off the main thread', () => {
   })
 
   it('uses no synchronous HOME filesystem calls for missing or stale scripts', async () => {
-    const hooksDir = join(state.home, '.orca', 'agent-hooks')
+    const hooksDir = join(state.home, '.quirky', 'agent-hooks')
     const claudeScript = join(
       hooksDir,
       process.platform === 'win32' ? 'claude-hook.cmd' : 'claude-hook.sh'
@@ -74,7 +74,7 @@ describe('managed hook script refresh stays off the main thread', () => {
     const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     try {
-      const hooksDir = join(state.home, '.orca', 'agent-hooks')
+      const hooksDir = join(state.home, '.quirky', 'agent-hooks')
       await mkdir(hooksDir, { recursive: true })
       await writeFile(join(hooksDir, 'claude-hook.cmd'), 'stale', 'utf-8')
       state.syncCalls = []

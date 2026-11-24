@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { runProcessMock } = vi.hoisted(() => ({ runProcessMock: vi.fn() }))
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 
 import {
   createNotebookVenv,
@@ -64,7 +64,7 @@ describe('listPythonEnvironments', () => {
       stdout: `${program}\n3.13.0\n`,
       stderr: ''
     }))
-    root = mkdtempSync(join(tmpdir(), 'orca-pyenvs-'))
+    root = mkdtempSync(join(tmpdir(), 'quirky-pyenvs-'))
     for (const interpreter of [venvPython(), condaPython()]) {
       mkdirSync(dirname(interpreter), { recursive: true })
       writeFileSync(interpreter, '')
@@ -206,7 +206,7 @@ describe('createNotebookVenv', () => {
   })
 
   it('reuses an existing .venv rather than re-running venv over it', async () => {
-    const parent = mkdtempSync(join(tmpdir(), 'orca-venv-'))
+    const parent = mkdtempSync(join(tmpdir(), 'quirky-venv-'))
     try {
       const venvPython = interpreterIn(join(parent, '.venv'))
       mkdirSync(dirname(venvPython), { recursive: true })

@@ -280,7 +280,7 @@ describe('ssh host partition hydration', () => {
 })
 
 describe('ssh host partition workspaces with no terminal tabs', () => {
-  /** An SSH workspace the user left with an editor open and every terminal closed. Orca does not
+  /** An SSH workspace the user left with an editor open and every terminal closed. Quirky does not
    *  auto-create a terminal while other tabs exist, so this is an ordinary state — and the whole
    *  workspace now persists to `ssh:<targetId>`, tabs or no tabs. */
   function editorOnlyPartitions() {

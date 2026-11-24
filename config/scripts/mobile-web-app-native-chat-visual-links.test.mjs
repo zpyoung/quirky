@@ -56,7 +56,7 @@ beforeAll(async () => {
   })
   await new Promise((resolve) => shellServer.listen(0, '127.0.0.1', resolve))
   shellOrigin = `http://127.0.0.1:${shellServer.address().port}`
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browsers.chromium = await chromium.launch({
     headless: true,
     ...(executablePath ? { executablePath } : {})

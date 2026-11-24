@@ -1,4 +1,4 @@
-// Forked so a killed WSL UNC syscall cannot retain a libuv thread in Orca.
+// Forked so a killed WSL UNC syscall cannot retain a libuv thread in Quirky.
 import type {
   WslTranscriptFsProcessError,
   WslTranscriptFsProcessRequest,

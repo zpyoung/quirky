@@ -84,7 +84,7 @@ export function ManagedDataAccountsSection({
     }
   }
 
-  const command = `orca account add --agent ${provider}`
+  const command = `quirky account add --agent ${provider}`
   return (
     <section className="space-y-3">
       <h3 className="text-sm font-semibold">
@@ -95,7 +95,7 @@ export function ManagedDataAccountsSection({
       <p className="text-xs text-muted-foreground">
         {translate(
           'accounts.managedData.description',
-          'Add accounts by running this command in a terminal on the Orca host. Selection applies to new explicit agent launches on that host; direct SSH relay and Windows-hosted WSL launches use their own credentials.'
+          'Add accounts by running this command in a terminal on the Quirky host. Selection applies to new explicit agent launches on that host; direct SSH relay and Windows-hosted WSL launches use their own credentials.'
         )}
       </p>
       <code className="text-xs">{command}</code>
@@ -129,7 +129,7 @@ export function ManagedDataAccountsSection({
         <p className="text-xs text-muted-foreground">
           {translate(
             'accounts.managedData.upgrade',
-            'If accounts do not appear, update or restart the Orca host.'
+            'If accounts do not appear, update or restart the Quirky host.'
           )}
         </p>
       )}

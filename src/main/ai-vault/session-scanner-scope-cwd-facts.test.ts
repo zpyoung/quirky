@@ -48,7 +48,7 @@ afterEach(async () => {
 })
 
 it.each([false, true])('keeps cold authority with read failure=%s', async (failReads) => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-scope-invalid-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-scope-invalid-'))
   tempRoots.push(root)
   const roots = isolatedScanRoots(root)
   const persistence = { filePath: join(root, 'parse-cache.json'), appVersion: 'test' }
@@ -171,7 +171,7 @@ async function writeRollout(sessionsDir: string, id: string, cwd: string, day: n
 }
 
 it('settles out-of-scope transcripts once and reads none of them after a restart', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-scope-cwd-facts-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-scope-cwd-facts-'))
   tempRoots.push(root)
   const roots = isolatedScanRoots(root)
   const persistence = { filePath: join(root, 'user-data', 'parse-cache.json'), appVersion: 'test' }

@@ -37,7 +37,7 @@ function createCliSessionSearch(client: RuntimeClient) {
   return { search, envelope }
 }
 
-/** `orca search` over `aiVault.searchSessions` / `aiVault.searchStatus` on one host. */
+/** `quirky search` over `aiVault.searchSessions` / `aiVault.searchStatus` on one host. */
 export const SEARCH_HANDLERS: Record<string, CommandHandler> = {
   search: async ({ client, flags, json }) => {
     const command = parseSearchCommand(flags)

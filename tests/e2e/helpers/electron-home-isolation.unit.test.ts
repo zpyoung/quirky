@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 function createUserDataDir(): string {
-  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'orca-home-isolation-test-'))
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-home-isolation-test-'))
   tempDirs.push(tempDir)
   return tempDir
 }
@@ -32,10 +32,10 @@ describe('createElectronHomeIsolation', () => {
         HOME: '/real/home',
         USERPROFILE: '/real/home',
         CODEX_HOME: '/real/codex',
-        ORCA_CODEX_HOME: '/real/orca-codex',
+        QUIRKY_CODEX_HOME: '/real/quirky-codex',
         CLAUDE_CONFIG_DIR: '/real/claude',
         ZDOTDIR: '/real/zdotdir',
-        ORCA_DISABLE_MACOS_LOGIN_SHELL: 'false',
+        QUIRKY_DISABLE_MACOS_LOGIN_SHELL: 'false',
         PATH: '/bin'
       },
       launchEnv: { TEST_TOKEN: 'safe' },
@@ -54,13 +54,13 @@ describe('createElectronHomeIsolation', () => {
       EXTRA_TEST_FLAG: '1',
       HOME: canonicalHome,
       USERPROFILE: canonicalHome,
-      ORCA_E2E_USER_DATA_DIR: userDataDir
+      QUIRKY_E2E_USER_DATA_DIR: userDataDir
     })
     expect(isolation.env.CODEX_HOME).toBeUndefined()
-    expect(isolation.env.ORCA_CODEX_HOME).toBeUndefined()
+    expect(isolation.env.QUIRKY_CODEX_HOME).toBeUndefined()
     expect(isolation.env.CLAUDE_CONFIG_DIR).toBeUndefined()
     expect(isolation.env.ZDOTDIR).toBeUndefined()
-    expect(isolation.env.ORCA_DISABLE_MACOS_LOGIN_SHELL).toBe(
+    expect(isolation.env.QUIRKY_DISABLE_MACOS_LOGIN_SHELL).toBe(
       process.platform === 'darwin' ? '1' : undefined
     )
     // Codex always routes to the resolved home, so the post-launch guard must
@@ -85,11 +85,11 @@ describe('createElectronHomeIsolation', () => {
       createElectronHomeIsolation({
         inheritedEnv: {},
         launchEnv: {},
-        extraEnv: { ORCA_E2E_USER_DATA_DIR: '/unsafe' },
+        extraEnv: { QUIRKY_E2E_USER_DATA_DIR: '/unsafe' },
         userDataDir: createUserDataDir(),
         realHome: '/real/home'
       })
-    ).toThrow(/orcaAppExtraEnv\.ORCA_E2E_USER_DATA_DIR/)
+    ).toThrow(/quirkyAppExtraEnv\.QUIRKY_E2E_USER_DATA_DIR/)
   })
 
   it('compares Windows home paths case-insensitively', () => {
@@ -102,12 +102,12 @@ describe('createElectronHomeIsolation', () => {
       expect(() =>
         createElectronHomeIsolation({
           inheritedEnv: {},
-          launchEnv: overlay === 'launchEnv' ? { ORCA_DISABLE_MACOS_LOGIN_SHELL: '0' } : {},
-          extraEnv: overlay === 'extraEnv' ? { ORCA_DISABLE_MACOS_LOGIN_SHELL: '0' } : {},
+          launchEnv: overlay === 'launchEnv' ? { QUIRKY_DISABLE_MACOS_LOGIN_SHELL: '0' } : {},
+          extraEnv: overlay === 'extraEnv' ? { QUIRKY_DISABLE_MACOS_LOGIN_SHELL: '0' } : {},
           userDataDir: createUserDataDir(),
           realHome: '/real/home'
         })
-      ).toThrow(/ORCA_DISABLE_MACOS_LOGIN_SHELL/)
+      ).toThrow(/QUIRKY_DISABLE_MACOS_LOGIN_SHELL/)
     }
   )
 })
@@ -187,7 +187,7 @@ describe('ZCode credentials in the disposable home', () => {
             realHome: externalHome
           })
         ).toThrow(
-          `${overlay === 'launchEnv' ? 'launchEnv' : 'orcaAppExtraEnv'}.${spelling} cannot override the E2E home boundary`
+          `${overlay === 'launchEnv' ? 'launchEnv' : 'quirkyAppExtraEnv'}.${spelling} cannot override the E2E home boundary`
         )
       }
     }
@@ -196,7 +196,7 @@ describe('ZCode credentials in the disposable home', () => {
   it('reads ordinary home fixtures while retaining legitimate launch overrides', () => {
     const isolation = createElectronHomeIsolation({
       inheritedEnv: { PATH: '/synthetic/bin' },
-      launchEnv: { ORCA_DISABLE_AGENT_HOOKS: '1', TEST_TOKEN: 'launch' },
+      launchEnv: { QUIRKY_DISABLE_AGENT_HOOKS: '1', TEST_TOKEN: 'launch' },
       extraEnv: { TEST_TOKEN: 'extra', ZCODE_CREDENTIAL_SECRET: 'synthetic-secret' },
       userDataDir: createUserDataDir(),
       realHome: createUserDataDir()
@@ -210,7 +210,7 @@ describe('ZCode credentials in the disposable home', () => {
     )
     expect(isolation.env).toMatchObject({
       PATH: '/synthetic/bin',
-      ORCA_DISABLE_AGENT_HOOKS: '1',
+      QUIRKY_DISABLE_AGENT_HOOKS: '1',
       TEST_TOKEN: 'extra',
       ZCODE_CREDENTIAL_SECRET: 'synthetic-secret'
     })

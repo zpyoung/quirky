@@ -469,7 +469,7 @@ describe('Resume', () => {
     expect(ledgerRow(id)).toBeUndefined()
   })
 
-  it("answers a no-op on a newer Orca's records with that refusal, not unknown", async () => {
+  it("answers a no-op on a newer Quirky's records with that refusal, not unknown", async () => {
     await rig.workingSend()
     const id = opId()
     Object.defineProperty(openTestJournalHostDatabase(rig.root), 'readOnly', { value: true })
@@ -563,7 +563,7 @@ describe('source-bound ordinary Continue', () => {
     if (!journal) {
       throw new Error('expected an open journal')
     }
-    const identity = { provider: 'orca' as const, clientMessageId: id }
+    const identity = { provider: 'quirky' as const, clientMessageId: id }
     const turnItemId = agentJournalItemKey(identity)
     await journal.appendItem(
       identity,
@@ -578,7 +578,7 @@ describe('source-bound ordinary Continue', () => {
       { fence: 1, turnScope: { kind: 'thread' } }
     )
     await journal.appendItem(
-      { provider: 'orca', clientMessageId: `failure-${id}` },
+      { provider: 'quirky', clientMessageId: `failure-${id}` },
       {
         kind: 'status',
         ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' })

@@ -14,14 +14,14 @@ const config = require('../electron-builder.config.cjs')
 it('uses the same three folder descriptions for the app and every packaged Electron Helper', () => {
   expect(config.mac.extendInfo).toMatchObject(MACOS_FOLDER_USAGE_DESCRIPTIONS)
   expect(Object.keys(MACOS_FOLDER_USAGE_DESCRIPTIONS)).toHaveLength(3)
-  const root = mkdtempSync(join(tmpdir(), 'orca-helper-privacy-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-helper-privacy-'))
   try {
     const names = [
-      'Orca Dev Helper.app',
-      'Orca Dev Helper (GPU).app',
-      'Orca Dev Helper (Renderer).app',
-      'Orca Dev Helper (Plugin).app',
-      'Orca Computer.app'
+      'Quirky Helper.app',
+      'Quirky Helper (GPU).app',
+      'Quirky Helper (Renderer).app',
+      'Quirky Helper (Plugin).app',
+      'Quirky Computer.app'
     ]
     for (const name of names) {
       const contents = join(root, 'Contents', 'Frameworks', name, 'Contents')
@@ -34,7 +34,7 @@ it('uses the same three folder descriptions for the app and every packaged Elect
     const run = vi.fn((_program, args) =>
       args.includes('json') ? readFileSync(args.at(-1), 'utf8') : ''
     )
-    applyMacHelperFolderUsageDescriptions(root, 'Orca Dev', run)
+    applyMacHelperFolderUsageDescriptions(root, 'Quirky', run)
     for (const name of names.slice(0, 4)) {
       expect(
         JSON.parse(

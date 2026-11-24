@@ -1,6 +1,6 @@
 import type { SshTarget } from '../../../shared/ssh-types'
-import type { CensusHostRelayTerminals } from '../orcad-migration-terminal-gate'
-import { requireManagedOrcadInfrastructure } from '../../managed-server/lifecycle/orcad-managed-runtime-context'
+import type { CensusHostRelayTerminals } from '../quirkyd-migration-terminal-gate'
+import { requireManagedQuirkydInfrastructure } from '../../managed-server/lifecycle/quirkyd-managed-runtime-context'
 import {
   beginSshHostCensus,
   currentSshOwner,
@@ -15,7 +15,7 @@ import {
 /** The host census a terminal proof falls back to when no relay session can be asked. */
 export function censusHostRelayTerminalsFor(target: SshTarget): CensusHostRelayTerminals {
   const census = async (): ReturnType<CensusHostRelayTerminals> => {
-    const { connectionManager } = requireManagedOrcadInfrastructure()
+    const { connectionManager } = requireManagedQuirkydInfrastructure()
     return hostTerminalProofFromCensus(
       await censusSshHostRelaysBeforeSession(await connectionManager.connect(target), target.id)
     )
@@ -37,7 +37,7 @@ async function censusOutsideConnect<T>(target: SshTarget, census: () => Promise<
 
 /** A transport this census opened that no connect or tunnel took over has no one to serve. */
 async function closeUnadoptedCensusTransport(targetId: string, owner: symbol): Promise<void> {
-  const { connectionManager } = requireManagedOrcadInfrastructure()
+  const { connectionManager } = requireManagedQuirkydInfrastructure()
   const opened = connectionManager.getConnection(targetId)
   if (opened && isSshConnectionSolelyOwnedBy(opened, owner)) {
     await connectionManager.disconnectConnection(targetId, opened).catch((error: unknown) => {

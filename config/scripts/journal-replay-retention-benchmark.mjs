@@ -31,7 +31,7 @@ const identity = {
 }
 // The baseline predates the neutral handle and takes its journal identity in the typed form.
 const baselineIdentity = { ...identity, providerHandle: { kind: 'codex', threadId: 'thread' } }
-const fixture = await mkdtemp(join(tmpdir(), 'orca-journal-replay-bench-'))
+const fixture = await mkdtemp(join(tmpdir(), 'quirky-journal-replay-bench-'))
 // Released in `finally`, newest first: an open SQLite handle blocks the fixture's removal on Windows.
 const releases = []
 

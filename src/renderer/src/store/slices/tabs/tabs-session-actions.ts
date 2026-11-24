@@ -10,7 +10,7 @@ import { buildHydratedTabState } from '../tabs-hydration'
 import { projectWorktreeTabModelReconciliation } from './tabs-reconciliation'
 import { createWorktreeTabModelReconciliationBatch } from './tabs-reconciliation-batch'
 import type { AppState } from '../../types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
 function replaceWorkspaceRecordKeys<T>(
   current: Record<string, T>,
@@ -61,7 +61,7 @@ export function createTabsSessionActions(
         return
       }
       // Switch point: main's frames draw the tab bar, so reconcile writes no structure of its own.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         return
       }
       const patch = projectWorktreeTabModelReconciliations(get(), worktreeIds)
@@ -73,7 +73,7 @@ export function createTabsSessionActions(
     reconcileWorktreeTabModel: (worktreeId) => {
       const reconciliation = projectWorktreeTabModelReconciliation(get(), worktreeId)
       // Switch point: the counts only; main's frames draw the tab bar.
-      if (!ORCA_LAYOUT_OWNER_IS_MAIN && Object.keys(reconciliation.patch).length > 0) {
+      if (!QUIRKY_LAYOUT_OWNER_IS_MAIN && Object.keys(reconciliation.patch).length > 0) {
         set(reconciliation.patch)
       }
       return {

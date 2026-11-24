@@ -25,24 +25,24 @@ const AUTOMATION_STATE_FLAGS = [
 export const AUTOMATION_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['automations', 'list'],
-    summary: 'List scheduled Orca automations',
-    usage: 'orca automations list [--json]',
+    summary: 'List scheduled Quirky automations',
+    usage: 'quirky automations list [--json]',
     allowedFlags: [...GLOBAL_FLAGS],
-    examples: ['orca automations list', 'orca automations list --json']
+    examples: ['quirky automations list', 'quirky automations list --json']
   },
   {
     path: ['automations', 'show'],
-    summary: 'Show one Orca automation',
-    usage: 'orca automations show <id> [--json]',
+    summary: 'Show one Quirky automation',
+    usage: 'quirky automations show <id> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id'],
     positionalArgs: ['id'],
-    examples: ['orca automations show 2f9e...', 'orca automations show --id 2f9e... --json']
+    examples: ['quirky automations show 2f9e...', 'quirky automations show --id 2f9e... --json']
   },
   {
     path: ['automations', 'create'],
-    summary: 'Create a scheduled Orca automation',
+    summary: 'Create a scheduled Quirky automation',
     usage:
-      'orca automations create --name <name> --trigger <preset|cron|rrule> --prompt <text> --provider <agent> [--model <id>] [--effort <value>] [--precheck <command>] [--repo <selector>|--workspace <selector>|--project <id-or-name> [--host <host>]|--project-host-setup <id>] [--json]',
+      'quirky automations create --name <name> --trigger <preset|cron|rrule> --prompt <text> --provider <agent> [--model <id>] [--effort <value>] [--precheck <command>] [--repo <selector>|--workspace <selector>|--project <id-or-name> [--host <host>]|--project-host-setup <id>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'name',
@@ -57,9 +57,9 @@ export const AUTOMATION_COMMAND_SPECS: CommandSpec[] = [
     ],
     notes: [
       'Trigger accepts hourly, daily, weekdays, weekly, a 5-field cron expression, or an RRULE string.',
-      'When --repo is omitted, the CLI uses the enclosing Orca worktree when one can be resolved from cwd.',
-      'Use --project, or --project-host-setup, to run on a specific project host setup. --project takes the project id or the display name from `orca project list`, and --host is only needed when the project is set up on more than one host.',
-      '--host takes local, ssh:<target-id>, runtime:<environment-id>, or the bare host name `orca host list` prints for any of them.',
+      'When --repo is omitted, the CLI uses the enclosing Quirky worktree when one can be resolved from cwd.',
+      'Use --project, or --project-host-setup, to run on a specific project host setup. --project takes the project id or the display name from `quirky project list`, and --host is only needed when the project is set up on more than one host.',
+      '--host takes local, ssh:<target-id>, runtime:<environment-id>, or the bare host name `quirky host list` prints for any of them.',
       'Use --source-context with a JSON TaskSourceContext when task/provider data should come from a specific host/account; pass null on edit to clear it.',
       'Use --workspace to run in an existing worktree; otherwise the automation creates a new worktree per run.',
       'Use --precheck to run a bounded command before scheduled runs; exit code 0 continues, anything else records a skipped run.',
@@ -69,17 +69,17 @@ export const AUTOMATION_COMMAND_SPECS: CommandSpec[] = [
       'Use --extra-agent-args="--model opus --effort high" to add arguments after the host\'s default agent Arguments on each fresh run. Only model, effort, and a few safe options are accepted (Claude, Codex, CodeBuddy, Cursor, Grok, OMP); extras cannot be combined with --reuse-session. On edit, --extra-agent-args= clears them.'
     ],
     examples: [
-      'orca automations create --name "Daily review" --trigger daily --prompt "Review open changes" --provider codex',
-      'orca automations create --name "Weekday triage" --trigger "0 9 * * 1-5" --prompt "Triage issues" --provider claude --repo my-repo',
-      'orca automations create --name "PR review" --trigger hourly --precheck "gh pr list --json number -q .[0].number" --prompt "Review requested PRs" --provider codex',
-      'orca automations create --name "Docs pass" --trigger daily --prompt "Tidy the docs" --provider claude --extra-agent-args="--model opus --effort high --add-dir docs"'
+      'quirky automations create --name "Daily review" --trigger daily --prompt "Review open changes" --provider codex',
+      'quirky automations create --name "Weekday triage" --trigger "0 9 * * 1-5" --prompt "Triage issues" --provider claude --repo my-repo',
+      'quirky automations create --name "PR review" --trigger hourly --precheck "gh pr list --json number -q .[0].number" --prompt "Review requested PRs" --provider codex',
+      'quirky automations create --name "Docs pass" --trigger daily --prompt "Tidy the docs" --provider claude --extra-agent-args="--model opus --effort high --add-dir docs"'
     ]
   },
   {
     path: ['automations', 'edit'],
-    summary: 'Edit an Orca automation',
+    summary: 'Edit an Quirky automation',
     usage:
-      'orca automations edit <id> [--name <name>] [--trigger <preset|cron|rrule>] [--model <id|inherit>] [--effort <value|inherit>] [--json]',
+      'quirky automations edit <id> [--name <name>] [--trigger <preset|cron|rrule>] [--model <id|inherit>] [--effort <value|inherit>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'id',
@@ -95,49 +95,49 @@ export const AUTOMATION_COMMAND_SPECS: CommandSpec[] = [
     ],
     positionalArgs: ['id'],
     examples: [
-      'orca automations edit 2f9e... --disabled',
-      'orca automations edit --id 2f9e... --trigger "30 * * * *" --json',
-      'orca automations edit 2f9e... --extra-agent-args='
+      'quirky automations edit 2f9e... --disabled',
+      'quirky automations edit --id 2f9e... --trigger "30 * * * *" --json',
+      'quirky automations edit 2f9e... --extra-agent-args='
     ]
   },
   {
     path: ['automations', 'remove'],
     destructive: true,
-    summary: 'Remove an Orca automation and its run history',
-    usage: 'orca automations remove <id> [--json]',
+    summary: 'Remove an Quirky automation and its run history',
+    usage: 'quirky automations remove <id> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id'],
     positionalArgs: ['id'],
-    examples: ['orca automations remove 2f9e...', 'orca automations remove --id 2f9e... --json']
+    examples: ['quirky automations remove 2f9e...', 'quirky automations remove --id 2f9e... --json']
   },
   {
     path: ['automations', 'run'],
-    summary: 'Run an Orca automation now',
-    usage: 'orca automations run <id> [--json]',
+    summary: 'Run an Quirky automation now',
+    usage: 'quirky automations run <id> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id'],
     positionalArgs: ['id'],
     notes: [
-      'Use the full automation UUID from orca automations list; shortened prefixes are not accepted.',
-      'A queued or dispatching run has been accepted but may not have a workspace or terminal yet. Use orca automations runs --id <automation-id> to follow its progress.'
+      'Use the full automation UUID from quirky automations list; shortened prefixes are not accepted.',
+      'A queued or dispatching run has been accepted but may not have a workspace or terminal yet. Use quirky automations runs --id <automation-id> to follow its progress.'
     ],
     examples: [
-      'orca automations run 497bafa9-5a97-4f85-9e48-2b211b8f31fa',
-      'orca automations run --id 497bafa9-5a97-4f85-9e48-2b211b8f31fa --json'
+      'quirky automations run 497bafa9-5a97-4f85-9e48-2b211b8f31fa',
+      'quirky automations run --id 497bafa9-5a97-4f85-9e48-2b211b8f31fa --json'
     ]
   },
   {
     path: ['automations', 'runs'],
     summary: 'List automation run history',
     usage:
-      'orca automations runs [--id <automation-id>] [--limit <n>] [--cursor <cursor>] [--json]',
+      'quirky automations runs [--id <automation-id>] [--limit <n>] [--cursor <cursor>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'limit', 'cursor'],
     notes: [
       'Without --limit or --cursor, reads the whole history in pages, so a large history from a paired server still fits in its replies.',
       'With --limit or --cursor, prints one page (newest first, at most 100 runs) and its nextCursor; pass that as --cursor for the next page.'
     ],
     examples: [
-      'orca automations runs',
-      'orca automations runs --id 2f9e... --json',
-      'orca automations runs --limit 20 --json'
+      'quirky automations runs',
+      'quirky automations runs --id 2f9e... --json',
+      'quirky automations runs --limit 20 --json'
     ]
   }
 ]

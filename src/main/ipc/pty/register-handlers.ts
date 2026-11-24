@@ -1,5 +1,5 @@
 import { settledDaemonRestart } from '../../daemon/daemon-restart-state'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { Store } from '../../persistence'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import { LocalPtyProvider } from '../../providers/local-pty-provider'
@@ -70,7 +70,7 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 
 export function registerPtyHandlers(
   mainWindow?: PtyRendererDelivery,
-  runtime?: OrcaRuntimeService,
+  runtime?: QuirkyRuntimeService,
   getSelectedCodexHomePath?: GetSelectedCodexHomePath,
   getSettings?: () => GlobalSettings,
   prepareClaudeAuth?: PrepareClaudeAuth,

@@ -2,23 +2,23 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { encodePaletteIdentity } from '../../src/renderer/src/lib/palette-match/palette-ranking'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 
 test.use({ seedTestRepo: false })
 
 for (const theme of ['light', 'dark'] as const) {
   test(`Cmd+J searches and opens a folder workspace without repositories (${theme})`, async ({
-    orcaPage,
+    quirkyPage,
     electronApp,
     registerPostElectronShutdownCleanup
   }, testInfo) => {
-    const folderPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-palette-folder-')))
+    const folderPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-palette-folder-')))
     registerPostElectronShutdownCleanup(async () =>
       rmSync(folderPath, { recursive: true, force: true })
     )
-    await waitForSessionReady(orcaPage)
-    const workspaceId = await orcaPage.evaluate(
+    await waitForSessionReady(quirkyPage)
+    const workspaceId = await quirkyPage.evaluate(
       async ({ folderPath, theme }) => {
         const store = window.__store!
         await store.getState().updateSettingsOrThrow({ theme, defaultTuiAgent: 'blank' })
@@ -45,8 +45,8 @@ for (const theme of ['light', 'dark'] as const) {
       },
       { folderPath, theme }
     )
-    await orcaPage.evaluate(() => window.__store!.getState().openModal('worktree-palette'))
-    const palette = orcaPage.getByRole('dialog', { name: 'Jump to...' })
+    await quirkyPage.evaluate(() => window.__store!.getState().openModal('worktree-palette'))
+    const palette = quirkyPage.getByRole('dialog', { name: 'Jump to...' })
     await expect(palette).toBeVisible()
     const rowId = encodePaletteIdentity(['worktree', `local|${workspaceId}`])
     const row = palette.locator(`[cmdk-item][data-value=${JSON.stringify(rowId)}]`)
@@ -59,7 +59,7 @@ for (const theme of ['light', 'dark'] as const) {
     await testInfo.attach(`folder-palette-${theme}`, { path: screenshot, contentType: 'image/png' })
     await input.press('Enter')
     await expect(palette).toHaveCount(0)
-    const sidebarRow = orcaPage.locator(
+    const sidebarRow = quirkyPage.locator(
       `[data-worktree-sidebar] [role="option"][data-worktree-id=${JSON.stringify(workspaceId)}]`
     )
     await expect(sidebarRow).toHaveAttribute('aria-current', 'page')

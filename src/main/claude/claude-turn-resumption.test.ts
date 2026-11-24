@@ -64,7 +64,7 @@ function frame(
 ) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     ...(type === 'user' && parentToolUseId === null ? { startsTurn: true as const } : {}),
     message: {
       type,
@@ -76,12 +76,12 @@ function frame(
   }
 }
 
-/** The captured `task-notification` wake-up: a main-thread user frame Orca never
+/** The captured `task-notification` wake-up: a main-thread user frame Quirky never
  *  dispatched, so it carries no replay waiter and cannot start a turn. */
 function taskNotification(uuid: string) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     message: {
       type: 'user',
       uuid,
@@ -100,7 +100,7 @@ function taskNotification(uuid: string) {
 function textDelta(uuid: string, messageId: string, text: string) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     message: {
       type: 'stream_event',
       uuid,
@@ -115,7 +115,7 @@ function textDelta(uuid: string, messageId: string, text: string) {
 function streamMessageStart(uuid: string, parentToolUseId: string | null = null) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     message: {
       type: 'stream_event',
       uuid,
@@ -129,7 +129,7 @@ function streamMessageStart(uuid: string, parentToolUseId: string | null = null)
 function result(uuid: string, parentToolUseId: string | null = null, durationMs = 322_937) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     message: {
       type: 'result',
       subtype: 'success',
@@ -291,7 +291,7 @@ describe('a Claude turn the provider resumed on its own', () => {
     const { translator, items } = harness()
     translator.handle(frame('user', 'u1', [{ type: 'text', text: 'go' }]))
     translator.handle(frame('assistant', 'a0', [{ type: 'text', text: 'on it' }]))
-    translator.handle({ type: 'ended', sessionId: 'orca-session', reason: 'exit', observedAt: 1 })
+    translator.handle({ type: 'ended', sessionId: 'quirky-session', reason: 'exit', observedAt: 1 })
     expect(projected(items())).toBe('idle')
 
     // Nothing can close a turn opened now, so nothing may open one.
@@ -305,7 +305,7 @@ describe('a Claude turn the provider resumed on its own', () => {
     translator.handle(frame('assistant', 'a0', [{ type: 'text', text: 'on it' }]))
     translator.handle({
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'result',
         subtype: 'error',
@@ -389,7 +389,7 @@ describe('a Claude turn the provider resumed on its own', () => {
     const before = appended.length
     translator.handle({
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'result',
         subtype: 'error',
@@ -410,7 +410,7 @@ describe('a Claude turn the provider resumed on its own', () => {
     translator.handle(frame('assistant', 'a0', [{ type: 'text', text: 'on it' }]))
     translator.handle({
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'result',
         subtype: 'error',

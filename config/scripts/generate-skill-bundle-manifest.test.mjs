@@ -28,7 +28,7 @@ const temporaryDirectories = []
 const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..')
 
 async function createPackage() {
-  const directory = await mkdtemp(path.join(tmpdir(), 'orca-skill-manifest-'))
+  const directory = await mkdtemp(path.join(tmpdir(), 'quirky-skill-manifest-'))
   temporaryDirectories.push(directory)
   return directory
 }

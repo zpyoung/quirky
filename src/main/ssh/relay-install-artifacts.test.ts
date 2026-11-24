@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { ORCAD_WINDOWS_PROCESS_TREE_FILENAME } from '../../shared/orcad-artifacts'
+import { QUIRKYD_WINDOWS_PROCESS_TREE_FILENAME } from '../../shared/quirkyd-artifacts'
 import { relayArtifactFilenames } from './relay-install-artifacts'
 
 describe('relay install artifacts', () => {
   it('keeps the optional process-table addon out of the required set', () => {
     // A complete install never had to contain it: only a Windows build machine could emit it.
-    expect(relayArtifactFilenames(true)).not.toContain(ORCAD_WINDOWS_PROCESS_TREE_FILENAME)
-    expect(relayArtifactFilenames(false)).not.toContain(ORCAD_WINDOWS_PROCESS_TREE_FILENAME)
+    expect(relayArtifactFilenames(true)).not.toContain(QUIRKYD_WINDOWS_PROCESS_TREE_FILENAME)
+    expect(relayArtifactFilenames(false)).not.toContain(QUIRKYD_WINDOWS_PROCESS_TREE_FILENAME)
   })
 
   it('requires the Windows-only patches only on Windows', () => {

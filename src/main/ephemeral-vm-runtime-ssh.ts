@@ -11,7 +11,7 @@ import { SshHostNotServedError } from './providers/ssh-host-not-served-error'
 export type RuntimeOwnedSshConnectionResult = {
   targetId: string
   target: SshTarget
-  /** The managed Orca server that serves this host. */
+  /** The managed Quirky server that serves this host. */
   environmentId: string
 }
 

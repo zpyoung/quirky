@@ -13,13 +13,13 @@ import {
 import { ensureOwnedTempStagingRoot, getOwnedTempStagingRoot } from './owned-temp-staging-root'
 
 // Why: macOS screenshot thumbnails live in `$TMPDIR/TemporaryItems/NSIRD_*`,
-// which only processes attributed to Orca main may open. The detached PTY
+// which only processes attributed to Quirky main may open. The detached PTY
 // daemon is not, so agents in local terminals get EPERM on the original path.
 
 const TEMPORARY_ITEMS_SEGMENT = 'TemporaryItems'
 const DRAG_PROVIDER_DIR_PREFIX = 'NSIRD_'
-const COPY_DIR_PREFIX = 'orca-drop-'
-const DRAG_TEMP_COPY_ROOT_NAME = 'orca-drops'
+const COPY_DIR_PREFIX = 'quirky-drop-'
+const DRAG_TEMP_COPY_ROOT_NAME = 'quirky-drops'
 // Why no expiry: a copy may be what a terminal agent, a draft or a sent message still names, and
 // nothing tells which; fresh structured-chat copies enter the chat store before publication.
 
@@ -27,7 +27,7 @@ export type DragTempCopyEnvironment = {
   platform: NodeJS.Platform
   /** macOS per-user temp dir: where drag providers put their files. */
   sourceTempRoot: string
-  /** Orca-owned directory that holds one `orca-drop-*` directory per copy. */
+  /** Quirky-owned directory that holds one `quirky-drop-*` directory per copy. */
   copyRoot: string
 }
 
@@ -60,7 +60,7 @@ export function mayNeedDragTempCopy(path: string, platform: NodeJS.Platform): bo
 }
 
 /**
- * Copy every drag-temp path in a drop into Orca-owned storage, sequentially,
+ * Copy every drag-temp path in a drop into Quirky-owned storage, sequentially,
  * within the per-drop byte budget. Other paths pass through unchanged.
  */
 export async function materializeDragTempPaths(
@@ -234,7 +234,7 @@ export async function materializeDragTempPath(
       }
       // Why: a caller that gave up mid-copy never hands this path out; don't retain it.
       signal?.throwIfAborted()
-      console.debug('[drop] copied a drag-temp file into Orca storage', { bytes: size })
+      console.debug('[drop] copied a drag-temp file into Quirky storage', { bytes: size })
       return {
         result: { sourcePath, status: 'imported', destPath, byteLength: size, directory: copyDir },
         copiedBytes: size

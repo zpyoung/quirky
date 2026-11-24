@@ -85,7 +85,7 @@ function adapterForAcquire(
 
 describe('processless structured session reservation', () => {
   it('refuses an adapter that declares no create support before reserving a lease', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-unsupported-attach-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-unsupported-attach-'))
     const store = await openTestAgentSessionRecordStore(root)
     const reserveOwner = vi.spyOn(store, 'reserveOwner')
     const acquire = vi.fn<StructuredAgentSessionAdapter['acquire']>()
@@ -121,7 +121,7 @@ describe('processless structured session reservation', () => {
   })
 
   it('refuses a replay when adapter support drifts after durable reservation', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-replay-support-drift-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-replay-support-drift-'))
     const store = await openTestAgentSessionRecordStore(root)
     const supportsCreate = vi
       .fn<NonNullable<StructuredAgentSessionAdapter['supportsCreate']>>()
@@ -172,7 +172,7 @@ describe('processless structured session reservation', () => {
   })
 
   it('releases a new reservation when support drifts before acquisition', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-support-drift-reservation-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-support-drift-reservation-'))
     const store = await openTestAgentSessionRecordStore(root)
     const supportsCreate = vi
       .fn<NonNullable<StructuredAgentSessionAdapter['supportsCreate']>>()
@@ -226,7 +226,7 @@ describe('processless structured session reservation', () => {
   })
 
   it('settles a pre-spawn failure and its processless evidence in one durable transaction', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-processless-reservation-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-processless-reservation-'))
     const store = await openTestAgentSessionRecordStore(root)
     const adapter = adapterForAcquire(
       vi.fn(async () => {
@@ -280,7 +280,7 @@ describe('processless structured session reservation', () => {
   })
 
   it('does not rerun a settled pre-spawn failure and admits a fresh operation', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-processless-retry-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-processless-retry-'))
     const store = await openTestAgentSessionRecordStore(root)
     const adapter = {
       ...adapterForAcquire(vi.fn()),

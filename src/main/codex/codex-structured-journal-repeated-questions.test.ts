@@ -25,7 +25,7 @@ it.each([
 ] as const)(
   'shows %s question ids through the queued sink without a host fault',
   async (_name, ids, questions) => {
-    root = await mkdtemp(join(tmpdir(), 'orca-codex-questions-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-codex-questions-'))
     const journal = await journals.open({
       identity: {
         sessionId: SESSION,

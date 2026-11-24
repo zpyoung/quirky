@@ -146,7 +146,7 @@ export const AgentLaunchFields = z.object({
     )
     .optional(),
   /**
-   * The Claude/Codex home a desktop prepared for a host with no account services (WSL orcad).
+   * The Claude/Codex home a desktop prepared for a host with no account services (WSL quirkyd).
    * Terminal-only: a structured launch keeps its host-derived home and warns. Optional forever; an
    * older host strips it and runs its default account. Outside the replay fingerprint.
    */

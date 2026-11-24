@@ -1,6 +1,6 @@
-// The installed Codex, driven through Orca's own visuals setup in an isolated CODEX_HOME: Codex must
+// The installed Codex, driven through Quirky's own visuals setup in an isolated CODEX_HOME: Codex must
 // list the bundled skill and open the thread with the chat folder beside the user's own writable
-// root. Opt-in (ORCA_REAL_CODEX_CLI_TEST=1); no account is used, nothing reaches a model.
+// root. Opt-in (QUIRKY_REAL_CODEX_CLI_TEST=1); no account is used, nothing reaches a model.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,12 +11,12 @@ import { openCodexAppServerConnection } from './codex-app-server-connection'
 import { withCodexVisualsThreadConfig } from './codex-structured-visuals'
 import { codexStructuredPermissionPolicy } from './codex-structured-permission-policy'
 
-const enabled = process.env.ORCA_REAL_CODEX_CLI_TEST === '1'
+const enabled = process.env.QUIRKY_REAL_CODEX_CLI_TEST === '1'
 const MANUAL = codexStructuredPermissionPolicy('ask')
 
 describe.skipIf(!enabled)('Codex real app-server chat visuals', () => {
   it('lists the visuals skill and grants the chat folder beside the user writable roots', async () => {
-    const base = mkdtempSync(join(tmpdir(), 'orca-real-codex-visuals-'))
+    const base = mkdtempSync(join(tmpdir(), 'quirky-real-codex-visuals-'))
     try {
       const codexHome = join(base, 'codex-home')
       const cwd = join(base, 'workspace')

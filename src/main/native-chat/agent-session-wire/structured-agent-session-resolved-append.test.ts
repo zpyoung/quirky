@@ -23,7 +23,7 @@ import { estimateStructuredAgentSessionItemBytes } from './structured-agent-sess
 import { testEventSinkLogging } from './structured-agent-session-logger-test-support'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 
-const ROW: AgentJournalItemIdentity = { provider: 'orca', clientMessageId: 'row' }
+const ROW: AgentJournalItemIdentity = { provider: 'quirky', clientMessageId: 'row' }
 
 const text = (value: string): AgentJournalItemBody => ({
   kind: 'message',
@@ -40,7 +40,7 @@ let root = ''
 let journal: AgentSessionJournal
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-resolved-append-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-resolved-append-'))
   journal = await openAgentSessionJournal({
     database: openTestJournalHostDatabase(root),
     identity: {

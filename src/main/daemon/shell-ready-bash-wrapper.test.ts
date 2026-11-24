@@ -6,7 +6,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import type * as DaemonBashRcfileModule from './daemon-bash-shell-ready-rcfile'
 import { getBashShellReadyRcfileContent } from '../providers/local-pty-shell-ready-bash-rcfile'
 import { getDaemonBashShellReadyRcfileContent } from './daemon-bash-shell-ready-rcfile'
-import { prependOrcaCliDirToChildPath } from '../cli/orca-cli-child-path'
+import { prependQuirkyCliDirToChildPath } from '../cli/quirky-cli-child-path'
 import {
   OVERLAY_ONLY_FEATURES,
   STARTUP_COMMAND_FEATURES
@@ -45,16 +45,16 @@ describePosix('daemon shell-ready bash wrapper', () => {
   let previousUserDataPath: string | undefined
 
   beforeEach(() => {
-    previousUserDataPath = process.env.ORCA_USER_DATA_PATH
+    previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
     userDataPath = mkdtempSync(join(tmpdir(), 'daemon-shell-ready-bash-test-'))
-    process.env.ORCA_USER_DATA_PATH = userDataPath
+    process.env.QUIRKY_USER_DATA_PATH = userDataPath
   })
 
   afterEach(() => {
     if (previousUserDataPath === undefined) {
-      delete process.env.ORCA_USER_DATA_PATH
+      delete process.env.QUIRKY_USER_DATA_PATH
     } else {
-      process.env.ORCA_USER_DATA_PATH = previousUserDataPath
+      process.env.QUIRKY_USER_DATA_PATH = previousUserDataPath
     }
     rmSync(userDataPath, { recursive: true, force: true })
     vi.restoreAllMocks()
@@ -69,7 +69,7 @@ describePosix('daemon shell-ready bash wrapper', () => {
     mkdirSync(cliBin, { recursive: true })
     mkdirSync(ambientBin)
     for (const bin of [cliBin, ambientBin]) {
-      const launcher = join(bin, 'orca-dev')
+      const launcher = join(bin, 'quirky-dev')
       writeFileSync(launcher, '#!/bin/sh\nexit 0\n')
       chmodSync(launcher, 0o755)
     }
@@ -77,9 +77,9 @@ describePosix('daemon shell-ready bash wrapper', () => {
       HOME: userDataPath,
       USERPROFILE: userDataPath,
       PATH: `${ambientBin}:/usr/bin:/bin`,
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
     }
-    const expectedLauncher = prependOrcaCliDirToChildPath(env, {
+    const expectedLauncher = prependQuirkyCliDirToChildPath(env, {
       isPackaged: false,
       userDataPath
     })
@@ -89,7 +89,7 @@ describePosix('daemon shell-ready bash wrapper', () => {
     )
     const rcfile = join(userDataPath, 'cli-path-rcfile')
     writeFileSync(rcfile, content())
-    const result = spawnSync('bash', ['-c', '. "$1"; command -v orca-dev', 'bash', rcfile], {
+    const result = spawnSync('bash', ['-c', '. "$1"; command -v quirky-dev', 'bash', rcfile], {
       env,
       encoding: 'utf8',
       timeout: 5000
@@ -111,13 +111,13 @@ describePosix('daemon shell-ready bash wrapper', () => {
     const bashRc = readFileSync(join(getShellReadyWrapperRoot(), 'bash', 'rcfile'), 'utf8')
 
     expect(bashRc).toContain('printf "\\033]133;D;%s\\007"')
-    expect(bashRc).toContain('printf "\\033]777;orca-shell-start:%s\\007" "$$"')
+    expect(bashRc).toContain('printf "\\033]777;quirky-shell-start:%s\\007" "$$"')
     expect(bashRc).toContain('printf "\\033]133;C\\007"')
-    expect(bashRc).toContain('__orca_prepend_prompt_command "__orca_osc133_precmd"')
-    expect(bashRc).toContain('__orca_append_prompt_command "__orca_osc133_epilogue"')
+    expect(bashRc).toContain('__quirky_prepend_prompt_command "__quirky_osc133_precmd"')
+    expect(bashRc).toContain('__quirky_append_prompt_command "__quirky_osc133_epilogue"')
     // DEBUG is armed after PROMPT_COMMAND setup so rcfile commands aren't seen as foreground; lastIndexOf skips the epilogue's re-arm.
-    expect(bashRc.lastIndexOf("trap '__orca_osc133_preexec' DEBUG")).toBeGreaterThan(
-      bashRc.indexOf('__orca_append_prompt_command "__orca_osc133_epilogue"')
+    expect(bashRc.lastIndexOf("trap '__quirky_osc133_preexec' DEBUG")).toBeGreaterThan(
+      bashRc.indexOf('__quirky_append_prompt_command "__quirky_osc133_epilogue"')
     )
     expect(zshrc).toContain('printf "\\033]133;D;%s\\007"')
     expect(zshrc).toContain('printf "\\033]133;C\\007"')
@@ -158,7 +158,7 @@ describePosix('daemon shell-ready bash wrapper', () => {
     'still emits 133;C when bash-preexec re-arms the DEBUG trap at first prompt',
     async () => {
       const { getDaemonBashShellReadyRcfileContent } = await importFreshDaemonBashRcfile()
-      // Minimal bash-preexec imitation: re-arms its own DEBUG trap from PROMPT_COMMAND at first prompt, silencing Orca's trap.
+      // Minimal bash-preexec imitation: re-arms its own DEBUG trap from PROMPT_COMMAND at first prompt, silencing Quirky's trap.
       writeFileSync(
         join(userDataPath, '.bash_profile'),
         [
@@ -181,7 +181,7 @@ describePosix('daemon shell-ready bash wrapper', () => {
   )
 
   itWithBash(
-    'dispatches a non-empty preexec_functions against the real command, not Orca hooks',
+    'dispatches a non-empty preexec_functions against the real command, not Quirky hooks',
     async () => {
       const { getDaemonBashShellReadyRcfileContent } = await importFreshDaemonBashRcfile()
       // Why: the epilogue chains bash-preexec's re-armed DEBUG trap, so a real preexec callback must fire against the user's command.
@@ -217,7 +217,7 @@ describePosix('daemon shell-ready bash wrapper', () => {
       expectBashOsc133Lifecycle(output)
       expect(output).toContain('USER_PREEXEC:true')
       expect(output).toContain('USER_PREEXEC:false')
-      expect(output).not.toContain('USER_PREEXEC:__orca_osc133')
+      expect(output).not.toContain('USER_PREEXEC:__quirky_osc133')
       expect(output).not.toContain('USER_PREEXEC:__bp_')
     }
   )

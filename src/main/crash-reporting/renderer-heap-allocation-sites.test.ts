@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { summarizeSamplingProfile, trustedScriptPrefixFor } from './renderer-heap-allocation-sites'
 
-const PAGE = 'file:///Users/someone/Orca.app/Contents/Resources/app.asar/out/renderer/index.html'
+const PAGE = 'file:///Users/someone/Quirky.app/Contents/Resources/app.asar/out/renderer/index.html'
 const BUNDLE = trustedScriptPrefixFor(PAGE)
 
 function frame(functionName: string, url: string, scriptId = '7', lineNumber = 9) {
@@ -111,7 +111,7 @@ describe('site length', () => {
 describe('trustedScriptPrefixFor', () => {
   it('is the assets folder next to the page', () => {
     expect(trustedScriptPrefixFor(`${PAGE}?x=1#hash`)).toBe(
-      'file:///Users/someone/Orca.app/Contents/Resources/app.asar/out/renderer/assets/'
+      'file:///Users/someone/Quirky.app/Contents/Resources/app.asar/out/renderer/assets/'
     )
     expect(trustedScriptPrefixFor('http://localhost:5173/')).toBe('http://localhost:5173/assets/')
     expect(trustedScriptPrefixFor('about:blank')).toBeNull()

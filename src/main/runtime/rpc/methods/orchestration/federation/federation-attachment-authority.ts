@@ -1,10 +1,10 @@
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import type { FederationEffect } from './federation-effects'
 import type { WorkerSetupReceipt } from '../worker/worker-topology'
 
 export function prepareFederatedAttachmentAuthority(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   db: OrchestrationDb
   dispatchId: string
   terminalHandle: string

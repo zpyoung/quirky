@@ -13,7 +13,7 @@ import { encodeAgentSessionQuestionAnswers } from '../../../shared/agent-session
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import {
   openTestJournalHostDatabase,
-  SAVED_BY_NEWER_ORCA
+  SAVED_BY_NEWER_QUIRKY
 } from '../agent-session-journal/journal-host-database-test-support'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import type { StructuredAgentSessionHost } from './structured-agent-session-host'
@@ -280,13 +280,13 @@ describe('a prompt answer', () => {
     expect(await resolution(prompt.itemId)).toBe('pending')
   })
 
-  it("refuses with the update words when a newer Orca's journal holds the chat", async () => {
+  it("refuses with the update words when a newer Quirky's journal holds the chat", async () => {
     const prompt = await seeded()
     const id = opId()
     Object.defineProperty(openTestJournalHostDatabase(root), 'readOnly', { value: true })
     expect(await host.respondToPrompt(CALLER, answer(prompt, id))).toMatchObject({
       ok: false,
-      ...SAVED_BY_NEWER_ORCA
+      ...SAVED_BY_NEWER_QUIRKY
     })
     expect(receipt(id)).toEqual({ verdict: 'absent' })
   })

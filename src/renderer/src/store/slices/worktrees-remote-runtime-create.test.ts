@@ -158,9 +158,9 @@ describe('worktree remote runtime mutations', () => {
       provider: 'jira' as const,
       type: 'issue' as const,
       number: 0,
-      title: 'ORCA-123 Link Jira',
-      url: 'https://company.atlassian.net/browse/ORCA-123',
-      jiraIdentifier: 'ORCA-123'
+      title: 'QUIRKY-123 Link Jira',
+      url: 'https://company.atlassian.net/browse/QUIRKY-123',
+      jiraIdentifier: 'QUIRKY-123'
     }
     const linkedTaskSourceContext = {
       kind: 'task-source' as const,
@@ -171,7 +171,7 @@ describe('worktree remote runtime mutations', () => {
         provider: 'jira' as const,
         siteId: 'site-1',
         siteUrl: 'https://company.atlassian.net',
-        projectKey: 'ORCA'
+        projectKey: 'QUIRKY'
       }
     }
     const createWorktree = store.getState().createWorktree
@@ -211,9 +211,9 @@ describe('worktree remote runtime mutations', () => {
         provider: 'jira',
         type: 'issue',
         number: 0,
-        title: 'ORCA-123 Link Jira',
-        url: 'https://company.atlassian.net/browse/ORCA-123',
-        jiraIdentifier: 'ORCA-123'
+        title: 'QUIRKY-123 Link Jira',
+        url: 'https://company.atlassian.net/browse/QUIRKY-123',
+        jiraIdentifier: 'QUIRKY-123'
       }
     }
 
@@ -260,11 +260,11 @@ describe('worktree remote runtime mutations', () => {
         undefined,
         {
           command: "codex 'summarize repo'",
-          env: { ORCA_AGENT_MODE: 'direct' },
+          env: { QUIRKY_AGENT_MODE: 'direct' },
           launchConfig: {
             agentCommand: 'codex',
             agentArgs: '--model gpt-5',
-            agentEnv: { ORCA_AGENT_MODE: 'direct' }
+            agentEnv: { QUIRKY_AGENT_MODE: 'direct' }
           }
         }
       )
@@ -279,11 +279,11 @@ describe('worktree remote runtime mutations', () => {
           displayName: 'Launch agent',
           createdWithAgent: 'codex',
           startupCommand: "codex 'summarize repo'",
-          startupEnv: { ORCA_AGENT_MODE: 'direct' },
+          startupEnv: { QUIRKY_AGENT_MODE: 'direct' },
           startupLaunchConfig: {
             agentCommand: 'codex',
             agentArgs: '--model gpt-5',
-            agentEnv: { ORCA_AGENT_MODE: 'direct' }
+            agentEnv: { QUIRKY_AGENT_MODE: 'direct' }
           },
           activate: true
         })
@@ -363,7 +363,7 @@ describe('worktree remote runtime mutations', () => {
         undefined,
         {
           command: "claude --prefill 'summarize repo'",
-          env: { ORCA_AGENT_MODE: 'direct' },
+          env: { QUIRKY_AGENT_MODE: 'direct' },
           telemetry: {
             agent_kind: 'claude-code',
             launch_source: 'new_workspace_composer',
@@ -381,7 +381,7 @@ describe('worktree remote runtime mutations', () => {
         createdWithAgent: 'claude',
         startup: {
           command: "claude --prefill 'summarize repo'",
-          env: { ORCA_AGENT_MODE: 'direct' },
+          env: { QUIRKY_AGENT_MODE: 'direct' },
           telemetry: {
             agent_kind: 'claude-code',
             launch_source: 'new_workspace_composer',

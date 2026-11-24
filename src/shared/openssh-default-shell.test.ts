@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { runProcessSyncMock } = vi.hoisted(() => ({ runProcessSyncMock: vi.fn() }))
 
-vi.mock('@orca/process-host', () => ({ runProcessSync: runProcessSyncMock }))
+vi.mock('@quirky/process-host', () => ({ runProcessSync: runProcessSyncMock }))
 
 function regResult(stdout: string, code = 0) {
   return { code, signal: null, stdout, stderr: '', timedOut: false }

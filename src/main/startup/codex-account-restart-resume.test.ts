@@ -25,7 +25,7 @@ vi.mock('../codex/codex-hook-reconcile', () => ({ reconcileCodexHooksForLaunch: 
 vi.mock('../codex/codex-home-paths', () => ({
   getCodexSessionBackfillStateDirPath: () => join(homes.system, 'backfill'),
   getSystemCodexHomePath: () => homes.system,
-  getOrcaManagedCodexHomePath: () => join(homes.system, 'legacy')
+  getQuirkyManagedCodexHomePath: () => join(homes.system, 'legacy')
 }))
 vi.mock('../codex/codex-config-mirror', () => ({ ensureCodexDaemonSocketGuard: vi.fn() }))
 
@@ -35,7 +35,7 @@ let root: string
 let transcriptPath: string
 const sessionId = 'abcdef00-1234-4321-9999-cafecafecafe'
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-account-restart-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-account-restart-'))
   homes.original = join(root, 'codex-accounts', 'old', 'home')
   homes.selected = join(root, 'codex-accounts', 'new', 'home')
   homes.system = join(root, 'system')

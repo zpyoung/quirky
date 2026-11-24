@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it } from 'vitest'
 import { getDefaultUIState } from '../../../../shared/constants'
 import type { PersistedUIState } from '../../../../shared/persisted-ui-state-types'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { CollapseWriteOrder } from '../../workspace-view-collapse-writes'
 import type { RpcRequest } from '../core'
 import { RpcDispatcher } from '../dispatcher'
@@ -24,7 +24,7 @@ function makeHost(initialCollapsed: string[] = []) {
     collapseWriteOrder: new CollapseWriteOrder()
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: ui.set/ui.setCollapsed read only the members above.
-  const runtime = fake as unknown as OrcaRuntimeService
+  const runtime = fake as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({
     runtime,
     methods: [...CLIENT_UI_METHODS, ...SIDEBAR_INPUT_METHODS]

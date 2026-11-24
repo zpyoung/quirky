@@ -15,7 +15,7 @@ import {
 import type { ClaudeStreamJsonConnection } from './claude-stream-json-connection'
 import type { ClaudeJournalTranslator } from './claude-journal-translator-contract'
 import type { ClaudePromptRegistry } from './claude-structured-prompt-replies'
-import { closeProcessRegistry } from '@orca/process-host/close-process-registry'
+import { closeProcessRegistry } from '@quirky/process-host/close-process-registry'
 import { retireClaudeDispatchWaiters } from './claude-structured-dispatch'
 import { claudeHeldSends } from './claude-command-lifecycle'
 import { settledClaudeTurnEndLeaf } from './claude-structured-resume-point'
@@ -128,7 +128,7 @@ async function finalizeClaudePublishedSession(
   session.events?.observeExit?.(claudeHeldSends(session))
   retireClaudeDispatchWaiters(session)
   // Queues the session's ending for the host's child records; the adapter delivers it after close.
-  // Even a proven close is Orca losing contact, not a Stop the CLI accepted: what still ran ends
+  // Even a proven close is Quirky losing contact, not a Stop the CLI accepted: what still ran ends
   // with no outcome anyone reported.
   session.childWork.clear()
   session.backgroundTasks.clear()

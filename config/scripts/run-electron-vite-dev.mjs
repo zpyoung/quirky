@@ -49,10 +49,10 @@ const rawForwardedArgs = process.argv.slice(2)
 // Why: keep an escape hatch for tools that key off Electron's stock app name.
 // The flag is runner-only and must not leak into Chromium/electron-vite.
 const useStableElectronName =
-  process.env.ORCA_DEV_STABLE_NAME === '1' || rawForwardedArgs.includes(STABLE_NAME_FLAG)
+  process.env.QUIRKY_DEV_STABLE_NAME === '1' || rawForwardedArgs.includes(STABLE_NAME_FLAG)
 const forwardedRaw = rawForwardedArgs.filter((arg) => arg !== STABLE_NAME_FLAG)
 if (useStableElectronName) {
-  process.env.ORCA_DEV_STABLE_NAME = '1'
+  process.env.QUIRKY_DEV_STABLE_NAME = '1'
 }
 
 function readGitValue(args) {
@@ -82,33 +82,34 @@ function formatDevInstanceLabel(branch, worktreeName) {
 }
 
 function createDockTitle(branch, label) {
-  return `Orca: ${branch || label || 'dev'}`
+  return `Quirky: ${branch || label || 'dev'}`
 }
 
 function seedDevInstanceIdentityEnv() {
   const branch =
-    process.env.ORCA_DEV_BRANCH ||
+    process.env.QUIRKY_DEV_BRANCH ||
     readGitValue(['symbolic-ref', '--quiet', '--short', 'HEAD']) ||
     readGitValue(['rev-parse', '--short', 'HEAD'])
-  const worktreeName = process.env.ORCA_DEV_WORKTREE_NAME || path.basename(repoRoot)
-  const label = process.env.ORCA_DEV_INSTANCE_LABEL || formatDevInstanceLabel(branch, worktreeName)
-  const identitySeed = process.env.ORCA_DEV_INSTANCE_KEY || repoRoot
-  const dockTitle = process.env.ORCA_DEV_DOCK_TITLE || createDockTitle(branch, label)
+  const worktreeName = process.env.QUIRKY_DEV_WORKTREE_NAME || path.basename(repoRoot)
+  const label =
+    process.env.QUIRKY_DEV_INSTANCE_LABEL || formatDevInstanceLabel(branch, worktreeName)
+  const identitySeed = process.env.QUIRKY_DEV_INSTANCE_KEY || repoRoot
+  const dockTitle = process.env.QUIRKY_DEV_DOCK_TITLE || createDockTitle(branch, label)
 
-  process.env.ORCA_DEV_REPO_ROOT ||= repoRoot
-  process.env.ORCA_DEV_INSTANCE_KEY ||= identitySeed
+  process.env.QUIRKY_DEV_REPO_ROOT ||= repoRoot
+  process.env.QUIRKY_DEV_INSTANCE_KEY ||= identitySeed
   if (branch) {
-    process.env.ORCA_DEV_BRANCH ||= branch
+    process.env.QUIRKY_DEV_BRANCH ||= branch
   }
   if (worktreeName) {
-    process.env.ORCA_DEV_WORKTREE_NAME ||= worktreeName
+    process.env.QUIRKY_DEV_WORKTREE_NAME ||= worktreeName
   }
   if (label) {
     // Why: parallel `pn dev` runs need a stable origin label for window titles,
     // Dock names, and automation sessions without re-running git in Electron.
-    process.env.ORCA_DEV_INSTANCE_LABEL ||= label
+    process.env.QUIRKY_DEV_INSTANCE_LABEL ||= label
   }
-  process.env.ORCA_DEV_DOCK_TITLE ||= dockTitle
+  process.env.QUIRKY_DEV_DOCK_TITLE ||= dockTitle
 }
 
 function setPlistValue(plistPath, key, value) {
@@ -124,7 +125,7 @@ function sanitizeMacAppBundleName(value) {
       .join('')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 120) || 'Orca'
+      .slice(0, 120) || 'Quirky'
   )
 }
 
@@ -181,8 +182,8 @@ function prepareMacDevElectronApp() {
     electronVersion = JSON.parse(readFileSync(electronPackagePath, 'utf8')).version ?? null
   } catch {}
 
-  const title = process.env.ORCA_DEV_DOCK_TITLE || 'Orca: dev'
-  const identityKey = process.env.ORCA_DEV_INSTANCE_KEY || repoRoot
+  const title = process.env.QUIRKY_DEV_DOCK_TITLE || 'Quirky: dev'
+  const identityKey = process.env.QUIRKY_DEV_INSTANCE_KEY || repoRoot
   // v11: stop patching the branch title into Info.plist so every dev bundle signs to one cdhash.
   // A stale copy only emits extra fields the parser ignores, so narrowing its schema needs no bump.
   const bundleLayoutVersion = 'stable-cdhash-dock-name-from-bundle-dir-v11'
@@ -201,7 +202,7 @@ function prepareMacDevElectronApp() {
   const markerPath = path.join(distDir, DEV_BUNDLE_MARKER_FILENAME)
   // Why: one stable id for every dev instance. Per-instance ids registered a
   // new macOS Notification Settings entry for each branch × Electron version,
-  // piling up "Orca: <branch>" rows forever and breaking the notification
+  // piling up "Quirky: <branch>" rows forever and breaking the notification
   // settings deep-link (System Settings can't resolve an id it has no entry
   // for and falls back to the root list). macOS keys notification permission
   // by bundle id, so a single id also means granting notifications to one dev
@@ -210,7 +211,7 @@ function prepareMacDevElectronApp() {
   // Electron drops clicks for notification ids it didn't create, so the
   // click is lost, not misdirected.
   const bundleId = DEV_BUNDLE_ID
-  process.env.ORCA_DEV_MACOS_BUNDLE_ID = bundleId
+  process.env.QUIRKY_DEV_MACOS_BUNDLE_ID = bundleId
   // Why the patches are in the marker: bundleLayoutVersion alone does not cover them, so a cache
   // built before a patch value changed would be reused and keep presenting the old identity.
   const expectedMarker = JSON.stringify(
@@ -240,7 +241,7 @@ function prepareMacDevElectronApp() {
   )
   const requiredResourcePaths = [
     chromiumResourcePath,
-    path.join(appPath, 'Contents', 'MacOS', 'orca-keyboard-layout')
+    path.join(appPath, 'Contents', 'MacOS', 'quirky-keyboard-layout')
   ]
 
   function copiedAppIsUsable() {
@@ -285,7 +286,7 @@ function prepareMacDevElectronApp() {
     existsSync(chromiumResourcePath)
   ) {
     console.warn(
-      `[orca-dev] Another dev instance is running from this bundle; reusing it instead of rebuilding. Quit the other instance (or delete ${distDir}) to force a rebuild.`
+      `[quirky-dev] Another dev instance is running from this bundle; reusing it instead of rebuilding. Quit the other instance (or delete ${distDir}) to force a rebuild.`
     )
     process.env.ELECTRON_EXEC_PATH = executablePath
     return
@@ -334,13 +335,13 @@ function prepareMacDevElectronApp() {
         bundleId,
         '--single-arch',
         '--output',
-        path.join(appPath, 'Contents', 'MacOS', 'orca-notification-status')
+        path.join(appPath, 'Contents', 'MacOS', 'quirky-notification-status')
       ],
       { stdio: 'inherit' }
     )
   } catch (error) {
     console.warn(
-      `[orca-dev] notification-status helper build failed (permission card falls back to probes): ${error?.message ?? error}`
+      `[quirky-dev] notification-status helper build failed (permission card falls back to probes): ${error?.message ?? error}`
     )
   }
 
@@ -351,13 +352,13 @@ function prepareMacDevElectronApp() {
         path.join(repoRoot, 'config', 'scripts', 'build-keyboard-layout-macos.mjs'),
         '--single-arch',
         '--output',
-        path.join(appPath, 'Contents', 'MacOS', 'orca-keyboard-layout')
+        path.join(appPath, 'Contents', 'MacOS', 'quirky-keyboard-layout')
       ],
       { stdio: 'inherit' }
     )
   } catch (error) {
     console.warn(
-      `[orca-dev] keyboard-layout helper build failed (shifted Option composition stays conservative): ${error?.message ?? error}`
+      `[quirky-dev] keyboard-layout helper build failed (shifted Option composition stays conservative): ${error?.message ?? error}`
     )
   }
 
@@ -374,7 +375,7 @@ function prepareMacDevElectronApp() {
   } catch (error) {
     signed = false
     console.warn(
-      `[orca-dev] ad-hoc codesign failed (dev notifications will not deliver): ${error?.message ?? error}`
+      `[quirky-dev] ad-hoc codesign failed (dev notifications will not deliver): ${error?.message ?? error}`
     )
   }
   // Why only when signed: the marker is what marks this bundle reusable. Writing it after a failed
@@ -432,21 +433,21 @@ function restoreElectronFrameworkSymlinks(appPath) {
 }
 
 function getDevUserDataPath() {
-  if (process.env.ORCA_DEV_USER_DATA_PATH) {
-    return process.env.ORCA_DEV_USER_DATA_PATH
+  if (process.env.QUIRKY_DEV_USER_DATA_PATH) {
+    return process.env.QUIRKY_DEV_USER_DATA_PATH
   }
   if (process.platform === 'darwin') {
-    return path.join(process.env.HOME ?? '', 'Library', 'Application Support', 'orca-dev')
+    return path.join(process.env.HOME ?? '', 'Library', 'Application Support', 'quirky-dev')
   }
   if (process.platform === 'win32') {
     return path.join(
       process.env.APPDATA ?? path.join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming'),
-      'orca-dev'
+      'quirky-dev'
     )
   }
   return path.join(
     process.env.XDG_CONFIG_HOME ?? path.join(process.env.HOME ?? '', '.config'),
-    'orca-dev'
+    'quirky-dev'
   )
 }
 
@@ -459,7 +460,7 @@ function prepareDevCliWrapper() {
   })
 
   process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH ?? ''}`
-  console.log(`[orca-dev] Prepared wrapper in ${binDir}`)
+  console.log(`[quirky-dev] Prepared wrapper in ${binDir}`)
 }
 
 function getElectronExecutable() {
@@ -469,22 +470,22 @@ function getElectronExecutable() {
   return path.join(repoRoot, 'node_modules', '.bin', 'electron')
 }
 
-if (process.env.ORCA_SKIP_DEV_CLI_PREPARE !== '1') {
+if (process.env.QUIRKY_SKIP_DEV_CLI_PREPARE !== '1') {
   prepareDevCliWrapper()
 }
 
 seedDevInstanceIdentityEnv()
-if (!useStableElectronName && process.env.ORCA_SKIP_DEV_ELECTRON_APP_PREPARE !== '1') {
+if (!useStableElectronName && process.env.QUIRKY_SKIP_DEV_ELECTRON_APP_PREPARE !== '1') {
   prepareMacDevElectronApp()
 }
 
 // Why: tests inject a tiny fake CLI here so they can verify Ctrl+C tears down
 // the full child tree without depending on a real electron-vite install.
 const electronViteCli =
-  process.env.ORCA_ELECTRON_VITE_CLI ||
+  process.env.QUIRKY_ELECTRON_VITE_CLI ||
   path.join(path.dirname(require.resolve('electron-vite/package.json')), 'bin', 'electron-vite.js')
 const viteCli =
-  process.env.ORCA_VITE_CLI ||
+  process.env.QUIRKY_VITE_CLI ||
   path.join(path.dirname(require.resolve('vite/package.json')), 'bin', 'vite.js')
 
 function getMtimeMs(filePath) {
@@ -500,14 +501,14 @@ function getDevWebClientIndexPath() {
 }
 
 function prepareDevWebClient() {
-  if (process.env.ORCA_SKIP_DEV_WEB_PREPARE === '1' || isHelpOrVersion) {
+  if (process.env.QUIRKY_SKIP_DEV_WEB_PREPARE === '1' || isHelpOrVersion) {
     return
   }
   // Why: fresh worktrees should start Electron immediately; pairing already
   // falls back to non-browser URLs when the optional web bundle is unavailable.
-  if (!existsSync(getDevWebClientIndexPath()) && process.env.ORCA_DEV_WEB_PREPARE !== '1') {
+  if (!existsSync(getDevWebClientIndexPath()) && process.env.QUIRKY_DEV_WEB_PREPARE !== '1') {
     console.error(
-      '[orca-dev] Web client bundle missing; skipping pairing web build. Run `pnpm run build:web` or set ORCA_DEV_WEB_PREPARE=1 when you need browser pairing.'
+      '[quirky-dev] Web client bundle missing; skipping pairing web build. Run `pnpm run build:web` or set QUIRKY_DEV_WEB_PREPARE=1 when you need browser pairing.'
     )
     return
   }
@@ -515,7 +516,7 @@ function prepareDevWebClient() {
     return
   }
   const inputs = captureDevWebClientInputs(repoRoot)
-  console.error('[orca-dev] Building web client for pairing...')
+  console.error('[quirky-dev] Building web client for pairing...')
   execFileSync(
     process.execPath,
     [viteCli, 'build', '--config', path.join(repoRoot, 'vite.web.config.ts')],
@@ -580,13 +581,13 @@ const userPassedPort = forwardedRaw.some(
 // Why: --help/--version exit immediately; binding a probe socket and printing
 // a debug-port line would be noise.
 const isHelpOrVersion = forwardedRaw.some((a) => a === '--help' || a === '-h' || a === '--version')
-if (!isHelpOrVersion && process.env.ORCA_DEV_INSTANCE_LABEL) {
-  console.error(`[orca-dev] Instance: ${process.env.ORCA_DEV_INSTANCE_LABEL}`)
+if (!isHelpOrVersion && process.env.QUIRKY_DEV_INSTANCE_LABEL) {
+  console.error(`[quirky-dev] Instance: ${process.env.QUIRKY_DEV_INSTANCE_LABEL}`)
 }
 // Why: automation launches this app while someone is working; announce that the
 // window will come up without taking the foreground so the mode is visible in logs.
-if (!isHelpOrVersion && process.env.ORCA_BACKGROUND_LAUNCH === '1') {
-  console.error('[orca-dev] Background launch: window stays off screen; automate through CDP')
+if (!isHelpOrVersion && process.env.QUIRKY_BACKGROUND_LAUNCH === '1') {
+  console.error('[quirky-dev] Background launch: window stays off screen; automate through CDP')
 }
 let forwardedExtras = []
 if (!userPassedPort && !isHelpOrVersion) {
@@ -596,7 +597,7 @@ if (!userPassedPort && !isHelpOrVersion) {
     port = parseDebugPortEnv(envPortRaw)
     if (port === null) {
       console.error(
-        `[orca-dev] Ignoring invalid REMOTE_DEBUGGING_PORT=${JSON.stringify(envPortRaw)}; falling back to probe.`
+        `[quirky-dev] Ignoring invalid REMOTE_DEBUGGING_PORT=${JSON.stringify(envPortRaw)}; falling back to probe.`
       )
     }
   }
@@ -608,10 +609,10 @@ if (!userPassedPort && !isHelpOrVersion) {
     // Why: stderr keeps stdout clean for downstream parsing; log uses
     // 127.0.0.1 to match the interface we actually probed (localhost may
     // resolve to ::1 on IPv6-first hosts).
-    console.error(`[orca-dev] Remote debugging on http://127.0.0.1:${port}`)
+    console.error(`[quirky-dev] Remote debugging on http://127.0.0.1:${port}`)
   } else {
     console.error(
-      '[orca-dev] No free debug port found in sweep; starting without --remote-debugging-port.'
+      '[quirky-dev] No free debug port found in sweep; starting without --remote-debugging-port.'
     )
   }
 }

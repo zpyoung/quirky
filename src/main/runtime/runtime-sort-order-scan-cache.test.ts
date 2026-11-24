@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
-import './orca-runtime-test-lifecycle.spec'
-import { OrcaRuntimeService, listWorktrees } from './orca-runtime-test-mocks.spec'
-import type { WorktreeMeta } from './orca-runtime-test-mocks.spec'
+import './quirky-runtime-test-lifecycle.spec'
+import { QuirkyRuntimeService, listWorktrees } from './quirky-runtime-test-mocks.spec'
+import type { WorktreeMeta } from './quirky-runtime-test-mocks.spec'
 import {
   TEST_REPO_ID,
   TEST_REPO_PATH,
   makeWorktreeInfo,
   makeWorktreeMeta,
   store
-} from './orca-runtime-test-fixtures.spec'
+} from './quirky-runtime-test-fixtures.spec'
 import { registerRuntimeWindowLifecycle } from '../window/runtime-window-lifecycle'
 import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
@@ -22,12 +22,12 @@ const secondPath = join(TEST_REPO_PATH, 'second')
 const firstId = `${TEST_REPO_ID}::${firstPath}`
 const secondId = `${TEST_REPO_ID}::${secondPath}`
 
-async function createScannedRuntime(): Promise<InstanceType<typeof OrcaRuntimeService>> {
+async function createScannedRuntime(): Promise<InstanceType<typeof QuirkyRuntimeService>> {
   const metaById: Record<string, WorktreeMeta> = {
     [firstId]: makeWorktreeMeta({ sortOrder: 200 }),
     [secondId]: makeWorktreeMeta({ sortOrder: 100 })
   }
-  const runtime = new OrcaRuntimeService({
+  const runtime = new QuirkyRuntimeService({
     ...store,
     getAllWorktreeMeta: () => metaById,
     getWorktreeMeta: (id: string) => metaById[id],
@@ -46,7 +46,7 @@ async function createScannedRuntime(): Promise<InstanceType<typeof OrcaRuntimeSe
 }
 
 async function expectOrderSaveSkipsGitScan(
-  runtime: InstanceType<typeof OrcaRuntimeService>
+  runtime: InstanceType<typeof QuirkyRuntimeService>
 ): Promise<void> {
   const events: RuntimeClientEvent[] = []
   const unsubscribe = runtime.onClientEvent((event) => events.push(event))

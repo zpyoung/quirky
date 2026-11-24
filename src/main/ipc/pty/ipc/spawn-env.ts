@@ -19,7 +19,7 @@ export async function assemblePtyIpcSpawnEnv(ctx: PtyIpcSpawnState): Promise<voi
   const args = ctx.args
   // Why: the daemon-backed provider skips LocalPtyProvider's buildSpawnEnv, so assemble the same host-local env here for parity.
   const baseEnvWithAuth = ctx.claudeAuth ? { ...args.env, ...ctx.claudeAuth.envPatch } : args.env
-  const spawnPaneKey = baseEnvWithAuth?.ORCA_PANE_KEY
+  const spawnPaneKey = baseEnvWithAuth?.QUIRKY_PANE_KEY
   const parsedSpawnPaneKey = parseValidPaneKey(spawnPaneKey)
   const verifiedPaneKey =
     parsedSpawnPaneKey &&
@@ -95,7 +95,7 @@ export async function assemblePtyIpcSpawnEnv(ctx: PtyIpcSpawnState): Promise<voi
       }
     }
   }
-  ctx.requestedAgentTeamsPath = ctx.baseEnv?.ORCA_AGENT_TEAMS_TEAM_ID
+  ctx.requestedAgentTeamsPath = ctx.baseEnv?.QUIRKY_AGENT_TEAMS_TEAM_ID
     ? ctx.baseEnv[resolvePathEnvKey(ctx.baseEnv, process.platform)]
     : undefined
   ctx.agentTeamsEnvToDelete = shouldRefreshAgentTeamsEnv ? ['TERM_PROGRAM'] : undefined
@@ -114,7 +114,7 @@ export async function assemblePtyIpcSpawnEnv(ctx: PtyIpcSpawnState): Promise<voi
         : undefined
   })
   ctx.validatedPaneKey = ctx.stablePaneKey
-  // Why: IPC tab/leaf metadata names the pane even when ORCA_PANE_KEY was not proven.
+  // Why: IPC tab/leaf metadata names the pane even when QUIRKY_PANE_KEY was not proven.
   ctx.reservationPaneKey = ctx.metadataPaneKey ?? ctx.validatedPaneKey
   ctx.validatedLeafId = ctx.verifiedLeafId ?? ctx.metadataLeafId
   ctx.spawnTiming.mark('pane_env')

@@ -2,7 +2,7 @@ import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './dispatcher'
 import type { RpcRequest } from './core'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { TERMINAL_METHODS } from './methods/terminal'
 import type { RuntimeTerminalWait } from '../../../shared/runtime-types'
 import {
@@ -83,7 +83,7 @@ async function requestSnapshotReply(options: {
     cleanupSubscription: vi.fn((id: string) => cleanups.get(id)?.()),
     waitForTerminal: vi.fn(() => new Promise<RuntimeTerminalWait>(() => {})),
     updateDesktopViewport: vi.fn().mockResolvedValue(true)
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 
   const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
   const dispatchPromise = dispatcher.dispatchStreaming(

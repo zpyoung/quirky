@@ -99,7 +99,7 @@ export class PiRpcSession {
       onInputAccepted: (clientMessageId) =>
         this.settle(clientMessageId, {
           state: 'accepted',
-          providerIdentity: { provider: 'orca', clientMessageId }
+          providerIdentity: { provider: 'quirky', clientMessageId }
         })
     })
     this.turns = new PiRpcTurns({

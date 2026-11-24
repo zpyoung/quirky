@@ -1,4 +1,4 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { createDesktopMobilePairingOffer } from './helpers/paired-electron-client'
@@ -38,15 +38,15 @@ function pinned(state: SidebarInputsFeedState): unknown {
 test.describe('switch on', () => {
   test.skip(
     !SIDEBAR_INPUTS_BUILD,
-    'sidebarInputs.read exists only in an ORCA_SIDEBAR_INPUTS=main build'
+    'sidebarInputs.read exists only in an QUIRKY_SIDEBAR_INPUTS=main build'
   )
 
   test('the host’s own phone reads a whole snapshot, then a delta after a change', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
-    const worktreeId = await waitForActiveWorktree(orcaPage)
-    const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
+    await waitForSessionReady(quirkyPage)
+    const worktreeId = await waitForActiveWorktree(quirkyPage)
+    const phone = pairMobileClient(await createDesktopMobilePairingOffer(quirkyPage))
     try {
       const socket = await phone.openSocket()
       socket.send('events', 'runtime.clientEvents.subscribe', null)
@@ -57,7 +57,7 @@ test.describe('switch on', () => {
       expect(installed?.domains.get('temporal')?.has('retention')).toBe(true)
       expect(pinned(first.state)).not.toContain(worktreeId)
 
-      await orcaPage.evaluate(
+      await quirkyPage.evaluate(
         (id) =>
           window.api.runtime.call({
             method: 'worktree.set',
@@ -98,9 +98,9 @@ test.describe('switch on', () => {
 test.describe('switch off', () => {
   test.skip(SIDEBAR_INPUTS_BUILD, 'checks the shipped method set')
 
-  test('a switch-off build refuses sidebarInputs.read to the phone', async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
+  test('a switch-off build refuses sidebarInputs.read to the phone', async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    const phone = pairMobileClient(await createDesktopMobilePairingOffer(quirkyPage))
     try {
       const response = await phone.request('sidebarInputs.read', { maxBytes: 262_144 })
       expect(response).toMatchObject({ ok: false })

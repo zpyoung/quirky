@@ -31,7 +31,7 @@ function makeInput(overrides: Partial<CreateInput> = {}): CreateInput {
   const createdReview: CreateHostedReviewResult = {
     ok: true,
     number: 42,
-    url: 'https://github.com/orca/app/pull/42'
+    url: 'https://github.com/quirky/app/pull/42'
   }
   return {
     activePullRequestGenerationKey: null,
@@ -156,7 +156,7 @@ describe('useChecksPanelCreateReview provider flow', () => {
                     requestId: 3,
                     result: {
                       base: 'main',
-                      title: '[ORCA-7] Generated title',
+                      title: '[QUIRKY-7] Generated title',
                       body: 'Generated details',
                       draft: true
                     }
@@ -412,7 +412,7 @@ describe('useChecksPanelCreateReview provider flow', () => {
     await act(async () => result.current.handleCreatePullRequest(false))
 
     expect(input.setRightSidebarTab).toHaveBeenCalledWith('checks')
-    expect(openHttpLink).toHaveBeenCalledWith('https://github.com/orca/app/pull/42', {
+    expect(openHttpLink).toHaveBeenCalledWith('https://github.com/quirky/app/pull/42', {
       worktreeId: 'worktree-1'
     })
   })

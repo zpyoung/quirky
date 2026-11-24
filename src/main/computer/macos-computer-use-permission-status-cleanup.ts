@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { escapeRegex } from '../../shared/string-utils'
 
 export async function stopMacOSPermissionStatusHelper(statusPath: string): Promise<void> {
@@ -7,7 +7,7 @@ export async function stopMacOSPermissionStatusHelper(statusPath: string): Promi
     program: '/usr/bin/pkill',
     args: [
       '-f',
-      `(^|[[:space:]/])orca-computer-use-macos[[:space:]]+--permission-status-file[[:space:]]+${escapeRegex(statusPath)}$`
+      `(^|[[:space:]/])quirky-computer-use-macos[[:space:]]+--permission-status-file[[:space:]]+${escapeRegex(statusPath)}$`
     ],
     timeoutMs: 2_000,
     stdio: 'ignore'

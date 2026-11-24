@@ -38,7 +38,7 @@ afterEach(async () => {
 async function scanInChild(
   limit = 20
 ): Promise<{ reports: AiVaultScanWork[]; final: AiVaultScanWork }> {
-  tempRoot = await mkdtemp(join(tmpdir(), 'orca-scan-strip-'))
+  tempRoot = await mkdtemp(join(tmpdir(), 'quirky-scan-strip-'))
   const roots = isolatedScanRoots(tempRoot)
   for (const [index, name] of ['a', 'b', 'c'].entries()) {
     const path = join(roots.claudeProjectsDir, 'project', `${name}.jsonl`)

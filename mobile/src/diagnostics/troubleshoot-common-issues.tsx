@@ -14,7 +14,7 @@ export const troubleshootCommonIssues: TroubleshootSection[] = [
     icon: <Bell size={16} color={colors.textSecondary} />,
     title: 'Push Notifications',
     steps: [
-      'Check that system settings allow Orca notifications and that Focus or Do Not Disturb is off.',
+      'Check that system settings allow Quirky notifications and that Focus or Do Not Disturb is off.',
       'Try cellular or another Wi-Fi network. If alerts arrive after switching, your network may be delaying delivery.'
     ]
   },
@@ -34,8 +34,8 @@ export const troubleshootCommonIssues: TroubleshootSection[] = [
     icon: <Shield size={16} color={colors.textSecondary} />,
     title: 'Firewall Blocking Port 6768',
     steps: [
-      'macOS: System Settings → Network → Firewall — allow Orca.',
-      'Windows: Defender Firewall → Allow app — enable Orca for Private networks.',
+      'macOS: System Settings → Network → Firewall — allow Quirky.',
+      'Windows: Defender Firewall → Allow app — enable Quirky for Private networks.',
       'Linux: sudo ufw allow 6768',
       'Corporate/school networks may block P2P — try a personal hotspot.'
     ]
@@ -45,8 +45,8 @@ export const troubleshootCommonIssues: TroubleshootSection[] = [
     icon: <Monitor size={16} color={colors.textSecondary} />,
     title: 'Desktop App Not Running',
     steps: [
-      'Orca must be open on your desktop to accept connections.',
-      'Try restarting Orca — the companion server starts on launch.',
+      'Quirky must be open on your desktop to accept connections.',
+      'Try restarting Quirky — the companion server starts on launch.',
       'After an update, you may need to re-pair via QR code.'
     ]
   },

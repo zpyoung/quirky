@@ -46,7 +46,7 @@ export function directoryAccountBinding(
   }
 }
 
-/** An agent whose account is a folder Orca keeps for it on each host, which the agent signs in to
+/** An agent whose account is a folder Quirky keeps for it on each host, which the agent signs in to
  *  itself. It keeps that sign-in there in plain text, so every start makes the folder and
  *  `privateSubfolders` owner-only, whatever made them first. */
 export function hostFolderAccountBinding(

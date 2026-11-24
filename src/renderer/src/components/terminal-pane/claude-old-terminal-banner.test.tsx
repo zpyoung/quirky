@@ -21,7 +21,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const TAB_ID = 'tab-1'
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const PANE_KEY = makePaneKey(TAB_ID, LEAF_ID)
-const TITLE = "This terminal was opened before Orca's Claude account update"
+const TITLE = "This terminal was opened before Quirky's Claude account update"
 const ACCOUNT: ClaudeManagedAccount = {
   id: 'a',
   email: 'a@example.test',

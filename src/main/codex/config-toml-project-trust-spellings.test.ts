@@ -11,7 +11,7 @@ import {
 } from './config-toml-runtime-owned-sections'
 import { upsertProjectTrustLevelInContent } from './config-toml-trust'
 
-// Why (#22592): Codex's settings screen writes these spellings; each is the same TOML key as Orca's.
+// Why (#22592): Codex's settings screen writes these spellings; each is the same TOML key as Quirky's.
 const PROJECT = '/Users/me/Projects/agentic-WPS'
 const HEADER_SPELLINGS = [
   `["projects"."${PROJECT}"]`,
@@ -114,7 +114,7 @@ describe('the config mirror treats every spelling as one project table', () => {
     let systemHomePath: string
 
     beforeEach(() => {
-      root = mkdtempSync(join(tmpdir(), 'orca-project-spellings-'))
+      root = mkdtempSync(join(tmpdir(), 'quirky-project-spellings-'))
       runtimeHomePath = join(root, 'runtime')
       systemHomePath = join(root, 'system')
       mkdirSync(runtimeHomePath)

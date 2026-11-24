@@ -33,7 +33,7 @@ export function composeLoopPrompt(args: {
     body,
     notesPath: ctx.targets
       ? loopNotesPath(ctx.targets.workspace, loop.slug)
-      : `.orca/loops/${loop.slug}/notes.md`,
+      : `.quirky/loops/${loop.slug}/notes.md`,
     includePreamble: args.includePreamble
   })
 }

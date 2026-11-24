@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   cleanupMarkdownFixture,
   createMarkdownFixture,
@@ -10,7 +10,7 @@ import {
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 const proofDirectory = path.join(process.cwd(), 'validation-screenshots', 'large-markdown-tables')
-const baseline = process.env.ORCA_MARKDOWN_CAPTURE_TABLE_BASELINE === '1'
+const baseline = process.env.QUIRKY_MARKDOWN_CAPTURE_TABLE_BASELINE === '1'
 
 function largeTable(): string {
   return `# Large table\n\n\`\`\`javascript\nconst needle = 42\nconst longLine = "${'x'.repeat(6000)}"; const FarCodeNeedle = 42\n\`\`\`\n\n| Item | Description | Reference |\n| --- | --- | --- |\n${Array.from({ length: 12_000 }, (_, index) => `| Item ${index} | ${'Readable table content. '.repeat(3)}${index === 11_999 ? 'TableEndMarker' : ''} | [Value ${index}][later] |`).join('\n')}\n\n[later]: https://example.com\n`
@@ -18,18 +18,18 @@ function largeTable(): string {
 
 for (const width of [1920, 1280]) {
   test(`large single table keeps Find, aligned columns, review notes, and refresh (${width}px)`, async ({
-    orcaPage,
+    quirkyPage,
     registerPostElectronShutdownCleanup
   }, testInfo) => {
-    await orcaPage.setViewportSize({ width, height: 900 })
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    const context = await getActiveWorktreeContext(orcaPage)
+    await quirkyPage.setViewportSize({ width, height: 900 })
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    const context = await getActiveWorktreeContext(quirkyPage)
     const content = largeTable()
     expect(Buffer.byteLength(content)).toBeGreaterThan(1024 * 1024)
     const filePath = await createMarkdownFixture(
       context,
-      '.orca-e2e-large-table-preview',
+      '.quirky-e2e-large-table-preview',
       'table',
       testInfo.workerIndex,
       content
@@ -37,8 +37,8 @@ for (const width of [1920, 1280]) {
     registerPostElectronShutdownCleanup(() => cleanupMarkdownFixture(filePath))
     await mkdir(proofDirectory, { recursive: true })
     const errors: string[] = []
-    orcaPage.on('pageerror', (error) => errors.push(error.message))
-    await orcaPage.evaluate(
+    quirkyPage.on('pageerror', (error) => errors.push(error.message))
+    await quirkyPage.evaluate(
       ({ filePath, relativePath, worktreeId }) => {
         window
           .__store!.getState()
@@ -50,7 +50,7 @@ for (const width of [1920, 1280]) {
         worktreeId: context.worktreeId
       }
     )
-    const preview = orcaPage.locator('.markdown-preview')
+    const preview = quirkyPage.locator('.markdown-preview')
     await expect(preview.getByRole('heading', { name: 'Large table', exact: true })).toBeVisible({
       timeout: 25_000
     })
@@ -58,7 +58,7 @@ for (const width of [1920, 1280]) {
       await expect(
         preview.getByText('This block is too large to render. Open source view to read it.')
       ).toBeVisible()
-      await orcaPage.screenshot({ path: path.join(proofDirectory, `before-${width}.png`) })
+      await quirkyPage.screenshot({ path: path.join(proofDirectory, `before-${width}.png`) })
       return
     }
     await expect(preview.getByRole('cell', { name: 'Item 0', exact: true })).toBeVisible()
@@ -66,28 +66,28 @@ for (const width of [1920, 1280]) {
     await expect(
       preview.getByText('This block is too large to render. Open source view to read it.')
     ).toHaveCount(0)
-    await orcaPage.screenshot({ path: path.join(proofDirectory, `after-${width}.png`) })
+    await quirkyPage.screenshot({ path: path.join(proofDirectory, `after-${width}.png`) })
     await preview.focus()
-    await orcaPage.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f')
-    const input = orcaPage.getByRole('textbox', { name: 'Find in markdown preview' })
+    await quirkyPage.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f')
+    const input = quirkyPage.getByRole('textbox', { name: 'Find in markdown preview' })
     await input.fill('const needle')
-    await expect(orcaPage.locator('.markdown-preview-search-status')).toHaveText('1/1', {
+    await expect(quirkyPage.locator('.markdown-preview-search-status')).toHaveText('1/1', {
       timeout: 25_000
     })
     await expect(preview.locator('.hljs')).toBeInViewport()
     await expect
       .poll(() =>
-        orcaPage.evaluate(() => {
+        quirkyPage.evaluate(() => {
           const highlight = CSS.highlights.get('markdown-preview-search-active-match')
           return highlight ? [...highlight].map((range) => range.toString()).join('') : ''
         })
       )
       .toBe('const needle')
     await input.fill('FarCodeNeedle')
-    await expect(orcaPage.locator('.markdown-preview-search-status')).toHaveText('1/1')
+    await expect(quirkyPage.locator('.markdown-preview-search-status')).toHaveText('1/1')
     await expect
       .poll(() =>
-        orcaPage.evaluate(() => {
+        quirkyPage.evaluate(() => {
           const range = [...(CSS.highlights.get('markdown-preview-search-active-match') ?? [])][0]
           const pre = range?.startContainer.parentElement?.closest('pre')
           if (!(range instanceof Range) || !pre || range.toString() !== 'FarCodeNeedle') {
@@ -100,7 +100,7 @@ for (const width of [1920, 1280]) {
       )
       .toBe(true)
     await input.fill('TableEndMarker')
-    await expect(orcaPage.locator('.markdown-preview-search-status')).toHaveText('1/1', {
+    await expect(quirkyPage.locator('.markdown-preview-search-status')).toHaveText('1/1', {
       timeout: 25_000
     })
     const lastCell = preview.getByRole('cell', { name: 'Item 11999', exact: true })
@@ -111,13 +111,13 @@ for (const width of [1920, 1280]) {
     )
     expect(await preview.locator('tr').count()).toBeLessThan(600)
     await preview.hover()
-    await orcaPage.mouse.wheel(0, -5000)
+    await quirkyPage.mouse.wheel(0, -5000)
     await expect(lastCell).not.toBeInViewport()
-    await orcaPage.getByRole('button', { name: 'Next match', exact: true }).click()
+    await quirkyPage.getByRole('button', { name: 'Next match', exact: true }).click()
     await expectSettledInViewport(lastCell)
     const annotation = preview
       .locator('[data-annotation-block-key]')
-      .filter({ has: orcaPage.getByRole('cell', { name: 'Item 11999', exact: true }) })
+      .filter({ has: quirkyPage.getByRole('cell', { name: 'Item 11999', exact: true }) })
     await annotation.hover()
     await annotation.getByRole('button', { name: 'Add note', exact: true }).click()
     const composer = preview.getByPlaceholder('Add note for the AI')
@@ -125,11 +125,11 @@ for (const width of [1920, 1280]) {
     await composer.press('Enter')
     await expect(preview.getByText('Review the final table rows', { exact: true })).toBeVisible()
     await expectSettledInViewport(lastCell)
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       (dark) => window.__store!.getState().updateSettings({ theme: dark ? 'dark' : 'light' }),
       width === 1280
     )
-    await orcaPage.setViewportSize({ width: width - 120, height: 1100 })
+    await quirkyPage.setViewportSize({ width: width - 120, height: 1100 })
     await expect
       .poll(() =>
         preview.locator('table[data-preview-table-start]').evaluateAll((tables) => {
@@ -144,9 +144,9 @@ for (const width of [1920, 1280]) {
     await input.fill('')
     await input.fill('TableEndMarker')
     await expectSettledInViewport(lastCell)
-    await orcaPage.screenshot({ path: path.join(proofDirectory, `end-${width}.png`) })
+    await quirkyPage.screenshot({ path: path.join(proofDirectory, `end-${width}.png`) })
     await input.fill('')
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       (content) => {
         const state = window.__store!.getState()
         const file = state.openFiles.find((entry) => entry.id === state.activeFileId)
@@ -160,7 +160,7 @@ for (const width of [1920, 1280]) {
         .replace('| Item 0 |', `| Item 0 ${'x'.repeat(9000)} |`)
     )
     await expectSettledInViewport(preview.getByText(/TableEndUpdated/))
-    await orcaPage.screenshot({ path: path.join(proofDirectory, `refreshed-${width}.png`) })
+    await quirkyPage.screenshot({ path: path.join(proofDirectory, `refreshed-${width}.png`) })
     expect(errors).toEqual([])
   })
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { waitForActivePaneHookDescriptor, waitForActiveTerminalManager } from './helpers/terminal'
 import {
@@ -14,17 +14,17 @@ import {
 
 test('renders a larger transcript rewrite during snapshot publication, then ordinary appends', async ({
   electronApp,
-  orcaPage,
+  quirkyPage,
   registerPostElectronShutdownCleanup
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
-  const descriptor = await waitForActivePaneHookDescriptor(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
+  const descriptor = await waitForActivePaneHookDescriptor(quirkyPage)
   const [tabId] = descriptor.paneKey.split(':')
   const sessionId = `drain-race-${randomUUID()}`
-  const root = mkdtempSync(join(tmpdir(), 'orca-native-chat-drain-proof-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-native-chat-drain-proof-'))
   registerPostElectronShutdownCleanup(async () => rmSync(root, { recursive: true, force: true }))
   const transcriptPath = join(root, `${sessionId}.jsonl`)
   const cleanupChannel = `e2e:drain-race-cleanup:${sessionId}`
@@ -91,21 +91,21 @@ test('renders a larger transcript rewrite during snapshot publication, then ordi
     { transcriptPath, replacement, cleanupChannel }
   )
 
-  const transcript = orcaPage.locator('[data-native-chat-root="true"]')
+  const transcript = quirkyPage.locator('[data-native-chat-root="true"]')
   async function capture(name: string): Promise<void> {
     const bounds = await transcript.boundingBox()
     if (!bounds) {
       throw new Error('Chat transcript has no rendered bounds')
     }
-    await orcaPage.screenshot({
+    await quirkyPage.screenshot({
       path: testInfo.outputPath(name),
       clip: { ...bounds, height: Math.min(bounds.height, 320) }
     })
   }
   try {
-    await enableNativeChatSetting(orcaPage)
-    await seedClaudeProviderSession(orcaPage, { ...descriptor, sessionId, transcriptPath })
-    await toggleTerminalTabToChatView(orcaPage, { tabId, worktreeId: descriptor.worktreeId })
+    await enableNativeChatSetting(quirkyPage)
+    await seedClaudeProviderSession(quirkyPage, { ...descriptor, sessionId, transcriptPath })
+    await toggleTerminalTabToChatView(quirkyPage, { tabId, worktreeId: descriptor.worktreeId })
     await expect(transcript).toBeVisible()
     try {
       await expect(transcript.getByText(newText)).toBeVisible({ timeout: 8_000 })

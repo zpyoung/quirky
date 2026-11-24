@@ -39,7 +39,7 @@ describe('POSIX secure files', () => {
   })
 
   function tempDir(): string {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-secure-file-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-secure-file-'))
     tempDirs.push(dir)
     return dir
   }

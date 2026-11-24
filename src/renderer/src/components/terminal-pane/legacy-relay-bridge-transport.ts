@@ -1,5 +1,5 @@
 /**
- * A runtime pane whose terminal still runs inside an older Orca's relay: it reattaches through
+ * A runtime pane whose terminal still runs inside an older Quirky's relay: it reattaches through
  * main's legacy relay bridge, and hands every other connect to the managed server's transport.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15, with src/main/ssh/legacy-relay/.
  *
@@ -19,7 +19,7 @@ import {
 type Callbacks = Parameters<PtyTransport['connect']>[0]['callbacks']
 
 const UNREACHABLE_MESSAGE =
-  'This terminal is still running on the host under an older version of Orca. Reconnecting to it…'
+  'This terminal is still running on the host under an older version of Quirky. Reconnecting to it…'
 
 export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransport): PtyTransport {
   const api = window.api.legacyRelayBridge

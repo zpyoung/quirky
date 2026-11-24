@@ -12,7 +12,10 @@ beforeEach(() => {
   loadNative.mockReset()
   record.mockReset()
   Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
-  Object.defineProperty(process, 'resourcesPath', { value: '/orca-resources', configurable: true })
+  Object.defineProperty(process, 'resourcesPath', {
+    value: '/quirky-resources',
+    configurable: true
+  })
 })
 
 afterEach(() => {

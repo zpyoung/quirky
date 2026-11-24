@@ -40,7 +40,7 @@ function expectIdenticalToPrevious(
 }
 
 function sentinel(): string {
-  return `orca-secret-slot-${randomUUID()}`
+  return `quirky-secret-slot-${randomUUID()}`
 }
 
 describe('complete profile domain serialization', () => {
@@ -145,7 +145,7 @@ describe('applySecretSentinelSubstitutions', () => {
       settings: { opencodeSessionCookie: subs[0].sentinel, httpProxyUrl: subs[1].sentinel },
       ui: { browserKagiSessionLink: subs[2].sentinel },
       // Adjacent content that must not shift: a near-miss prefix, and JSON escapes either side.
-      noise: ['orca-secret-slot-', 'a\\b"c\n\t', subs[0].sentinel.slice(0, -1)]
+      noise: ['quirky-secret-slot-', 'a\\b"c\n\t', subs[0].sentinel.slice(0, -1)]
     }
     expectIdenticalToPrevious(JSON.stringify(state), subs)
   })
@@ -203,7 +203,7 @@ describe('applySecretSentinelSubstitutions', () => {
   it.each(['', 'safeStorage-degraded\0'])(
     'keeps the first duplicate and handles adjacent escaped sentinels with prefix %j',
     (prefix) => {
-      const slot = 'orca-$a/.*+?^${}()|[]\\"雪'
+      const slot = 'quirky-$a/.*+?^${}()|[]\\"雪'
       const subs = [
         { sentinel: slot, blob: 'cipher-other-token-"\\\n雪\ud800', hashValue: 'plain-😀' },
         { sentinel: slot, blob: 'duplicate-must-not-win', hashValue: 'wrong-plain' },

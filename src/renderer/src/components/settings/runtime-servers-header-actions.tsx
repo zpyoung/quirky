@@ -12,7 +12,7 @@ import {
 } from '../ui/dropdown-menu'
 import { useRuntimeServersPage } from './runtime-servers-page-context'
 import { RuntimeShareComputerButton } from './runtime-share-computer-button'
-import { getManagedOrcadApi } from './use-managed-server-catalog'
+import { getManagedQuirkydApi } from './use-managed-server-catalog'
 
 function AddServerMenuItem({
   icon,
@@ -41,7 +41,7 @@ function AddServerMenuItem({
   )
 }
 
-/** Section-header actions for Remote Orca Servers: update-all and the Add server split button. */
+/** Section-header actions for Remote Quirky Servers: update-all and the Add server split button. */
 export function RuntimeServersHeaderActions({
   canGeneratePairingUrl
 }: {
@@ -55,7 +55,7 @@ export function RuntimeServersHeaderActions({
   const setRemoteServerUpdateDialogOpen = useAppStore(
     (state) => state.setRemoteServerUpdateDialogOpen
   )
-  const canInstall = getManagedOrcadApi() !== undefined
+  const canInstall = getManagedQuirkydApi() !== undefined
   let availableCount = 0
   for (const entry of remoteServerUpdates.values()) {
     if (entry.phase === 'available') {
@@ -113,7 +113,7 @@ export function RuntimeServersHeaderActions({
               )}
               description={translate(
                 'auto.components.settings.serverList.pasteAccessLinkHelp',
-                'Pair with Orca already running on another machine.'
+                'Pair with Quirky already running on another machine.'
               )}
               onSelect={() => setDialog('add')}
             />
@@ -122,11 +122,11 @@ export function RuntimeServersHeaderActions({
                 icon={<TerminalSquare />}
                 label={translate(
                   'auto.components.settings.serverList.setUpOnSshHost',
-                  'Set up Orca on an SSH host'
+                  'Set up Quirky on an SSH host'
                 )}
                 description={translate(
                   'auto.components.settings.managedServers.description',
-                  'Orca installs itself on an empty SSH host and keeps itself up to date.'
+                  'Quirky installs itself on an empty SSH host and keeps itself up to date.'
                 )}
                 onSelect={() => setDialog('install')}
               />

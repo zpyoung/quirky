@@ -44,7 +44,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Fumadocs should consume Orca's semantic palette, not a parallel neutral theme. */
+  /* Fumadocs should consume Quirky's semantic palette, not a parallel neutral theme. */
   --color-fd-background: var(--background);
   --color-fd-foreground: var(--foreground);
   --color-fd-muted: var(--muted);
@@ -166,7 +166,7 @@
   color: var(--popover-foreground);
 }
 
-/* Preserve Fumadocs structure while using Orca sidebar roles. */
+/* Preserve Fumadocs structure while using Quirky sidebar roles. */
 #nd-sidebar {
   --color-fd-background: var(--sidebar);
   --color-fd-foreground: var(--sidebar-foreground);

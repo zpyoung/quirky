@@ -13,7 +13,7 @@ export type SaveClipboardImageAsTempFileArgs = {
   runtimeEnvironmentId?: string | null
   /** With `runtimeEnvironmentId`: store the image as an attachment of this structured chat. */
   agentSessionAttachment?: AgentSessionAttachmentClipboardTarget
-  /** A native-chat composer paste: kept in Orca's paste folder so its draft can bring it back. */
+  /** A native-chat composer paste: kept in Quirky's paste folder so its draft can bring it back. */
   forNativeChatDraft?: boolean
   /** With `forNativeChatDraft`: a structured chat on this machine, whose sends claim its pastes
    *  from this machine's chat attachment store. */
@@ -26,7 +26,7 @@ export async function saveClipboardImageBufferAsTempFile(
 ): Promise<string> {
   assertClipboardImageByteLengthWithinLimit(buffer.byteLength)
 
-  const fileName = `orca-paste-${Date.now()}-${randomUUID()}.png`
+  const fileName = `quirky-paste-${Date.now()}-${randomUUID()}.png`
 
   if (args?.connectionId) {
     throw new SshHostNotServedError(args.connectionId)

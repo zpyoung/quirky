@@ -80,7 +80,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 }))
 
 vi.mock('@/hooks/useVirtualizedScrollAnchor', () => ({
-  VIRTUALIZED_SCROLL_ANCHOR_RECORD_EVENT: 'orca:test-record-scroll-anchor',
+  VIRTUALIZED_SCROLL_ANCHOR_RECORD_EVENT: 'quirky:test-record-scroll-anchor',
   useVirtualizedScrollAnchor: vi.fn()
 }))
 
@@ -138,12 +138,12 @@ vi.mock('./WorktreeCardAgents', () => ({
   default: ({ worktreeId }: { worktreeId: string }) => (
     <div data-agent-worktree-id={worktreeId}>Agent row</div>
   ),
-  SUPPRESS_WORKTREE_LIST_SCROLL_ADJUSTMENT_EVENT: 'orca:test-suppress-scroll-adjustment'
+  SUPPRESS_WORKTREE_LIST_SCROLL_ADJUSTMENT_EVENT: 'quirky:test-suppress-scroll-adjustment'
 }))
 
 vi.mock('./WorktreeContextMenu', () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
-  WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-orca-context-menu-scope',
+  WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-quirky-context-menu-scope',
   WORKTREE_NATIVE_CONTEXT_MENU_ATTR: 'data-worktree-native-context-menu'
 }))
 
@@ -206,7 +206,7 @@ function makeHostedReview(overrides: Partial<HostedReviewInfo> = {}): HostedRevi
     number: 42,
     title: 'Child GitLab MR',
     state: 'open',
-    url: 'https://gitlab.com/acme/orca/-/merge_requests/42',
+    url: 'https://gitlab.com/acme/quirky/-/merge_requests/42',
     status: 'success',
     updatedAt: '2026-06-09T00:00:00.000Z',
     mergeable: 'MERGEABLE',

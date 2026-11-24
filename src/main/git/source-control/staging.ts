@@ -87,7 +87,7 @@ export async function stageWorktreeChanges(
   invalidateGitReadCaches()
   try {
     const gitOptions = gitOptionsForWorktree(worktreePath, options)
-    // Why: Git cannot ignore Orca's shared symlinks under a directory-only rule (`node_modules/`),
+    // Why: Git cannot ignore Quirky's shared symlinks under a directory-only rule (`node_modules/`),
     // so `add --all` would commit a machine-specific link the listing hides (see status-read).
     const excludedUntrackedPaths =
       scope === 'all' && options.sharedLinkPaths && options.sharedLinkPaths.length > 0

@@ -96,7 +96,7 @@ function resetMocks(): void {
 
 function mockGitHubProvider(): void {
   getProjectSlugMock.mockResolvedValue(null)
-  getRepoSlugMock.mockResolvedValue({ owner: 'acme', repo: 'orca' })
+  getRepoSlugMock.mockResolvedValue({ owner: 'acme', repo: 'quirky' })
   getEnterpriseGitHubRepoSlugMock.mockResolvedValue(null)
 }
 
@@ -108,19 +108,19 @@ function mockGitHubEnterpriseProvider(): void {
   // comes back host-qualified instead of null + separate enterprise fallback.
   getRepoSlugMock.mockResolvedValue({
     owner: 'acme',
-    repo: 'orca',
+    repo: 'quirky',
     host: 'github.acme-corp.com'
   })
   // The auth gate still keys off the enterprise resolver (authed-GHES signal).
   getEnterpriseGitHubRepoSlugMock.mockResolvedValue({
     owner: 'acme',
-    repo: 'orca',
+    repo: 'quirky',
     host: 'github.acme-corp.com'
   })
 }
 
 function mockGitLabProvider(): void {
-  getProjectSlugMock.mockResolvedValue({ host: 'gitlab.com', path: 'acme/orca' })
+  getProjectSlugMock.mockResolvedValue({ host: 'gitlab.com', path: 'acme/quirky' })
   getRepoSlugMock.mockResolvedValue(null)
 }
 
@@ -162,12 +162,12 @@ describe('createHostedReview', () => {
     createGitHubPullRequestMock.mockResolvedValue({
       ok: true,
       number: 12,
-      url: 'https://github.com/acme/orca/pull/12'
+      url: 'https://github.com/acme/quirky/pull/12'
     })
     createGitLabMergeRequestMock.mockResolvedValue({
       ok: true,
       number: 44,
-      url: 'https://gitlab.com/acme/orca/-/merge_requests/44'
+      url: 'https://gitlab.com/acme/quirky/-/merge_requests/44'
     })
   })
 
@@ -272,7 +272,7 @@ describe('createHostedReview', () => {
     ).resolves.toEqual({
       ok: true,
       number: 12,
-      url: 'https://github.com/acme/orca/pull/12'
+      url: 'https://github.com/acme/quirky/pull/12'
     })
     expect(createGitHubPullRequestMock).toHaveBeenCalledOnce()
   })
@@ -293,7 +293,7 @@ describe('createHostedReview', () => {
     ).resolves.toEqual({
       ok: true,
       number: 12,
-      url: 'https://github.com/acme/orca/pull/12'
+      url: 'https://github.com/acme/quirky/pull/12'
     })
 
     expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['rev-parse', '--abbrev-ref', 'HEAD'], {
@@ -319,7 +319,7 @@ describe('createHostedReview', () => {
         branch: 'feature',
         localGitExecOptions: { wslDistro: 'Ubuntu' },
         // Why: a stale no-review answer here would leave Create enabled after a
-        // review was opened outside Orca, so eligibility takes the fast tier.
+        // review was opened outside Quirky, so eligibility takes the fast tier.
         active: true
       })
     )
@@ -352,7 +352,7 @@ describe('createHostedReview', () => {
     ).resolves.toEqual({
       ok: true,
       number: 12,
-      url: 'https://github.com/acme/orca/pull/12'
+      url: 'https://github.com/acme/quirky/pull/12'
     })
 
     // Detection already confirmed gh is authed to the GHES host, so the auth
@@ -378,7 +378,7 @@ describe('createHostedReview', () => {
     ).resolves.toEqual({
       ok: true,
       number: 44,
-      url: 'https://gitlab.com/acme/orca/-/merge_requests/44'
+      url: 'https://gitlab.com/acme/quirky/-/merge_requests/44'
     })
 
     expect(glabExecFileAsyncMock).toHaveBeenCalledWith(
@@ -404,7 +404,7 @@ describe('createHostedReview', () => {
       number: 31,
       title: 'Existing feature',
       state: 'open',
-      url: 'https://github.com/acme/orca/pull/31',
+      url: 'https://github.com/acme/quirky/pull/31',
       status: 'pending',
       updatedAt: '2026-05-15T00:00:00.000Z',
       mergeable: 'UNKNOWN'
@@ -427,7 +427,7 @@ describe('createHostedReview', () => {
       error: 'A pull request already exists for this branch.',
       existingReview: {
         number: 31,
-        url: 'https://github.com/acme/orca/pull/31'
+        url: 'https://github.com/acme/quirky/pull/31'
       }
     })
     expect(createGitHubPullRequestMock).not.toHaveBeenCalled()

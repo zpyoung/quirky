@@ -20,7 +20,7 @@ import {
 let userDataPath: string
 
 beforeEach(() => {
-  userDataPath = mkdtempSync(join(tmpdir(), 'orca-removed-preference-'))
+  userDataPath = mkdtempSync(join(tmpdir(), 'quirky-removed-preference-'))
 })
 
 afterEach(() => {
@@ -174,7 +174,7 @@ describe('Active Server after a saved host is removed', () => {
   it('distinguishes a new profile from an unavailable registry for repair reads', () => {
     expect(listEnvironments(userDataPath)).toEqual([])
     expect(() => listEnvironments(userDataPath, { requireStoreFile: true })).toThrow(
-      'Could not read Orca environments'
+      'Could not read Quirky environments'
     )
   })
 })

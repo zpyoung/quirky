@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RuntimeAiVaultCommands } from '../../runtime-ai-vault-commands'
 import type { AiVaultListResult, AiVaultSession } from '../../../../shared/ai-vault-types'
 import type { AiVaultServiceScanOptions } from '../../../ai-vault/session-scanner-service-protocol'
@@ -86,7 +86,7 @@ function makeDispatcher(): RpcDispatcher {
     listAiVaultSessions: vault.list.bind(vault),
     resolveAiVaultSessionTitles: (requests: unknown[], signal?: AbortSignal) =>
       resolveAiVaultSessionTitlesInService(requests, signal)
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   return new RpcDispatcher({ runtime, methods: AI_VAULT_METHODS })
 }
 
@@ -95,7 +95,7 @@ function makeFailingDispatcher(error: Error): RpcDispatcher {
     getRuntimeId: () => 'test-runtime',
     ensureStructuredAgentSessionHost: vi.fn(async () => undefined),
     listAiVaultSessions: vi.fn().mockRejectedValue(error)
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   return new RpcDispatcher({ runtime, methods: AI_VAULT_METHODS })
 }
 
@@ -209,7 +209,7 @@ describe('aiVault.prepareSessionResume', () => {
       getRuntimeId: () => 'test-runtime',
       ensureStructuredAgentSessionHost: vi.fn(async () => undefined),
       prepareAiVaultSessionResume
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: AI_VAULT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -237,7 +237,7 @@ describe('aiVault.prepareSessionResume', () => {
       getRuntimeId: () => 'test-runtime',
       ensureStructuredAgentSessionHost: vi.fn(async () => undefined),
       prepareAiVaultSessionResume
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: AI_VAULT_METHODS })
 
     await dispatcher.dispatch(
@@ -271,7 +271,7 @@ describe('aiVault.prepareSessionResume for a chat whose host makes the copy', ()
       getRuntimeId: () => 'test-runtime',
       ensureStructuredAgentSessionHost: vi.fn(async () => undefined),
       prepareAiVaultSessionResume
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: AI_VAULT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -331,7 +331,7 @@ describe('aiVault methods without a structured host', () => {
         signal?: AbortSignal
       ) => listAiVaultSessions(args, { signal }),
       prepareAiVaultSessionResume: vi.fn().mockResolvedValue({ useRealCodexHome: true })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     return new RpcDispatcher({ runtime, methods: AI_VAULT_METHODS })
   }
 
@@ -677,11 +677,11 @@ describe('aiVault.listSessions handler + shared cache', () => {
     expect(options?.wslHomeDirs).toEqual([])
   })
 
-  it('forwards codex-home through the real OrcaRuntimeService construction path', async () => {
+  it('forwards codex-home through the real QuirkyRuntimeService construction path', async () => {
     // Why: the dispatcher test above seeds the cache module directly, so it would
-    // still pass if OrcaRuntimeService stopped forwarding the codex-home source.
+    // still pass if QuirkyRuntimeService stopped forwarding the codex-home source.
     // Construct the real runtime to lock that cross-layer wiring in place.
-    const runtime = new OrcaRuntimeService(null, undefined, {
+    const runtime = new QuirkyRuntimeService(null, undefined, {
       getAdditionalAiVaultCodexHomePaths: () => ['/ctor/codex/home']
     })
     await runtime.listAiVaultSessions({})

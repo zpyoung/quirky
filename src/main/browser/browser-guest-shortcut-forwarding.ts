@@ -68,7 +68,7 @@ export function setupGuestShortcutForwarding(args: {
   }
 
   const handler = (event: Electron.Event, input: Electron.Input): void => {
-    // Why: agent-injected keys must not run Orca shortcuts or grab actions (#20595).
+    // Why: agent-injected keys must not run Quirky shortcuts or grab actions (#20595).
     if (isAgentInjectingInput(guest)) {
       return
     }

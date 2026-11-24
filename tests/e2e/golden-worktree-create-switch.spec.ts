@@ -1,7 +1,7 @@
 import { removeWorktreeViaStore } from './helpers/dead-terminal'
 import { openSidebarWorkspaceComposer } from './helpers/sidebar-project-dialog'
 import type { Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   ensureTerminalVisible,
   getActiveWorktreeId,
@@ -28,60 +28,60 @@ async function createWorkspace(page: Page, name: string): Promise<void> {
 }
 
 test('creates a worktree, keeps its terminal isolated, and switches back @golden', async ({
-  orcaPage
+  quirkyPage
 }) => {
   test.setTimeout(180_000)
-  await waitForSessionReady(orcaPage)
-  const originalWorktreeId = await waitForActiveWorktree(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
-  const parentPtyId = await waitForActivePanePtyId(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  const originalWorktreeId = await waitForActiveWorktree(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
+  const parentPtyId = await waitForActivePanePtyId(quirkyPage)
   const workspaceName = `golden-switch-${Date.now()}`
   let childWorktreeId: string | null = null
 
   try {
-    await createWorkspace(orcaPage, workspaceName)
+    await createWorkspace(quirkyPage, workspaceName)
     await expect(
-      orcaPage.locator('[role="option"][aria-current="page"]').filter({ hasText: workspaceName })
+      quirkyPage.locator('[role="option"][aria-current="page"]').filter({ hasText: workspaceName })
     ).toBeVisible({ timeout: 30_000 })
-    childWorktreeId = await waitForActiveWorktree(orcaPage)
+    childWorktreeId = await waitForActiveWorktree(quirkyPage)
     // Why: the cleanup force-removes childWorktreeId, so it must never resolve to the original.
     expect(childWorktreeId).not.toBe(originalWorktreeId)
     await expect(
-      orcaPage.locator(`[role="option"][data-worktree-id="${childWorktreeId}"]`)
+      quirkyPage.locator(`[role="option"][data-worktree-id="${childWorktreeId}"]`)
     ).toHaveAttribute('aria-current', 'page')
 
-    await createTerminalTabFromMenu(orcaPage)
-    await waitForActiveTerminalManager(orcaPage, 30_000)
-    const childPtyId = await waitForActivePanePtyId(orcaPage)
+    await createTerminalTabFromMenu(quirkyPage)
+    await waitForActiveTerminalManager(quirkyPage, 30_000)
+    const childPtyId = await waitForActivePanePtyId(quirkyPage)
     expect(childPtyId).not.toBe(parentPtyId)
-    await waitForPtyShellEcho(orcaPage, childPtyId, 15_000)
-    await execInTerminal(orcaPage, childPtyId, splitMarkerEchoCommand('worktree', '-b'))
-    await waitForTerminalOutput(orcaPage, 'worktree-b')
+    await waitForPtyShellEcho(quirkyPage, childPtyId, 15_000)
+    await execInTerminal(quirkyPage, childPtyId, splitMarkerEchoCommand('worktree', '-b'))
+    await waitForTerminalOutput(quirkyPage, 'worktree-b')
 
-    await orcaPage.locator(`[role="option"][data-worktree-id="${originalWorktreeId}"]`).click()
+    await quirkyPage.locator(`[role="option"][data-worktree-id="${originalWorktreeId}"]`).click()
     await expect(
-      orcaPage.locator(`[role="option"][data-worktree-id="${originalWorktreeId}"]`)
+      quirkyPage.locator(`[role="option"][data-worktree-id="${originalWorktreeId}"]`)
     ).toHaveAttribute('aria-current', 'page', { timeout: 20_000 })
     // Why: sidebar aria-current can land before the store/terminal remount.
     // Mac release goldens then wait 30s on a child tab whose PaneManager is gone.
     await expect
-      .poll(() => getActiveWorktreeId(orcaPage), {
+      .poll(() => getActiveWorktreeId(quirkyPage), {
         timeout: 20_000,
         message: 'store did not activate the original worktree after sidebar click'
       })
       .toBe(originalWorktreeId)
-    await ensureTerminalVisible(orcaPage)
-    await waitForActiveTerminalManager(orcaPage, 30_000)
-    expect(await waitForActivePanePtyId(orcaPage, 30_000)).toBe(parentPtyId)
+    await ensureTerminalVisible(quirkyPage)
+    await waitForActiveTerminalManager(quirkyPage, 30_000)
+    expect(await waitForActivePanePtyId(quirkyPage, 30_000)).toBe(parentPtyId)
   } finally {
     if (childWorktreeId) {
-      if ((await getActiveWorktreeId(orcaPage).catch(() => null)) !== originalWorktreeId) {
-        await orcaPage
+      if ((await getActiveWorktreeId(quirkyPage).catch(() => null)) !== originalWorktreeId) {
+        await quirkyPage
           .locator(`[role="option"][data-worktree-id="${originalWorktreeId}"]`)
           .click()
           .catch(() => undefined)
       }
-      await removeWorktreeViaStore(orcaPage, childWorktreeId)
+      await removeWorktreeViaStore(quirkyPage, childWorktreeId)
     }
   }
 })

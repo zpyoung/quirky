@@ -100,7 +100,7 @@ const FILTER_ROWS: Record<WorkspaceFilterOptionKey, FilterRow> = {
     ariaLabel: () =>
       translate(
         'auto.components.sidebar.SidebarWorkspaceFilterSection.otherClientsAria',
-        'Hide workspaces created from other Orca clients on shared remote servers'
+        'Hide workspaces created from other Quirky clients on shared remote servers'
       ),
     checked: (state) => state.hideWorkspacesFromOtherDevices,
     set: (next) => useAppStore.getState().setHideWorkspacesFromOtherDevices(next)

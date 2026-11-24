@@ -84,7 +84,7 @@ describe('CI dependency download caches', () => {
     expect(lookup.uses).toBe('actions/cache@v5')
     expect(lookup.if).toBe("steps.pnpm-store-mode.outputs.lookup-only == 'true'")
     expect(lookup.with).toEqual({
-      path: '${{ env.ORCA_PNPM_STORE_CACHE_PATH }}',
+      path: '${{ env.QUIRKY_PNPM_STORE_CACHE_PATH }}',
       key: restore.with.key,
       'lookup-only': true
     })

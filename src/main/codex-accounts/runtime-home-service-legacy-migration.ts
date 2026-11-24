@@ -90,7 +90,7 @@ export abstract class CodexRuntimeHomeLegacyMigration extends CodexRuntimeHomePa
         continue
       }
       const managedHomePath = join(managedAccountsRoot, entry.name, 'home')
-      if (existsSync(join(managedHomePath, '.orca-managed-home'))) {
+      if (existsSync(join(managedHomePath, '.quirky-managed-home'))) {
         managedHomes.push(managedHomePath)
       }
     }
@@ -187,7 +187,7 @@ export abstract class CodexRuntimeHomeLegacyMigration extends CodexRuntimeHomePa
   protected getPreservedLegacySessionPath(runtimeFilePath: string, accountId: string): string {
     const extension = extname(runtimeFilePath)
     const basename = runtimeFilePath.slice(0, runtimeFilePath.length - extension.length)
-    return `${basename}.orca-legacy-${accountId}${extension}`
+    return `${basename}.quirky-legacy-${accountId}${extension}`
   }
 
   protected appendMigrationDiagnostic(record: Record<string, string>): void {

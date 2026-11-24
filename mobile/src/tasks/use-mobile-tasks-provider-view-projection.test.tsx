@@ -369,7 +369,7 @@ describe('useMobileTasksProviderViewProjection transitions', () => {
     const first = mount({ linearGroupBy: 'status' })
     const sections = first.linearBoardSections
     const entries = first.linearListEntries
-    const after = rerender({ linearGroupBy: 'status', githubProjectPickerSearch: 'orca' })
+    const after = rerender({ linearGroupBy: 'status', githubProjectPickerSearch: 'quirky' })
     expect(renderCount).toBe(2)
     expect(after.linearBoardSections).toBe(sections)
     expect(after.linearIssueSections).toBe(sections)
@@ -438,7 +438,7 @@ describe('useMobileTasksProviderViewProjection grouping work', () => {
   it('does no grouping work on an unrelated rerender', () => {
     mount({ linearGroupBy: 'status' })
     const onRerender = countLinearWork(() => {
-      rerender({ linearGroupBy: 'status', githubProjectPickerSearch: 'orca' })
+      rerender({ linearGroupBy: 'status', githubProjectPickerSearch: 'quirky' })
     })
     expect(onRerender).toEqual({ groupingCalls: 0, issueVisits: 0, comparisons: 0 })
   })

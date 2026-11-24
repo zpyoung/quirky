@@ -1,4 +1,4 @@
-import type { SpawnedProcess } from '@orca/process-host/process-spec'
+import type { SpawnedProcess } from '@quirky/process-host/process-spec'
 
 type RootTerminationInput = {
   child: Pick<SpawnedProcess, 'kill'>
@@ -8,7 +8,7 @@ type RootTerminationInput = {
 /**
  * Kills the root through the handle Node owns rather than through its pid, which
  * is why no identity probe gates it: libuv drops that handle in the same turn it
- * reaps, so the signal either reaches the process Orca spawned or reaches
+ * reaps, so the signal either reaches the process Quirky spawned or reaches
  * nothing. A probe here could only let an unreadable process table cost the tree
  * the one fallback that still works once every table read has failed.
  *

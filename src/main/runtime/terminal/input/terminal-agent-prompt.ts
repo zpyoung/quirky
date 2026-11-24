@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission } from '../wait/terminal-wait-permission'
+import { QuirkyRuntimeWithResolveAuthoritativeTerminalWaitPermission } from '../wait/terminal-wait-permission'
 import type { RuntimeAgentPromptWriteOptions } from '../../runtime-terminal-contracts'
 import type {
   RuntimeTerminalPromptDelivery,
@@ -8,7 +8,7 @@ import {
   assertAgentPromptRequestActive,
   waitForAgentPromptDelay,
   waitForAgentPromptPromise
-} from '../../orca-runtime-core'
+} from '../../quirky-runtime-core'
 import {
   AGENT_PROMPT_POST_PASTE_SUBMIT_DELAY_MS,
   AGENT_PROMPT_SUBMIT,
@@ -25,7 +25,7 @@ import {
 } from '../../agent-prompt-submission-verification'
 import { TUI_AGENT_CONFIG } from '../../../../shared/tui-agent-config'
 
-export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission {
+export abstract class QuirkyRuntimeWithWriteTerminalAgentPrompt extends QuirkyRuntimeWithResolveAuthoritativeTerminalWaitPermission {
   protected abstract createAgentPromptRenderGate(
     ptyId: string,
     pasteIngestMs: number
@@ -167,7 +167,7 @@ export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntim
     }
     options.onInputAccepted?.(checkpoint)
     // Providers without a lifecycle verifier still get an honest accepted
-    // receipt; they must not fail a Dispatch merely because Orca cannot prove
+    // receipt; they must not fail a Dispatch merely because Quirky cannot prove
     // submission through hooks.
     if (!settlementAgent) {
       return { submits, prompt: inputAccepted }

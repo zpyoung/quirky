@@ -92,12 +92,12 @@ it('ends a running turn signed out when the connection closes for sign-in', asyn
       rejection: expect.objectContaining({ kind: 'notSignedIn' })
     })
   )
-  // Orca's own words for the prompt are for logs; the chat says only how to sign in.
+  // Quirky's own words for the prompt are for logs; the chat says only how to sign in.
   const rejected = rig.settled.find((item) => 'state' in item && item.state === 'rejected')
   expect(rejected && 'reason' in rejected ? rejected.reason : '').not.toContain(internal)
 })
 
-it('starts signed out without Orca words when the connection closes for sign-in', async () => {
+it('starts signed out without Quirky words when the connection closes for sign-in', async () => {
   const rig = await openAcpAdapterRig({ script: (agent) => agent.on('session/new', () => {}) })
   // Session setup runs in the start's open, which the rig awaits after the acquire.
   const starting = rig.acquire()
@@ -106,7 +106,7 @@ it('starts signed out without Orca words when the connection closes for sign-in'
   AcpSessionRuntime.prototype.close.call(rig.child(), new AcpSignInPromptError(internal))
   await starting
   const error = rig.openFailure()
-  // Session setup re-types sign-in answers; this close must stay Orca's, words and all.
+  // Session setup re-types sign-in answers; this close must stay Quirky's, words and all.
   expect(error).toMatchObject({ reason: 'notSignedIn' })
   expect(providerDiagnosticOf(error)).toBeUndefined()
 })

@@ -1,5 +1,5 @@
 /**
- * The one v4 UUID generator that is safe everywhere Orca's code runs.
+ * The one v4 UUID generator that is safe everywhere Quirky's code runs.
  *
  * Why: browsers hide `crypto.randomUUID` outside a secure context, so a renderer served
  * over plain HTTP (Remote Web on a LAN/Tailscale address) throws on any direct call — at

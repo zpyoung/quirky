@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Page, TestInfo } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { loadWorktreesUntilPathsPresent } from './helpers/worktree-registration'
 import {
   ensureTerminalVisible,
@@ -37,13 +37,13 @@ import {
 
 // Why 3: the field profile that motivated this budget has 449 worktrees whose
 // median tab count is 2-3, so a 3-tab worktree is the switch users actually pay for.
-const TABS_PER_WORKTREE = Number(process.env.ORCA_SWITCH_TABS ?? '3')
+const TABS_PER_WORKTREE = Number(process.env.QUIRKY_SWITCH_TABS ?? '3')
 const SCROLLBACK_LINES = 1_500
 // Budget: a switch has to look instant. Anything over this reads as a stall.
-const FIRST_PAINT_BUDGET_MS = Number(process.env.ORCA_SWITCH_BUDGET_MS ?? '250')
+const FIRST_PAINT_BUDGET_MS = Number(process.env.QUIRKY_SWITCH_BUDGET_MS ?? '250')
 // Why repeat: a single cold reveal on a loaded dev machine swings by tens of ms,
 // which is the same order as the effect under test.
-const SWITCH_SAMPLE_COUNT = Number(process.env.ORCA_SWITCH_ROUNDS ?? '5')
+const SWITCH_SAMPLE_COUNT = Number(process.env.QUIRKY_SWITCH_ROUNDS ?? '5')
 
 type SwitchSample = {
   activationMs: number | null
@@ -297,13 +297,13 @@ async function publish(testInfo: TestInfo, name: string, body: string): Promise<
 // Why 8 extra: hot-retain keeps the 4 most recently hidden worktrees mounted and
 // exempts the last-active one, so a target only cold-parks once enough other
 // worktrees have been visited after it. That is the steady state at field scale.
-const FILLER_WORKTREE_COUNT = Number(process.env.ORCA_SWITCH_FILLER_WORKTREES ?? '8')
+const FILLER_WORKTREE_COUNT = Number(process.env.QUIRKY_SWITCH_FILLER_WORKTREES ?? '8')
 
 async function addFillerWorktrees(
   page: Page,
   testRepoPath: string
 ): Promise<{ ids: string[]; cleanup: () => void }> {
-  const parent = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-switch-paint-')))
+  const parent = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-switch-paint-')))
   const paths = Array.from({ length: FILLER_WORKTREE_COUNT }, (_, index) =>
     path.join(parent, `filler-${index}`)
   )
@@ -375,32 +375,32 @@ function median(values: readonly number[]): number {
 // Linux needs a mapped window for animation frames after reload; run on an isolated display.
 test.describe('Worktree switch first paint @headful', () => {
   test.skip(
-    process.env.ORCA_BACKGROUND_LAUNCH === '1',
+    process.env.QUIRKY_BACKGROUND_LAUNCH === '1',
     'First-paint measurement requires a mapped window'
   )
   test('repaints an unmounted worktree within the switch budget', async ({
-    orcaPage,
+    quirkyPage,
     testRepoPath
   }, testInfo) => {
     test.setTimeout(900_000)
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
 
-    const worktreeIds = await getAllWorktreeIds(orcaPage)
+    const worktreeIds = await getAllWorktreeIds(quirkyPage)
     expect(worktreeIds.length).toBeGreaterThanOrEqual(2)
     const [primaryId, targetId] = worktreeIds
-    const filler = await addFillerWorktrees(orcaPage, testRepoPath)
+    const filler = await addFillerWorktrees(quirkyPage, testRepoPath)
 
     const samples: SwitchSample[] = []
     const lines: string[] = []
     try {
-      const targetTabIds = await ensureTabs(orcaPage, targetId, 'WTB')
+      const targetTabIds = await ensureTabs(quirkyPage, targetId, 'WTB')
 
       // Give the filler worktrees persisted tabs without mounting them, so the
       // store carries a field-scale tab population (the profile that motivated
       // this budget has 846 tabs across 449 worktrees).
-      await orcaPage.evaluate(
+      await quirkyPage.evaluate(
         ({ ids, perWorktree }) => {
           const state = window.__store!.getState()
           for (const id of ids) {
@@ -419,25 +419,25 @@ test.describe('Worktree switch first paint @headful', () => {
         // the target come back with tabs in the session and no pane ever mounted
         // — the state every switch lands in once the worktree count exceeds the
         // hot-retain working set.
-        await switchToWorktree(orcaPage, primaryId)
-        await ensureTerminalVisible(orcaPage)
-        await orcaPage.waitForTimeout(2_500)
-        await orcaPage.reload()
-        await waitForSessionReady(orcaPage)
-        await waitForActiveWorktree(orcaPage)
-        await ensureTerminalVisible(orcaPage)
-        await orcaPage.waitForTimeout(2_500)
-        const unmounted = await waitForUnmountedTabs(orcaPage, targetTabIds)
+        await switchToWorktree(quirkyPage, primaryId)
+        await ensureTerminalVisible(quirkyPage)
+        await quirkyPage.waitForTimeout(2_500)
+        await quirkyPage.reload()
+        await waitForSessionReady(quirkyPage)
+        await waitForActiveWorktree(quirkyPage)
+        await ensureTerminalVisible(quirkyPage)
+        await quirkyPage.waitForTimeout(2_500)
+        const unmounted = await waitForUnmountedTabs(quirkyPage, targetTabIds)
         expect(unmounted, 'target worktree was already mounted before the switch').toBe(true)
 
-        const sample = await measureSwitch(orcaPage, targetId, targetTabIds)
+        const sample = await measureSwitch(quirkyPage, targetId, targetTabIds)
         samples.push(sample)
         lines.push(report(`round ${round + 1} (target unmounted=${unmounted})`, sample))
 
         // The half of the contract that keeps the speed-up free: the hidden tabs
         // the switch skipped still end up mounted, so the next tab switch is as
         // warm as it was before the reveal stopped mounting them up front.
-        const warmedTabIds = await waitForMountedTabs(orcaPage, targetTabIds)
+        const warmedTabIds = await waitForMountedTabs(quirkyPage, targetTabIds)
         expect(warmedTabIds, 'deferred tabs never joined the warm working set').toEqual(
           [...targetTabIds].sort()
         )

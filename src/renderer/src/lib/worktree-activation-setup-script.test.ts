@@ -17,10 +17,10 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     const store = createMockStore({ createTab })
 
     ensureWorktreeHasInitialTerminal(store, 'wt-1', undefined, {
-      runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
+      runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
       envVars: {
-        ORCA_ROOT_PATH: '/tmp/repo',
-        ORCA_WORKTREE_PATH: '/tmp/worktrees/wt-1'
+        QUIRKY_ROOT_PATH: '/tmp/repo',
+        QUIRKY_WORKTREE_PATH: '/tmp/worktrees/wt-1'
       }
     })
 
@@ -31,10 +31,10 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       recordInteraction: false
     })
     expect(createdTabStartups(store)['tab-2']).toEqual({
-      command: 'bash /tmp/repo/.git/orca/setup-runner.sh',
+      command: 'bash /tmp/repo/.git/quirky/setup-runner.sh',
       env: {
-        ORCA_ROOT_PATH: '/tmp/repo',
-        ORCA_WORKTREE_PATH: '/tmp/worktrees/wt-1'
+        QUIRKY_ROOT_PATH: '/tmp/repo',
+        QUIRKY_WORKTREE_PATH: '/tmp/worktrees/wt-1'
       }
     })
   })
@@ -45,19 +45,19 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     const store = createMockStore({ createTab })
 
     ensureWorktreeHasInitialTerminal(store, 'wt-1', undefined, {
-      runnerScriptPath: 'C:\\repo\\.git\\orca\\setup-runner.sh',
+      runnerScriptPath: 'C:\\repo\\.git\\quirky\\setup-runner.sh',
       shell: { family: 'posix' },
       envVars: {
-        ORCA_ROOT_PATH: 'C:\\repo',
-        ORCA_WORKTREE_PATH: 'C:\\worktrees\\wt-1'
+        QUIRKY_ROOT_PATH: 'C:\\repo',
+        QUIRKY_WORKTREE_PATH: 'C:\\worktrees\\wt-1'
       }
     })
 
     expect(createdTabStartups(store)['tab-2']).toEqual({
-      command: 'bash /c/repo/.git/orca/setup-runner.sh',
+      command: 'bash /c/repo/.git/quirky/setup-runner.sh',
       env: {
-        ORCA_ROOT_PATH: 'C:\\repo',
-        ORCA_WORKTREE_PATH: 'C:\\worktrees\\wt-1'
+        QUIRKY_ROOT_PATH: 'C:\\repo',
+        QUIRKY_WORKTREE_PATH: 'C:\\worktrees\\wt-1'
       }
     })
   })
@@ -72,9 +72,9 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     })
 
     const result = ensureWorktreeHasInitialTerminal(store, 'wt-1', undefined, {
-      runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
+      runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
       command: 'bash -lc wrapped-setup',
-      envVars: { ORCA_ROOT_PATH: '/tmp/repo' }
+      envVars: { QUIRKY_ROOT_PATH: '/tmp/repo' }
     })
 
     expect(result).toBe('tab-1')
@@ -85,7 +85,7 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     })
     expect(createdTabStartups(store)['tab-2']).toEqual({
       command: 'bash -lc wrapped-setup',
-      env: { ORCA_ROOT_PATH: '/tmp/repo' }
+      env: { QUIRKY_ROOT_PATH: '/tmp/repo' }
     })
   })
 
@@ -103,8 +103,8 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       'wt-1',
       { command: 'claude' },
       {
-        runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-        envVars: { ORCA_ROOT_PATH: '/tmp/repo' },
+        runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
+        envVars: { QUIRKY_ROOT_PATH: '/tmp/repo' },
         waitForAgentStartup: true
       }
     )
@@ -113,7 +113,7 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     expect(createTab).toHaveBeenCalledTimes(1)
     expect(createdTabStartups(store)['tab-2']).toEqual(
       expect.objectContaining({
-        command: expect.stringContaining('bash /tmp/repo/.git/orca/setup-runner.sh')
+        command: expect.stringContaining('bash /tmp/repo/.git/quirky/setup-runner.sh')
       })
     )
     expect(createdTabStartups(store)['tab-2']).toEqual(
@@ -129,19 +129,19 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     const store = createMockStore({ createTab })
 
     ensureWorktreeHasInitialTerminal(store, 'wt-1', undefined, {
-      runnerScriptPath: 'C:\\repo\\.git\\orca\\setup-runner.sh',
+      runnerScriptPath: 'C:\\repo\\.git\\quirky\\setup-runner.sh',
       shell: { family: 'posix', executable: 'wsl.exe' },
       envVars: {
-        ORCA_ROOT_PATH: 'C:\\repo',
-        ORCA_WORKTREE_PATH: 'C:\\worktrees\\wt-1'
+        QUIRKY_ROOT_PATH: 'C:\\repo',
+        QUIRKY_WORKTREE_PATH: 'C:\\worktrees\\wt-1'
       }
     })
 
     expect(createdTabStartups(store)['tab-2']).toEqual({
-      command: 'bash /mnt/c/repo/.git/orca/setup-runner.sh',
+      command: 'bash /mnt/c/repo/.git/quirky/setup-runner.sh',
       env: {
-        ORCA_ROOT_PATH: 'C:\\repo',
-        ORCA_WORKTREE_PATH: 'C:\\worktrees\\wt-1'
+        QUIRKY_ROOT_PATH: 'C:\\repo',
+        QUIRKY_WORKTREE_PATH: 'C:\\worktrees\\wt-1'
       }
     })
   })
@@ -157,8 +157,8 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       'wt-1',
       { command: 'claude' },
       {
-        runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-        envVars: { ORCA_ROOT_PATH: '/tmp/repo' },
+        runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
+        envVars: { QUIRKY_ROOT_PATH: '/tmp/repo' },
         waitForAgentStartup: true
       }
     )
@@ -186,7 +186,7 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     )
     expect(createdTabStartups(store)['tab-2']).toEqual(
       expect.objectContaining({
-        command: expect.stringContaining('bash /tmp/repo/.git/orca/setup-runner.sh')
+        command: expect.stringContaining('bash /tmp/repo/.git/quirky/setup-runner.sh')
       })
     )
   })
@@ -202,8 +202,8 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       'wt-1',
       { command: 'claude' },
       {
-        runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-        envVars: { ORCA_ROOT_PATH: '/tmp/repo' }
+        runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
+        envVars: { QUIRKY_ROOT_PATH: '/tmp/repo' }
       }
     )
 
@@ -211,8 +211,8 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       command: 'claude'
     })
     expect(createdTabStartups(store)['tab-2']).toEqual({
-      command: 'bash /tmp/repo/.git/orca/setup-runner.sh',
-      env: { ORCA_ROOT_PATH: '/tmp/repo' }
+      command: 'bash /tmp/repo/.git/quirky/setup-runner.sh',
+      env: { QUIRKY_ROOT_PATH: '/tmp/repo' }
     })
   })
 
@@ -225,8 +225,8 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       'wt-1',
       { command: 'claude' },
       {
-        runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-        envVars: { ORCA_ROOT_PATH: '/tmp/repo' },
+        runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
+        envVars: { QUIRKY_ROOT_PATH: '/tmp/repo' },
         waitForAgentStartup: true
       }
     )
@@ -239,12 +239,12 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       })
     )
     expect(createdTabStartups(store)['tab-2']).toEqual({
-      command: expect.stringContaining('bash /tmp/repo/.git/orca/setup-runner.sh'),
-      env: { ORCA_ROOT_PATH: '/tmp/repo' }
+      command: expect.stringContaining('bash /tmp/repo/.git/quirky/setup-runner.sh'),
+      env: { QUIRKY_ROOT_PATH: '/tmp/repo' }
     })
     expect(createdTabStartups(store)['tab-2']).toEqual({
       command: expect.stringContaining('printf'),
-      env: { ORCA_ROOT_PATH: '/tmp/repo' }
+      env: { QUIRKY_ROOT_PATH: '/tmp/repo' }
     })
   })
 
@@ -257,9 +257,9 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       'wt-1',
       { command: 'claude' },
       {
-        runnerScriptPath: 'C:\\repo\\.git\\orca\\setup-runner.sh',
+        runnerScriptPath: 'C:\\repo\\.git\\quirky\\setup-runner.sh',
         shell: { family: 'posix', executable: 'wsl.exe' },
-        envVars: { ORCA_ROOT_PATH: 'C:\\repo' },
+        envVars: { QUIRKY_ROOT_PATH: 'C:\\repo' },
         waitForAgentStartup: true
       }
     )
@@ -268,14 +268,14 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       expect.objectContaining({
         env: expect.objectContaining({
           [SETUP_AGENT_SEQUENCE_STARTUP_SCRIPT_ENV]: expect.stringContaining(
-            '/mnt/c/repo/.git/orca/setup-runner.sh'
+            '/mnt/c/repo/.git/quirky/setup-runner.sh'
           )
         })
       })
     )
     expect(createdTabStartups(store)['tab-2']).toEqual({
-      command: expect.stringContaining('bash /mnt/c/repo/.git/orca/setup-runner.sh'),
-      env: { ORCA_ROOT_PATH: 'C:\\repo' }
+      command: expect.stringContaining('bash /mnt/c/repo/.git/quirky/setup-runner.sh'),
+      env: { QUIRKY_ROOT_PATH: 'C:\\repo' }
     })
   })
 
@@ -285,13 +285,13 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       setLegacySetupScriptLaunchMode(mode)
       const store = createMockStore()
       ensureWorktreeHasInitialTerminal(store, 'wt-1', undefined, {
-        runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-        envVars: { ORCA_ROOT_PATH: '/tmp/repo' }
+        runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
+        envVars: { QUIRKY_ROOT_PATH: '/tmp/repo' }
       })
       expect(store.createTab).toHaveBeenCalledTimes(2)
       expect(createdTabStartups(store)['tab-2']).toEqual({
-        command: 'bash /tmp/repo/.git/orca/setup-runner.sh',
-        env: { ORCA_ROOT_PATH: '/tmp/repo' }
+        command: 'bash /tmp/repo/.git/quirky/setup-runner.sh',
+        env: { QUIRKY_ROOT_PATH: '/tmp/repo' }
       })
       expect(store.setActiveTab).toHaveBeenLastCalledWith('tab-1')
       expect(store.setTabCustomTitle).toHaveBeenCalledWith('tab-2', 'Setup', {
@@ -307,8 +307,8 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     const store = createMockStore({ createTab })
 
     ensureWorktreeHasInitialTerminal(store, 'wt-1', undefined, {
-      runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-      envVars: { ORCA_ROOT_PATH: '/tmp/repo' }
+      runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
+      envVars: { QUIRKY_ROOT_PATH: '/tmp/repo' }
     })
 
     expect(createTab).toHaveBeenCalledTimes(2)
@@ -320,8 +320,8 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       recordInteraction: false
     })
     expect(createdTabStartups(store)['tab-2']).toEqual({
-      command: 'bash /tmp/repo/.git/orca/setup-runner.sh',
-      env: { ORCA_ROOT_PATH: '/tmp/repo' }
+      command: 'bash /tmp/repo/.git/quirky/setup-runner.sh',
+      env: { QUIRKY_ROOT_PATH: '/tmp/repo' }
     })
   })
 })

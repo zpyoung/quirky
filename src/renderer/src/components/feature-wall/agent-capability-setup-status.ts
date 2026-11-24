@@ -5,7 +5,7 @@ import type {
 } from '../onboarding/onboarding-feature-setup'
 import {
   COMPUTER_USE_SKILL_NAME,
-  ORCA_CLI_SKILL_NAME,
+  QUIRKY_CLI_SKILL_NAME,
   ORCHESTRATION_SKILL_NAME
 } from '@/lib/agent-feature-install-commands'
 import {
@@ -48,7 +48,7 @@ export type AgentCapabilitySetupStatus = {
 
 export function useAgentCapabilitySetupStatus(): AgentCapabilitySetupStatus {
   const activeSkillRuntime = useActiveProjectSkillRuntime()
-  const browserUseSkill = useInstalledAgentSkill(ORCA_CLI_SKILL_NAME, {
+  const browserUseSkill = useInstalledAgentSkill(QUIRKY_CLI_SKILL_NAME, {
     discoveryTarget: activeSkillRuntime.discoveryTarget,
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
@@ -221,8 +221,8 @@ function getComputerUseInstallStatus(
       label:
         permissions.unavailableReason === 'web_client'
           ? translate(
-              'auto.components.feature.wall.agent.capability.setup.status.requiresOrcaDesktop',
-              'Requires Orca Desktop'
+              'auto.components.feature.wall.agent.capability.setup.status.requiresQuirkyDesktop',
+              'Requires Quirky Desktop'
             )
           : translate(
               'auto.components.feature.wall.agent.capability.setup.status.6d2b0a84e1',

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { main as verifyTogether } from './verify-localization-catalogs.mjs'
 import { main as verifyCatalog } from './verify-localization-catalog.mjs'
 import { main as verifyRuntimeCatalog } from './generate-runtime-required-english-catalog.mjs'
@@ -13,7 +13,7 @@ const englishPath = `${renderer}/i18n/locales/en.json`
 const runtimePath = `${renderer}/i18n/en-runtime-required.json`
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-localization-checks-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-localization-checks-'))
   directories.push(root)
   await mkdir(join(root, renderer, 'i18n/locales'), { recursive: true })
   await mkdir(join(root, 'src/main'), { recursive: true })
@@ -49,7 +49,7 @@ describe('combined localization verification', () => {
           program,
           args: [resolve(import.meta.dirname, 'verify-localization-catalogs.mjs')],
           cwd: root,
-          env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+          env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
           timeoutMs: 10000
         })
         expect(result.code, result.stderr).toBe(code)

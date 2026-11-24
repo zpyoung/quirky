@@ -24,7 +24,7 @@ afterEach(() => {
 })
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-async-rename-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-async-rename-'))
   roots.push(root)
   const target = join(root, 'state.json')
   const temporary = join(root, 'temporary.json')

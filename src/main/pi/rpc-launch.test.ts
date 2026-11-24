@@ -36,12 +36,12 @@ describe('Pi RPC launch', () => {
       extraArgs: ['--extension', '/host/my extension.ts'],
       ...piRpcSessionlessEnvironment({
         PI_CODING_AGENT_DIR: '/host/account',
-        ORCA_PANE_KEY: 'other-pane',
-        ORCA_AGENT_PANE: 'alias'
+        QUIRKY_PANE_KEY: 'other-pane',
+        QUIRKY_AGENT_PANE: 'alias'
       })
     })
     const env = resolveProviderChildEnv(launch, {
-      ORCA_AGENT_HOOK_TOKEN: 'inherited',
+      QUIRKY_AGENT_HOOK_TOKEN: 'inherited',
       API_KEY: 'retained'
     })
     expect(env).toEqual({ API_KEY: 'retained', PI_CODING_AGENT_DIR: '/host/account' })
@@ -92,10 +92,10 @@ describe('Pi RPC launch', () => {
 
   it('scrubs inherited structured identity and injects only this acquisition identity', () => {
     const inherited = {
-      ORCA_AGENT_SESSION_ID: 'stale',
-      ORCA_STRUCTURED_SESSION: '1',
-      ORCA_TERMINAL_HANDLE: 'structworker_stale',
-      ORCA_AGENT_SESSION_SPAWN_TOKEN: 'old-token'
+      QUIRKY_AGENT_SESSION_ID: 'stale',
+      QUIRKY_STRUCTURED_SESSION: '1',
+      QUIRKY_TERMINAL_HANDLE: 'structworker_stale',
+      QUIRKY_AGENT_SESSION_SPAWN_TOKEN: 'old-token'
     }
     expect(
       resolveProviderChildEnv(
@@ -117,10 +117,10 @@ describe('Pi RPC launch', () => {
       inherited
     )
     expect(childEnv).toMatchObject({
-      ORCA_AGENT_SESSION_ID: 'this-session',
-      ORCA_STRUCTURED_SESSION: '1',
-      ORCA_AGENT_SESSION_SPAWN_TOKEN: 'this-token'
+      QUIRKY_AGENT_SESSION_ID: 'this-session',
+      QUIRKY_STRUCTURED_SESSION: '1',
+      QUIRKY_AGENT_SESSION_SPAWN_TOKEN: 'this-token'
     })
-    expect(childEnv).not.toHaveProperty('ORCA_TERMINAL_HANDLE')
+    expect(childEnv).not.toHaveProperty('QUIRKY_TERMINAL_HANDLE')
   })
 })

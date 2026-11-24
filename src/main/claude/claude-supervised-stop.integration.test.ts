@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { SpawnOptions as SdkSpawnOptions } from '@anthropic-ai/claude-agent-sdk'
-import { spawnProcess } from '@orca/process-host'
-import type { ProcessSpec } from '@orca/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
+import type { ProcessSpec } from '@quirky/process-host/process-spec'
 import {
   PROVIDER_SIGTERM_GRACE_MS,
   PROVIDER_STDIN_END_GRACE_MS,
@@ -37,23 +37,23 @@ const FAKE_CLAUDE = String.raw`
     process.stdout.write(JSON.stringify({ claude: process.pid, tool: tool.pid, daemon: Number(daemon) }) + '\n')
   })
   process.on('SIGTERM', () => {
-    if (process.env.ORCA_TEST_CLAUDE_IGNORES_SIGTERM) return
+    if (process.env.QUIRKY_TEST_CLAUDE_IGNORES_SIGTERM) return
     try { process.kill(-tool.pid, 'SIGKILL') } catch {}
-    writeFileSync(process.env.ORCA_TEST_SIGTERM_MARKER, 'reaped')
+    writeFileSync(process.env.QUIRKY_TEST_SIGTERM_MARKER, 'reaped')
     process.exit(143)
   })
   setInterval(() => {}, 60000)
 `
 
-// Stands in for Orca's main: starts exactly the spec Claude's spawner built, then can be SIGKILLed.
+// Stands in for Quirky's main: starts exactly the spec Claude's spawner built, then can be SIGKILLed.
 const OWNER = String.raw`
   const { spawn } = require('node:child_process')
-  const spec = JSON.parse(process.env.ORCA_TEST_SPAWN_SPEC)
+  const spec = JSON.parse(process.env.QUIRKY_TEST_SPAWN_SPEC)
   const env = { ...spec.env }
-  if (env.ORCA_PROVIDER_SUPERVISOR_SPEC) {
-    const supervisor = JSON.parse(Buffer.from(env.ORCA_PROVIDER_SUPERVISOR_SPEC, 'base64').toString())
+  if (env.QUIRKY_PROVIDER_SUPERVISOR_SPEC) {
+    const supervisor = JSON.parse(Buffer.from(env.QUIRKY_PROVIDER_SUPERVISOR_SPEC, 'base64').toString())
     supervisor.ownerPid = process.pid
-    env.ORCA_PROVIDER_SUPERVISOR_SPEC = Buffer.from(JSON.stringify(supervisor)).toString('base64')
+    env.QUIRKY_PROVIDER_SUPERVISOR_SPEC = Buffer.from(JSON.stringify(supervisor)).toString('base64')
   }
   const child = spawn(spec.program, spec.args, {
     cwd: spec.cwd,
@@ -119,7 +119,7 @@ function readPids(child: ChildProcess, keys: readonly string[]): Promise<Record<
 }
 
 function sdkOptions(env: Record<string, string>): SdkSpawnOptions {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-claude-supervised-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-claude-supervised-'))
   tempDirs.push(dir)
   return {
     command: process.execPath,
@@ -127,14 +127,14 @@ function sdkOptions(env: Record<string, string>): SdkSpawnOptions {
     cwd: dir,
     env: {
       ...process.env,
-      ORCA_TEST_SIGTERM_MARKER: join(dir, 'sigterm-reap'),
+      QUIRKY_TEST_SIGTERM_MARKER: join(dir, 'sigterm-reap'),
       ...env
     },
     signal: new AbortController().signal
   }
 }
 
-/** Claude spawned through Orca's own spawner and stopped by Orca's own close ladder. */
+/** Claude spawned through Quirky's own spawner and stopped by Quirky's own close ladder. */
 async function spawnClaude(env: Record<string, string> = {}) {
   const spawner = createClaudeCodeProcessSpawn(spawnProcess)
   const options = sdkOptions(env)
@@ -149,7 +149,14 @@ async function spawnClaude(env: Record<string, string> = {}) {
   )
   const pids = await readPids(child, ['claude', 'tool', 'daemon'])
   const close = (): Promise<boolean> => proveClaudeChildExit({ managed })
-  return { child, managed, exit, pids, close, marker: String(options.env.ORCA_TEST_SIGTERM_MARKER) }
+  return {
+    child,
+    managed,
+    exit,
+    pids,
+    close,
+    marker: String(options.env.QUIRKY_TEST_SIGTERM_MARKER)
+  }
 }
 
 afterEach(() => {
@@ -184,7 +191,7 @@ describe.runIf(process.platform !== 'win32')('Claude under the POSIX provider su
 
   it('lets the supervisor escalate a Claude that ignores SIGTERM, and exits only after it', async () => {
     const { managed, exit, pids, close } = await spawnClaude({
-      ORCA_TEST_CLAUDE_IGNORES_SIGTERM: '1'
+      QUIRKY_TEST_CLAUDE_IGNORES_SIGTERM: '1'
     })
 
     const startedAt = Date.now()
@@ -200,14 +207,14 @@ describe.runIf(process.platform !== 'win32')('Claude under the POSIX provider su
     expect(alive(pids.claude)).toBe(false)
   })
 
-  it("stops Claude and its tool when Orca's main dies, and leaves a daemon that left its tree alone", async () => {
+  it("stops Claude and its tool when Quirky's main dies, and leaves a daemon that left its tree alone", async () => {
     const specs: ProcessSpec[] = []
     createClaudeCodeProcessSpawn((spec) => {
       specs.push(spec)
       return spawnProcess({ program: 'true' })
     }).spawn(sdkOptions({}))
     const owner = spawn(process.execPath, ['-e', OWNER], {
-      env: { ...process.env, ORCA_TEST_SPAWN_SPEC: JSON.stringify(specs[0]) },
+      env: { ...process.env, QUIRKY_TEST_SPAWN_SPEC: JSON.stringify(specs[0]) },
       stdio: ['ignore', 'pipe', 'ignore']
     })
     recordedPids.add(owner.pid!)

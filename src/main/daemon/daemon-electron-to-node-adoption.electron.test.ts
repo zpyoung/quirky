@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   buildDaemonLauncherDriver,
   closeLauncherWindows,
@@ -23,13 +23,13 @@ import {
 import {
   buildDaemonSessionClient,
   type DaemonSessionClientResult
-} from '../orcad/orcad-daemon-session-client-fixture'
+} from '../quirkyd/quirkyd-daemon-session-client-fixture'
 import {
   killAndAwaitExit,
   killProfileDaemons,
   removeTestRoot
-} from '../orcad/orcad-daemon-teardown-fixture'
-import { locatePinnedNodeForTests } from '../orcad/orcad-node-slot-fixture'
+} from '../quirkyd/quirkyd-daemon-teardown-fixture'
+import { locatePinnedNodeForTests } from '../quirkyd/quirkyd-node-slot-fixture'
 
 type Runtime = 'electron' | 'node'
 
@@ -91,7 +91,7 @@ describe.runIf(linux)('an Electron-hosted daemon meeting a Node-hosted launcher'
     runtimes.electron = realpathSync(electron)
     runtimes.node = realpathSync(locatePinnedNodeForTests() ?? process.execPath)
     // Short root: the daemon's socket must fit sun_path.
-    root = realpathSync(mkdtempSync('/tmp/orca-e2n-'))
+    root = realpathSync(mkdtempSync('/tmp/quirky-e2n-'))
     appPath = join(root, 'app')
     launcher = join(root, 'launcher.cjs')
     client = join(root, 'client.cjs')

@@ -115,7 +115,7 @@ describe('native browser tunnel upstream proxy (#29154)', () => {
     )
   })
 
-  it("prefers Orca's proxy setting and its bypass list over the environment", async () => {
+  it("prefers Quirky's proxy setting and its bypass list over the environment", async () => {
     const proxy = await startConnectProxy(await startEchoServer())
     setNetworkProxySettingsSource(() => ({
       httpProxyUrl: `http://127.0.0.1:${proxy.port}`,
@@ -186,7 +186,7 @@ describe('proxy bypass rules', () => {
     ['.corp.test', 'corp.test', 443, true, false],
     ['*.corp.test', 'corp.test', 443, true, false],
     ['*corp.test', 'corp.test', 443, true, true],
-    // A bare host covers subdomains in NO_PROXY, but is exact in Chromium (Orca's setting).
+    // A bare host covers subdomains in NO_PROXY, but is exact in Chromium (Quirky's setting).
     ['corp.test', 'deep.a.corp.test', 443, true, false],
     ['corp.test', 'corp.test', 443, true, true],
     ['corp.test', 'notcorp.test', 443, false, false],

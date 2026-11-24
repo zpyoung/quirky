@@ -27,7 +27,7 @@ vi.mock('@/lib/connection-context', () => ({
 
 installTerminalLinkTestEnvironment(doubles)
 
-const IMAGE = '/tmp/orca-preview.png'
+const IMAGE = '/tmp/quirky-preview.png'
 
 function hostGrants(): void {
   runtimeEnvironmentCallMock.mockResolvedValue({

@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { agentHookServer } from '../agent-hooks/server'
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
-const { TEST_REPO_ID, TEST_WORKTREE_ID, store } = await import('./orca-runtime-test-fixtures.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
+const { TEST_REPO_ID, TEST_WORKTREE_ID, store } =
+  await import('./quirky-runtime-test-fixtures.spec')
 
 const SESSION = { key: 'session_id', id: 'codex-history-session' } as const
 
@@ -15,9 +16,9 @@ function spyOnRecord() {
   return spy
 }
 
-function makeRuntime(runtimeStore: ConstructorParameters<typeof OrcaRuntimeService>[0] = store) {
+function makeRuntime(runtimeStore: ConstructorParameters<typeof QuirkyRuntimeService>[0] = store) {
   const spawn = vi.fn().mockResolvedValue({ id: 'pty-resume' })
-  const runtime = new OrcaRuntimeService(runtimeStore)
+  const runtime = new QuirkyRuntimeService(runtimeStore)
   runtime.setPtyController({
     spawn,
     write: () => true,

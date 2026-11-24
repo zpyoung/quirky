@@ -56,7 +56,7 @@ function makeGitHubReview(title: string): HostedReviewInfo {
     provider: 'github',
     number: 42,
     title,
-    url: 'https://github.com/acme/orca/pull/42'
+    url: 'https://github.com/acme/quirky/pull/42'
   }
 }
 

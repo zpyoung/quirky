@@ -21,7 +21,7 @@ export function printHookWarning(result: HookWarningResult, json: boolean): void
   if (result.warning) {
     console.error(`warning: ${result.warning}`)
   }
-  // Why (#19334): a waived archive-hook failure is the one case where Orca deleted a checkout
+  // Why (#19334): a waived archive-hook failure is the one case where Quirky deleted a checkout
   // whose archive step did not succeed. It has to stay visible in human output.
   if (result.archiveHookOverride) {
     console.error(`warning: ${formatArchiveHookOverride(result.archiveHookOverride)}`)

@@ -56,7 +56,7 @@ function rollout(sessionId: string, recordCount: number): string {
 let directory: string
 
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), 'orca-codex-rollout-lifetime-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-codex-rollout-lifetime-'))
   openedHandles.length = 0
   closedHandles.clear()
   failNextClose.current = false

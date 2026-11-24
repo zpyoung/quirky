@@ -10,7 +10,7 @@ import { computeAgentSessionPayloadFingerprint } from '../../../../shared/agent-
 import { isDefinitiveAgentSessionCreateRefusal } from '../../../../shared/agent-session-definitive-refusal'
 import { agentSessionRefusalError } from '../../../../shared/agent-session-wire-refusals'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { RpcResponse } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { STRUCTURED_AGENT_SESSION_METHODS } from './structured-agent-session'
@@ -97,7 +97,7 @@ async function create(
   }
   const replies: RpcResponse[] = []
   await new RpcDispatcher({
-    runtime: runtime as unknown as OrcaRuntimeService,
+    runtime: runtime as unknown as QuirkyRuntimeService,
     methods: STRUCTURED_AGENT_SESSION_METHODS
   }).dispatchStreaming(
     { id: 'request-1', authToken: 'token', method: 'agentSession.create', params },
@@ -228,7 +228,7 @@ describe('the boundary the envelope stops at', () => {
   it('keeps hiding the surface from a client that never advertised it', async () => {
     const replies: RpcResponse[] = []
     await new RpcDispatcher({
-      runtime: { getRuntimeId: () => 'runtime-1' } as unknown as OrcaRuntimeService,
+      runtime: { getRuntimeId: () => 'runtime-1' } as unknown as QuirkyRuntimeService,
       methods: STRUCTURED_AGENT_SESSION_METHODS
     }).dispatchStreaming(
       {

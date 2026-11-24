@@ -93,7 +93,7 @@ import { PRAssigneesPanel } from '../../src/renderer/src/components/github/PRAss
 import { updateIssue } from '../../src/main/github/issue-update'
 import { _resetOriginGitHubApiRepositoryCache } from '../../src/main/github/github-api-repository'
 
-const repoPath = join(tmpdir(), 'orca-pr-assignee-repository-fixture')
+const repoPath = join(tmpdir(), 'quirky-pr-assignee-repository-fixture')
 
 beforeEach(() => {
   fixture.callbacks = []

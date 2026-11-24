@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
 import type { PtyListedSession } from '../../../shared/pty-listed-session'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
@@ -20,7 +20,7 @@ import { indexLiveTerminalSurfaceOwners } from './worktree-live-terminal-surface
 
 // Main places live terminals in a layout-owner build; those tests' twins are in
 // worktree-agent-activation-gate-layout-owner.test.ts, under the same name unless noted.
-const windowOwnedIt = it.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)
+const windowOwnedIt = it.skipIf(QUIRKY_LAYOUT_OWNER_IS_MAIN)
 
 /** Layout-owner build: the sweep only reads main's listing; it binds no pane of its own. */
 function expectNoBindingWrite(store: GateTestStore): void {
@@ -489,7 +489,7 @@ describe('worktree agent activation gate', () => {
     await expect(runWorktreeAgentActivationGate(WORKTREE_ID, deps)).resolves.toBe('adopted')
 
     expect(createTab).not.toHaveBeenCalled()
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
       // Main's listing names the pane it holds and its frames rebind it; the window writes nothing.
       expectNoBindingWrite(store)
       return
@@ -575,7 +575,7 @@ describe('worktree agent activation gate', () => {
     })
     seedExistingSurface(deps.getState(), { tabId: 'tab-live', leafId: LIVE_LEAF_ID })
 
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
       // Main holds the layout: the leaf it names is shown by its frames, so nothing is declined.
       await expect(runWorktreeAgentActivationGate(WORKTREE_ID, deps)).resolves.toBe('adopted')
       expect(createTab).not.toHaveBeenCalled()
@@ -613,7 +613,7 @@ describe('worktree agent activation gate', () => {
   it.each([
     ['ssh:box@@pty-1', WORKTREE_ID],
     [`${WORKTREE_ID}@@legacy`, ''],
-    // A relay seeds worktreeId from the host's own ORCA_WORKTREE_ID, so a foreign value must not
+    // A relay seeds worktreeId from the host's own QUIRKY_WORKTREE_ID, so a foreign value must not
     // hide a session the minted id already claims for this workspace.
     [`${WORKTREE_ID}@@stale-env`, 'other-repo::/elsewhere']
   ])(
@@ -633,7 +633,7 @@ describe('worktree agent activation gate', () => {
       expect(resume).not.toHaveBeenCalled()
       expect(store.terminalLayoutsByTabId['tab-live']?.ptyIdsByLeafId).toEqual(
         // Layout-owner build: main's frames bind the pane, not the window.
-        ORCA_LAYOUT_OWNER_IS_MAIN ? {} : { [LIVE_LEAF_ID]: livePtyId }
+        QUIRKY_LAYOUT_OWNER_IS_MAIN ? {} : { [LIVE_LEAF_ID]: livePtyId }
       )
     }
   )
@@ -657,7 +657,7 @@ describe('worktree agent activation gate', () => {
     expect(createTab).not.toHaveBeenCalled()
     expect(store.terminalLayoutsByTabId['tab-live']?.ptyIdsByLeafId).toEqual(
       // Layout-owner build: main's frames bind the pane, not the window.
-      ORCA_LAYOUT_OWNER_IS_MAIN ? {} : { [LIVE_LEAF_ID]: livePtyId }
+      QUIRKY_LAYOUT_OWNER_IS_MAIN ? {} : { [LIVE_LEAF_ID]: livePtyId }
     )
   })
 

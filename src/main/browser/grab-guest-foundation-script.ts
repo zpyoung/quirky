@@ -2,16 +2,16 @@ export const GRAB_GUEST_FOUNDATION_SCRIPT = `(function() {
   'use strict';
 
   // Why: always tear down any pre-existing state before arming. A malicious
-  // guest page could predefine window.__orcaGrab with a fake extractPayload
+  // guest page could predefine window.__quirkyGrab with a fake extractPayload
   // function. By tearing down unconditionally we ensure our freshly installed
   // extraction logic is the only code that runs.
-  if (window.__orcaGrab) {
+  if (window.__quirkyGrab) {
     try {
-      if (typeof window.__orcaGrab.cleanup === 'function') {
-        window.__orcaGrab.cleanup();
+      if (typeof window.__quirkyGrab.cleanup === 'function') {
+        window.__quirkyGrab.cleanup();
       }
     } catch(e) {}
-    delete window.__orcaGrab;
+    delete window.__quirkyGrab;
   }
 
   // --- Budget constants (mirrored from shared types) ---

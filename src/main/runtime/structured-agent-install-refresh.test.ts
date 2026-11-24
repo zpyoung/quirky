@@ -32,7 +32,7 @@ afterEach(() => {
  * on the machine running the test can answer for it.
  */
 function hostInstallingAfterFirstCapture(name: string) {
-  const root = mkdtempSync(join(tmpdir(), 'orca-install-after-capture-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-install-after-capture-'))
   roots.push(root)
   const profileBin = join(root, 'profile-bin')
   mkdirSync(profileBin)
@@ -126,7 +126,7 @@ describe('an agent installed after the first shell capture', () => {
     // A workspace `bin` on PATH: the spawn finds the program in the chat's directory, where the
     // lookup did not search, so its bare name is not a miss; an entry without it still is.
     const name = `codex-relative-${process.pid}`
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-relative-path-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-relative-path-'))
     roots.push(workspace)
     mkdirSync(join(workspace, 'node_modules', '.bin'), { recursive: true })
     writeFileSync(join(workspace, 'node_modules', '.bin', name), '#!/bin/sh\nexit 0\n')

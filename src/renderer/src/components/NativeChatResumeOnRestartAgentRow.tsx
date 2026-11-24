@@ -29,7 +29,7 @@ import { ResumeTreeDepthContext } from './native-chat-resume-tree-state'
  * a fault, `done` a finish, `working` a spinner. A missing dot beats a dot that says these agents
  * are running.
  *
- * After the name, what the chat was doing when Orca went away — mid-reply, waiting on the user,
+ * After the name, what the chat was doing when Quirky went away — mid-reply, waiting on the user,
  * subagents or monitoring — so rows the sidebar showed as working for different reasons differ.
  *
  * A chat an earlier resume could not carry on is the same row — selectable where a retry can run,

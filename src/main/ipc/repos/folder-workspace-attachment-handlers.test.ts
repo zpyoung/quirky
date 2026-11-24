@@ -39,7 +39,7 @@ async function invoke(channel: string, args: unknown): Promise<unknown> {
 describe('folder workspace attachment desktop IPC', () => {
   beforeEach(() => {
     handlers.clear()
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-folder-ipc-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-folder-ipc-'))
   })
   afterEach(async () => {
     await closeTestStores()

@@ -113,7 +113,7 @@ export function CodexSharedServerBanner({
             <>
               {translate(
                 'terminal.codexSharedServerBanner.openedBeforeUpdateBody',
-                'This terminal was opened before Orca started giving each Codex its own server.'
+                'This terminal was opened before Quirky started giving each Codex its own server.'
               )}{' '}
               <PaneBannerLearnMore onClick={() => showDialog('oldTerminal')} />
             </>

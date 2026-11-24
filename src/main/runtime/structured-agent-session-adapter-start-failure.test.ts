@@ -33,7 +33,7 @@ afterEach(async () => {
 })
 
 async function failedStart(agent: 'pi' | 'codex' | 'grok', script: ScriptedAgentChild) {
-  directory = await mkdtemp(join(tmpdir(), 'orca-adapter-start-failure-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-adapter-start-failure-'))
   const root = directory
   const host = await ensureStructuredAgentSessionHost({
     logger: createStructuredAgentSessionLogger(),

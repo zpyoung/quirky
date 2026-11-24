@@ -8,16 +8,16 @@ import {
 } from './kimi-hook-config-toml'
 
 const COMMAND =
-  "if [ -x '/home/u/.orca/agent-hooks/kimi-hook.sh' ]; then /bin/sh '/home/u/.orca/agent-hooks/kimi-hook.sh'; fi"
+  "if [ -x '/home/u/.quirky/agent-hooks/kimi-hook.sh' ]; then /bin/sh '/home/u/.quirky/agent-hooks/kimi-hook.sh'; fi"
 const isManaged = (command: string | undefined): boolean =>
   typeof command === 'string' && command.includes('agent-hooks/kimi-hook.sh')
 
-const END_MARKER_LINE = '# <<< orca-managed-kimi-hooks <<<'
-const START_MARKER = '# >>> orca-managed-kimi-hooks (managed by Orca; do not edit) >>>'
+const END_MARKER_LINE = '# <<< quirky-managed-kimi-hooks <<<'
+const START_MARKER = '# >>> quirky-managed-kimi-hooks (managed by Quirky; do not edit) >>>'
 
 /** Drops only the `# <<< ... <<<` line, the hand-edit that orphans the block. */
 function deleteEndMarker(text: string): string {
-  return text.replace(/\r?\n# <<< orca-managed-kimi-hooks <<<(?=\r?\n|$)/, '')
+  return text.replace(/\r?\n# <<< quirky-managed-kimi-hooks <<<(?=\r?\n|$)/, '')
 }
 
 describe('kimi managed hooks TOML block', () => {
@@ -60,7 +60,7 @@ describe('kimi managed hooks TOML block', () => {
     const once = applyManagedKimiHooks('default_model = "x"\n', COMMAND, isManaged)
     const twice = applyManagedKimiHooks(once, COMMAND, isManaged)
     expect(twice).toBe(once)
-    const markerCount = (twice.match(/orca-managed-kimi-hooks \(/g) ?? []).length
+    const markerCount = (twice.match(/quirky-managed-kimi-hooks \(/g) ?? []).length
     expect(markerCount).toBe(1)
   })
 
@@ -104,7 +104,7 @@ describe('kimi managed hooks TOML block', () => {
     })
     // ...and reinstall converges to a single block instead of duplicating.
     const reinstalled = applyManagedKimiHooks(orphaned, COMMAND, isManaged)
-    expect((reinstalled.match(/orca-managed-kimi-hooks \(/g) ?? []).length).toBe(1)
+    expect((reinstalled.match(/quirky-managed-kimi-hooks \(/g) ?? []).length).toBe(1)
   })
 
   it('treats stale managed entries pointing at a moved script path as managed', () => {
@@ -148,7 +148,7 @@ describe('orphaned managed block ownership (#18861)', () => {
     expect(reinstalled).toContain('api_key = "sk-secret"')
     expect(reinstalled).toContain('command = "node my-own-hook.mjs"')
     // Exactly one well-formed block, appended after the surviving user bytes.
-    expect((reinstalled.match(/orca-managed-kimi-hooks \(/g) ?? []).length).toBe(1)
+    expect((reinstalled.match(/quirky-managed-kimi-hooks \(/g) ?? []).length).toBe(1)
     expect(reinstalled.indexOf('sk-secret')).toBeLessThan(reinstalled.indexOf(START_MARKER))
     expect(readManagedKimiHookEvents(reinstalled, isManaged)).toEqual(new Set(KIMI_HOOK_EVENTS))
     // And a second install is a no-op, so the recovery converges.
@@ -180,7 +180,7 @@ describe('orphaned managed block ownership (#18861)', () => {
     expect(text).toBe('default_model = "x"\n[user.table]\nvalue = "keep"\n')
   })
 
-  it('does not treat a user [[hooks]] table as Orca-owned content', () => {
+  it('does not treat a user [[hooks]] table as Quirky-owned content', () => {
     const orphan = [
       START_MARKER,
       '[[hooks]]',
@@ -194,8 +194,8 @@ describe('orphaned managed block ownership (#18861)', () => {
     expect(text).not.toContain(START_MARKER)
   })
 
-  // A user adding keys has customised Orca's hook, not authored their own: the
-  // command path is what makes it fire. Leaving it would keep sending Orca their
+  // A user adding keys has customised Quirky's hook, not authored their own: the
+  // command path is what makes it fire. Leaving it would keep sending Quirky their
   // events after uninstall, and reinstall would double-fire the event.
   it('owns a managed table the user added an extra key to', () => {
     const orphan = [
@@ -307,7 +307,7 @@ describe('orphaned managed block ownership (#18861)', () => {
     expect(text).toContain('[user.table]')
   })
 
-  // pullfrog on #20148: ownership keys on `command`, so an `event` Orca cannot
+  // pullfrog on #20148: ownership keys on `command`, so an `event` Quirky cannot
   // parse must never let status claim nothing is installed.
   it('never reports not_installed for a table remove() would strip', () => {
     for (const eventLine of [`event = 'Stop'`, 'event = "Stop" # note', 'event = 12']) {

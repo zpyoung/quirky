@@ -1,5 +1,5 @@
 /**
- * Whether a managed Claude launch gets Orca's AskUserQuestion suppression flags.
+ * Whether a managed Claude launch gets Quirky's AskUserQuestion suppression flags.
  *
  * Three states, not two: `'pending'` (no version read yet) must not be collapsed into `null`
  * (a version was read and it did not clear the floor). They agree on a fresh launch — neither

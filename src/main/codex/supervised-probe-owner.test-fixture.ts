@@ -12,10 +12,10 @@ function standInSource(body: string): string {
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const record = (event) =>
-  fs.appendFileSync(process.env.ORCA_TEST_EVENTS_FILE, JSON.stringify({ event, at: Date.now() }) + '\n')
+  fs.appendFileSync(process.env.QUIRKY_TEST_EVENTS_FILE, JSON.stringify({ event, at: Date.now() }) + '\n')
 process.on('SIGTERM', () => {
   record('SIGTERM')
-  fs.writeFileSync(process.env.ORCA_TEST_SIGNAL_FILE, 'SIGTERM')
+  fs.writeFileSync(process.env.QUIRKY_TEST_SIGNAL_FILE, 'SIGTERM')
   process.exit(0)
 })
 process.stdin.on('error', () => {}).on('end', () => record('stdin-end')).resume()
@@ -26,9 +26,9 @@ const grandchild = spawn(
 )
 grandchild.stdout.once('data', () => {
   // Renamed into place, so a reader never sees a half-written file.
-  const partial = process.env.ORCA_TEST_PID_FILE + '.partial'
+  const partial = process.env.QUIRKY_TEST_PID_FILE + '.partial'
   fs.writeFileSync(partial, JSON.stringify({ provider: process.pid, grandchild: grandchild.pid }))
-  fs.renameSync(partial, process.env.ORCA_TEST_PID_FILE)
+  fs.renameSync(partial, process.env.QUIRKY_TEST_PID_FILE)
 })
 setInterval(() => {}, 60000)
 ${body}
@@ -74,15 +74,15 @@ export async function waitFor(predicate: () => boolean, timeoutMs: number): Prom
 }
 
 export function createSupervisedProbeRig(): SupervisedProbeRig {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-supervised-probe-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-supervised-probe-'))
   const pidFile = join(dir, 'pids.json')
   const signalFile = join(dir, 'signal')
   const eventsFile = join(dir, 'events.jsonl')
   const recordedPids = new Set<number>()
   const env = {
-    ORCA_TEST_PID_FILE: pidFile,
-    ORCA_TEST_SIGNAL_FILE: signalFile,
-    ORCA_TEST_EVENTS_FILE: eventsFile
+    QUIRKY_TEST_PID_FILE: pidFile,
+    QUIRKY_TEST_SIGNAL_FILE: signalFile,
+    QUIRKY_TEST_EVENTS_FILE: eventsFile
   }
   return {
     dir,

@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL('../..', import.meta.url))
 const require = createRequire(import.meta.url)
 
 export function resolveMobileTypecheckCompiler() {
-  const mode = process.env.ORCA_MOBILE_TYPECHECK_COMPILER ?? 'javascript'
+  const mode = process.env.QUIRKY_MOBILE_TYPECHECK_COMPILER ?? 'javascript'
   if (mode !== 'javascript' && mode !== 'native') {
     throw new Error(`Unknown mobile typecheck compiler: ${mode}`)
   }

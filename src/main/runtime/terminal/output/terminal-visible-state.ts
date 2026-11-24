@@ -1,8 +1,8 @@
-import { OrcaRuntimeWithCaptureProviderTerminalBuffer } from './provider-buffer-capture'
+import { QuirkyRuntimeWithCaptureProviderTerminalBuffer } from './provider-buffer-capture'
 import {
   TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS,
   type RuntimeTerminalProjection
-} from '../../orca-runtime-core'
+} from '../../quirky-runtime-core'
 import { buildPreview } from '../../terminal-tail-state'
 import type {
   RuntimeHeadlessTerminal,
@@ -11,14 +11,14 @@ import type {
 import {
   VISIBLE_TERMINAL_SNAPSHOT_RETRY_MS,
   VISIBLE_TERMINAL_SNAPSHOT_TIMEOUT_MS
-} from '../../orca-runtime-postlude'
-import { projectTerminalVisibleLines } from '../../orca-runtime-terminal-projection'
+} from '../../quirky-runtime-postlude'
+import { projectTerminalVisibleLines } from '../../quirky-runtime-terminal-projection'
 import { visibleNonBlankTerminalLines } from '../../terminal-tail-read'
 import type { RuledScreen } from '../../screen-input-veto'
 import { HeadlessEmulator } from '../../../daemon/headless-emulator'
 import { withTimeout } from '../../runtime-async-boundaries'
 
-export abstract class OrcaRuntimeWithVisibleSnapshotPreview extends OrcaRuntimeWithCaptureProviderTerminalBuffer {
+export abstract class QuirkyRuntimeWithVisibleSnapshotPreview extends QuirkyRuntimeWithCaptureProviderTerminalBuffer {
   protected async visibleSnapshotPreview(ptyId: string, preview: string): Promise<string> {
     const knownAlternateScreen = this.isTerminalAlternateScreen(ptyId)
     const providerModeUnknown =

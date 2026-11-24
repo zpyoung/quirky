@@ -145,7 +145,7 @@ describe('MobilePane pairing', () => {
     getPairingQR.mockReset().mockResolvedValue({
       available: true,
       qrDataUrl: 'data:image/png;base64,qr',
-      pairingUrl: 'orca://pair',
+      pairingUrl: 'quirky://pair',
       endpoint: 'ws://host'
     })
     mocks.listDevices.mockReset().mockResolvedValue({ devices: [] })
@@ -183,7 +183,7 @@ describe('MobilePane pairing', () => {
       available: true,
       qrDataUrl: null,
       qrError: 'encoding_failed',
-      pairingUrl: 'orca://pair?code=copy-fallback',
+      pairingUrl: 'quirky://pair?code=copy-fallback',
       endpoint: 'wss://host.example/large'
     })
     const user = userEvent.setup()
@@ -422,7 +422,7 @@ describe('MobilePane', () => {
     mocks.getPairingQR.mockReset().mockResolvedValue({
       available: true,
       qrDataUrl: 'data:image/png;base64,qr',
-      pairingUrl: 'orca://pair',
+      pairingUrl: 'quirky://pair',
       endpoint: 'ws://host'
     })
     mocks.listDevices.mockReset()

@@ -1,12 +1,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { describeProcessFailure } from './process-failure-message.mjs'
-import { ORCAD_SESSION_SCANNER_SERVICE_ENTRY } from '../../src/shared/orcad-artifacts.ts'
+import { QUIRKYD_SESSION_SCANNER_SERVICE_ENTRY } from '../../src/shared/quirkyd-artifacts.ts'
 import { AI_VAULT_SERVICE_PROTOCOL_VERSION } from '../../src/main/ai-vault/session-scanner-service-protocol.ts'
 
-// Why fork from a probe: the child must run under the runtime orcad ships, and it forks with
+// Why fork from a probe: the child must run under the runtime quirkyd ships, and it forks with
 // that runtime's execPath. The verdict is the exit code, never matched output.
 const PROBE = `
 const { fork } = require('node:child_process')
@@ -47,11 +47,11 @@ child.send({ type: 'init', protocol: Number(protocol) })
 
 /**
  * Fork the built session scanner child and list a seeded Claude session through it.
- * @param outDir - orcad output directory holding the entry.
+ * @param outDir - quirkyd output directory holding the entry.
  * @param options.runtimePath - Node to run under; the build's own Node when omitted.
  */
 export function smokeSessionScannerService(outDir, { runtimePath, timeoutMs = 60_000 } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-session-scanner-smoke-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-session-scanner-smoke-'))
   try {
     const home = join(directory, 'home')
     const project = join(home, '.claude', 'projects', 'smoke-project')
@@ -72,11 +72,11 @@ export function smokeSessionScannerService(outDir, { runtimePath, timeoutMs = 60
       program: runtimePath ?? process.execPath,
       args: [
         probe,
-        resolve(outDir, ORCAD_SESSION_SCANNER_SERVICE_ENTRY),
+        resolve(outDir, QUIRKYD_SESSION_SCANNER_SERVICE_ENTRY),
         home,
         String(AI_VAULT_SERVICE_PROTOCOL_VERSION)
       ],
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs,
       maxOutputBytes: 64 * 1024
     })

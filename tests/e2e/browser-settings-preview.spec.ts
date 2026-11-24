@@ -1,19 +1,19 @@
 // Throwaway interactive preview (untracked): opens Settings → Browser scrolled
 // to the new Remote browsing section and holds the app open for review.
-// Run: ORCA_SETTINGS_PREVIEW=1 pnpm exec playwright test --config tests/playwright.config.ts \
+// Run: QUIRKY_SETTINGS_PREVIEW=1 pnpm exec playwright test --config tests/playwright.config.ts \
 //   --project electron-headless --workers=1 tests/e2e/browser-settings-preview.spec.ts
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 
 test.skip(
-  process.env.ORCA_SETTINGS_PREVIEW !== '1',
-  'Preview only; run with ORCA_SETTINGS_PREVIEW=1'
+  process.env.QUIRKY_SETTINGS_PREVIEW !== '1',
+  'Preview only; run with QUIRKY_SETTINGS_PREVIEW=1'
 )
 
 const HOLD_MINUTES = 20
 
 test('shows the remote browsing settings section and holds for review', async ({
   electronApp,
-  orcaPage
+  quirkyPage
 }) => {
   test.setTimeout((HOLD_MINUTES + 10) * 60_000)
 
@@ -26,7 +26,7 @@ test('shows the remote browsing settings section and holds for review', async ({
   })
 
   // Seed one opted-out SSH host so the "Route again" list renders too.
-  await orcaPage.evaluate(() => {
+  await quirkyPage.evaluate(() => {
     const state = window.__store?.getState()
     state?.updateSettings({ browserSshWorkspaceRoutingDisabledTargetIds: ['preview-target'] })
     window.__store?.setState({
@@ -40,10 +40,10 @@ test('shows the remote browsing settings section and holds for review', async ({
     state?.openSettingsPage()
   })
 
-  await expect(orcaPage.getByText('Remote browsing', { exact: true })).toBeVisible({
+  await expect(quirkyPage.getByText('Remote browsing', { exact: true })).toBeVisible({
     timeout: 30_000
   })
 
   console.log(`\n=== SETTINGS PREVIEW READY — window stays up ${HOLD_MINUTES} minutes ===\n`)
-  await orcaPage.waitForTimeout(HOLD_MINUTES * 60_000)
+  await quirkyPage.waitForTimeout(HOLD_MINUTES * 60_000)
 })

@@ -4,7 +4,7 @@ import { getTuiAgentLaunchCommand, TUI_AGENT_CONFIG } from '../../../shared/tui-
 import { translate } from '@/i18n/i18n'
 import type { AgentCatalogEntry } from './agent-catalog'
 
-/** The agents Orca drives first-party. Split from the community tail so adding an agent
+/** The agents Quirky drives first-party. Split from the community tail so adding an agent
  *  does not push either module past its line budget; the two are concatenated in order
  *  by `buildAgentCatalogEntries`. */
 export function primaryAgentCatalogEntries(): AgentCatalogEntry[] {
@@ -25,7 +25,7 @@ export function primaryAgentCatalogEntries(): AgentCatalogEntry[] {
       id: 'openclaude',
       label: translate('auto.lib.agent.catalog.a5fc0cb622', 'OpenClaude'),
       cmd: 'openclaude',
-      // Why: OpenClaude's published favicon has a padded 500px canvas; Orca
+      // Why: OpenClaude's published favicon has a padded 500px canvas; Quirky
       // uses a cropped derivative of that official asset so 12px tab icons stay legible.
       iconUrl: openClaudeLogoUrl,
       homepageUrl: 'https://openclaude.gitlawb.com/'

@@ -4,8 +4,8 @@ import {
   fakeCodex,
   identityFor
 } from './codex-structured-session-adapter-fixture'
-// Only the Codex app-server child's own exit says Codex stopped; a close Orca made — a journal
-// sink that could not take a frame, a forced close — is Orca's.
+// Only the Codex app-server child's own exit says Codex stopped; a close Quirky made — a journal
+// sink that could not take a frame, a forced close — is Quirky's.
 
 import { describe, expect, it, vi } from 'vitest'
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
@@ -49,7 +49,7 @@ describe('what a started Codex session says ended it', () => {
     )
   })
 
-  it('blames Orca when a journal sink failure makes Orca close the child', async () => {
+  it('blames Quirky when a journal sink failure makes Quirky close the child', async () => {
     const { connection, ended } = await startedCodex(
       sink({ tryAppendItem: () => ({ accepted: false, reason: 'failed' }) })
     )
@@ -66,7 +66,7 @@ describe('what a started Codex session says ended it', () => {
     expect(connection.closeCount).toBe(1)
   })
 
-  it('blames Orca for a forced close', async () => {
+  it('blames Quirky for a forced close', async () => {
     const { adapter, ended } = await startedCodex(sink())
 
     await expect(adapter.forceCloseSession('session-1')).resolves.toBe(true)

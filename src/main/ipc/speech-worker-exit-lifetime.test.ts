@@ -263,7 +263,7 @@ describe('speech worker exit ownership', () => {
 
   it('retains hotwords until startup finishes and preserves the live hook on write failure', async () => {
     environment.readyOnInit = false
-    const pendingStart = handler('speech:startDictation')(sender, 'test-model', ['orca'], 'one')
+    const pendingStart = handler('speech:startDictation')(sender, 'test-model', ['quirky'], 'one')
     await vi.waitFor(() => expect(environment.workers).toHaveLength(1))
     expect(fileAccess.write).toHaveBeenCalledTimes(1)
     expect(fileAccess.unlink).not.toHaveBeenCalled()

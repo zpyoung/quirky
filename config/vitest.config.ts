@@ -9,17 +9,17 @@ import { nodeRuntimePool } from './scripts/vitest-node-runtime-pool'
 import { createWorkspaceSourceResolver } from './scripts/workspace-source-exports.mjs'
 
 const nodeRuntimeInclude = process.versions.bun ? getNodeRuntimeInclude() : []
-const balancedShards = process.env.ORCA_BALANCE_UNIT_SHARDS === '1'
+const balancedShards = process.env.QUIRKY_BALANCE_UNIT_SHARDS === '1'
 const measurementFile = 'src/main/foreign-sqlite-readers/foreign-sqlite-reader-event-loop.test.ts'
 const paletteMeasurementFile =
   'src/renderer/src/lib/palette-match/palette-match-performance.test.ts'
 const measurementFiles = [measurementFile, paletteMeasurementFile]
 const transforms = {
   define: {
-    ORCA_FEATURE_WALL_ENABLED: 'true',
+    QUIRKY_FEATURE_WALL_ENABLED: 'true',
     // Why: tests only interpolate it; they must not depend on the checkout's HEAD.
-    ORCA_BUILD_COMMIT: JSON.stringify('0'.repeat(40)),
-    // A dark switch set to 'main' in the env (`ORCA_LAYOUT_OWNER=main pnpm vitest`) is on in tests.
+    QUIRKY_BUILD_COMMIT: JSON.stringify('0'.repeat(40)),
+    // A dark switch set to 'main' in the env (`QUIRKY_LAYOUT_OWNER=main pnpm vitest`) is on in tests.
     ...createRequire(import.meta.url)('./dark-build-switches.cjs').turnedOnDarkBuildDefines()
   },
   resolve: {
@@ -38,11 +38,11 @@ const testOptions = {
   clearMocks: false,
   ...(balancedShards ? { silent: 'passed-only' as const } : {}),
   // Persistent transforms can miss source additions; only explicit cache experiments opt in.
-  fsModuleCache: Boolean(process.env.ORCA_UNIT_MODULE_CACHE_PATH),
-  ...(process.env.ORCA_UNIT_MODULE_CACHE_PATH
-    ? { fsModuleCachePath: process.env.ORCA_UNIT_MODULE_CACHE_PATH }
+  fsModuleCache: Boolean(process.env.QUIRKY_UNIT_MODULE_CACHE_PATH),
+  ...(process.env.QUIRKY_UNIT_MODULE_CACHE_PATH
+    ? { fsModuleCachePath: process.env.QUIRKY_UNIT_MODULE_CACHE_PATH }
     : {}),
-  env: { ORCA_VITEST_RUNTIME: 'node' },
+  env: { QUIRKY_VITEST_RUNTIME: 'node' },
   server: { deps: { inline: ['zod'] } },
   // Node's storage globals and V8 retention checks require the existing child flags.
   execArgv: ['--no-experimental-webstorage', '--expose-gc'],
@@ -64,7 +64,7 @@ const nodeProject = {
   test: {
     ...testOptions,
     name: process.versions.bun ? 'node-runtime' : 'node',
-    env: { ORCA_VITEST_RUNTIME: process.versions.bun ? 'node-runtime' : 'node' },
+    env: { QUIRKY_VITEST_RUNTIME: process.versions.bun ? 'node-runtime' : 'node' },
     include: process.versions.bun ? nodeRuntimeInclude : UNIT_INCLUDE,
     exclude: [...testOptions.exclude, ...measurementFiles],
     sequence: { groupOrder: 1 },
@@ -79,7 +79,7 @@ const bunProject = {
   test: {
     ...testOptions,
     name: 'bun',
-    env: { ORCA_VITEST_RUNTIME: 'bun' },
+    env: { QUIRKY_VITEST_RUNTIME: 'bun' },
     pool: 'forks',
     exclude: [...testOptions.exclude, ...nodeRuntimeInclude, ...measurementFiles],
     sequence: { groupOrder: 1 }

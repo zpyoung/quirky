@@ -19,10 +19,10 @@ Admission generation allocation and normal queued live writes keep their existin
 The original before/after reproduction belongs to commit `9ed2f743a4dd7aab1d35906c049c11d143a92aaf`. Its patch targets the runtime layout at that commit; use that checkout to reproduce the historical result:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/headless-hydration-retention/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/headless-hydration-retention/reproduce.mjs
 ```
 
-The script runs the actual `OrcaRuntimeService` regression fixtures twice. For the before case, it reverses only the included four-file `fix.patch` in a temporary Vite transform. It neither rewrites source files nor needs an unpublished commit. The after case uses the checked-out source. Source hashes and individual failing cases are recorded in `results.json`.
+The script runs the actual `QuirkyRuntimeService` regression fixtures twice. For the before case, it reverses only the included four-file `fix.patch` in a temporary Vite transform. It neither rewrites source files nor needs an unpublished commit. The after case uses the checked-out source. Source hashes and individual failing cases are recorded in `results.json`.
 
 - Before: **16 failed, 6 passed**.
 - After: **22 passed**.
@@ -32,8 +32,8 @@ The tests control pending promises to cover retirement before callback admission
 Current ownership regression coverage lives together in `src/main/runtime/headless-hydration-ownership.test.ts`; all 22 original cases remain. Current validation:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node node_modules/typescript/bin/tsc --noEmit -p config/tsconfig.node.json
-ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/terminal-query-responder.test.ts src/main/runtime/headless-hydration-ownership.test.ts --testNamePattern 'headless|hydrat|WSL|provider cwd|live WSL cwd|query|seed|retire|replacement|capture|renderer'
+QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/typescript/bin/tsc --noEmit -p config/tsconfig.node.json
+QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/runtime/quirky-runtime.test.ts src/main/runtime/terminal-query-responder.test.ts src/main/runtime/headless-hydration-ownership.test.ts --testNamePattern 'headless|hydrat|WSL|provider cwd|live WSL cwd|query|seed|retire|replacement|capture|renderer'
 ```
 
-Historical validation at #20996: Node typecheck passed. The selected existing runtime/query checks plus the new cases passed **306 tests**, with 1087 unrelated cases skipped by the name filter. All runs were headless and used `ORCA_BACKGROUND_LAUNCH=1`.
+Historical validation at #20996: Node typecheck passed. The selected existing runtime/query checks plus the new cases passed **306 tests**, with 1087 unrelated cases skipped by the name filter. All runs were headless and used `QUIRKY_BACKGROUND_LAUNCH=1`.

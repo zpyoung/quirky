@@ -107,7 +107,7 @@ describe('attachments at send admission', () => {
 
   it('sends text that only mentions another store path, claiming nothing', async () => {
     const result = await clientSend(
-      textWith(`/home/someone/.config/Orca/agent-session-attachments/${UPLOAD}/notes.txt`)
+      textWith(`/home/someone/.config/Quirky/agent-session-attachments/${UPLOAD}/notes.txt`)
     )
     expect(result).toMatchObject({ ok: true, value: { submission: expect.anything() } })
     expect(claimedSessions()).toEqual([])

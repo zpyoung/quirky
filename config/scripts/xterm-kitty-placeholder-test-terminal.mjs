@@ -2,9 +2,9 @@ import { createRequire } from 'node:module'
 import { vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
-const { Terminal } = require(process.env.ORCA_IMAGE_CONTRACT_CORE_PATH ?? '@xterm/xterm')
+const { Terminal } = require(process.env.QUIRKY_IMAGE_CONTRACT_CORE_PATH ?? '@xterm/xterm')
 const { Unicode11Addon } = require('@xterm/addon-unicode11')
-const { ImageAddon } = require(process.env.ORCA_IMAGE_CONTRACT_ADDON_PATH ?? '@xterm/addon-image')
+const { ImageAddon } = require(process.env.QUIRKY_IMAGE_CONTRACT_ADDON_PATH ?? '@xterm/addon-image')
 
 export const PLACEHOLDER = '\u{10EEEE}'
 export const DIACRITICS = ['\u0305', '\u030D', '\u030E']

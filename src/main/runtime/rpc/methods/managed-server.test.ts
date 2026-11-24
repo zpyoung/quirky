@@ -1,6 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import {
   registerManagedServerActions,
   type ManagedServerActions
@@ -14,7 +14,7 @@ function request(method: string, params?: unknown): RpcRequest {
 }
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these handlers read no runtime member; only the reply envelope needs getRuntimeId.
-const RUNTIME = { getRuntimeId: () => 'runtime-1' } as unknown as OrcaRuntimeService
+const RUNTIME = { getRuntimeId: () => 'runtime-1' } as unknown as QuirkyRuntimeService
 
 function dispatcher(): RpcDispatcher {
   return new RpcDispatcher({ runtime: RUNTIME, methods: MANAGED_SERVER_METHODS })

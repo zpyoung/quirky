@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { parsePairingCode } from '../../shared/pairing'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 import type { PersistedMobileClientTabSelections } from '../../shared/persisted-state-types'
-import { OrcaRuntimeService } from './orca-runtime'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeService } from './quirky-runtime'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import {
   activeTabId,
   authenticate,
@@ -43,7 +43,7 @@ vi.mock('../git/worktree', () => {
 })
 
 describe('paired runtime navigation isolation', () => {
-  const servers: OrcaRuntimeRpcServer[] = []
+  const servers: QuirkyRuntimeRpcServer[] = []
   const sessions: PairedSession[] = []
   const readers: ResponseReader[] = []
 
@@ -57,7 +57,7 @@ describe('paired runtime navigation isolation', () => {
     await Promise.all(servers.splice(0).map((server) => server.stop()))
   })
 
-  /** `headless: true` models `orca serve` — no renderer notifier and no attached window. */
+  /** `headless: true` models `quirky serve` — no renderer notifier and no attached window. */
   async function startHarness(options: { headless?: boolean } = {}) {
     const hostSelections = { worktreeId: HOST_WORKTREE_ID, tabId: 'host-tab' }
     const activateWorktree = vi.fn((_repoId: string, nextWorktreeId: string) => {
@@ -66,7 +66,7 @@ describe('paired runtime navigation isolation', () => {
     const focusTerminal = vi.fn((nextTabId: string) => {
       hostSelections.tabId = nextTabId
     })
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    const runtime = new QuirkyRuntimeService(makeStore() as never)
     if (!options.headless) {
       runtime.setNotifier({
         worktreesChanged: vi.fn(),
@@ -87,10 +87,10 @@ describe('paired runtime navigation isolation', () => {
       seedSessionTabs(runtime)
     }
 
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-navigation-isolation-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-navigation-isolation-'))
     onTestFinished(() => rmSync(userDataPath, { recursive: true, force: true }))
 
-    const server = new OrcaRuntimeRpcServer({
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
       userDataPath,
       enableWebSocket: true,
@@ -429,7 +429,7 @@ describe('paired runtime navigation isolation', () => {
     expect(eventB).toMatchObject({ result: { navigation: 'all' } })
   })
 
-  it('keeps create activation caller-scoped on a headless orca serve host', async () => {
+  it('keeps create activation caller-scoped on a headless quirky serve host', async () => {
     const harness = await startHarness({ headless: true })
     await subscribeBothClientEventStreams(harness)
 
@@ -786,7 +786,7 @@ describe('paired runtime navigation isolation', () => {
       }
     })
 
-    const first = new OrcaRuntimeService(makeStoreWithSelections() as never)
+    const first = new QuirkyRuntimeService(makeStoreWithSelections() as never)
     first.attachWindow(1)
     first.markGraphReady(1)
     seedSessionTabs(first)
@@ -797,7 +797,7 @@ describe('paired runtime navigation isolation', () => {
     })
     expect(persisted.state['device-a']?.[SESSION_WORKTREE_ID]?.activeTabId).toBe('client-a-tab')
 
-    const restarted = new OrcaRuntimeService(makeStoreWithSelections() as never)
+    const restarted = new QuirkyRuntimeService(makeStoreWithSelections() as never)
     restarted.attachWindow(1)
     restarted.markGraphReady(1)
     seedSessionTabs(restarted)

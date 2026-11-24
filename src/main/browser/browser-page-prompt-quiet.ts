@@ -9,8 +9,8 @@ export function isBrowserPagePromptQuiet(contents: Electron.WebContents): boolea
 
 /**
  * Why: prompts are app-modal, so a page that asks again after every Cancel (a deep-link loop, a 401
- * page that reloads itself) would lock the user out of Orca. As in Chrome, it stays quiet until the
- * user clicks or types in it, or starts a navigation from Orca's toolbar.
+ * page that reloads itself) would lock the user out of Quirky. As in Chrome, it stays quiet until the
+ * user clicks or types in it, or starts a navigation from Quirky's toolbar.
  */
 export function quietBrowserPagePrompts(contents: Electron.WebContents): void {
   const { id } = contents

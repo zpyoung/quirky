@@ -108,7 +108,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: orca-mobile-apk
+          name: quirky-mobile-apk
           path: |
             mobile/android/app/build/outputs/apk/release/*.apk
             mobile/android/app/build/outputs/apk/release/*.apk.sha256
@@ -207,13 +207,13 @@ jobs:
               fi
             fi
             if [ ! -s "$notes_file" ]; then
-              printf 'Orca Mobile Android %s\n' "$tag" > "$notes_file"
+              printf 'Quirky Mobile Android %s\n' "$tag" > "$notes_file"
             fi
             write_notes_with_verification
 
             gh release create "$tag" \
               --repo "$GITHUB_REPOSITORY" \
-              --title "Orca Mobile Android $tag" \
+              --title "Quirky Mobile Android $tag" \
               --prerelease \
               --latest=false \
               --notes-file "$notes_file" \
@@ -235,7 +235,7 @@ jobs:
       SITE_REPO: stablyai/orca-marketing-website
       BRANCH: bump/android-apk-${{ needs.android-build.outputs.version }}
     steps:
-      - name: Checkout orca
+      - name: Checkout quirky
         uses: actions/checkout@v6
         with:
           sparse-checkout: config/scripts
@@ -249,7 +249,7 @@ jobs:
           app-id: 2590194
           private-key: ${{ secrets.BUFO_BOT_PRIVATE_KEY }}
           owner: stablyai
-          repositories: orca-marketing-website
+          repositories: quirky-marketing-website
           permission-contents: write
           permission-pull-requests: write
 

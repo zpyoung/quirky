@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-types'
 import type * as RuntimeRpcClient from '../../src/renderer/src/runtime/runtime-rpc-client'
-import { OrcaRuntimeService } from '../../src/main/runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../src/main/runtime/quirky-runtime'
 import { setStructuredAgentSessionHost } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
 import { useAppStore } from '../../src/renderer/src/store'
 import { applyStructuredSessionTabSnapshots } from '../../src/renderer/src/runtime/local-structured-session-tabs-sync/snapshot-apply'
@@ -29,7 +29,7 @@ type CloseRequest = { requestId: string; tabId: string; worktreeId: string; expi
 
 type ProcessBoundary = {
   scenario: 'reopened' | 'stale-frame'
-  runtime: Pick<OrcaRuntimeService, 'closeMobileSessionTab' | 'listMobileSessionTabs'> | null
+  runtime: Pick<QuirkyRuntimeService, 'closeMobileSessionTab' | 'listMobileSessionTabs'> | null
   rendererSessionCloses: string[]
   closeHeld: Promise<void> | null
   pairedClose: Promise<void> | null
@@ -131,7 +131,7 @@ describe('reopened structured session close', () => {
 
     const hostSessionCloses: string[] = []
     const closeResponses: (string | undefined)[] = []
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     bridge.runtime = runtime
     let nextRequest = 0
     runtime.setNotifier(
@@ -285,7 +285,7 @@ describe('in-flight structured session close', () => {
   async function setup(options: { hostFailsClose?: boolean } = {}) {
     let closeRequest: ((request: CloseRequest) => void) | undefined
     const pendingResponses = new Map<string, (error?: string) => void>()
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     bridge.runtime = runtime
     vi.stubGlobal('api', {
       ui: {

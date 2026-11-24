@@ -4,13 +4,13 @@ import type {
   RuntimeTerminalAgentStatus
 } from '../../shared/runtime-terminal-contracts'
 import { RuntimeMachineName } from './runtime-machine-name'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { makeTuiIdleLeaf, makeTuiIdlePty } from './tui-idle-wait-test-harness'
 import { readFileSync } from 'node:fs'
 import { makeAgentStatusStoreWiring } from './agent-status-store-wiring.test-fixture'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS } from './orca-runtime-core'
+import { TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS } from './quirky-runtime-core'
 import {
   createTranscriptPane,
   type TranscriptPaneOptions,
@@ -59,13 +59,13 @@ describe('Interactive wait visibility and terminal admission', () => {
   async function createPane(
     options: TranscriptPaneOptions
   ): Promise<Awaited<ReturnType<typeof createTranscriptPane>>> {
-    // Compose the same central hook-store wiring as desktop and orcad so OSC rows exercise the
+    // Compose the same central hook-store wiring as desktop and quirkyd so OSC rows exercise the
     // production status path rather than silently disappearing in a bare runtime fixture.
     const statusWiring = makeAgentStatusStoreWiring()
     return createTranscriptPane(options, statusWiring.deps)
   }
 
-  // cursor-agent renders a braille spinner in its OSC title while it works, and Orca reads
+  // cursor-agent renders a braille spinner in its OSC title while it works, and Quirky reads
   // that as `working`; the title is identical whether it is running a command or waiting.
   const CURSOR_TITLE = '⠇ Cursor Agent'
 
@@ -252,7 +252,7 @@ describe('Interactive wait visibility and terminal admission', () => {
 
     describe('prompts the runtime already matched but never surfaced', () => {
       it('surfaces a startup trust screen on the pane, not only on terminal wait', async () => {
-        // A pane on its trust screen still wears Orca's tab title; the agent has set none.
+        // A pane on its trust screen still wears Quirky's tab title; the agent has set none.
         const { runtime, handle } = await createPane({
           paneTitle: 'sta4513-claude',
           foregroundProcess: 'claude',
@@ -330,7 +330,7 @@ describe('Interactive wait visibility and terminal admission', () => {
     })
 
     it('still reports a live dialog restored from terminal history', async () => {
-      // Why this case exists: a lane parked on a prompt emits no bytes, so an Orca restart is
+      // Why this case exists: a lane parked on a prompt emits no bytes, so an Quirky restart is
       // exactly when it would go quiet forever. A restored tail carries no waitBlockedAt, and
       // the approval menu does not need one — being at the bottom of the restored screen is
       // itself the proof that this is where the pane stopped.
@@ -513,7 +513,7 @@ describe('terminal wait ownership', () => {
   }
 
   function interactiveWait(getStatus: (handle: string) => Promise<RuntimeTerminalAgentStatus>) {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime['getTerminalAgentStatusPtyId'] = () => 'pty-1'
     runtime['getTerminalWaitPermissionInputs'] = () => ({
       terminal: {
@@ -576,7 +576,7 @@ describe('terminal wait ownership', () => {
   it('rechecks current leaf evidence before delivery and coalesces repeated refusals', async () => {
     let leaf = makeTuiIdleLeaf({ lastOutputAt: Date.now(), lastAgentStatus: 'working' })
     const deliver = vi.fn()
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const key = runtime['getLeafKey'](leaf.tabId, leaf.leafId)
     runtime['leaves'].set(key, leaf)
     runtime['deliverPendingMessagesForLeaf'] = deliver
@@ -593,8 +593,8 @@ describe('terminal wait ownership', () => {
 
   it('cancels only the delivery recheck belonging to its runtime', async () => {
     const leaf = makeTuiIdleLeaf({ lastOutputAt: Date.now(), lastAgentStatus: 'working' })
-    const first = new OrcaRuntimeService()
-    const second = new OrcaRuntimeService()
+    const first = new QuirkyRuntimeService()
+    const second = new QuirkyRuntimeService()
     const key = first['getLeafKey'](leaf.tabId, leaf.leafId)
     first['leaves'].set(key, leaf)
     second['leaves'].set(key, leaf)
@@ -610,8 +610,8 @@ describe('terminal wait ownership', () => {
   it('clears a pending blocked scan without cancelling another runtime scan', async () => {
     const pty = makeTuiIdlePty({ waitBlockedAt: null })
     const getPty = vi.fn(() => pty)
-    const first = new OrcaRuntimeService()
-    const second = new OrcaRuntimeService()
+    const first = new QuirkyRuntimeService()
+    const second = new QuirkyRuntimeService()
     vi.spyOn(first['ptysById'], 'get').mockImplementation(getPty)
     vi.spyOn(second['ptysById'], 'get').mockImplementation(getPty)
     first['scheduleWaitBlockedCheck']('pty-1', 'output', 10_000)
@@ -627,7 +627,7 @@ describe('terminal wait ownership', () => {
   })
 
   it('routes settlement through the current runtime verdict and resolver', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const pending = Promise.withResolvers<RuntimeTerminalWait>()
     const waiter: TerminalWaiter = {
       handle: 'handle-1',
@@ -640,12 +640,12 @@ describe('terminal wait ownership', () => {
     }
     runtime['handleByPtyId'].set('pty-1', waiter.handle)
     runtime['terminalWaiters'].add(waiter)
-    const verdict = vi.fn<OrcaRuntimeService['evaluateTuiIdleForPty']>(() => ({
+    const verdict = vi.fn<QuirkyRuntimeService['evaluateTuiIdleForPty']>(() => ({
       kind: 'ready-strong'
     }))
     runtime['evaluateTuiIdleForPty'] = verdict
     const original = runtime['resolveWaiter']
-    const resolve = vi.fn<OrcaRuntimeService['resolveWaiter']>((...args) =>
+    const resolve = vi.fn<QuirkyRuntimeService['resolveWaiter']>((...args) =>
       original.call(runtime, ...args)
     )
     runtime['resolveWaiter'] = resolve
@@ -657,18 +657,18 @@ describe('terminal wait ownership', () => {
   })
 
   it('keeps an absent launcher target as a rejected promise', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const result = runtime.resolveOrchestrationAgentLauncherForTarget('custom', {})
     expect(result).toBeInstanceOf(Promise)
     await expect(result).rejects.toThrow()
   })
 
   it('reads the launcher resolver before forwarding an absent target', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const events: string[] = []
     const rejection = new Error('original_resolver_rejection')
-    const resolve = vi.fn<OrcaRuntimeService['resolveTerminalWorkspaceLaunchScope']>(
-      async function (this: OrcaRuntimeService) {
+    const resolve = vi.fn<QuirkyRuntimeService['resolveTerminalWorkspaceLaunchScope']>(
+      async function (this: QuirkyRuntimeService) {
         events.push('original-call')
         expect(this).toBe(runtime)
         throw rejection

@@ -13,7 +13,7 @@ afterEach(() => {
 
 describe('Linear workspace credential cache reset', () => {
   it('clears warmed credentials without reading real account files', async () => {
-    directory = mkdtempSync(join(tmpdir(), 'orca-workspace-token-cache-'))
+    directory = mkdtempSync(join(tmpdir(), 'quirky-workspace-token-cache-'))
     vi.resetModules()
     vi.doMock('os', async () => {
       const actual = await vi.importActual<typeof Os>('os')
@@ -26,7 +26,7 @@ describe('Linear workspace credential cache reset', () => {
       decryptString: (value) => value.toString('utf-8'),
       describeProtectionGap: () => null
     })
-    const tokenDirectory = join(directory, '.orca', 'linear-tokens')
+    const tokenDirectory = join(directory, '.quirky', 'linear-tokens')
     mkdirSync(tokenDirectory, { recursive: true })
     writeFileSync(
       join(tokenDirectory, `${Buffer.from('workspace').toString('base64url')}.enc`),

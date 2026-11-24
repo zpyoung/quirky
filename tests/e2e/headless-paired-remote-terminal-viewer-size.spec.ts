@@ -1,6 +1,6 @@
 import type { Page } from '@stablyai/playwright-test'
 import { toWebTerminalSurfaceTabId } from '../../src/shared/terminal-surface-id'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { launchPairedWebClient, type PairedWebClient } from './helpers/paired-electron-client'
 import { callColdActivationRuntime } from './helpers/paired-terminal-cold-activation-observation'

@@ -37,7 +37,7 @@ function sinkState() {
 function userTurn(uuid: string, observedAt?: number): ClaudeStructuredSessionEvent {
   return {
     type: 'message',
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     startsTurn: true,
     ...(observedAt === undefined ? {} : { observedAt }),
     message: {
@@ -56,7 +56,7 @@ function result(
 ): ClaudeStructuredSessionEvent {
   return {
     type: 'message',
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     ...(observedAt === undefined ? {} : { observedAt }),
     message: {
       type: 'result',
@@ -78,7 +78,7 @@ function sessionState(
 ): ClaudeStructuredSessionEvent {
   return {
     type: 'message',
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     observedAt,
     message: {
       type: 'system',
@@ -230,7 +230,7 @@ describe('Claude structured turn timing', () => {
     translator.handle(userTurn('user-1', 1_000))
     translator.handle({
       type: 'ended',
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       reason: 'child exited',
       observedAt: 2_250
     })

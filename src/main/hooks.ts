@@ -1,6 +1,6 @@
-import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
-import { parseOrcaYaml } from '../shared/orca-yaml'
+import { readFileSync } from 'node:fs'
+import { parseQuirkyYaml } from '../shared/quirky-yaml'
+import { resolveRepoConfigPath } from '../shared/repo-config-paths'
 import { resolveHookCommandSourcePolicy } from '../shared/hook-command-source-policy'
 import { getEffectiveHooksFromConfig } from './effective-hook-config'
 import { getSetupEnvVars } from './setup-hook-env-vars'
@@ -8,15 +8,15 @@ import { iterateLfScriptLines } from './setup-runner-script-text'
 import { promptGuardShellEnv } from './git/runner'
 import { dropIncoherentCondaActivationEnv } from './pty/conda-activation-env'
 import type { HookRuntimeTarget } from './hook-runtime-target'
-import type { OrcaHooks } from '../shared/orca-yaml-hook-types'
+import type { QuirkyHooks } from '../shared/quirky-yaml-hook-types'
 import type { Repo } from '../shared/repo-types'
 import type { ProjectExecutionRuntimeResolution } from '../shared/project-execution-runtime'
 import { spawn } from 'node:child_process'
 import {
   forceTerminateProcessTree,
   signalProcessTree
-} from '@orca/process-host/process-tree-termination'
-import { createOutputSink } from '@orca/process-host/bounded-output-sink'
+} from '@quirky/process-host/process-tree-termination'
+import { createOutputSink } from '@quirky/process-host/bounded-output-sink'
 
 const HOOK_TIMEOUT = 120_000 // 2 minutes
 
@@ -98,34 +98,34 @@ function getHookShell(): string | undefined {
   return '/bin/bash'
 }
 
-export { parseOrcaYaml }
+export { parseQuirkyYaml }
 
 /**
- * Load hooks from orca.yaml in the given repo root.
+ * Load hooks from quirky.yaml in the given repo root.
  */
-export function loadHooks(repoPath: string): OrcaHooks | null {
-  const yamlPath = join(repoPath, 'orca.yaml')
-  if (!existsSync(yamlPath)) {
+export function loadHooks(repoPath: string): QuirkyHooks | null {
+  const yamlPath = resolveRepoConfigPath(repoPath, 'yaml')
+  if (!yamlPath) {
     return null
   }
 
   try {
     const content = readFileSync(yamlPath, 'utf-8')
-    return parseOrcaYaml(content)
+    return parseQuirkyYaml(content)
   } catch {
     return null
   }
 }
 
 /**
- * Check whether an orca.yaml exists for a repo.
+ * Check whether an quirky.yaml exists for a repo.
  */
 export function hasHooksFile(repoPath: string): boolean {
-  return existsSync(join(repoPath, 'orca.yaml'))
+  return resolveRepoConfigPath(repoPath, 'yaml') !== null
 }
 
 // Why: detect unrecognised keys so the UI can suggest an update instead of showing a "could not be parsed" error.
-const RECOGNIZED_ORCA_YAML_KEYS = new Set([
+const RECOGNIZED_QUIRKY_YAML_KEYS = new Set([
   'scripts',
   'setupAgentStartupPolicy',
   'issueCommand',
@@ -134,14 +134,18 @@ const RECOGNIZED_ORCA_YAML_KEYS = new Set([
   'worktree'
 ])
 
-/** True when `orca.yaml` has a top-level key this version of Orca does not handle. */
-export function hasUnrecognizedOrcaYamlKeys(repoPath: string): boolean {
+/** True when `quirky.yaml` has a top-level key this version of Quirky does not handle. */
+export function hasUnrecognizedQuirkyYamlKeys(repoPath: string): boolean {
   try {
-    const content = readFileSync(join(repoPath, 'orca.yaml'), 'utf-8')
+    const yamlPath = resolveRepoConfigPath(repoPath, 'yaml')
+    if (!yamlPath) {
+      return false
+    }
+    const content = readFileSync(yamlPath, 'utf-8')
     for (const line of iterateLfScriptLines(content)) {
       // Why: match bare `key:` at end-of-line too, since a mapping with a block value on the next line is valid YAML.
       const m = line.match(/^([A-Za-z][A-Za-z0-9_-]*):(\s|$)/)
-      if (m != null && !RECOGNIZED_ORCA_YAML_KEYS.has(m[1])) {
+      if (m != null && !RECOGNIZED_QUIRKY_YAML_KEYS.has(m[1])) {
         return true
       }
     }
@@ -151,7 +155,7 @@ export function hasUnrecognizedOrcaYamlKeys(repoPath: string): boolean {
   }
 }
 
-export function getEffectiveHooks(repo: Repo, worktreePath?: string): OrcaHooks | null {
+export function getEffectiveHooks(repo: Repo, worktreePath?: string): QuirkyHooks | null {
   const hooksRoot = worktreePath ?? repo.path
   return getEffectiveHooksFromConfig(repo, loadHooks(hooksRoot))
 }
@@ -284,7 +288,7 @@ export function runHook(
             { hookName, cwd, timeoutMs }
           )
         )
-        // Orca's own tree terminator: POSIX process groups, `taskkill /t /f` on Windows (where a
+        // Quirky's own tree terminator: POSIX process groups, `taskkill /t /f` on Windows (where a
         // bare `child.kill` reaches only the shell and leaves its descendants running), and the
         // recycled-pid guard that hazard needs. SIGTERM first so a well-behaved hook can clean up.
         void signalProcessTree(child, 'SIGTERM')

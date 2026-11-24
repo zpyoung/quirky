@@ -5,7 +5,7 @@ const { writeFileMock, mkdirMock, getPathMock } = vi.hoisted(() => ({
   writeFileMock: vi.fn(),
   mkdirMock: vi.fn(),
   getPathMock: vi.fn((name: string) =>
-    name === 'temp' ? '/os/temp' : '/Users/me/Library/Application Support/orca'
+    name === 'temp' ? '/os/temp' : '/Users/me/Library/Application Support/quirky'
   )
 }))
 
@@ -38,11 +38,11 @@ describe('saveClipboardImageBufferAsTempFile', () => {
     })
 
     expect(mkdirMock).toHaveBeenCalledWith(
-      join('/Users/me/Library/Application Support/orca', 'native-chat-pastes'),
+      join('/Users/me/Library/Application Support/quirky', 'native-chat-pastes'),
       { recursive: true }
     )
     expect(dirname(savedPath)).toBe(
-      join('/Users/me/Library/Application Support/orca', 'native-chat-pastes')
+      join('/Users/me/Library/Application Support/quirky', 'native-chat-pastes')
     )
     expect(writeFileMock).toHaveBeenCalledWith(savedPath, Buffer.from([1, 2, 3]))
   })

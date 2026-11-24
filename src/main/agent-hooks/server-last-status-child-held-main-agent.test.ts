@@ -27,7 +27,7 @@ describe('Claude rows held open by child agents', () => {
   let userDataPath: string
 
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-child-held-main-agent-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-child-held-main-agent-'))
   })
 
   afterEach(() => {

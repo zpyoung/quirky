@@ -1,6 +1,6 @@
 // Steps every command shares: lookups, placing a tab in the one tab order, and result shapes.
 
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 import { insertTabIdIntoOrder } from './tab-order'
 import { collectLayoutLeafIdsInOrder } from './terminal-pane-tree'
 import type {
@@ -120,7 +120,7 @@ export type TabPlacement = { groupId?: string; afterTabId?: string; index?: numb
  * group), else the workspace's root group id, which the window and the Loader mint too.
  */
 function firstGroupId(key: string, placement: TabPlacement, context: LayoutContext): string {
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     return placement.groupId ?? workspaceRootGroupId(key)
   }
   return context.mintId()

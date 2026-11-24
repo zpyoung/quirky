@@ -49,7 +49,7 @@ async function upstreamOf(cwd: string, branch: string): Promise<string | null> {
 
 /** A clone whose `origin` and `upstream` both carry `alex/fix`, with no local `alex/fix`. */
 async function cloneWithRemoteOnlyBranch(): Promise<{ root: string; repo: string }> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-remote-branch-upstream-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-remote-branch-upstream-'))
   roots.push(root)
   const seed = join(root, 'seed')
   await gitExecFileAsync(['init', '--quiet', seed], { cwd: root })

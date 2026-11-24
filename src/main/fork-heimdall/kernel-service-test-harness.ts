@@ -8,7 +8,7 @@ import type { LedgerEntry } from '../../shared/fork-heimdall/ledger-types'
 import type { Snapshot } from '../../shared/fork-heimdall/snapshot'
 import type { EnrollInput, WatcherEnrollment } from '../../shared/fork-heimdall/watcher-types'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { HeimdallBudgetClock } from './budget-clock'
 import { HeimdallDatabase } from './database'
 import { HeimdallEnrollmentStore } from './enrollment-store'
@@ -175,8 +175,8 @@ export async function harness(
     getWorktreeMetaForHost: () => null
   } as unknown as Store
   const service = new HeimdallKernelServiceImpl({
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial test double for OrcaRuntimeService; this harness never calls runtime methods directly.
-    runtime: {} as OrcaRuntimeService,
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial test double for QuirkyRuntimeService; this harness never calls runtime methods directly.
+    runtime: {} as QuirkyRuntimeService,
     store,
     ...(options.storageAuthority ? { storageAuthority: options.storageAuthority } : {}),
     database,

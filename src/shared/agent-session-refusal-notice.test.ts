@@ -59,7 +59,7 @@ const CAUSES: Partial<Record<AgentSessionWireRefusalCode, AgentSessionWriteNotic
   // Only an older host's ledger, when a day's retained operation ids filled its quota.
   agent_session_operation_capacity: 'capacity',
   // A replayed operation with no recorded outcome, or a send behind a rewind whose outcome is
-  // unrecorded: either way Orca cannot say what happened.
+  // unrecorded: either way Quirky cannot say what happened.
   agent_session_operation_unknown: 'outcomeUnknown',
   // Only the pending-prompt check.
   agent_session_item_revision_stale: 'questionChanged',
@@ -67,7 +67,7 @@ const CAUSES: Partial<Record<AgentSessionWireRefusalCode, AgentSessionWriteNotic
   // Send preparation, for any failed open; the code names nothing else.
   agent_session_journal_unreadable: 'historyUnreadable',
   // With no reason: a method the host doesn't know, or a host from before reasons. Either way an
-  // older Orca runs the chat.
+  // older Quirky runs the chat.
   structured_agent_session_unsupported: 'unsupported'
 }
 
@@ -163,7 +163,7 @@ describe('the notice for every failure and write', () => {
   })
 
   // The control that sent the write is how to try again; only the phone's composer has none.
-  it('says how to try again only to update Orca, or on the phone where a resend can work', () => {
+  it('says how to try again only to update Quirky, or on the phone where a resend can work', () => {
     for (const { failure, write, parts, english, cell } of cells) {
       const phoneResend = write === 'composer-send' && RESEND_CAN_WORK.has(codeOf(failure))
       expect(parts.includes('tryAgainComposerSend'), cell).toBe(phoneResend)
@@ -264,7 +264,7 @@ describe('agentSessionRefusalNotice', () => {
           agentSessionWriteNoticeEnglish(
             agentSessionWriteNoticeParts(agentSessionRpcErrorFailure(code), write)
           )
-        ).toBe("Orca couldn't confirm what happened. Check the chat.")
+        ).toBe("Quirky couldn't confirm what happened. Check the chat.")
       }
     }
   )
@@ -350,7 +350,7 @@ describe('the notice for every reason a host names', () => {
     }))
   )
 
-  // An unsupported location or agent, or no chat host, is not fixed by updating Orca. Only an
+  // An unsupported location or agent, or no chat host, is not fixed by updating Quirky. Only an
   // agent or location the host can't run names its cause; a read otherwise asked for nothing
   // "this" could name, so it says only that the history didn't load.
   it('says an unsupported write never asks for an update when the host names why', () => {
@@ -393,7 +393,7 @@ describe('the notice for every reason a host names', () => {
           words.action === 'wait' ||
             words.action === 'actFirst' ||
             words.action === 'goElsewhere' ||
-            words.action === 'updateOrca'
+            words.action === 'updateQuirky'
         )
         // A card's Cancel that was not saved names its step: its notice has no Retry beside it.
         expect(retryNow, cell).toBe(
@@ -613,33 +613,33 @@ describe('a chat whose history the host could not open', () => {
     [
       'journalUnavailable',
       'read-history',
-      "Orca couldn't open this chat's history right now. Try again."
+      "Quirky couldn't open this chat's history right now. Try again."
     ],
     [
       'journalUnavailable',
       'send',
-      "Orca couldn't open this chat's history right now. Your message was not sent. Try again."
+      "Quirky couldn't open this chat's history right now. Your message was not sent. Try again."
     ],
     // Only an update gets past it, so it never says to try again. A read meets it on one chat.
     [
-      'journalWrittenByNewerOrca',
+      'journalWrittenByNewerQuirky',
       'read-history',
-      'This chat was saved by a newer Orca. Update Orca to open it.'
+      'This chat was saved by a newer Quirky. Update Quirky to open it.'
     ],
     [
-      'journalWrittenByNewerOrca',
+      'journalWrittenByNewerQuirky',
       'send',
-      'Chats were saved by a newer Orca. Your message was not sent. Update Orca to keep using them.'
+      'Chats were saved by a newer Quirky. Your message was not sent. Update Quirky to keep using them.'
     ],
     [
-      'journalWrittenByNewerOrca',
+      'journalWrittenByNewerQuirky',
       'stop',
-      "Chats were saved by a newer Orca. The agent wasn't stopped. Update Orca to keep using them."
+      "Chats were saved by a newer Quirky. The agent wasn't stopped. Update Quirky to keep using them."
     ],
     [
-      'journalWrittenByNewerOrca',
+      'journalWrittenByNewerQuirky',
       'answer',
-      'Chats were saved by a newer Orca. Your answer was not sent. Update Orca to keep using them.'
+      'Chats were saved by a newer Quirky. Your answer was not sent. Update Quirky to keep using them.'
     ]
   ] as const)('%s on %s', (reason, write, expected) => {
     expect(notice({ reason }, write)).toBe(expected)
@@ -650,9 +650,9 @@ describe('a chat whose history the host could not open', () => {
     ['an older host', undefined],
     ['a reason an unreleased build wrote', { reason: 'journalUnreadable' }]
   ])('promises nothing for a refusal that names no reason: %s', (_label, details) => {
-    expect(notice(details, 'read-history')).toBe("Orca couldn't read this chat's saved history.")
+    expect(notice(details, 'read-history')).toBe("Quirky couldn't read this chat's saved history.")
     expect(notice(details, 'send')).toBe(
-      "Orca couldn't read this chat's saved history. Your message was not sent."
+      "Quirky couldn't read this chat's saved history. Your message was not sent."
     )
     expect(
       agentSessionReadHistoryRefusalParts('agent_session_journal_unreadable', details)

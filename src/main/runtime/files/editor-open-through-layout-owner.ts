@@ -13,7 +13,7 @@ import type { WindowLayoutCommand } from '../runtime-layout-apply'
 import type { RuntimeNotifier } from '../runtime-notifier-contract'
 import type { RuntimeFileCommandHost } from './file-command-host'
 import { isChatScratchWorktreeId } from './chat-scratch-file-root'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 
 export type EditorFileOpen = RuntimeEditorFileOpen
 
@@ -39,7 +39,7 @@ export function createRuntimeEditorFileOpener(
     }
     const notifier = host.getNotifier()
     const open = { worktreeId, filePath, relativePath, runtimeEnvironmentId, navigation, position }
-    if (ORCA_LAYOUT_OWNER_IS_MAIN || !notifier?.openFile) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN || !notifier?.openFile) {
       await openEditorFileThroughLayoutOwner(
         {
           ...host,

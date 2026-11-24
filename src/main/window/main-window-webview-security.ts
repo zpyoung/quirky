@@ -1,6 +1,6 @@
 import type { BrowserWindow } from 'electron'
 import { join } from 'node:path'
-import { ORCA_BROWSER_GUEST_WEB_PREFERENCES } from '../../shared/browser-guest-web-preferences'
+import { QUIRKY_BROWSER_GUEST_WEB_PREFERENCES } from '../../shared/browser-guest-web-preferences'
 import { normalizeBrowserNavigationUrl } from '../../shared/browser-url'
 import { browserManager } from '../browser/browser-manager'
 import { browserSessionRegistry } from '../browser/browser-session-registry'
@@ -12,7 +12,7 @@ import {
   browserRouteSessionRegistry,
   browserRouteWebContentsRegistry
 } from '../browser/browser-route-session-runtime'
-import { ORCA_BROWSER_BLANK_URL } from '../../shared/constants'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../shared/constants'
 import { DOC_PREVIEW_PARTITION, parseDocPreviewUrl } from '../../shared/doc-preview-scheme'
 import { setDocPreviewFailureSink } from '../browser/doc-preview-failure-notice'
 import {
@@ -25,7 +25,7 @@ import { installPrivilegedWindowNavigationPolicy } from './privileged-window-nav
 
 /**
  * Why a separate admission rule: `normalizeBrowserNavigationUrl` answers only for
- * http(s) and `file:`, so `orca-preview://` can only ever attach here — and only
+ * http(s) and `file:`, so `quirky-preview://` can only ever attach here — and only
  * on the doc-preview partition, carrying a grant the main process minted for a
  * deliberate user preview action. Web content has no way to reach either.
  */
@@ -80,7 +80,7 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
       !isDocPreviewAttach &&
       (!normalizedSrc ||
         (!isProfilePartition && !isRoutePartition && !isLocalSshPartition) ||
-        (isRoutePartition && normalizedSrc !== ORCA_BROWSER_BLANK_URL))
+        (isRoutePartition && normalizedSrc !== QUIRKY_BROWSER_BLANK_URL))
     ) {
       event.preventDefault()
       return
@@ -104,7 +104,7 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
     webPreferences.contextIsolation = true
     webPreferences.sandbox = true
     // Why: force the browser guest policy even if host markup omits or misspells a preference.
-    Object.assign(webPreferences, ORCA_BROWSER_GUEST_WEB_PREFERENCES)
+    Object.assign(webPreferences, QUIRKY_BROWSER_GUEST_WEB_PREFERENCES)
     // Why: keep the registry-validated partition so isolated session profiles use their own storage while other hardening stays intact.
     webPreferences.partition = partition
   })

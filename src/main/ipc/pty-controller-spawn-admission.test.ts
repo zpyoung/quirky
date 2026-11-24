@@ -6,7 +6,7 @@ import {
 } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import type { AgentSessionOwnerBinding } from '../../shared/agent-session-host-authority'
-import { OrcaRuntimeService } from '../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { clearProviderPtyState } from './pty/provider/state-cleanup'
 import { setLocalPtyProvider } from './pty/provider/registry'
@@ -34,7 +34,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -63,7 +63,7 @@ describe('registerPtyHandlers', () => {
   it('rejects renderer persistence when a local PTY exits before spawn settles', async () => {
     const ptyId = 'pty-renderer-early-exit'
     const incarnationId = 'incarnation-renderer-early-exit'
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const registerRuntimePty = vi.spyOn(runtime, 'registerPty')
     const provider = createAgentClaimProvider({
       spawn: vi.fn(async () => {
@@ -339,7 +339,7 @@ describe('registerPtyHandlers', () => {
       ptyId: 'pty-adopted-exit',
       surface: recoveredAgentSurface
     }
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const provider = createAgentClaimProvider({
       sessions: [
         {

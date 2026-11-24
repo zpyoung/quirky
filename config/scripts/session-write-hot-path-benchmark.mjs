@@ -40,14 +40,14 @@ nodeModule.registerHooks({
 })
 
 const ROOT = path.resolve(import.meta.dirname, '../..')
-const ROUNDS = Number(process.env.ORCA_SESSION_WRITE_BENCH_ROUNDS ?? '9')
-const LEAVES = Number(process.env.ORCA_SESSION_WRITE_BENCH_LEAVES ?? '8')
-const PANE_KEYS = Number(process.env.ORCA_SESSION_WRITE_BENCH_PANE_KEYS ?? '2000')
+const ROUNDS = Number(process.env.QUIRKY_SESSION_WRITE_BENCH_ROUNDS ?? '9')
+const LEAVES = Number(process.env.QUIRKY_SESSION_WRITE_BENCH_LEAVES ?? '8')
+const PANE_KEYS = Number(process.env.QUIRKY_SESSION_WRITE_BENCH_PANE_KEYS ?? '2000')
 
 for (const [name, value] of [
-  ['ORCA_SESSION_WRITE_BENCH_ROUNDS', ROUNDS],
-  ['ORCA_SESSION_WRITE_BENCH_LEAVES', LEAVES],
-  ['ORCA_SESSION_WRITE_BENCH_PANE_KEYS', PANE_KEYS]
+  ['QUIRKY_SESSION_WRITE_BENCH_ROUNDS', ROUNDS],
+  ['QUIRKY_SESSION_WRITE_BENCH_LEAVES', LEAVES],
+  ['QUIRKY_SESSION_WRITE_BENCH_PANE_KEYS', PANE_KEYS]
 ]) {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${name} must be a positive integer, got ${value}`)

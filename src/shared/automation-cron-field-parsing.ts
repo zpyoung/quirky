@@ -1,4 +1,4 @@
-// Orca's cron dialect (vixie/POSIX):
+// Quirky's cron dialect (vixie/POSIX):
 // - `N/step` is the open-ended sequence `N-max/step`; a bare `N` is only itself (#15723).
 // - A day field is restricted iff no term of it ranges over a star, so `1-31` restricts but
 //   `*/2` does not (#15896). Restriction is lexical: the expanded set cannot tell `1-31` from

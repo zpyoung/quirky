@@ -5,8 +5,8 @@ import {
   parseGitRemoteVerboseLine
 } from './git-remote-url-index'
 
-const SSH_URL = 'git@github.com:contributor/orca.git'
-const HTTPS_URL = 'https://github.com/contributor/orca.git'
+const SSH_URL = 'git@github.com:contributor/quirky.git'
+const HTTPS_URL = 'https://github.com/contributor/quirky.git'
 
 function verbose(rows: readonly (readonly [string, string])[]): string {
   return rows.map(([name, url]) => `${name}\t${url}`).join('\n')

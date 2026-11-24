@@ -1,4 +1,4 @@
-import * as dependencies from '../../orca-runtime-create-terminal-dependencies'
+import * as dependencies from '../../quirky-runtime-create-terminal-dependencies'
 import type { RuntimeNotifier } from '../../runtime-notifier-contract'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
 import type { RuntimeTerminalPresentation } from '../../../../shared/runtime-types'

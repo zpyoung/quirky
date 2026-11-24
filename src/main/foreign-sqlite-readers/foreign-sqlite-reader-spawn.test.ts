@@ -27,7 +27,7 @@ const CURSOR = { ms: 0, id: '' }
 let root = ''
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-binder-preflight-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-binder-preflight-'))
   reads.binder.mockReset().mockResolvedValue([])
   reads.client.mockClear()
 })

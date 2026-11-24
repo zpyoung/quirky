@@ -51,7 +51,7 @@ vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0 })
 }))
 vi.mock('lucide-react-native', () => ({ ChevronLeft: 'Icon' }))
-vi.mock('../components/OrcaLogo', () => ({ OrcaLogo: 'Logo' }))
+vi.mock('../components/QuirkyLogo', () => ({ QuirkyLogo: 'Logo' }))
 vi.mock('../onboarding/MobileOnboardingPage', () => ({ MobileOnboardingPage: 'Page' }))
 vi.mock('../transport/use-all-host-clients', () => ({ useAllHostClients: () => [] }))
 vi.mock('../transport/host-store', () => ({ loadHostCatalog: async () => [] }))
@@ -90,7 +90,7 @@ const token = {
 }
 let renderer: ReactTestRenderer | undefined
 let stopSync: () => void
-const records = () => JSON.parse(mocks.storage.get('orca:remotePushHostRegistrations') ?? '{}')
+const records = () => JSON.parse(mocks.storage.get('quirky:remotePushHostRegistrations') ?? '{}')
 const drain = () => vi.advanceTimersByTimeAsync(0)
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -139,7 +139,7 @@ async function choose(entry: string) {
   })
 }
 function expectChoiceComplete(entry: string) {
-  expect(mocks.storage.get('orca:pushServiceNotificationsEnabled')).toBe('true')
+  expect(mocks.storage.get('quirky:pushServiceNotificationsEnabled')).toBe('true')
   if (entry === 'settings') {
     expect(renderer!.root.findByType('Switch').props).toMatchObject({
       value: true,
@@ -169,7 +169,7 @@ afterEach(async () => {
 it.each(['true', 'false'])(
   'requires consent before registering a legacy %s user',
   async (legacy) => {
-    mocks.storage.set('orca:pushNotificationsEnabled', legacy)
+    mocks.storage.set('quirky:pushNotificationsEnabled', legacy)
     const client = await connectedHost()
     await expect(shouldPresentNotificationOptIn()).resolves.toBe(true)
     await drain()
@@ -185,7 +185,7 @@ it.each(['true', 'false'])(
 )
 
 it('remembers Not now without registering and does not ask again', async () => {
-  mocks.storage.set('orca:pushNotificationsEnabled', 'true')
+  mocks.storage.set('quirky:pushNotificationsEnabled', 'true')
   const client = await connectedHost()
   await act(async () => {
     renderer = create(createElement(MobileOnboardingScreen))
@@ -196,7 +196,7 @@ it('remembers Not now without registering and does not ask again', async () => {
   })
   await drain()
   await expect(shouldPresentNotificationOptIn()).resolves.toBe(false)
-  expect(mocks.storage.get('orca:pushServiceNotificationsEnabled')).toBe('false')
+  expect(mocks.storage.get('quirky:pushServiceNotificationsEnabled')).toBe('false')
   expect(getDevicePushToken).not.toHaveBeenCalled()
   expect(
     client.sendRequest.mock.calls.some(([method]) => method === 'notifications.registerPush')
@@ -294,7 +294,7 @@ it('exposes a failed consent write without scheduling or changing durable consen
   vi.mocked(AsyncStorage.setItem).mockRejectedValueOnce(new Error('consent write failed'))
   await expect(setRemotePushEnabled(true)).rejects.toThrow('consent write failed')
   await drain()
-  expect(mocks.storage.has('orca:pushServiceNotificationsEnabled')).toBe(false)
+  expect(mocks.storage.has('quirky:pushServiceNotificationsEnabled')).toBe(false)
   expect(client.sendRequest).not.toHaveBeenCalled()
 })
 
@@ -310,7 +310,7 @@ it('exposes a failed records write and still schedules exactly one cleanup', asy
     .mockRejectedValueOnce(new Error('records write failed'))
   await expect(setRemotePushEnabled(false)).rejects.toThrow('records write failed')
   await drain()
-  expect(mocks.storage.get('orca:pushServiceNotificationsEnabled')).toBe('false')
+  expect(mocks.storage.get('quirky:pushServiceNotificationsEnabled')).toBe('false')
   expect(client.sendRequest.mock.calls.map(([method]) => method)).toEqual([
     'notifications.unregisterPush'
   ])

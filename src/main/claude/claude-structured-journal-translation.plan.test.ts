@@ -19,7 +19,7 @@ function sinkState() {
 function assistantMessage(uuid: string, content: unknown[]) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     message: {
       type: 'assistant' as const,
       uuid,

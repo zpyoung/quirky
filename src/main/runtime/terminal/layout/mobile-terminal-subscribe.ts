@@ -1,6 +1,6 @@
-import { OrcaRuntimeWithApplyLayout } from './terminal-layout-application'
+import { QuirkyRuntimeWithApplyLayout } from './terminal-layout-application'
 
-export abstract class OrcaRuntimeWithHandleMobileSubscribe extends OrcaRuntimeWithApplyLayout {
+export abstract class QuirkyRuntimeWithHandleMobileSubscribe extends QuirkyRuntimeWithApplyLayout {
   protected abstract handleMobileSubscribeInternal(
     ptyId: string,
     clientId: string,

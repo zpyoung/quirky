@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { SPEECH_METHODS } from './speech'
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -14,7 +14,7 @@ describe('speech RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       feedMobileDictation: vi.fn().mockReturnValue({ dictationId: 'dict-1' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SPEECH_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -39,7 +39,7 @@ describe('speech RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       feedMobileDictation: vi.fn().mockReturnValue({ dictationId: 'dict-1' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SPEECH_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -58,7 +58,7 @@ describe('speech RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       feedMobileDictation: vi.fn().mockReturnValue({ dictationId: 'dict-1' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SPEECH_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -79,7 +79,7 @@ describe('speech RPC methods', () => {
       listMobileSpeechModels: vi
         .fn()
         .mockResolvedValue({ enabled: false, selectedModelId: '', models: [] })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SPEECH_METHODS })
 
     const response = await dispatcher.dispatch(makeRequest('speech.models.list', null))
@@ -92,7 +92,7 @@ describe('speech RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       downloadMobileSpeechModel: vi.fn().mockResolvedValue({ started: true })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SPEECH_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -108,7 +108,7 @@ describe('speech RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       deleteMobileSpeechModel: vi.fn().mockResolvedValue(setup)
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SPEECH_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -123,7 +123,7 @@ describe('speech RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       deleteMobileSpeechModel: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SPEECH_METHODS })
 
     const response = await dispatcher.dispatch(makeRequest('speech.models.delete', {}))
@@ -138,7 +138,7 @@ describe('speech RPC methods', () => {
       configureMobileDictation: vi
         .fn()
         .mockResolvedValue({ enabled: true, selectedModelId: 'm1', models: [] })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SPEECH_METHODS })
 
     const response = await dispatcher.dispatch(

@@ -1,11 +1,11 @@
 import type { PtyRendererDelivery } from '../session'
 import { getPtyIpc } from '../../pty-host-bindings'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import { createPtyWriteInput } from './write-input'
 
 export function installPtyWriteIpcHandlers(deps: {
   mainWindow?: PtyRendererDelivery
-  runtime?: OrcaRuntimeService
+  runtime?: QuirkyRuntimeService
 }): void {
   const ipcMain = getPtyIpc()
   const { runtime } = deps

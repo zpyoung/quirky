@@ -9,32 +9,32 @@ import {
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
 
 export function registerReposCrossHostRefreshIdentityTests(): void {
-  // One project cloned on the local Mac and on a remote Orca server under distinct repo ids —
+  // One project cloned on the local Mac and on a remote Quirky server under distinct repo ids —
   // the shape the compat merge exists to serve, and the only shape whose sourceRepoIds are
   // assembled from two hosts.
   const SHARED_PROJECT_ID = 'github:stablyai/orca'
 
   const localRepo: Repo = {
     id: 'local-repo',
-    path: '/local/orca',
-    displayName: 'orca',
+    path: '/local/quirky',
+    displayName: 'quirky',
     badgeColor: '#22c55e',
-    upstream: { owner: 'stablyai', repo: 'orca' },
+    upstream: { owner: 'stablyai', repo: 'quirky' },
     addedAt: 1_700_000_000_000
   }
 
   const remoteRepo: Repo = {
     id: 'remote-repo',
-    path: '/srv/orca',
-    displayName: 'orca',
+    path: '/srv/quirky',
+    displayName: 'quirky',
     badgeColor: '#737373',
-    upstream: { owner: 'stablyai', repo: 'orca' },
+    upstream: { owner: 'stablyai', repo: 'quirky' },
     addedAt: 1_700_000_001_000
   }
 
   const localProject: Project = {
     id: SHARED_PROJECT_ID,
-    displayName: 'orca',
+    displayName: 'quirky',
     badgeColor: '#22c55e',
     sourceRepoIds: ['local-repo'],
     createdAt: 1,
@@ -56,7 +56,7 @@ export function registerReposCrossHostRefreshIdentityTests(): void {
       hostId: 'local',
       repoId,
       path,
-      displayName: 'orca',
+      displayName: 'quirky',
       setupState: 'ready',
       setupMethod: 'imported-existing-folder',
       createdAt: 1,
@@ -84,7 +84,7 @@ export function registerReposCrossHostRefreshIdentityTests(): void {
       return { projects: [clone(remoteProject)] }
     }
     if (method === 'projectHostSetup.list') {
-      return { setups: [clone(setup('remote-repo', '/srv/orca'))] }
+      return { setups: [clone(setup('remote-repo', '/srv/quirky'))] }
     }
     return {}
   }
@@ -104,7 +104,7 @@ export function registerReposCrossHostRefreshIdentityTests(): void {
 
       reposList.mockImplementation(async () => [clone(localRepo)])
       projectsList.mockImplementation(async () => [clone(localProject)])
-      listHostSetups.mockImplementation(async () => [clone(setup('local-repo', '/local/orca'))])
+      listHostSetups.mockImplementation(async () => [clone(setup('local-repo', '/local/quirky'))])
       runtimeEnvironmentsList.mockResolvedValue([{ id: 'env-1', name: 'awin' }])
       runtimeEnvironmentTransportCall.mockImplementation((args: RuntimeEnvironmentCallRequest) => {
         const compatible = createCompatibleRuntimeStatusResponseIfNeeded(args)

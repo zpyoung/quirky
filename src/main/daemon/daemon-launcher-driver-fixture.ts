@@ -4,10 +4,10 @@ import { build, type Plugin } from 'esbuild'
 import { mkdirSync, readlinkSync, realpathSync, symlinkSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { readDaemonPidRecord } from './daemon-endpoint-incarnation'
 import { getDaemonPidPath } from './daemon-spawner'
-import { killChildAndWait } from '../orcad/orcad-daemon-teardown-fixture'
+import { killChildAndWait } from '../quirkyd/quirkyd-daemon-teardown-fixture'
 
 export type DaemonLauncherDriverResult = { adopted: boolean; mode: string | null }
 
@@ -116,8 +116,8 @@ export function daemonTestEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv 
     ...Object.fromEntries(
       Object.entries(process.env).filter(([key]) => !key.startsWith('VITEST') && key !== 'NODE_ENV')
     ),
-    ORCA_BACKGROUND_LAUNCH: '1',
-    ORCA_DIAGNOSTICS_DISABLED: '1'
+    QUIRKY_BACKGROUND_LAUNCH: '1',
+    QUIRKY_DIAGNOSTICS_DISABLED: '1'
   }
   delete env.ELECTRON_RUN_AS_NODE
   return { ...env, ...extra }

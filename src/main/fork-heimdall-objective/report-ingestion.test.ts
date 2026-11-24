@@ -17,7 +17,7 @@ import {
 const temporaryDirectories: string[] = []
 
 async function localFolderTarget(): Promise<ObjectiveWorkspaceTarget> {
-  return createLocalFolderTarget(temporaryDirectories, 'orca-objective-report-')
+  return createLocalFolderTarget(temporaryDirectories, 'quirky-objective-report-')
 }
 
 function remoteFolderTarget(): ObjectiveWorkspaceTarget {
@@ -38,7 +38,7 @@ describe('objective role report ingestion', () => {
     const path = await issueObjectiveReportPath(target, '../../mailbox-path\0with unsafe text')
 
     expect(dirname(path)).toBe(
-      join(target.workspacePath, '.orca', 'heimdall', 'objective', 'reports')
+      join(target.workspacePath, '.quirky', 'heimdall', 'objective', 'reports')
     )
     expect(basename(path)).toMatch(/^[0-9a-f]{64}\.json$/u)
     await expect(
@@ -398,7 +398,7 @@ describe('objective role report ingestion', () => {
   it('rejects a local report redirected through a symlinked metadata ancestor', async () => {
     const target = await localFolderTarget()
     const path = await issueObjectiveReportPath(target, 'symlink-ancestor')
-    const outside = await mkdtemp(join(tmpdir(), 'orca-objective-report-outside-'))
+    const outside = await mkdtemp(join(tmpdir(), 'quirky-objective-report-outside-'))
     temporaryDirectories.push(outside)
     const redirectedDirectory = join(outside, 'heimdall', 'objective', 'reports')
     await mkdir(redirectedDirectory, { recursive: true })
@@ -406,8 +406,8 @@ describe('objective role report ingestion', () => {
       join(redirectedDirectory, basename(path)),
       JSON.stringify({ verdict: 'approve', criteriaResults: [], summary: 'x' })
     )
-    await rm(join(target.workspacePath, '.orca'), { recursive: true, force: true })
-    await symlink(outside, join(target.workspacePath, '.orca'))
+    await rm(join(target.workspacePath, '.quirky'), { recursive: true, force: true })
+    await symlink(outside, join(target.workspacePath, '.quirky'))
 
     await expect(
       readObjectiveRoleReport({

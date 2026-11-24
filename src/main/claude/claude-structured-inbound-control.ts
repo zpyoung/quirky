@@ -16,7 +16,7 @@ export type ClaudePermissionCallbackDeps = {
 function denySafeResult(toolUseId: string | undefined): PermissionResult {
   return {
     behavior: 'deny',
-    message: 'Orca could not decode this permission request.',
+    message: 'Quirky could not decode this permission request.',
     ...(toolUseId ? { toolUseID: toolUseId } : {})
   }
 }
@@ -28,7 +28,7 @@ function denySafeResult(toolUseId: string | undefined): PermissionResult {
  * a malformed one is denied without registering. The SDK's abort signal fires on
  * `control_cancel_request` (a cancelled turn), which forgets the prompt and settles it with
  * `null` — never authorizing a tool. A late answer after abort finds no prompt and is refused
- * by `answerClaudePrompt`. `onUserDialog` is deny-safe; the CLI only emits dialog kinds Orca
+ * by `answerClaudePrompt`. `onUserDialog` is deny-safe; the CLI only emits dialog kinds Quirky
  * declares in `supportedDialogKinds`, which is empty.
  */
 export function buildClaudePermissionCallbacks(deps: ClaudePermissionCallbackDeps): {

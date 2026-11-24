@@ -41,7 +41,7 @@ class Sender extends EventEmitter {
 let directory = ''
 let filePath = ''
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-log-admission-test-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-log-admission-test-'))
   filePath = join(directory, 'fixture.log')
   await writeFile(filePath, 'test\n')
   authorize.mockReset().mockResolvedValue(filePath)

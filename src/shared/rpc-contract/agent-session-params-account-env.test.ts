@@ -4,10 +4,10 @@ import { RUNTIME_CAPABILITIES } from '../protocol-version'
 import { AGENT_SESSION_ACCOUNT_ENV_RUNTIME_CAPABILITY } from '../agent-session-create-capabilities'
 
 const ACCOUNT_ENV = {
-  CLAUDE_CONFIG_DIR: '/home/u/.orca-claude/a/config',
-  ORCA_CLAUDE_INJECTED_CONFIG_DIR: '/home/u/.orca-claude/a/config',
-  ORCA_CLAUDE_PROFILE_POINTER: '~/.orca-claude/pointer',
-  CODEX_HOME: '/home/u/.orca-codex/b'
+  CLAUDE_CONFIG_DIR: '/home/u/.quirky-claude/a/config',
+  QUIRKY_CLAUDE_INJECTED_CONFIG_DIR: '/home/u/.quirky-claude/a/config',
+  QUIRKY_CLAUDE_PROFILE_POINTER: '~/.quirky-claude/pointer',
+  CODEX_HOME: '/home/u/.quirky-codex/b'
 }
 const CREATE = {
   clientOperationId: `${Date.now()}-${'a'.repeat(32)}`,

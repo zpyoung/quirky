@@ -153,8 +153,8 @@ const localReadyHostOption: ProjectHostSetupOption = {
   hostId: 'local',
   repoId: 'repo-a',
   label: 'Local Mac',
-  detail: 'Orca',
-  path: '/Users/alice/orca'
+  detail: 'Quirky',
+  path: '/Users/alice/quirky'
 }
 
 const devboxNeedsSetupHostOption: ProjectHostSetupOption = {
@@ -202,8 +202,8 @@ const vmRecipeHostOptions: ProjectHostSetupOption[] = [
     hostId: 'ssh:builder',
     repoId: 'repo-a',
     label: 'Builder',
-    detail: 'Orca',
-    path: '/workspace/orca'
+    detail: 'Quirky',
+    path: '/workspace/quirky'
   }
 ]
 
@@ -807,10 +807,10 @@ describe('NewWorkspaceComposerCard folder task source mode', () => {
     })
 
     expect(findRunTargetItem('Add SSH host')).toBeTruthy()
-    expect(findRunTargetItem('Add Remote Orca Server')).toBeTruthy()
+    expect(findRunTargetItem('Add Remote Quirky Server')).toBeTruthy()
   })
 
-  it('opens the remote Orca server add dialog over the composer without leaving for Settings', () => {
+  it('opens the remote Quirky server add dialog over the composer without leaving for Settings', () => {
     current = renderCard({
       projectHostSetupOptions: [localReadyHostOption, devboxNeedsSetupHostOption],
       selectedProjectHostSetupId: 'setup-local'
@@ -818,7 +818,7 @@ describe('NewWorkspaceComposerCard folder task source mode', () => {
 
     openRunTargetPicker(current.container)
     act(() => findRunTargetItem('Add host')?.click())
-    act(() => findRunTargetItem('Add Remote Orca Server')?.click())
+    act(() => findRunTargetItem('Add Remote Quirky Server')?.click())
 
     const dialog = document.body.querySelector('[data-testid="add-remote-host-dialog"]')
     expect(dialog?.getAttribute('data-mode')).toBe('server')
@@ -838,8 +838,8 @@ describe('NewWorkspaceComposerCard folder task source mode', () => {
         {
           id: 'vercel',
           name: 'Vercel Sandbox',
-          create: './scripts/orca-vm/vercel.start.sh',
-          destroy: './scripts/orca-vm/vercel.cleanup.sh',
+          create: './scripts/quirky-vm/vercel.start.sh',
+          destroy: './scripts/quirky-vm/vercel.cleanup.sh',
           destroyDisabled: false
         }
       ] as never,
@@ -879,7 +879,7 @@ describe('NewWorkspaceComposerCard folder task source mode', () => {
         {
           id: 'vercel',
           name: 'Vercel Sandbox',
-          create: './scripts/orca-vm/vercel.start.sh',
+          create: './scripts/quirky-vm/vercel.start.sh',
           destroyDisabled: true
         }
       ] as never,

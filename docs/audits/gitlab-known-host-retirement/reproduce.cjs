@@ -5,9 +5,9 @@ const Module = require('node:module')
 const esbuild = require('esbuild')
 const { sourcePath, baseline, fixed, sourceHashes, hash } = require('./sources.cjs')
 
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function')
-const symbol = Symbol.for('orca-known-host-comparison')
+const symbol = Symbol.for('quirky-known-host-comparison')
 const context = { generation: 1, calls: 0, runner: null }
 globalThis[symbol] = context
 const resultFor = (host) => ({ stdout: `Logged in to ${host} as user`, stderr: '' })
@@ -34,7 +34,7 @@ async function load(phase) {
           }))
           build.onLoad({ filter: /.*/, namespace: 'ports' }, (args) => ({
             loader: 'js',
-            contents: `const context=globalThis[Symbol.for('orca-known-host-comparison')];${
+            contents: `const context=globalThis[Symbol.for('quirky-known-host-comparison')];${
               args.path === 'runner'
                 ? `exports.glabExecFileAsync=(...args)=>{context.calls++;return context.runner(...args)};`
                 : `exports.getSshGitProviderGeneration=()=>context.generation;`

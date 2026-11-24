@@ -1,11 +1,11 @@
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 
 test.use({ minimumSeededWorktreeCount: 1 })
 
 for (const scenario of ['single', 'children', 'batch', 'known-dirty'] as const) {
   test(`keeps deletion geometry stable while checking ${scenario} workspaces`, async ({
-    orcaPage: page,
+    quirkyPage: page,
     electronApp
   }, testInfo) => {
     await waitForSessionReady(page)

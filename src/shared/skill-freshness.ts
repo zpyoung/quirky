@@ -61,10 +61,10 @@ export type SkillFreshnessInstallation = {
   errorCategory: string | null
 }
 
-const ORCA_SKILL_LOCK_SOURCE = 'zpyoung/quirky'
+const QUIRKY_SKILL_LOCK_SOURCE = 'zpyoung/quirky'
 
-/** Whether the skills.sh lock says this name was installed from Orca's repository. */
-export function isOrcaSkillLockSource(source: string | null): boolean {
+/** Whether the skills.sh lock says this name was installed from Quirky's repository. */
+export function isQuirkySkillLockSource(source: string | null): boolean {
   if (!source) {
     return false
   }
@@ -74,11 +74,11 @@ export function isOrcaSkillLockSource(source: string | null): boolean {
     .replace(/^https:\/\/github\.com\//, '')
     .replace(/\/+$/, '')
     .replace(/\.git$/, '')
-  return normalized === ORCA_SKILL_LOCK_SOURCE
+  return normalized === QUIRKY_SKILL_LOCK_SOURCE
 }
 
-// Why: Orca's updater only ever passes --global, so a project's or a plugin's own copy is
-// not something Orca can act on. Without a list of past releases, a differing plugin copy
+// Why: Quirky's updater only ever passes --global, so a project's or a plugin's own copy is
+// not something Quirky can act on. Without a list of past releases, a differing plugin copy
 // is indistinguishable from another vendor's same-named skill, so neither scope can be
 // reported as the user's drift.
 export function skillPlacementParticipatesInGlobalFreshness(
@@ -123,7 +123,7 @@ export type SkillFreshnessScanIssue = {
   errorCode: string | null
 }
 
-// Why: a real read failure is a fact about the user's disk and stays actionable. Orca's
+// Why: a real read failure is a fact about the user's disk and stays actionable. Quirky's
 // own traversal bounds are not — reporting them as attention turns an ordinary large
 // plugin cache into a permanent amber pill on every skill.
 //

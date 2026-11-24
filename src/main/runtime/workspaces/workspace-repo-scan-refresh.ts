@@ -1,12 +1,12 @@
 import { RuntimeWorkspaceCatalog } from './workspace-catalog'
 import type { Repo } from '../../../shared/repo-types'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
-import type { RuntimeWorktreeScanCache, RuntimeWorktreeScanRefresh } from '../orca-runtime-core'
+import type { RuntimeWorktreeScanCache, RuntimeWorktreeScanRefresh } from '../quirky-runtime-core'
 import { resolveWorktreeScanCacheTtlMs } from '../runtime-worktree-scan-cache'
 import {
   WORKTREE_SCAN_ADMIN_FINGERPRINT_TIMEOUT_MS,
   WORKTREE_SCAN_ADMIN_RECONCILE_INTERVAL_MS
-} from '../orca-runtime-postlude'
+} from '../quirky-runtime-postlude'
 import { getLocalProjectWorktreeGitOptionsForRuntime } from '../../project-runtime-git-options'
 import { withTimeoutResult } from '../runtime-async-boundaries'
 import { readRepoWorktreeAdminFingerprint } from '../repo-worktree-admin-fingerprint'

@@ -12,8 +12,8 @@ export const ROWS = 24
 /** Design §2 measured the host's own chunker at 48 KiB, so the sample is at least one full one. */
 export const MIN_STREAM_BYTES = 48 * 1024
 /** Printed at the top of the stream and again at the end, so the read-back covers both edges. */
-export const FIRST_MARKER = 'ORCA-TERMINAL-RENDER-FIRST'
-export const LAST_MARKER = 'ORCA-TERMINAL-RENDER-LAST'
+export const FIRST_MARKER = 'QUIRKY-TERMINAL-RENDER-FIRST'
+export const LAST_MARKER = 'QUIRKY-TERMINAL-RENDER-LAST'
 
 /**
  * An escape-dense sample of at least 48 KiB: an SGR colour change every cell, an erase-to-end and
@@ -61,18 +61,18 @@ export default function TerminalProbeRoute() {
   const frameRef = useRef({ width: 0, height: 0 })
   const [mounted, setMounted] = useState(true)
   const onSelectionCopy = useCallback((text) => {
-    globalThis.__orcaTerminalCopied = text
+    globalThis.__quirkyTerminalCopied = text
   }, [])
   const onWebReady = useCallback(() => {
-    globalThis.__orcaTerminalReady = true
+    globalThis.__quirkyTerminalReady = true
   }, [])
   const onEngineError = useCallback((message) => {
-    globalThis.__orcaTerminalEngineErrors.push(message)
+    globalThis.__quirkyTerminalEngineErrors.push(message)
   }, [])
   useEffect(() => {
-    globalThis.__orcaTerminalEngineErrors = globalThis.__orcaTerminalEngineErrors ?? []
-    globalThis.__orcaTerminalBeforeInput = []
-    globalThis.__orcaTerminalProbe = {
+    globalThis.__quirkyTerminalEngineErrors = globalThis.__quirkyTerminalEngineErrors ?? []
+    globalThis.__quirkyTerminalBeforeInput = []
+    globalThis.__quirkyTerminalProbe = {
       init: (cols, rows, initialData) =>
         handleRef.current?.init({ cols, rows, initialData, oscLinks: [], frame: frameRef.current }),
       write: (data) => handleRef.current?.write(data),
@@ -82,7 +82,7 @@ export default function TerminalProbeRoute() {
       setMounted: (next) => setMounted(next)
     }
     const onBeforeInput = (event) => {
-      globalThis.__orcaTerminalBeforeInput.push({
+      globalThis.__quirkyTerminalBeforeInput.push({
         inputType: event.inputType,
         data: event.data === null ? null : String(event.data),
         isComposing: !!event.isComposing
@@ -128,7 +128,7 @@ export default function TerminalProbeRoute() {
 export const CONTROL_SOURCE = `import { View } from 'react-native'
 
 export default function ControlRoute() {
-  globalThis.__orcaTerminalControlMounted = true
+  globalThis.__quirkyTerminalControlMounted = true
   return <View testID="terminal-control" />
 }
 `

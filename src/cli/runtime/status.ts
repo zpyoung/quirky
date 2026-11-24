@@ -26,7 +26,7 @@ export async function getCliStatus(
       runtime: {
         // Why: distinguishing "never started" from "was running but died"
         // gives the user a better signal about what happened. If the metadata
-        // file exists, Orca was running at some point.
+        // file exists, Quirky was running at some point.
         state: metadata ? 'stale_bootstrap' : 'not_running',
         reachable: false,
         runtimeId: null
@@ -70,7 +70,7 @@ export async function getCliStatus(
       }
     })
   } catch (error) {
-    // Why: a denied caller cannot tell a live Orca from a dead one, so report the denial, not a state.
+    // Why: a denied caller cannot tell a live Quirky from a dead one, so report the denial, not a state.
     if (error instanceof RuntimeClientError && error.code === 'runtime_access_denied') {
       throw error
     }

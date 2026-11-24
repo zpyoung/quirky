@@ -1,7 +1,7 @@
 import { resolveHostCodexSessionSourceHome } from '../codex/codex-session-source-home'
 import { startSystemCodexSessionBridgeInBackground } from '../codex/codex-session-bridge'
 import {
-  resolveOrcaManagedCodexHomePath,
+  resolveQuirkyManagedCodexHomePath,
   syncSystemCodexResourcesIntoManagedHome
 } from '../codex/codex-home-paths'
 import { syncSystemConfigIntoManagedCodexHome } from '../codex/codex-config-mirror'
@@ -44,7 +44,7 @@ export abstract class CodexRuntimeHomeLaunch extends CodexRuntimeHomeRouting {
         return perAccountHome
       }
       // Why: only an untrusted home clears the selection; fall through to the
-      // system default without injecting a path Orca cannot prove it owns.
+      // system default without injecting a path Quirky cannot prove it owns.
     }
     if (this.isHostSystemDefaultRealHomeSelected(launchEnv)) {
       // Why: the system default runs Codex on the user's own ~/.codex.
@@ -90,13 +90,13 @@ export abstract class CodexRuntimeHomeLaunch extends CodexRuntimeHomeRouting {
       // its next check sees no selection; predict that route, clearing nothing.
       return !hasCustomCodexHomeOverrideForLaunch(launchEnv)
         ? null
-        : resolveOrcaManagedCodexHomePath()
+        : resolveQuirkyManagedCodexHomePath()
     }
     // Why the path-only resolver: getRuntimeHomePath() mkdirs the mirror, and
     // this lookup must not create directories either.
     return this.isHostSystemDefaultRealHomeSelected(launchEnv)
       ? null
-      : resolveOrcaManagedCodexHomePath()
+      : resolveQuirkyManagedCodexHomePath()
   }
 
   async prepareForCodexLaunchAsync(

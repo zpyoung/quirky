@@ -8,7 +8,7 @@ import {
 } from './store-test-harness'
 
 const { getPathMock } = vi.hoisted(() => ({
-  getPathMock: vi.fn(() => '/tmp/orca-test-userdata')
+  getPathMock: vi.fn(() => '/tmp/quirky-test-userdata')
 }))
 
 vi.mock('electron', () => ({

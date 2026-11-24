@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 
 const executionProgram = `
 const fs = require('node:fs');
@@ -37,7 +37,7 @@ export async function createRelayExecutionProcess() {
     program: process.execPath,
     args: ['-e', executionProgram, marker],
     cwd: folder,
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
   })
   const fail = (error: Error) => {
     failure = error

@@ -1,5 +1,5 @@
 import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import {
   createStructuredWorkerSession,
   releaseStructuredWorkerSession,
@@ -40,7 +40,7 @@ export function findOwnerSession(watcherId: string): OwnerSessionHandle | null {
  * hold this takes is what keeps the provider child alive between wakes.
  */
 export async function ensureOwnerSession(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   watcherId: string
   worktreeId: string
   owner: WatcherOwnerConfig

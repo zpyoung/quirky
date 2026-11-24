@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
-import { store, TEST_WORKTREE_ID } from '../orca-runtime-test-fixtures.spec'
+import { QuirkyRuntimeService } from '../quirky-runtime-test-mocks.spec'
+import { store, TEST_WORKTREE_ID } from '../quirky-runtime-test-fixtures.spec'
 import type { Repo } from '../../../shared/repo-types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
@@ -52,7 +52,7 @@ const snapshot: ResolvedWorktreeSnapshot = {
 describe('workspace query prototype dispatch', () => {
   it('re-enters the runtime repo selector', async () => {
     const seen: unknown[][] = []
-    class Probe extends OrcaRuntimeService {
+    class Probe extends QuirkyRuntimeService {
       protected override selectReposBySelector(selector: string): Repo[] {
         seen.push([this, selector])
         return [repo]
@@ -67,8 +67,8 @@ describe('workspace query prototype dispatch', () => {
   })
 
   it('re-enters the runtime snapshot from async listing', async () => {
-    const seen: OrcaRuntimeService[] = []
-    class Probe extends OrcaRuntimeService {
+    const seen: QuirkyRuntimeService[] = []
+    class Probe extends QuirkyRuntimeService {
       protected override async listResolvedWorktreeSnapshot(): Promise<ResolvedWorktreeSnapshot> {
         seen.push(this)
         return snapshot
@@ -83,8 +83,8 @@ describe('workspace query prototype dispatch', () => {
   })
 
   it('calls the runtime scoped resolver with the original single argument', async () => {
-    const seen: { receiver: OrcaRuntimeService; args: unknown[] }[] = []
-    class Probe extends OrcaRuntimeService {
+    const seen: { receiver: QuirkyRuntimeService; args: unknown[] }[] = []
+    class Probe extends QuirkyRuntimeService {
       protected override hasFreshResolvedWorktreeCache(): boolean {
         return false
       }
@@ -105,7 +105,7 @@ describe('workspace query prototype dispatch', () => {
   })
 
   it('keeps disconnected SSH stored rows with a failed scan verdict', async () => {
-    class Probe extends OrcaRuntimeService {
+    class Probe extends QuirkyRuntimeService {
       run(remote: Repo) {
         return this.listRepoWorktreesForResolutionUncached(remote, undefined)
       }
@@ -152,7 +152,7 @@ describe('workspace-detected-listing-capture characterization', () => {
         source: 'git',
         worktrees: []
       }
-      const runtime = new (class extends OrcaRuntimeService {
+      const runtime = new (class extends QuirkyRuntimeService {
         override resolveRepoSelectorForConnection(selector: string, connectionId?: string | null) {
           events.push('resolve')
           expect([selector, connectionId]).toEqual(['repo', 'ssh:box'])
@@ -160,7 +160,7 @@ describe('workspace-detected-listing-capture characterization', () => {
         }
       })()
       const original = vi.fn(function (
-        this: OrcaRuntimeService,
+        this: QuirkyRuntimeService,
         resolved: Repo,
         sourceDefaultsSupported?: boolean
       ) {
@@ -194,7 +194,7 @@ describe('workspace-detected-listing-capture characterization', () => {
 
   describe('workspace methods captured before request property reads', () => {
     it('captures port probes before reading repoId', async () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       const events: string[] = []
       const original = vi.fn(async () => [])
       const replacement = vi.fn(async () => [])
@@ -221,7 +221,7 @@ describe('workspace-detected-listing-capture characterization', () => {
     })
 
     it('captures file routing before reading the requested workspace', async () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       const events: string[] = []
       const original = vi.fn(async () => ({ executionHostId: 'ssh:box' }))
       const replacement = vi.fn(async () => ({ executionHostId: 'ssh:box' }))
@@ -249,7 +249,7 @@ describe('workspace-detected-listing-capture characterization', () => {
     })
 
     it('captures scan invalidation before reading the resolved repo id', async () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       const events: string[] = []
       const original = vi.fn()
       const replacement = vi.fn()
@@ -298,11 +298,11 @@ describe('workspace-detected-listing-capture characterization', () => {
 describe('workspace-file-target-capture characterization', () => {
   describe('floating workspace file target resolution', () => {
     it('captures the converter before awaiting the path and keeps its runtime receiver', async () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       const pending = Promise.withResolvers<string>()
       const events: string[] = []
       const convert = runtime['floatingWorkspaceToResolvedWorktree']
-      const original = vi.fn(function (this: OrcaRuntimeService, path: string) {
+      const original = vi.fn(function (this: QuirkyRuntimeService, path: string) {
         events.push('invoke original')
         expect(this).toBe(runtime)
         return convert.call(this, path)
@@ -342,18 +342,18 @@ describe('workspace-session-read-order characterization', () => {
 
   describe('workspace session callable lookup order', () => {
     it('keeps the native refusal for a launcher without a workspace selector', async () => {
-      const runtime = new OrcaRuntimeService(null)
+      const runtime = new QuirkyRuntimeService(null)
       await expect(
         runtime.resolveOrchestrationAgentLauncherForTarget('missing-launcher', {})
       ).rejects.toBeInstanceOf(TypeError)
     })
 
     it('captures the browser reader before evaluating the snapshot workspace getter', () => {
-      const runtime = new OrcaRuntimeService(null)
+      const runtime = new QuirkyRuntimeService(null)
       const order: string[] = []
       const replacement = vi.fn(() => new Map<string, BrowserTabInfo>())
       const original = function (
-        this: InstanceType<typeof OrcaRuntimeService>,
+        this: InstanceType<typeof QuirkyRuntimeService>,
         worktreeId: string
       ) {
         expect(this).toBe(runtime)
@@ -390,11 +390,11 @@ describe('workspace-session-read-order characterization', () => {
     })
 
     it('captures the title writer before constructing a session with getter-backed fields', () => {
-      const runtime = new OrcaRuntimeService(null)
+      const runtime = new QuirkyRuntimeService(null)
       const order: string[] = []
       const replacement = vi.fn()
       const original = function (
-        this: InstanceType<typeof OrcaRuntimeService>,
+        this: InstanceType<typeof QuirkyRuntimeService>,
         worktreeId: string,
         session: WorkspaceSessionState
       ) {
@@ -494,7 +494,7 @@ describe('first-work rename lazy Store capabilities', () => {
       if (provideFolder) {
         store.getFolderWorkspace = () => undefined
       }
-      const runtime = new OrcaRuntimeService(null)
+      const runtime = new QuirkyRuntimeService(null)
       let notified = false
       runtime.notifyFolderWorkspaceChanged = () => {
         notified = true
@@ -508,7 +508,7 @@ describe('first-work rename lazy Store capabilities', () => {
 
   it('looks up the current writer on each call and retains Store and Root receivers', () => {
     const store = renameStore()
-    const runtime = new OrcaRuntimeService(null)
+    const runtime = new QuirkyRuntimeService(null)
     const order: string[] = []
     runtime.notifyFolderWorkspaceChanged = function () {
       expect(this).toBe(runtime)

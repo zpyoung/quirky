@@ -27,7 +27,7 @@ export type RestoredStatusDeadTerminalSweepDeps = {
   getPersistedPtyIdForPaneKey: (paneKey: string) => string | undefined
 }
 
-/** A terminal that dies while Orca is down never reaches the PTY-exit teardown, so its restored
+/** A terminal that dies while Quirky is down never reaches the PTY-exit teardown, so its restored
  *  row would claim work forever. Stand in for that exit: retire restored rows whose local PTY
  *  the provider proves absent, through the same path an observed exit takes. */
 export async function retireRestoredStatusesWithDeadTerminals(

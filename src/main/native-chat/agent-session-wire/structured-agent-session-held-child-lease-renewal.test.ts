@@ -26,7 +26,7 @@ async function liveStoreWithoutStartTime(): Promise<{
   store: AgentSessionRecordStore
   fence: number
 }> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-held-child-renewal-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-held-child-renewal-'))
   roots.push(root)
   const store = await openTestAgentSessionRecordStore(root)
   const reserved = await store.reserveOwner({
@@ -160,7 +160,7 @@ describe.each(['darwin', 'win32'] as const)('lease renewal of a held child on %s
     clock.now = NOW + 20_000
     await renewer.renewNow()
 
-    // Orca crashed: the next runtime holds no child and finds the recorded pid gone.
+    // Quirky crashed: the next runtime holds no child and finds the recorded pid gone.
     const reopened = await openTestAgentSessionRecordStore(root)
     await reopened.reconcileOnRestart({
       probe: async () => ({ outcome: 'pid-absent' }),

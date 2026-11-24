@@ -5,7 +5,7 @@ import {
   resolveForkedChildEntryPathWithoutApp
 } from '../forked-child-entry-path'
 
-// orcad resolves this literal beside orcad.js; build-orcad.mjs emits it from ORCAD_CHILD_ENTRY_POINTS.
+// quirkyd resolves this literal beside quirkyd.js; build-quirkyd.mjs emits it from QUIRKYD_CHILD_ENTRY_POINTS.
 export const AI_VAULT_SERVICE_ENTRY_FILENAME = 'session-scanner-service-entry.js'
 
 export function resolveAiVaultServiceEntryPath(

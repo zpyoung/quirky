@@ -10,7 +10,7 @@ import type {
   RuntimeMobileSessionTabsSnapshot
 } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import * as mobileSessionTerminalProjection from './mobile-session-terminal-projection'
 
 // Freshness predicate of shouldApplyWebSessionTabsSnapshot in
@@ -93,7 +93,7 @@ function makeTerminalTab(id: string, ptyId: string | null) {
 
 function createRuntime(initialSession: WorkspaceSessionState) {
   let session = initialSession
-  const runtime = new OrcaRuntimeService({
+  const runtime = new QuirkyRuntimeService({
     ...storeBase,
     getWorkspaceSession: () => session,
     setWorkspaceSession: (next: WorkspaceSessionState) => {

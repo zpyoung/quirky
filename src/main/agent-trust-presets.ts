@@ -12,7 +12,7 @@ export type AgentTrustPreset = NonNullable<TuiAgentConfig['preflightTrust']>
  * Codex so the agent's "Do you trust this folder?" menu does not fire on
  * first launch.
  *
- * Why: Orca's "drop URL into agent input as a draft" flow injects the URL
+ * Why: Quirky's "drop URL into agent input as a draft" flow injects the URL
  * via bracketed-paste once the TUI is up. If the trust menu intercepts the
  * keystrokes (each menu reads a single character or numbered option), the
  * paste either selects an arbitrary option or quits the session. Pre-writing
@@ -163,7 +163,7 @@ export function markAntigravityWorkspaceTrusted(workspacePath: string, home: str
  * codex-rs/core/src/config/config_tests.rs in the Codex CLI source.
  *
  * `configFiles` names every config.toml the launched Codex may read, in the
- * hook installer's lock order (an Orca-owned CODEX_HOME before the system one).
+ * hook installer's lock order (an Quirky-owned CODEX_HOME before the system one).
  */
 export function markCodexProjectTrusted(
   workspacePath: string,
@@ -189,7 +189,7 @@ function canonicalize(p: string): string {
   // Why: macOS reports `/tmp/x` and `/private/tmp/x` as the same inode, but
   // both Cursor and Copilot's trust comparators run realpath() before the
   // string compare. Mirror that so a worktree under a symlinked parent
-  // (orca caches realpath()'d worktree paths) matches the agent's lookup.
+  // (quirky caches realpath()'d worktree paths) matches the agent's lookup.
   try {
     if (existsSync(p)) {
       return realpathSync.native(p)

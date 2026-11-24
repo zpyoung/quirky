@@ -113,7 +113,7 @@ describe('hidden Chromium background OpenURL compatibility', () => {
         input: 'modifier'
       }
       await prepareBackgroundPopupProbe(page, probe, `${origin}/must-not-execute-background`)
-      await page.evaluate((failure) => console.log(`orca-popup-fixture:fail-${failure}`), failure)
+      await page.evaluate((failure) => console.log(`quirky-popup-fixture:fail-${failure}`), failure)
       await refreshBackgroundPopupStatus()
       const before = status().native.windows.length
       const receiptCount = receipts.length
@@ -128,7 +128,7 @@ describe('hidden Chromium background OpenURL compatibility', () => {
       ).toBe(false)
       expect(status().native.presentationCalls).toEqual([])
       snapshots.push(status())
-      await page.evaluate('console.log("orca-popup-fixture:restore-authority")')
+      await page.evaluate('console.log("quirky-popup-fixture:restore-authority")')
     }
   )
 
@@ -162,7 +162,7 @@ describe('hidden Chromium background OpenURL compatibility', () => {
     await clickBackgroundPopupProbe(page, probe)
     await expect.poll(() => children().length).toBe(4)
     const fenced = children()
-    await page.evaluate('console.log("orca-popup-fixture:fence")')
+    await page.evaluate('console.log("quirky-popup-fixture:fence")')
     await expect.poll(() => status().routeGranted).toBe(false)
     await expect.poll(() => fenced.every((child) => child.isClosed())).toBe(true)
     const fencedReceiptCount = receipts.length
@@ -172,12 +172,12 @@ describe('hidden Chromium background OpenURL compatibility', () => {
     expect(
       receipts.slice(fencedReceiptCount).some((receipt) => receipt.path === '/background-owned')
     ).toBe(false)
-    await page.evaluate('console.log("orca-popup-fixture:grant")')
+    await page.evaluate('console.log("quirky-popup-fixture:grant")')
     await expect.poll(() => status().routeGranted).toBe(true)
     await clickBackgroundPopupProbe(page, probe)
     await expect.poll(() => children().length).toBe(1)
     const regranted = children()[0]
-    await page.evaluate('console.log("orca-popup-fixture:close")')
+    await page.evaluate('console.log("quirky-popup-fixture:close")')
     await expect.poll(() => regranted.isClosed()).toBe(true)
     expect(status().native.presentationCalls).toEqual([])
     expect(status().windowsHidden).toBe(true)

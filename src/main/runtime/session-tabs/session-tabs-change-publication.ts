@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab } from './mobile-session-publication-preservation'
+import { QuirkyRuntimeWithStoredMobileSnapshotHasStalePreservedTab } from './mobile-session-publication-preservation'
 import type {
   BrowserTabInfo,
   RuntimeMobileSessionClientTab,
@@ -12,7 +12,7 @@ import { getMobileSessionTabOrderIds } from '../mobile-session-tab-merge'
 import { readCreatedWorkspaceLaunch } from '../../agent-launch/agent-launch-created-workspace'
 import { worktreeIdsEqual } from '../../../shared/worktree/id'
 
-export abstract class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab {
+export abstract class QuirkyRuntimeWithScheduleMobileSessionTabsChanged extends QuirkyRuntimeWithStoredMobileSnapshotHasStalePreservedTab {
   protected scheduleMobileSessionTabsChanged(worktreeId: string): void {
     this.pendingMobileSessionTabsChangeSequenceByWorktree.set(
       worktreeId,

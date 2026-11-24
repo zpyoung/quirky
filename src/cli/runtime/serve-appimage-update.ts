@@ -7,7 +7,7 @@
  */
 import { readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   readAppImageSourceOfNamespace,
   resolveAppImageCacheKey,
@@ -91,7 +91,7 @@ export async function restartFromNewAppImage(
   watch: AppImageBuildWatch,
   deps: AppImageRestartDeps
 ): Promise<string> {
-  deps.log(`[serve] ${watch.appImagePath} holds a new Orca build; restarting from it.`)
+  deps.log(`[serve] ${watch.appImagePath} holds a new Quirky build; restarting from it.`)
   const env = appImageEnv(deps.env)
   // Why probe first: a host without FUSE cannot mount it, and an exec that fails there would
   // turn into a service restart loop instead of a server still running the old build.
@@ -144,16 +144,16 @@ function appImageEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     'APPDIR',
     'ARGV0',
     'OWD',
-    'ORCA_CLI_LAUNCH_REDIRECTED'
+    'QUIRKY_CLI_LAUNCH_REDIRECTED'
   ]) {
     delete next[name]
   }
   // Why: node mode moved the user's NODE_OPTIONS aside; the new launch moves it aside again.
-  if (env.ORCA_NODE_OPTIONS) {
-    next.NODE_OPTIONS = env.ORCA_NODE_OPTIONS
+  if (env.QUIRKY_NODE_OPTIONS) {
+    next.NODE_OPTIONS = env.QUIRKY_NODE_OPTIONS
   }
-  if (env.ORCA_NODE_REPL_EXTERNAL_MODULE) {
-    next.NODE_REPL_EXTERNAL_MODULE = env.ORCA_NODE_REPL_EXTERNAL_MODULE
+  if (env.QUIRKY_NODE_REPL_EXTERNAL_MODULE) {
+    next.NODE_REPL_EXTERNAL_MODULE = env.QUIRKY_NODE_REPL_EXTERNAL_MODULE
   }
   return next
 }
@@ -210,7 +210,7 @@ export function createSupervisedAppImageUpdate(
       if (!reportedFailedAttempt) {
         reportedFailedAttempt = true
         deps.log(
-          `[serve] Keeping the running build: ${watch.appImagePath} was started once and did not come up. Replace it again, or run \`orca serve --supervise --force\` once to retry it.`
+          `[serve] Keeping the running build: ${watch.appImagePath} was started once and did not come up. Replace it again, or run \`quirky serve --supervise --force\` once to retry it.`
         )
       }
       return 'current'

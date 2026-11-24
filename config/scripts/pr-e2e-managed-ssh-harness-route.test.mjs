@@ -5,7 +5,7 @@ import { testImportClosure } from './e2e-test-import-closure.mjs'
 import { MANUAL_ONLY_E2E_SPECS, selectPrE2eSpecs } from './pr-e2e-source-routing.mjs'
 
 const projectDir = resolve(import.meta.dirname, '../..')
-const MANAGED_SSH_SPEC = /^tests\/e2e\/ssh-orcad-.*\.spec\.ts$/
+const MANAGED_SSH_SPEC = /^tests\/e2e\/ssh-quirkyd-.*\.spec\.ts$/
 
 const allSpecs = readdirSync(join(projectDir, 'tests/e2e'), { encoding: 'utf8', recursive: true })
   .map((name) => `tests/e2e/${name.split(sep).join('/')}`)

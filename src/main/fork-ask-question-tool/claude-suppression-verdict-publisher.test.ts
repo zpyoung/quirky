@@ -65,7 +65,7 @@ describe('startClaudeSuppressionVerdictPublisher', () => {
       '--disallowedTools',
       'AskUserQuestion',
       '--append-system-prompt',
-      expect.stringContaining('orca ask')
+      expect.stringContaining('quirky ask')
     ])
     harness.stop()
   })

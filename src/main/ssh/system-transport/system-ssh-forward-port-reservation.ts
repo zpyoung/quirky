@@ -1,10 +1,10 @@
 /**
  * The port a system SSH forward will listen on. OpenSSH binds `-L 0` to a port it never reports,
- * so port 0 is resolved to a free one here first, and a fixed port an earlier Orca left bound is
+ * so port 0 is resolved to a free one here first, and a fixed port an earlier Quirky left bound is
  * recovered here before the caller gives up on it.
  */
 import { createServer } from 'node:net'
-import { stopOrphanedOrcaSshForward } from './system-ssh-orphaned-forward'
+import { stopOrphanedQuirkySshForward } from './system-ssh-orphaned-forward'
 
 /**
  * The port the forward should be spawned on: `localPort`, or a free one when it is 0. Recovery is
@@ -27,15 +27,15 @@ export async function reserveLocalForwardPort(
   }
 }
 
-/** True when a forward an earlier Orca left on `localPort` was released, by process or by master. */
+/** True when a forward an earlier Quirky left on `localPort` was released, by process or by master. */
 async function releaseLocalForwardPort(
   localPort: number,
   orphanArgs?: readonly string[],
   cancelMuxedForward?: () => Promise<boolean>
 ): Promise<boolean> {
-  // Why: a fixed port (a managed tunnel's) may be held by the same forward an earlier Orca
+  // Why: a fixed port (a managed tunnel's) may be held by the same forward an earlier Quirky
   // orphaned; `orphanArgs` is that forward's argv, the only process recovery may stop.
-  if (orphanArgs && (await stopOrphanedOrcaSshForward(localPort, orphanArgs))) {
+  if (orphanArgs && (await stopOrphanedQuirkySshForward(localPort, orphanArgs))) {
     return true
   }
   // Why second: a muxed forward outlives its process, so no argv on the table can match it.

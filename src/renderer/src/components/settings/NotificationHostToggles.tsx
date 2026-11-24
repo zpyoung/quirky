@@ -4,7 +4,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/colla
 import { Separator } from '../ui/separator'
 import { NotificationSettingToggle } from './NotificationSettingToggle'
 import { useNotificationSourceOptions } from './use-notification-source-options'
-import { pickerExecutionHosts } from '../../../../shared/managed-orcad-execution-host'
+import { pickerExecutionHosts } from '../../../../shared/managed-quirkyd-execution-host'
 import { translate } from '@/i18n/i18n'
 import { useBoundedHostRows } from '../host-picker/use-bounded-host-rows'
 import { HostListSearchField } from '../host-picker/HostListSearchField'

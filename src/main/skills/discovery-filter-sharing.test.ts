@@ -25,7 +25,7 @@ afterEach(() => {
 })
 
 async function fixture(task: (root: string) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-skill-name-repair-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-skill-name-repair-'))
   vi.stubEnv('HERMES_HOME', '')
   vi.stubEnv('LOCALAPPDATA', '')
   try {

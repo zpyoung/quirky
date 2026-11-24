@@ -14,7 +14,7 @@ import type { StructuredAgentSessionMutate } from './use-structured-agent-sessio
 export type StructuredAgentSessionThreadGoal = {
   goal: AgentJournalThreadGoal | null
   pending: boolean
-  /** False where only the agent's own `/goal` changes the goal: Orca sends it `/goal clear`, and
+  /** False where only the agent's own `/goal` changes the goal: Quirky sends it `/goal clear`, and
    *  the agent has no pause. */
   hostChanges: boolean
   /** Resolves false when the change was refused or not sent; the error surfaces separately. */

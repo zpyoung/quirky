@@ -1,7 +1,7 @@
 import type { StoreApi } from 'zustand/vanilla'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '@/store'
-import { ORCA_EDITOR_SAVE_AND_CLOSE_EVENT } from './editor-autosave'
+import { QUIRKY_EDITOR_SAVE_AND_CLOSE_EVENT } from './editor-autosave'
 import { attachEditorAutosaveController } from './editor-autosave-controller'
 import {
   createFakeEditorDisk,
@@ -80,7 +80,7 @@ describe('untitled note save lifecycle', () => {
       'Save in the unsaved-changes prompt',
       async (): Promise<void> => {
         window.dispatchEvent(
-          new CustomEvent(ORCA_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId: FILE_ID } })
+          new CustomEvent(QUIRKY_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId: FILE_ID } })
         )
         await vi.waitFor(() => expect(store.getState().openFiles).toHaveLength(0))
       }

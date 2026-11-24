@@ -13,7 +13,7 @@ export function createWebAppApi(): Partial<PreloadApi> {
       onProfileStateSaveDelayChanged: () => () => undefined,
       getIdentity: () =>
         Promise.resolve({
-          name: 'Orca',
+          name: 'Quirky',
           isDev: false,
           devLabel: null,
           devBranch: null,

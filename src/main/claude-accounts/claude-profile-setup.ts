@@ -23,7 +23,7 @@ export async function provisionClaudeAccountProfile(args: {
   userHome: string
   /** The user's own CLAUDE_CONFIG_DIR (see readUserClaudeConfigDir); `~/.claude` when unset. */
   userConfigDir?: string
-  /** Null when Orca's Claude hooks are turned off. Runs after the settings copy so its entries survive it. */
+  /** Null when Quirky's Claude hooks are turned off. Runs after the settings copy so its entries survive it. */
   installHooks: ((target: { configDir: string }) => AgentHookInstallStatus) | null
   platform?: NodeJS.Platform
 }): Promise<ClaudeProfileSetupReport> {

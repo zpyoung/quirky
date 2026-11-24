@@ -302,7 +302,7 @@ function renderWorkspacePane(): void {
 }
 
 function addressBar(): HTMLInputElement {
-  return document.querySelector('[data-orca-browser-address-bar]') as HTMLInputElement
+  return document.querySelector('[data-quirky-browser-address-bar]') as HTMLInputElement
 }
 
 /** The page generations the pane has attached a guest for, in call order. */

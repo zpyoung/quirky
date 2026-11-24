@@ -1,17 +1,17 @@
 import type { TuiAgent } from '../../shared/tui-agent'
 import { isTuiAgent } from '../../shared/tui-agent-config'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import type { LaunchedAgentForeground } from './launched-agent-foreground'
 
-/** A shell back at its prompt turns bracketed paste on, and Orca's shell integration marks it. */
+/** A shell back at its prompt turns bracketed paste on, and Quirky's shell integration marks it. */
 const SHELL_RETURN_MARKERS = ['\x1b[?2004', '\x1b]133;'] as const
 const MARKER_CARRY_CHARS = Math.max(...SHELL_RETURN_MARKERS.map((marker) => marker.length)) - 1
 
 export type LaunchedAgentWriteGuardRuntime = Pick<
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   'readLaunchedAgentForeground' | 'subscribeToTerminalData'
 > &
-  Partial<Pick<OrcaRuntimeService, 'launchedAgentHostProvesAgent'>>
+  Partial<Pick<QuirkyRuntimeService, 'launchedAgentHostProvesAgent'>>
 
 export type LaunchedAgentWriteGuard = {
   beforeWrite: (ptyId: string) => Promise<void>

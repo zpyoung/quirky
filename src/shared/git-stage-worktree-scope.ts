@@ -15,7 +15,7 @@ export function parseGitStageWorktreeScope(value: unknown): GitStageWorktreeScop
 }
 
 export const GIT_STAGE_WORKTREE_SCOPE_UNSUPPORTED_MESSAGE =
-  'The Orca version running this workspace cannot stage changes beyond the ones listed, so nothing was staged. Update Orca on that host, or stage from a terminal.'
+  'The Quirky version running this workspace cannot stage changes beyond the ones listed, so nothing was staged. Update Quirky on that host, or stage from a terminal.'
 
 /**
  * Why: an older host strips `scope` and stages only `filePaths`, which scoped callers send empty,
@@ -39,7 +39,7 @@ export function requireGitStageWorktreeScopeReceipt(
 type GitStageRunner = (args: string[], stdin?: string) => Promise<{ stdout: string }>
 
 export type StageGitWorktreeScopeOptions = {
-  /** Untracked paths `all` must skip: Orca's shared symlinks, already verified as symlinks. */
+  /** Untracked paths `all` must skip: Quirky's shared symlinks, already verified as symlinks. */
   excludedUntrackedPaths?: readonly string[]
 }
 

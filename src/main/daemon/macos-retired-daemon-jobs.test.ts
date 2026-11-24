@@ -1,11 +1,11 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
+import type { ProcessResult, ProcessSpec } from '@quirky/process-host/process-spec'
 import { getDaemonPidPath, getDaemonSocketPath, getDaemonTokenPath } from './daemon-spawner'
 import { PROTOCOL_VERSION } from './daemon-protocol-version'
 import { macDaemonJobLabel } from './macos-daemon-job-label'
 
 const { run } = vi.hoisted(() => ({ run: vi.fn<(spec: ProcessSpec) => Promise<ProcessResult>>() }))
-vi.mock('@orca/process-host', () => ({ runProcess: run }))
+vi.mock('@quirky/process-host', () => ({ runProcess: run }))
 import { listMacDaemonJobVersions, readMacDaemonRecoveryJob } from './macos-retired-daemon-jobs'
 
 const ok: ProcessResult = { code: 0, signal: null, stdout: '', stderr: '', timedOut: false }

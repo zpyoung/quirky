@@ -21,7 +21,7 @@ describe('task source context summary', () => {
           hostId: 'ssh:devbox',
           projectHostSetupId: 'setup-1',
           repoId: 'repo-1',
-          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
         }
       ]
     })
@@ -43,7 +43,7 @@ describe('task source context summary', () => {
           hostId: 'local',
           projectHostSetupId: 'setup-local',
           repoId: 'repo-local',
-          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' },
+          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' },
           accountLabel: 'personal-gh'
         },
         {
@@ -53,7 +53,7 @@ describe('task source context summary', () => {
           hostId: 'ssh:builder',
           projectHostSetupId: 'setup-builder',
           repoId: 'repo-builder',
-          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' },
+          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' },
           accountLabel: 'work-gh'
         }
       ]
@@ -77,7 +77,7 @@ describe('task source context summary', () => {
           projectId: 'github:stablyai/orca',
           hostId: 'ssh:devbox',
           repoId: 'repo-1',
-          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
         }
       ],
       hostAvailability: [{ hostId: 'ssh:devbox', status: 'disconnected' }]
@@ -170,7 +170,7 @@ describe('task source context summary', () => {
           projectId: 'project-a',
           hostId: 'runtime:old-server',
           repoId: 'repo-a',
-          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
         }
       ],
       hostAvailability: [{ hostId: 'runtime:old-server', health: 'blocked' }]
@@ -194,7 +194,7 @@ describe('task source context summary', () => {
           projectId: 'project-a',
           hostId: 'runtime:old-server',
           repoId: 'repo-a',
-          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
         }
       ],
       hostAvailability: [
@@ -224,7 +224,7 @@ describe('task source context summary', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3',
             repoId: 'repo-runtime',
-            providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+            providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
           }
         ],
         hostAvailability: [
@@ -344,7 +344,7 @@ describe('task source context summary', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'ssh:devbox',
             repoId: 'repo-1',
-            providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+            providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
           }
         ],
         hostAvailability: [{ hostId: 'ssh:devbox', reason: 'missing-provider-auth' }]

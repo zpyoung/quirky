@@ -155,7 +155,7 @@ export function ZcodePlanAccountsSection({
             <p className="text-xs text-muted-foreground">
               {translate(
                 'auto.components.settings.ZcodePlanAccountsSection.detailsUnavailable',
-                'Plan credential details are only readable on the computer running Orca.'
+                'Plan credential details are only readable on the computer running Quirky.'
               )}
             </p>
           ) : apiKeyConfigured ? (
@@ -192,11 +192,11 @@ export function ZcodePlanAccountsSection({
                 {hostLabel === null
                   ? translate(
                       'auto.components.settings.ZcodePlanAccountsSection.usingCliHelp',
-                      'Orca reads the selected Coding Plan from the ZCode CLI credential store on this computer. Save an API key below to link the plan here instead.'
+                      'Quirky reads the selected Coding Plan from the ZCode CLI credential store on this computer. Save an API key below to link the plan here instead.'
                     )
                   : translate(
                       'auto.components.settings.ZcodePlanAccountsSection.usingCliOnHostHelp',
-                      'Orca reads the selected Coding Plan from the ZCode CLI credential store on {{host}}. Save an API key below to link the plan there instead.',
+                      'Quirky reads the selected Coding Plan from the ZCode CLI credential store on {{host}}. Save an API key below to link the plan there instead.',
                       { host: hostLabel }
                     )}
               </p>
@@ -250,7 +250,7 @@ export function ZcodePlanAccountsSection({
         <p className="text-xs text-muted-foreground">
           {translate(
             'auto.components.settings.ZcodePlanAccountsSection.hostOnly',
-            'Change the plan site and API key in the desktop app on the computer running Orca.'
+            'Change the plan site and API key in the desktop app on the computer running Quirky.'
           )}
         </p>
       ) : null}

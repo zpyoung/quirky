@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   isWslGuestProcess,
-  isWslHostOrcadProcess,
-  ORCAD_WSL_HOST_ENV,
+  isWslHostQuirkydProcess,
+  QUIRKYD_WSL_HOST_ENV,
   parseWindowsDriveMountPoints,
   withoutWindowsDriveMountDirs
 } from './wsl-guest-windows-drive-path'
@@ -56,12 +56,14 @@ describe('Windows drive dirs on a WSL guest PATH', () => {
     expect(isWslGuestProcess({}, 'linux', () => true)).toBe(true)
   })
 
-  // Regression: SSH-managed orcad in a distro and Orca under WSLg must keep /mnt/<drive> CLIs.
-  it('filters only for an orcad Orca launched as a WSL host', () => {
+  // Regression: SSH-managed quirkyd in a distro and Quirky under WSLg must keep /mnt/<drive> CLIs.
+  it('filters only for an quirkyd Quirky launched as a WSL host', () => {
     const guest = { WSL_DISTRO_NAME: 'Ubuntu' }
-    expect(isWslHostOrcadProcess(guest, 'linux', () => true)).toBe(false)
-    expect(isWslHostOrcadProcess({ ...guest, [ORCAD_WSL_HOST_ENV]: '1' }, 'linux')).toBe(true)
-    expect(isWslHostOrcadProcess({ [ORCAD_WSL_HOST_ENV]: '1' }, 'linux', () => false)).toBe(false)
+    expect(isWslHostQuirkydProcess(guest, 'linux', () => true)).toBe(false)
+    expect(isWslHostQuirkydProcess({ ...guest, [QUIRKYD_WSL_HOST_ENV]: '1' }, 'linux')).toBe(true)
+    expect(isWslHostQuirkydProcess({ [QUIRKYD_WSL_HOST_ENV]: '1' }, 'linux', () => false)).toBe(
+      false
+    )
   })
 
   it.skipIf(process.platform === 'win32')(

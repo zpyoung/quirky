@@ -17,7 +17,7 @@ export function getSttWorkerPath(): string {
   return resolveWorkerThreadEntryPath(currentWorkerEntryLayout(__dirname), 'stt-worker.js')
 }
 
-/** The recognizer addon's directory, or null on a host that has none (an orcad slot alone). */
+/** The recognizer addon's directory, or null on a host that has none (an quirkyd slot alone). */
 export function getSherpaModulePath(): string | null {
   const nativePackage = speechRecognizerPackageName(process.platform, process.arch)
   const resourcesPath =
@@ -33,7 +33,7 @@ export function getSherpaModulePath(): string | null {
     return join(resourcesPath, 'app.asar.unpacked', 'node_modules', nativePackage)
   }
   if (getAppEnvironment().isPackaged()) {
-    // orcad: only the installed app's copy, which `orca serve` names.
+    // quirkyd: only the installed app's copy, which `quirky serve` names.
     const handed = process.env[SPEECH_RECOGNIZER_DIR_ENV]
     return handed && existsSync(join(handed, 'sherpa-onnx.node')) ? handed : null
   }

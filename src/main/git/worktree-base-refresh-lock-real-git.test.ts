@@ -23,7 +23,7 @@ async function createBehindRepoWithIndexLock(): Promise<{
   localOid: string
   remoteOid: string
 }> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-base-refresh-lock-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-base-refresh-lock-'))
   tempRoots.push(root)
   const repoPath = join(root, 'repo')
   execFileSync('git', ['init', '--quiet', repoPath])
@@ -108,7 +108,7 @@ async function createForkRepo(): Promise<{
 beforeEach(() => {
   // Why: a developer's global config (e.g. merge.verifySignatures) must not change what these repos do.
   vi.stubEnv('GIT_CONFIG_NOSYSTEM', '1')
-  vi.stubEnv('GIT_CONFIG_GLOBAL', join(tmpdir(), `orca-no-global-gitconfig-${process.pid}`))
+  vi.stubEnv('GIT_CONFIG_GLOBAL', join(tmpdir(), `quirky-no-global-gitconfig-${process.pid}`))
 })
 
 afterEach(async () => {

@@ -26,7 +26,7 @@ export function getDaemonShellReadyWrapperPaths(root: string): readonly string[]
 }
 
 // Why only .zshenv: the hook hands ZDOTDIR back on its first lines, so zsh reads
-// .zprofile, .zshrc and .zlogin from the user's own directory. Nothing Orca
+// .zprofile, .zshrc and .zlogin from the user's own directory. Nothing Quirky
 // writes is read after this file.
 export function buildDaemonShellReadyWrapperFiles(root: string): readonly ShellWrapperFile[] {
   const [zshEnvPath, zshMarkerPath, bashRcfilePath] = getDaemonShellReadyWrapperPaths(root)

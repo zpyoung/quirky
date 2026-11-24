@@ -14,7 +14,7 @@ export function getNativeFileDropRejectionMessage(data: NativeFileDropRejectedPa
       description: describeDropTempCopyFailure(data.commonReason),
       title: translate(
         'auto.hooks.useGlobalFileDrop.nativeDropTempCopyFailed',
-        "Orca couldn't copy {{count}} dropped files.",
+        "Quirky couldn't copy {{count}} dropped files.",
         { count: data.pathCount }
       )
     }
@@ -28,7 +28,7 @@ export function getNativeFileDropRejectionMessage(data: NativeFileDropRejectedPa
       ),
       title: translate(
         'auto.hooks.useGlobalFileDrop.nativeDropUnresolvedPaths',
-        "Orca couldn't read a path for the dropped files."
+        "Quirky couldn't read a path for the dropped files."
       )
     }
   }

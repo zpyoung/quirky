@@ -1,6 +1,6 @@
-import { OrcaRuntimeWithHandleMobileUnsubscribe } from './mobile-terminal-unsubscribe'
+import { QuirkyRuntimeWithHandleMobileUnsubscribe } from './mobile-terminal-unsubscribe'
 
-export abstract class OrcaRuntimeWithApplyMobileDisplayMode extends OrcaRuntimeWithHandleMobileUnsubscribe {
+export abstract class QuirkyRuntimeWithApplyMobileDisplayMode extends QuirkyRuntimeWithHandleMobileUnsubscribe {
   // Why: called when mode changes via terminal.setDisplayMode. Applies the
   // mode change immediately if there's an active subscriber, and emits a
   // 'resized' event so the mobile client can reinitialize xterm inline.

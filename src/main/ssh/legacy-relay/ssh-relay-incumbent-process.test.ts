@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createServer } from 'node:net'
 import { describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 vi.mock('../remote-exec/remote-exec-command', async (importOriginal) => ({
   ...(await importOriginal<typeof ExecCommandModule>()),
   execCommand: vi.fn()
@@ -16,7 +16,7 @@ import {
 } from './ssh-relay-endpoint-incumbent'
 
 async function probe(script: string, listening = false) {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-incumbent-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-incumbent-'))
   const socket = join(dir, 'socket with spaces.sock')
   const server = createServer((s) => s.end())
   const pidFile = join(dir, 'probe.pid')

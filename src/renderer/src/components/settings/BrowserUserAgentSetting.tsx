@@ -76,7 +76,7 @@ export function BrowserUserAgentSetting({
       <span className="text-xs text-muted-foreground">
         {translate(
           'settings.browser.userAgent.remoteUnsupported',
-          'Manage browser identity on the remote host with the Orca CLI.'
+          'Manage browser identity on the remote host with the Quirky CLI.'
         )}
       </span>
     )
@@ -88,7 +88,7 @@ export function BrowserUserAgentSetting({
     )
   } else if (status.identity.configuredMode === null) {
     // Why the command is named here: this state deliberately exposes no reset control, because the
-    // reset overwrites data that may belong to a newer Orca. Without naming the escape the message
+    // reset overwrites data that may belong to a newer Quirky. Without naming the escape the message
     // tells the user their data must be reset and then offers no way to do it.
     control = (
       <div className="space-y-1 text-right">
@@ -101,7 +101,7 @@ export function BrowserUserAgentSetting({
         <div className="text-[11px] text-muted-foreground">
           {translate(
             'settings.browser.userAgent.resetRequiredCommand',
-            'Reset it from the command line: orca browser identity set --mode <mode> --reset'
+            'Reset it from the command line: quirky browser identity set --mode <mode> --reset'
           )}
         </div>
       </div>
@@ -121,7 +121,7 @@ export function BrowserUserAgentSetting({
               label: translate('settings.browser.userAgent.optionClean', 'Cleaned'),
               tooltip: translate(
                 'settings.browser.userAgent.optionCleanTooltip',
-                'Removes Orca and Electron tokens to match imported Chrome sessions.'
+                'Removes Quirky and Electron tokens to match imported Chrome sessions.'
               )
             },
             {

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../shared/protocol-version'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import { OrchestrationDb } from '../orchestration/db'
 import { defineMethod, type RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
@@ -42,7 +42,7 @@ describe('durable orchestration mutation ledger', () => {
 
   function createHarness(dbPath: (string & {}) | ':memory:' = ':memory:') {
     const db = new OrchestrationDb(dbPath)
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     const effect = vi.fn((subject: string) =>
       db.insertMessage({ runId: 'run_legacy_local', from: 'caller', to: 'recipient', subject })
@@ -142,7 +142,7 @@ describe('durable orchestration mutation ledger', () => {
 
   it('joins concurrent identical mutations', async () => {
     const db = new OrchestrationDb(':memory:')
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     let release: (() => void) | undefined
     const gate = new Promise<void>((resolve) => {
@@ -179,7 +179,7 @@ describe('durable orchestration mutation ledger', () => {
   })
 
   it('replays a completed receipt after database and dispatcher restart', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-mutation-ledger-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-mutation-ledger-'))
     paths.push(dir)
     const dbPath = join(dir, 'orchestration.db')
     const first = createHarness(dbPath)
@@ -201,7 +201,7 @@ describe('durable orchestration mutation ledger', () => {
   })
 
   it('replays a local mutation after runtime authentication rotates', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-mutation-ledger-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-mutation-ledger-'))
     paths.push(dir)
     const dbPath = join(dir, 'orchestration.db')
     const firstRuntime = createHarness(dbPath)
@@ -252,7 +252,7 @@ describe('durable orchestration mutation ledger', () => {
 
   it('resumes a pending idempotent worker release after restart', async () => {
     const db = new OrchestrationDb(':memory:')
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     const params = { dispatch: 'ctx_release' }
     const callerFingerprint = db.getOrCreateLocalMutationCallerFingerprint()
@@ -301,7 +301,7 @@ describe('durable orchestration mutation ledger', () => {
 
   it('returns the accepted Dispatch when worker-start was interrupted by restart', async () => {
     const db = new OrchestrationDb(':memory:')
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     const params = {
       from: 'term_coord',
@@ -352,7 +352,7 @@ describe('durable orchestration mutation ledger', () => {
         data: {
           requestId: 'mutation_worker_start',
           dispatchId: started.dispatch.id,
-          recoveryCommand: `orca orchestration worker-show --dispatch ${started.dispatch.id} --json`
+          recoveryCommand: `quirky orchestration worker-show --dispatch ${started.dispatch.id} --json`
         }
       }
     })
@@ -361,11 +361,11 @@ describe('durable orchestration mutation ledger', () => {
   })
 
   it('recovers a lost ask acceptance without creating a second question', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-mutation-ask-recovery-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-mutation-ask-recovery-'))
     paths.push(dir)
     const dbPath = join(dir, 'orchestration.db')
     const db = new OrchestrationDb(dbPath)
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     vi.spyOn(runtime, 'getTerminalPaneKey').mockReturnValue('tab_worker:leaf_worker')
     vi.spyOn(runtime, 'getTerminalProcessIncarnation').mockReturnValue('runtime:pty:1')
@@ -404,7 +404,7 @@ describe('durable orchestration mutation ledger', () => {
     await vi.waitFor(() => expect(db.getInbox(10)).toHaveLength(1))
 
     const restartedDb = new OrchestrationDb(dbPath)
-    const restartedRuntime = new OrcaRuntimeService()
+    const restartedRuntime = new QuirkyRuntimeService()
     restartedRuntime.setOrchestrationDb(restartedDb)
     vi.spyOn(restartedRuntime, 'getTerminalPaneKey').mockReturnValue('tab_worker:leaf_worker')
     vi.spyOn(restartedRuntime, 'getTerminalProcessIncarnation').mockReturnValue('runtime:pty:1')

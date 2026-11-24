@@ -41,9 +41,9 @@ describe('timing-weighted shard selection', () => {
   })
 
   it('uses the post-filter Vitest discovery unchanged across eight shards', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-unit-shards-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-unit-shards-'))
     directories.push(directory)
-    vi.stubEnv('ORCA_SHARD_MANIFEST', join(directory, 'assignment.json'))
+    vi.stubEnv('QUIRKY_SHARD_MANIFEST', join(directory, 'assignment.json'))
     const specs = Array.from({ length: 37 }, (_, i) => ({
       moduleId: resolve(`src/fixture-${i}.test.ts`)
     }))
@@ -64,7 +64,7 @@ describe('timing-weighted shard selection', () => {
   })
 
   it('keeps global sharding and isolates measurements after ordinary projects', async () => {
-    vi.stubEnv('ORCA_BALANCE_UNIT_SHARDS', '1')
+    vi.stubEnv('QUIRKY_BALANCE_UNIT_SHARDS', '1')
     const { default: config } = await import('../vitest.config')
     expect(config.test.sequence.sequencer).toBe(TimingSequencer)
     expect(config.test.maxWorkers).toBe(process.platform === 'win32' ? 4 : undefined)
@@ -85,7 +85,7 @@ describe('timing-weighted shard selection', () => {
       exclude: UNIT_EXCLUDE,
       maxWorkers: 1,
       sequence: { groupOrder: 2 },
-      env: { ORCA_VITEST_RUNTIME: process.versions.bun ? 'node-runtime' : 'node' },
+      env: { QUIRKY_VITEST_RUNTIME: process.versions.bun ? 'node-runtime' : 'node' },
       pool: process.versions.bun ? 'node-runtime' : 'forks'
     })
     expect(measurement[0].test.poolRunner).toBe(process.versions.bun ? nodeRuntimePool : undefined)
@@ -95,7 +95,7 @@ describe('timing-weighted shard selection', () => {
       exclude: UNIT_EXCLUDE,
       maxWorkers: 1,
       sequence: { groupOrder: 3 },
-      env: { ORCA_VITEST_RUNTIME: process.versions.bun ? 'bun' : 'node' },
+      env: { QUIRKY_VITEST_RUNTIME: process.versions.bun ? 'bun' : 'node' },
       pool: 'forks'
     })
     expect(paletteMeasurement[0].test.poolRunner).toBeUndefined()
@@ -120,11 +120,11 @@ describe('timing-weighted shard selection', () => {
   it.each([
     { name: 'absent', path: undefined, enabled: false },
     { name: 'empty', path: '', enabled: false },
-    { name: 'explicit', path: join(tmpdir(), 'orca-unit-cache-experiment'), enabled: true }
+    { name: 'explicit', path: join(tmpdir(), 'quirky-unit-cache-experiment'), enabled: true }
   ])(
     'uses persistent transforms only with an explicit cache path ($name)',
     async ({ path, enabled }) => {
-      vi.stubEnv('ORCA_UNIT_MODULE_CACHE_PATH', path)
+      vi.stubEnv('QUIRKY_UNIT_MODULE_CACHE_PATH', path)
       vi.resetModules()
       const { default: config } = await import('../vitest.config')
       for (const test of [config.test, ...config.test.projects.map((project) => project.test)]) {
@@ -170,14 +170,14 @@ describe('timing-weighted shard selection', () => {
           specs: [
             spec('general', 'general.spec.ts'),
             spec('layout', 'workspace-layout-oracle-headless.spec.ts'),
-            spec('ssh', 'ssh-orcad-terminal.spec.ts')
+            spec('ssh', 'ssh-quirkyd-terminal.spec.ts')
           ]
         }
       ]
     }
     expect(Object.keys(discoverE2eFiles(report))).toEqual([
       'general.spec.ts',
-      'ssh-orcad-terminal.spec.ts',
+      'ssh-quirkyd-terminal.spec.ts',
       'workspace-layout-oracle-headless.spec.ts'
     ])
     const assignment = { ...planE2e(report, 1, { timings: {} }), selectedShard: 1 }

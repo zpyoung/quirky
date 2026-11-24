@@ -26,7 +26,7 @@ describe('CommandCodeHookService', () => {
   let homeDir: string
 
   beforeEach(() => {
-    homeDir = mkdtempSync(join(tmpdir(), 'orca-command-code-home-'))
+    homeDir = mkdtempSync(join(tmpdir(), 'quirky-command-code-home-'))
     homedirMock.mockReturnValue(homeDir)
   })
 
@@ -53,12 +53,12 @@ describe('CommandCodeHookService', () => {
     expect(config.hooks.PreToolUse[0].hooks[0].command).toMatch(
       process.platform === 'win32'
         ? wrapWindowsBatchHookCommand(
-            join(homeDir, '.orca', 'agent-hooks', 'command-code-hook.cmd')
+            join(homeDir, '.quirky', 'agent-hooks', 'command-code-hook.cmd')
           )
         : /command-code-hook/
     )
     if (process.platform !== 'win32') {
-      expect(config.hooks.PreToolUse[0].hooks[0].command).toContain(join(homeDir, '.orca'))
+      expect(config.hooks.PreToolUse[0].hooks[0].command).toContain(join(homeDir, '.quirky'))
     }
     if (process.platform !== 'win32') {
       expect(config.hooks.PreToolUse[0].hooks[0].command).toMatch(/^if \[ -f /)
@@ -71,7 +71,7 @@ describe('CommandCodeHookService', () => {
     try {
       expect(new CommandCodeHookService().install().state).toBe('installed')
       const command = wrapWindowsBatchHookCommand(
-        join(homeDir, '.orca', 'agent-hooks', 'command-code-hook.cmd')
+        join(homeDir, '.quirky', 'agent-hooks', 'command-code-hook.cmd')
       )
       const config = JSON.parse(
         readFileSync(join(homeDir, '.commandcode', 'settings.json'), 'utf8')
@@ -89,19 +89,19 @@ describe('CommandCodeHookService', () => {
 
     const scriptFileName =
       process.platform === 'win32' ? 'command-code-hook.cmd' : 'command-code-hook.sh'
-    const script = readFileSync(join(homeDir, '.orca', 'agent-hooks', scriptFileName), 'utf8')
+    const script = readFileSync(join(homeDir, '.quirky', 'agent-hooks', scriptFileName), 'utf8')
 
     if (process.platform === 'win32') {
       expect(script).toContain('sourceEndpointByPort')
-      expect(script).toContain('orca-dev\\agent-hooks')
-      expect(script).toContain('set ORCA_AGENT_HOOK_PORT=')
+      expect(script).toContain('quirky-dev\\agent-hooks')
+      expect(script).toContain('set QUIRKY_AGENT_HOOK_PORT=')
     } else {
-      expect(script).toContain('__orca_read_ancestor_var')
-      expect(script).toContain('__orca_fill_from_endpoint_file')
-      expect(script).toContain('[ "$__orca_endpoint_port" != "$ORCA_AGENT_HOOK_PORT" ]')
-      expect(script).toContain('ORCA_PANE_KEY')
-      expect(script).toContain('ORCA_AGENT_LAUNCH_TOKEN')
-      expect(script).toContain('orca-dev/agent-hooks')
+      expect(script).toContain('__quirky_read_ancestor_var')
+      expect(script).toContain('__quirky_fill_from_endpoint_file')
+      expect(script).toContain('[ "$__quirky_endpoint_port" != "$QUIRKY_AGENT_HOOK_PORT" ]')
+      expect(script).toContain('QUIRKY_PANE_KEY')
+      expect(script).toContain('QUIRKY_AGENT_LAUNCH_TOKEN')
+      expect(script).toContain('quirky-dev/agent-hooks')
       expect(script).toContain('endpoint_port=')
     }
   })
@@ -115,10 +115,10 @@ describe('CommandCodeHookService', () => {
     writeFileSync(
       staleEndpointPath,
       [
-        'ORCA_AGENT_HOOK_PORT=9',
-        'ORCA_AGENT_HOOK_TOKEN=stale-token',
-        'ORCA_AGENT_HOOK_ENV=development',
-        'ORCA_AGENT_HOOK_VERSION=1',
+        'QUIRKY_AGENT_HOOK_PORT=9',
+        'QUIRKY_AGENT_HOOK_TOKEN=stale-token',
+        'QUIRKY_AGENT_HOOK_ENV=development',
+        'QUIRKY_AGENT_HOOK_VERSION=1',
         ''
       ].join('\n')
     )
@@ -133,7 +133,7 @@ describe('CommandCodeHookService', () => {
       req.on('end', () => {
         requests.push({
           body,
-          token: req.headers['x-orca-agent-hook-token']
+          token: req.headers['x-quirky-agent-hook-token']
         })
         res.statusCode = 204
         res.end()
@@ -143,19 +143,19 @@ describe('CommandCodeHookService', () => {
     try {
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
       const address = server.address() as AddressInfo
-      const scriptPath = join(homeDir, '.orca', 'agent-hooks', 'command-code-hook.sh')
+      const scriptPath = join(homeDir, '.quirky', 'agent-hooks', 'command-code-hook.sh')
       const child = spawn('/bin/sh', [scriptPath], {
         env: {
           ...process.env,
           HOME: homeDir,
-          ORCA_AGENT_HOOK_ENDPOINT: staleEndpointPath,
-          ORCA_AGENT_HOOK_PORT: String(address.port),
-          ORCA_AGENT_HOOK_TOKEN: 'current-token',
-          ORCA_PANE_KEY: 'tab:leaf',
-          ORCA_TAB_ID: 'tab',
-          ORCA_WORKTREE_ID: 'worktree',
-          ORCA_AGENT_HOOK_ENV: 'development',
-          ORCA_AGENT_HOOK_VERSION: '1'
+          QUIRKY_AGENT_HOOK_ENDPOINT: staleEndpointPath,
+          QUIRKY_AGENT_HOOK_PORT: String(address.port),
+          QUIRKY_AGENT_HOOK_TOKEN: 'current-token',
+          QUIRKY_PANE_KEY: 'tab:leaf',
+          QUIRKY_TAB_ID: 'tab',
+          QUIRKY_WORKTREE_ID: 'worktree',
+          QUIRKY_AGENT_HOOK_ENV: 'development',
+          QUIRKY_AGENT_HOOK_VERSION: '1'
         },
         stdio: ['pipe', 'ignore', 'pipe']
       })

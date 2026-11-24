@@ -4,7 +4,7 @@ import { reexecHeadlessServeOnX11IfNeeded } from './headless-serve-x11-reexec'
 
 vi.mock('electron', () => ({ app: { commandLine: { getSwitchValue: () => 'wayland' } } }))
 
-const EXEC_PATH = '/opt/Orca/orca-ide'
+const EXEC_PATH = '/opt/Quirky/quirky-ide'
 
 /**
  * Electron's pre-main `--ozone-platform-hint=auto` resolution, verified against Electron 43 on
@@ -99,7 +99,7 @@ describe('reexecHeadlessServeOnX11IfNeeded', () => {
 
   it('keeps the pid, env and argv order, with the switch ahead of a `--` terminator', () => {
     const execve = vi.fn()
-    const env = { XDG_SESSION_TYPE: 'wayland', HOME: '/home/orca' }
+    const env = { XDG_SESSION_TYPE: 'wayland', HOME: '/home/quirky' }
     reexecHeadlessServeOnX11IfNeeded({
       isServeMode: true,
       readResolvedOzonePlatform: () => 'wayland',

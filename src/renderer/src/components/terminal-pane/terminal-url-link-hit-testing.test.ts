@@ -33,11 +33,11 @@ describe('extractTerminalHttpLinks', () => {
   it('scans large pasted terminal lines without regex match iteration', () => {
     const matchAllSpy = vi.spyOn(String.prototype, 'matchAll')
     const pastedPrefix = 'pasted terminal noise '.repeat(10_000)
-    const line = `${pastedPrefix}https://example.com/docs?q=orca.`
+    const line = `${pastedPrefix}https://example.com/docs?q=quirky.`
 
     expect(extractTerminalHttpLinks(line)).toEqual([
       {
-        url: 'https://example.com/docs?q=orca',
+        url: 'https://example.com/docs?q=quirky',
         startIndex: pastedPrefix.length,
         endIndex: line.length - 1
       }

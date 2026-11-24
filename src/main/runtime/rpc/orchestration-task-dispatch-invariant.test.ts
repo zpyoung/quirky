@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../shared/protocol-version'
 import Database from '../../sqlite/sync-database'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import { OrchestrationDb } from '../orchestration/db'
 import type { RpcRequest, RpcResponse } from './core'
 import { RpcDispatcher } from './dispatcher'
@@ -213,11 +213,11 @@ describe('Task/Dispatch state invariant', () => {
 })
 
 function createHarness(): Harness {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-task-dispatch-invariant-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-task-dispatch-invariant-'))
   const dbPath = join(dir, 'orchestration.db')
   tempDirs.push(dir)
   const db = new OrchestrationDb(dbPath)
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   runtime.setOrchestrationDb(db)
   vi.spyOn(runtime, 'getTerminalPaneKey').mockImplementation((handle) => {
     if (handle === COORDINATOR_HANDLE) {

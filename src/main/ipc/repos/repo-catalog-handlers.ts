@@ -7,14 +7,14 @@ import {
   normalizeExecutionHostId,
   parseExecutionHostId
 } from '../../../shared/execution-host'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { enrichRepoGitUsernames } from '../../repo-git-username-enrichment'
 import { enrichMissingRepoGitRemoteIdentities } from '../../repo-git-remote-identity-enrichment'
 import { invalidateAuthorizedRootsCache } from '../registered-worktree-roots-cache'
 import { notifyReposChanged } from './repos-changed-notification'
 import { scheduleCurrentWorktreeBaseDirectoryWatcherSync } from '../worktree-base-directory-watcher'
 import { ProjectUpdateIpcArgs, parseProjectGroupIpcArgs } from './repo-ipc-arg-schemas'
-import { visibleProjectHostSetups, visibleRepos } from '../../ssh/orcad-retained-source'
+import { visibleProjectHostSetups, visibleRepos } from '../../ssh/quirkyd-retained-source'
 import {
   assertWslMoveProjectWritable,
   assertWslMoveReposWritable,
@@ -25,7 +25,7 @@ import { withLedgerErrorCode } from './ledger-removal-guard'
 export function registerRepoCatalogHandlers(
   mainWindow: BrowserWindow,
   store: Store,
-  runtime: Pick<OrcaRuntimeService, 'removeProject'>
+  runtime: Pick<QuirkyRuntimeService, 'removeProject'>
 ): void {
   // Why one shared reference: enrichment dedupes coalesced callers by callback identity, so a fresh
   // closure per list call would stack up (and re-broadcast) for the length of a slow sweep.

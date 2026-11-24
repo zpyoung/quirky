@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 
 const { runProcessMock } = vi.hoisted(() => ({ runProcessMock: vi.fn() }))
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 
 import { readMacosBundleId, resetMacosTccPermission } from './macos-tcc-reset'
 
@@ -25,13 +25,13 @@ beforeEach(() => {
 
 describe('readMacosBundleId', () => {
   it('reads CFBundleIdentifier out of the bundle’s Info.plist', async () => {
-    runProcessMock.mockResolvedValue(processResult({ stdout: 'com.stablyai.orca\n' }))
+    runProcessMock.mockResolvedValue(processResult({ stdout: 'com.zpyoung.quirky\n' }))
 
-    await expect(readMacosBundleId('/Applications/Orca.app')).resolves.toBe('com.stablyai.orca')
+    await expect(readMacosBundleId('/Applications/Quirky.app')).resolves.toBe('com.zpyoung.quirky')
     expect(runProcessMock).toHaveBeenCalledWith(
       expect.objectContaining({
         program: '/usr/libexec/PlistBuddy',
-        args: ['-c', 'Print :CFBundleIdentifier', '/Applications/Orca.app/Contents/Info.plist']
+        args: ['-c', 'Print :CFBundleIdentifier', '/Applications/Quirky.app/Contents/Info.plist']
       })
     )
   })
@@ -42,13 +42,13 @@ describe('readMacosBundleId', () => {
   ])('returns null on %s', async (_label, result) => {
     runProcessMock.mockResolvedValue(result)
 
-    await expect(readMacosBundleId('/Applications/Orca.app')).resolves.toBeNull()
+    await expect(readMacosBundleId('/Applications/Quirky.app')).resolves.toBeNull()
   })
 
   it('returns null rather than throwing when PlistBuddy cannot be started', async () => {
     runProcessMock.mockRejectedValue(new Error('ENOENT'))
 
-    await expect(readMacosBundleId('/Applications/Orca.app')).resolves.toBeNull()
+    await expect(readMacosBundleId('/Applications/Quirky.app')).resolves.toBeNull()
   })
 })
 
@@ -57,12 +57,12 @@ describe('resetMacosTccPermission', () => {
     runProcessMock.mockResolvedValue(processResult({}))
 
     await expect(
-      resetMacosTccPermission('SystemPolicyDocumentsFolder', 'com.stablyai.orca')
+      resetMacosTccPermission('SystemPolicyDocumentsFolder', 'com.zpyoung.quirky')
     ).resolves.toEqual({ ok: true })
     expect(runProcessMock).toHaveBeenCalledWith(
       expect.objectContaining({
         program: '/usr/bin/tccutil',
-        args: ['reset', 'SystemPolicyDocumentsFolder', 'com.stablyai.orca']
+        args: ['reset', 'SystemPolicyDocumentsFolder', 'com.zpyoung.quirky']
       })
     )
   })
@@ -96,7 +96,7 @@ describe('resetMacosTccPermission', () => {
     runProcessMock.mockResolvedValue(result)
 
     await expect(
-      resetMacosTccPermission('SystemPolicyDownloadsFolder', 'com.stablyai.orca')
+      resetMacosTccPermission('SystemPolicyDownloadsFolder', 'com.zpyoung.quirky')
     ).resolves.toEqual({ ok: false, detail })
   })
 
@@ -104,7 +104,7 @@ describe('resetMacosTccPermission', () => {
     runProcessMock.mockRejectedValue(new Error('EACCES'))
 
     await expect(
-      resetMacosTccPermission('SystemPolicyDocumentsFolder', 'com.stablyai.orca')
+      resetMacosTccPermission('SystemPolicyDocumentsFolder', 'com.zpyoung.quirky')
     ).resolves.toEqual({ ok: false, detail: 'EACCES' })
   })
 })

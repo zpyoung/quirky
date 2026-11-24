@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { parseProcessTable, type ProcessTableRow } from '../pty-process-table-parser'
 
 const PROCESS_ROW_TIMEOUT_MS = 2_000

@@ -50,14 +50,14 @@ describe('mobile session route', () => {
     expect(
       mobileSessionRouteTarget({
         hostId: 'host/one',
-        worktreeId: 'repo::/Users/ada/orca/workspaces/fix #1',
+        worktreeId: 'repo::/Users/ada/quirky/workspaces/fix #1',
         name: 'Fix #1'
       })
     ).toEqual({
       name: '[hostId]/session/[worktreeId]',
       params: {
         hostId: 'host/one',
-        worktreeId: 'repo::/Users/ada/orca/workspaces/fix #1',
+        worktreeId: 'repo::/Users/ada/quirky/workspaces/fix #1',
         name: 'Fix #1'
       }
     })
@@ -74,7 +74,7 @@ describe('mobile session route', () => {
     const push = vi.fn()
     const target = mobileSessionRouteTarget({
       hostId: 'host/one',
-      worktreeId: 'repo::/Users/ada/orca/workspaces/fix #1',
+      worktreeId: 'repo::/Users/ada/quirky/workspaces/fix #1',
       name: 'Fix #1'
     })
 

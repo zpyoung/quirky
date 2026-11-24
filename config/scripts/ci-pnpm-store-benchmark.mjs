@@ -14,7 +14,7 @@ import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { parseArgs } from 'node:util'
 import { resolvePnpmCliInvocation } from './pnpm-cli-invocation.mjs'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { workspacePackageManifests } from './workspace-source-exports.mjs'
 
 const { values } = parseArgs({
@@ -23,7 +23,7 @@ const { values } = parseArgs({
 const samples = Number(values.samples)
 assert(Number.isInteger(samples) && samples > 0 && samples <= 10, '--samples must be 1–10')
 const repository = resolve(import.meta.dirname, '../..')
-const temporary = mkdtempSync(join(tmpdir(), 'orca-ci-pnpm-store-'))
+const temporary = mkdtempSync(join(tmpdir(), 'quirky-ci-pnpm-store-'))
 const checkout = join(temporary, 'checkout')
 const store = join(temporary, 'store')
 const archive = join(temporary, 'store.tar.zst')
@@ -45,7 +45,7 @@ function command(program, args, cwd = checkout) {
     program,
     args,
     cwd,
-    env: { ...process.env, CI: 'true', ORCA_BACKGROUND_LAUNCH: '1' },
+    env: { ...process.env, CI: 'true', QUIRKY_BACKGROUND_LAUNCH: '1' },
     timeoutMs: 300_000
   })
   assert.equal(result.code, 0, `${program}: ${result.stdout}\n${result.stderr}`)

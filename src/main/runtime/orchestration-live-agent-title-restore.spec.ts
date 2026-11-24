@@ -23,7 +23,7 @@ describe('neutral title while the hook-owned agent process is alive', () => {
 
   it('restores the idle agent and delivers mail without a foreground read', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-live-agent-title-restore-')
+    const db = createDatabase('quirky-live-agent-title-restore-')
     const hook: AgentStatusIpcPayload = {
       paneKey: PANE_KEY,
       terminalHandle: TERMINAL_HANDLE,

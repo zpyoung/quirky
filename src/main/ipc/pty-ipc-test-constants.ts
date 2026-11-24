@@ -13,20 +13,20 @@ export type PlatformGatedTest = (
 export const isWindowsHost = process.platform === 'win32'
 export const posixOnlyIt: PlatformGatedTest = isWindowsHost ? it.skip : it
 export const TEST_MANAGED_ROOT = isWindowsHost ? 'C:\\managed' : '/managed'
-export const BUNDLED_RESOURCES_PATH = join('/tmp', 'orca-bundled-resources')
+export const BUNDLED_RESOURCES_PATH = join('/tmp', 'quirky-bundled-resources')
 // Why: this suite forces darwin before every test, including on Linux CI.
 export const BUNDLED_CLI_PATH = getBundledLauncherPath('darwin', BUNDLED_RESOURCES_PATH) as string
 // Why: bare shells no longer mkdir ~/.omp; OMP status lives under userData (#10196).
 export const expectedOmpStatusExtension = posix.join(
-  '/tmp/orca-user-data',
+  '/tmp/quirky-user-data',
   'omp-managed-status-extension',
-  'orca-agent-status.ts'
+  'quirky-agent-status.ts'
 )
 
 export const TEST_CODEX_HOME =
   process.platform === 'win32'
-    ? 'C:\\Users\\test\\AppData\\Roaming\\orca\\codex-runtime-home\\home'
-    : '/tmp/orca-codex-home'
+    ? 'C:\\Users\\test\\AppData\\Roaming\\quirky\\codex-runtime-home\\home'
+    : '/tmp/quirky-codex-home'
 export const TEST_CODEX_AUTH_JSON = JSON.stringify({
   tokens: {
     access_token: 'access',

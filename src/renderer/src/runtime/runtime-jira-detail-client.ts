@@ -82,7 +82,7 @@ export async function jiraUpdateIssueForTarget(
     await assertRuntimeEnvironmentCapability(
       target.environmentId,
       JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY,
-      'Update the remote Orca server to submit required transition fields, or complete the transition in Jira.'
+      'Update the remote Quirky server to submit required transition fields, or complete the transition in Jira.'
     )
   }
   const args = { key, updates, siteId: siteId ?? undefined }

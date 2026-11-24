@@ -107,7 +107,7 @@ describe('daemon-init: macOS stable-bundle launch fallback', () => {
     if (stableLaunch.failure === 'real') {
       // The real launcher only runs from a packaged app.
       isPackagedMock.mockReturnValue(true)
-      getAppPathMock.mockReturnValue('/Applications/Orca.app/Contents/Resources/app.asar')
+      getAppPathMock.mockReturnValue('/Applications/Quirky.app/Contents/Resources/app.asar')
     }
     checkDaemonHealthMock.mockResolvedValue('unreachable')
     await mod.initDaemonPtyProvider(undefined, { macosLoginSessionWatch: true })

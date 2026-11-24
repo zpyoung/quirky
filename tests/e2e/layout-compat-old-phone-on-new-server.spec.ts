@@ -1,5 +1,5 @@
 /**
- * Layout rework P3 baseline: an old phone paired straight to the current `orca serve`. Not the
+ * Layout rework P3 baseline: an old phone paired straight to the current `quirky serve`. Not the
  * released app: a capability-list client that advertises mobile-android-v0.0.52's capabilities
  * and sends that release's request shapes. It creates, activates, renames, focuses and closes
  * terminals (one of them pinned on the host), opens a file, and reads its own selection again
@@ -8,7 +8,7 @@
  */
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { pairMobileClient, type PairedMobileClient } from './helpers/paired-mobile-client'
 import {
@@ -47,7 +47,7 @@ const OLD_PHONE_CAPABILITIES: readonly RuntimeCapability[] = [
 
 // A layout-owner build's main opens the file itself, so the open succeeds and the tab is listed.
 const LAYOUT_OWNER_BUILD = existsSync(
-  path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')
+  path.join(process.cwd(), 'out', 'main', 'QUIRKY_LAYOUT_OWNER_MAIN')
 )
 
 // Set until the restarted host hears from its paired hosts, or a deadline passes: timing, not shape.

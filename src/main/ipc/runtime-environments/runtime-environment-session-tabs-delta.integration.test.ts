@@ -11,8 +11,8 @@ import {
   resolveEnvironment
 } from '../../../shared/runtime-environment-store'
 import { getPreferredPairedRuntimeConnection } from '../../../shared/runtime-environments'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
-import { OrcaRuntimeRpcServer } from '../../runtime/runtime-rpc'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
+import { QuirkyRuntimeRpcServer } from '../../runtime/runtime-rpc'
 import { makeStore, SESSION_WORKTREE_ID } from '../../runtime/paired-client-navigation-test-harness'
 import { resetSharedControlSupport } from './runtime-environment-shared-control-support'
 import { subscribeRuntimeEnvironment } from './runtime-environment-transport-routing'
@@ -29,7 +29,7 @@ afterEach(async () => {
   }
 })
 
-function publish(runtime: OrcaRuntimeService, snapshotVersion: number, changedTab: number): void {
+function publish(runtime: QuirkyRuntimeService, snapshotVersion: number, changedTab: number): void {
   const tabs = Array.from({ length: TABS }, (_, index) => ({
     type: 'terminal' as const,
     id: `tab-${index}`,
@@ -77,16 +77,16 @@ function recorder(): Received & { onResponse: (response: RuntimeRpcResponse<unkn
 describe('session.tabs tab delta across mixed client versions', () => {
   it('serves an old desktop full frames and a new desktop the same frames from deltas', async () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared paired-client harness store covers every store read this host makes.
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    const runtime = new QuirkyRuntimeService(makeStore() as never)
     runtime.attachWindow(1)
     runtime.markGraphReady(1)
     publish(runtime, 1, -1)
     for (let index = 0; index < TABS; index += 1) {
       runtime.registerPty(`pty-${index + 1}`, SESSION_WORKTREE_ID)
     }
-    const hostDataPath = mkdtempSync(join(tmpdir(), 'orca-tab-delta-host-'))
+    const hostDataPath = mkdtempSync(join(tmpdir(), 'quirky-tab-delta-host-'))
     cleanups.push(() => rmSync(hostDataPath, { recursive: true, force: true }))
-    const server = new OrcaRuntimeRpcServer({
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
       userDataPath: hostDataPath,
       enableWebSocket: true,
@@ -100,7 +100,7 @@ describe('session.tabs tab delta across mixed client versions', () => {
       if (!offer.available) {
         throw new Error('pairing_unavailable')
       }
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-tab-delta-client-'))
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-tab-delta-client-'))
       cleanups.push(() => rmSync(userDataPath, { recursive: true, force: true }))
       const { id } = addEnvironmentFromPairingCode(userDataPath, {
         name,

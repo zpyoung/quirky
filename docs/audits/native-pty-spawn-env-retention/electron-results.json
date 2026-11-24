@@ -129,7 +129,7 @@
           "sha256": "df3ad7d74ff4048999231492aab490336078b915e9033cab77ab9e51b14c062f"
         },
         {
-          "path": "src/shared/orca-cli-command-name.ts",
+          "path": "src/shared/quirky-cli-command-name.ts",
           "sha256": "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0"
         },
         {
@@ -352,7 +352,7 @@
           "sha256": "df3ad7d74ff4048999231492aab490336078b915e9033cab77ab9e51b14c062f"
         },
         {
-          "path": "src/shared/orca-cli-command-name.ts",
+          "path": "src/shared/quirky-cli-command-name.ts",
           "sha256": "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0"
         },
         {

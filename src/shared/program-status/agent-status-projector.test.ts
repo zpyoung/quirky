@@ -16,7 +16,7 @@ function projector() {
 }
 
 describe('createProgramStatusProjector', () => {
-  it('maps a Claude Code turn onto Orca agent states', () => {
+  it('maps a Claude Code turn onto Quirky agent states', () => {
     const { feed, tick } = projector()
     expect(feed(osc('state=idle:app=claude-code'))).toEqual([
       {
@@ -129,7 +129,7 @@ describe('createProgramStatusProjector', () => {
     expect(feed(osc('state=clear'))).toEqual([])
   })
 
-  it("maps harness app ids onto Orca's agent ids so hook precedence can match them", () => {
+  it("maps harness app ids onto Quirky's agent ids so hook precedence can match them", () => {
     const { feed } = projector()
     expect(feed(osc('state=working:app=grok-build'))).toMatchObject([{ agentType: 'grok' }])
     expect(feed(osc('state=done:app=terraform'))).toMatchObject([{ agentType: 'terraform' }])

@@ -3,11 +3,11 @@
 import { SHELL_STARTUP_FEATURE_ENV } from './shell-startup-features'
 import { POSIX_SHELL_STARTUP_COMMAND_ENV } from './pty/posix-shell-startup-command'
 
-/** Basename of the file every Orca-generated zsh wrapper dir is stamped with. */
-export const ZSH_WRAPPER_DIR_MARKER_FILE = '.orca-shell-wrapper'
+/** Basename of the file every Quirky-generated zsh wrapper dir is stamped with. */
+export const ZSH_WRAPPER_DIR_MARKER_FILE = '.quirky-shell-wrapper'
 
-export const ZSH_WRAPPER_DIR_MARKER_CONTENT = `# Orca-generated zsh startup wrapper directory.
-# Its presence is how Orca recognises its own wrapper dir instead of treating it
+export const ZSH_WRAPPER_DIR_MARKER_CONTENT = `# Quirky-generated zsh startup wrapper directory.
+# Its presence is how Quirky recognises its own wrapper dir instead of treating it
 # as the user's ZDOTDIR. Do not edit; the whole directory is regenerated.
 `
 
@@ -15,31 +15,31 @@ export const ZSH_WRAPPER_DIR_MARKER_CONTENT = `# Orca-generated zsh startup wrap
  * The first executable lines of every zsh wrapper: read the feature allowlist,
  * then destroy the variable.
  *
- * Why destroy it here: `_orca_shell_features` is a plain (non-exported) shell
+ * Why destroy it here: `_quirky_shell_features` is a plain (non-exported) shell
  * variable, so it survives .zshenv -> .zprofile -> .zshrc -> .zlogin in this
  * process but physically cannot reach a child. Unsetting before the user's own
  * .zshenv is sourced means nothing the user's config spawns can see or inherit
- * Orca's feature selection.
+ * Quirky's feature selection.
  */
-export const ZSH_FEATURE_CHANNEL_BLOCK = `builtin typeset -ga _orca_shell_features
-_orca_shell_features=(\${(s:,:)\${${SHELL_STARTUP_FEATURE_ENV}:-}})
+export const ZSH_FEATURE_CHANNEL_BLOCK = `builtin typeset -ga _quirky_shell_features
+_quirky_shell_features=(\${(s:,:)\${${SHELL_STARTUP_FEATURE_ENV}:-}})
 builtin unset ${SHELL_STARTUP_FEATURE_ENV}
-# Why ORCA_HISTFILE is consumed HERE and not in the deferred hook: a user config
+# Why QUIRKY_HISTFILE is consumed HERE and not in the deferred hook: a user config
 # that replaces precmd_functions wholesale drops the hook, and an exported value
 # nothing will ever consume is then inherited by every child of this pane,
-# including a nested Orca (#11146). Captured non-exported, it cannot escape.
-builtin typeset -g _orca_histfile="\${ORCA_HISTFILE:-}"
-builtin unset ORCA_HISTFILE
-__orca_has_feature() { (( \${_orca_shell_features[(Ie)$1]} )) }`
+# including a nested Quirky (#11146). Captured non-exported, it cannot escape.
+builtin typeset -g _quirky_histfile="\${QUIRKY_HISTFILE:-}"
+builtin unset QUIRKY_HISTFILE
+__quirky_has_feature() { (( \${_quirky_shell_features[(Ie)$1]} )) }`
 
 /** The bash rcfile equivalent of ZSH_FEATURE_CHANNEL_BLOCK. */
-export const BASH_FEATURE_CHANNEL_BLOCK = `_orca_shell_features=",\${${SHELL_STARTUP_FEATURE_ENV}:-},"
+export const BASH_FEATURE_CHANNEL_BLOCK = `_quirky_shell_features=",\${${SHELL_STARTUP_FEATURE_ENV}:-},"
 builtin unset ${SHELL_STARTUP_FEATURE_ENV}
-__orca_has_feature() { [[ "$_orca_shell_features" == *",$1,"* ]]; }`
+__quirky_has_feature() { [[ "$_quirky_shell_features" == *",$1,"* ]]; }`
 
-// Why one line usable by both languages: __orca_has_feature is defined with the
+// Why one line usable by both languages: __quirky_has_feature is defined with the
 // same name and semantics in the zsh and bash channel blocks above.
-export const SHELL_STARTUP_IDENTITY_MARKER_BLOCK = `__orca_has_feature identity && printf "\\033]777;orca-shell-start:%s\\007" "$$"`
+export const SHELL_STARTUP_IDENTITY_MARKER_BLOCK = `__quirky_has_feature identity && printf "\\033]777;quirky-shell-start:%s\\007" "$$"`
 
 /**
  * The first executable lines of the wrapper: give ZDOTDIR back to the user.
@@ -49,41 +49,41 @@ export const SHELL_STARTUP_IDENTITY_MARKER_BLOCK = `__orca_has_feature identity 
  * back here means zsh reads all of them from the user's own directory, exactly
  * as it would with no wrapper at all. In particular /etc/zshrc's unguarded
  * `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history` then derives the user's own path
- * instead of one inside Orca's wrapper dir, so #11044 cannot happen rather than
+ * instead of one inside Quirky's wrapper dir, so #11044 cannot happen rather than
  * having to be repaired afterwards.
  *
- * ORCA_ORIG_ZDOTDIR is consumed: it has done its job, and leaving it exported
+ * QUIRKY_ORIG_ZDOTDIR is consumed: it has done its job, and leaving it exported
  * would hand a stale value to everything this pane launches.
  *
  * Why the value is vetted rather than trusted: the launch config only sets this
  * when it resolved a usable dir, but a pane also inherits its parent's
- * environment, so a stale ORCA_ORIG_ZDOTDIR written by an older build can arrive
- * on its own. Handing that back would point ZDOTDIR at an Orca wrapper dir — the
+ * environment, so a stale QUIRKY_ORIG_ZDOTDIR written by an older build can arrive
+ * on its own. Handing that back would point ZDOTDIR at an Quirky wrapper dir — the
  * self-loop the Node-side ownership check exists to prevent, arriving by a route
  * that check never sees. Identification stays positive, as it is in Node: a
- * stamped marker file, or Orca's own path shape for wrappers older builds wrote.
+ * stamped marker file, or Quirky's own path shape for wrappers older builds wrote.
  */
-export const ZSH_ZDOTDIR_HANDBACK_BLOCK = `__orca_usable_zdotdir() {
+export const ZSH_ZDOTDIR_HANDBACK_BLOCK = `__quirky_usable_zdotdir() {
   [[ -n "\${1:-}" ]] || return 1
-  # Orca's own dir, by marker file or by the shape older builds wrote.
+  # Quirky's own dir, by marker file or by the shape older builds wrote.
   [[ "$1" != */shell-ready/zsh ]] || return 1
   [[ ! -f "$1/${ZSH_WRAPPER_DIR_MARKER_FILE}" ]] || return 1
   # A directory holding no zsh startup file at all is not a config root,
   # whoever wrote it — and a stale value pointing at one would stop zsh from
   # ever reading the user's real .zshenv.
-  local _orca_startup_file
-  for _orca_startup_file in .zshenv .zshrc .zprofile .zlogin; do
-    [[ -r "$1/$_orca_startup_file" ]] && return 0
+  local _quirky_startup_file
+  for _quirky_startup_file in .zshenv .zshrc .zprofile .zlogin; do
+    [[ -r "$1/$_quirky_startup_file" ]] && return 0
   done
   return 1
 }
-if __orca_usable_zdotdir "\${ORCA_ORIG_ZDOTDIR:-}"; then
-  builtin export ZDOTDIR="$ORCA_ORIG_ZDOTDIR"
+if __quirky_usable_zdotdir "\${QUIRKY_ORIG_ZDOTDIR:-}"; then
+  builtin export ZDOTDIR="$QUIRKY_ORIG_ZDOTDIR"
 else
   builtin unset ZDOTDIR
 fi
-builtin unset ORCA_ORIG_ZDOTDIR ORCA_ZSHENV_SOURCE_DIR
-builtin unfunction __orca_usable_zdotdir`
+builtin unset QUIRKY_ORIG_ZDOTDIR QUIRKY_ZSHENV_SOURCE_DIR
+builtin unfunction __quirky_usable_zdotdir`
 
 /**
  * Sources the user's own .zshenv, then arms the deferred hook.
@@ -98,14 +98,14 @@ builtin unfunction __orca_usable_zdotdir`
  * still leave a dead name in the user's precmd_functions.
  */
 export const ZSH_USER_ZSHENV_SOURCE_BLOCK = `{
-  builtin typeset _orca_user_zshenv="\${ZDOTDIR-$HOME}/.zshenv"
-  [[ ! -r "$_orca_user_zshenv" ]] || builtin source -- "$_orca_user_zshenv"
+  builtin typeset _quirky_user_zshenv="\${ZDOTDIR-$HOME}/.zshenv"
+  [[ ! -r "$_quirky_user_zshenv" ]] || builtin source -- "$_quirky_user_zshenv"
 } always {
-  builtin unset _orca_user_zshenv
-  if (( ! $+_orca_deferred_init_done )); then
+  builtin unset _quirky_user_zshenv
+  if (( ! $+_quirky_deferred_init_done )); then
     builtin typeset -ag precmd_functions
-    (( \${precmd_functions[(Ie)__orca_deferred_init]} )) || precmd_functions+=(__orca_deferred_init)
-    __orca_arm_deferred_line_init
+    (( \${precmd_functions[(Ie)__quirky_deferred_init]} )) || precmd_functions+=(__quirky_deferred_init)
+    __quirky_arm_deferred_line_init
   fi
 }`
 
@@ -121,25 +121,25 @@ export { BASH_PROMPT_COMMAND_COMPOSITION_BLOCK } from './bash-prompt-command-com
  * hook. The `elif` below is inert under bash, where ZDOTDIR is normally unset.
  *
  * That file assigns `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history` with no
- * check-before-set, and it runs before any wrapper file Orca controls — so the
- * injected value is already gone, and because ZDOTDIR still points at Orca's
+ * check-before-set, and it runs before any wrapper file Quirky controls — so the
+ * injected value is already gone, and because ZDOTDIR still points at Quirky's
  * wrapper dir the replacement lands INSIDE it. Per-worktree history was a
  * silent no-op on the primary platform as a result (#11044).
  *
- * `builtin unset ORCA_HISTFILE` is the root-cause fix for #11146: the variable
+ * `builtin unset QUIRKY_HISTFILE` is the root-cause fix for #11146: the variable
  * cannot be inherited by anything the shell later spawns if it no longer exists
  * once it has been consumed. HISTFILE itself stays exported.
  */
-export const BASH_HISTFILE_RESTORE_BLOCK = `if [[ -n "\${ORCA_HISTFILE:-}" ]]; then
-  HISTFILE="$ORCA_HISTFILE"
-  builtin unset ORCA_HISTFILE
+export const BASH_HISTFILE_RESTORE_BLOCK = `if [[ -n "\${QUIRKY_HISTFILE:-}" ]]; then
+  HISTFILE="$QUIRKY_HISTFILE"
+  builtin unset QUIRKY_HISTFILE
 elif [[ "\${HISTFILE:-}" == "$ZDOTDIR/.zsh_history" ]]; then
-  # Why also when Orca injected nothing: /etc/zshrc derived this from Orca's
+  # Why also when Quirky injected nothing: /etc/zshrc derived this from Quirky's
   # wrapper ZDOTDIR, so history would accumulate INSIDE the wrapper dir and the
   # user's real history would be invisible — the plain #11044 bug, with no
   # per-worktree scoping involved. Matching the exact clobbered value means a
   # HISTFILE the user set deliberately is never touched.
-  HISTFILE="\${ORCA_ORIG_ZDOTDIR:-$HOME}/.zsh_history"
+  HISTFILE="\${QUIRKY_ORIG_ZDOTDIR:-$HOME}/.zsh_history"
 fi`
 
 // Why: zsh precmd fires before zle switches the PTY into line-editing mode,
@@ -155,7 +155,7 @@ export function getZshShellReadyMarkerRegistrationBlock(
   supportsStartupCommand = false
 ): string {
   const markerBlock = supportsStartupCommand
-    ? `  if [[ "\${__orca_emit_ready_marker-1}" == 1 ]]; then
+    ? `  if [[ "\${__quirky_emit_ready_marker-1}" == 1 ]]; then
     printf "${escapedMarker}"
   fi`
     : `  printf "${escapedMarker}"`
@@ -174,22 +174,22 @@ export function getZshShellReadyMarkerRegistrationBlock(
 # drop the user's widget on every prompt after the second source). Only
 # user-defined widgets are chainable as plain functions; builtin/completion
 # forms (rare for zle-line-init) are left unchained.
-if [[ "\${widgets[zle-line-init]:-}" == "user:__orca_prompt_mark" ]]; then
+if [[ "\${widgets[zle-line-init]:-}" == "user:__quirky_prompt_mark" ]]; then
   :
 elif (( \${+widgets[zle-line-init]} )) && [[ "\${widgets[zle-line-init]}" == user:* ]]; then
-  __orca_prev_line_init_fn="\${widgets[zle-line-init]#user:}"
+  __quirky_prev_line_init_fn="\${widgets[zle-line-init]#user:}"
 else
-  __orca_prev_line_init_fn=""
+  __quirky_prev_line_init_fn=""
 fi
-__orca_prompt_mark() {
+__quirky_prompt_mark() {
 ${markerBlock}
   # Why: call the prior hook as a plain function, not an aliased widget, so
   # $WIDGET stays zle-line-init for add-zle-hook-widget dispatchers.
-  if [[ -n "\${__orca_prev_line_init_fn:-}" ]]; then
-    "\${__orca_prev_line_init_fn}" "$@"
+  if [[ -n "\${__quirky_prev_line_init_fn:-}" ]]; then
+    "\${__quirky_prev_line_init_fn}" "$@"
   fi${startupCommandBlock}
 }
-zle -N zle-line-init __orca_prompt_mark`.replace(/\n\n}\n$/, '\n}\n')
+zle -N zle-line-init __quirky_prompt_mark`.replace(/\n\n}\n$/, '\n}\n')
 }
 
 // Why: fish has no ZDOTDIR-style wrapper dir, so the marker rides `--init-command`,
@@ -210,14 +210,14 @@ export function getFishShellReadyInitCommand(
   const readyMarkerBlock = emitReadyMarker ? `  builtin printf "${escapedMarker}"\n` : ''
   const startupCommandBlock = supportsStartupCommand
     ? `  if set -q ${POSIX_SHELL_STARTUP_COMMAND_ENV}
-    set -l __orca_command "\$${POSIX_SHELL_STARTUP_COMMAND_ENV}"
+    set -l __quirky_command "\$${POSIX_SHELL_STARTUP_COMMAND_ENV}"
     set -e ${POSIX_SHELL_STARTUP_COMMAND_ENV}
-    builtin printf '%s\\n' "$__orca_command"
-    eval "$__orca_command"
+    builtin printf '%s\\n' "$__quirky_command"
+    eval "$__quirky_command"
     return $status
   end\n`
     : ''
-  return `function __orca_shell_ready_marker --on-event fish_prompt
-${readyMarkerBlock}  functions -e __orca_shell_ready_marker
+  return `function __quirky_shell_ready_marker --on-event fish_prompt
+${readyMarkerBlock}  functions -e __quirky_shell_ready_marker
 ${startupCommandBlock}end`
 }

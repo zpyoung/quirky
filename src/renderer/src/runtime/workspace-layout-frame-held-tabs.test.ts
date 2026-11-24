@@ -30,7 +30,7 @@ import {
   runtimeMobileSessionSyncKeysEqual
 } from './sync-runtime-graph/sync-key'
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentStatusModule>()
@@ -239,8 +239,8 @@ describe('a tab the window drew, closed or moved, with a frame from before main 
       (store: ReturnType<typeof createTestStore>) => {
         const file = {
           ...store.getState().openFiles[0]!,
-          id: '/Users/dev/orca/src/new.ts',
-          filePath: '/Users/dev/orca/src/new.ts',
+          id: '/Users/dev/quirky/src/new.ts',
+          filePath: '/Users/dev/quirky/src/new.ts',
           relativePath: 'src/new.ts'
         }
         store.setState({ openFiles: [...store.getState().openFiles, file] })
@@ -357,8 +357,8 @@ describe('a change main applies first, with frames flowing', () => {
     const { store, sync, before, answer } = await boot()
     const file = {
       ...store.getState().openFiles[0]!,
-      id: '/Users/dev/orca/src/peek.ts',
-      filePath: '/Users/dev/orca/src/peek.ts',
+      id: '/Users/dev/quirky/src/peek.ts',
+      filePath: '/Users/dev/quirky/src/peek.ts',
       relativePath: 'src/peek.ts',
       isPreview: true
     }

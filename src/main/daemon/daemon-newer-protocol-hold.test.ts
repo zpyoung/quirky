@@ -50,8 +50,8 @@ async function holds(): Promise<boolean> {
 
 beforeEach(async () => {
   vi.clearAllMocks()
-  runtimeDir = mkdtempSync(join(tmpdir(), 'orca-newer-daemon-'))
-  otherProfileDir = mkdtempSync(join(tmpdir(), 'orca-newer-daemon-other-'))
+  runtimeDir = mkdtempSync(join(tmpdir(), 'quirky-newer-daemon-'))
+  otherProfileDir = mkdtempSync(join(tmpdir(), 'quirky-newer-daemon-other-'))
   probes.identity.mockResolvedValue('match')
   probes.endpoint.mockResolvedValue('connected')
   probes.kill.mockResolvedValue({ killed: true, liveOwnerSurvived: false })

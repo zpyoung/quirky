@@ -10,14 +10,14 @@ import {
 } from '../../shared/runtime-navigation'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { setRuntimeBrowserCommandsFactory } from './runtime-browser-commands-factory'
 
 const { browserSessionRegistryMock } = vi.hoisted(() => ({
   browserSessionRegistryMock: {
-    getDefaultProfile: () => ({ id: 'default', partition: 'persist:orca-browser' }),
-    getProfile: () => ({ id: 'default', partition: 'persist:orca-browser' }),
-    resolveKnownPartition: () => 'persist:orca-browser'
+    getDefaultProfile: () => ({ id: 'default', partition: 'persist:quirky-browser' }),
+    getProfile: () => ({ id: 'default', partition: 'persist:quirky-browser' }),
+    resolveKnownPartition: () => 'persist:quirky-browser'
   }
 }))
 
@@ -91,7 +91,7 @@ function makeSession(): WorkspaceSessionState {
 /** A runtime whose headless snapshot already carries one browser page, plus two paired devices. */
 function createPairedRuntime() {
   let session = makeSession()
-  const runtime = new OrcaRuntimeService({
+  const runtime = new QuirkyRuntimeService({
     ...storeBase,
     getWorkspaceSession: () => session,
     setWorkspaceSession: (next: WorkspaceSessionState) => {
@@ -152,7 +152,7 @@ function createPairedRuntime() {
  * the bystander device privately sits on page-alt, so neither can pass by having nothing selected,
  * and the bystander's assertion cannot pass by merely following the shared value.
  */
-async function seedSelections(runtime: OrcaRuntimeService): Promise<void> {
+async function seedSelections(runtime: QuirkyRuntimeService): Promise<void> {
   await runtime.browserTabCreate({ worktree: `id:${WT}`, page: 'page-old', activate: true })
   await runtime.browserTabCreate({ worktree: `id:${WT}`, page: 'page-alt', activate: false })
   await runtime.activateMobileSessionTab(`id:${WT}`, 'page-alt', undefined, {
@@ -175,7 +175,7 @@ const CREATE_NAVIGATION_OUTCOMES = {
 } satisfies Record<RuntimeNavigationTarget, { shared: string; caller: string; bystander: string }>
 
 function createBrowserTab(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   params: { navigation?: RuntimeNavigationTarget } = {}
 ): Promise<{ browserPageId: string }> {
   return runtime.browserTabCreate(

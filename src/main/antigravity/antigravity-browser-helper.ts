@@ -1,17 +1,17 @@
-// The Antigravity server opens its Google sign-in page through BROWSER. Orca points that at a
+// The Antigravity server opens its Google sign-in page through BROWSER. Quirky points that at a
 // one-line program run by its own executable in Node mode, which prints the link on error output
 // instead: the link is captured either way, and no browser opens on the host.
 
 import { quotePosixShellDoubleQuotedApostrophe } from '../../shared/shell-argument-quoting'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
-export const ANTIGRAVITY_BROWSER_MARKER = '__ORCA_ANTIGRAVITY_AUTH_URL__'
+export const ANTIGRAVITY_BROWSER_MARKER = '__QUIRKY_ANTIGRAVITY_AUTH_URL__'
 
 // EPIPE still exits 0, or Python falls back to a real browser once nothing reads the output.
 const HELPER_SOURCE =
   `process.stderr.on("error",()=>process.exit(0)).write(` +
   `"${ANTIGRAVITY_BROWSER_MARKER}"+JSON.stringify(process.argv[1])+"\\n",()=>process.exit(0))`
-const PREFLIGHT_URL = 'https://example.invalid/orca-antigravity-browser-preflight'
+const PREFLIGHT_URL = 'https://example.invalid/quirky-antigravity-browser-preflight'
 
 // Python splits BROWSER with shlex.
 

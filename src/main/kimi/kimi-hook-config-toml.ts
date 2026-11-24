@@ -1,9 +1,9 @@
 // Kimi Code keeps all preferences in TOML (`~/.kimi-code/config.toml`) and reads
 // lifecycle hooks from an array of `[[hooks]]` tables. There is no JSON settings
 // file to reuse the shared JSON installer with, and no TOML library is vendored,
-// so Orca manages only its own marker-delimited block: install rewrites the
+// so Quirky manages only its own marker-delimited block: install rewrites the
 // block, remove strips it, and user config is left untouched apart from hook
-// tables Orca itself emitted. Appending table headers is always valid TOML, so
+// tables Quirky itself emitted. Appending table headers is always valid TOML, so
 // the block can live at the end of any existing file.
 
 import { MANAGED_HOOK_TIMEOUT_SECONDS } from '../agent-hooks/installer-utils'
@@ -16,7 +16,7 @@ import {
   type RecognizedManagedTable
 } from '../agent-hooks/managed-toml-ownership'
 
-// Why: mirror the Claude-compatible events Orca normalizes for status. Kimi uses
+// Why: mirror the Claude-compatible events Quirky normalizes for status. Kimi uses
 // these exact event names (see normalizeKimiEvent), so each maps to a
 // working/waiting/done transition.
 export const KIMI_HOOK_EVENTS = [
@@ -30,17 +30,17 @@ export const KIMI_HOOK_EVENTS = [
 ] as const
 
 const MARKERS: ManagedTomlMarkers = {
-  startMarker: '# >>> orca-managed-kimi-hooks (managed by Orca; do not edit) >>>',
-  endMarker: '# <<< orca-managed-kimi-hooks <<<'
+  startMarker: '# >>> quirky-managed-kimi-hooks (managed by Quirky; do not edit) >>>',
+  endMarker: '# <<< quirky-managed-kimi-hooks <<<'
 }
 const HOOK_TABLE_HEADER = '[[hooks]]'
 
 export type ManagedCommandMatcher = (command: string | undefined) => boolean
 
-// A `[[hooks]]` table that invokes Orca's managed script is Orca's hook: that
-// command path is the only reason it fires, and it is there because Orca put it
+// A `[[hooks]]` table that invokes Quirky's managed script is Quirky's hook: that
+// command path is the only reason it fires, and it is there because Quirky put it
 // there. Extra keys are a user customising our hook, not authoring their own, so
-// uninstall still owns it — leaving it would keep feeding Orca their events
+// uninstall still owns it — leaving it would keep feeding Quirky their events
 // after they asked it to stop, and reinstall would double-fire the event.
 //
 // The key run is still parsed strictly: an unrecognized line shape (a multi-line
@@ -103,7 +103,7 @@ function readTomlString(value: string | undefined): string | undefined {
   return value?.match(/^"((?:[^"\\]|\\.)*)"/)?.[1] ?? value?.match(/^'([^']*)'/)?.[1]
 }
 
-// Ownership keys on the command, so an event Orca cannot parse must still
+// Ownership keys on the command, so an event Quirky cannot parse must still
 // register: status reporting `not_installed` for a table remove() will strip is
 // the exact split this recognizer exists to close. An unreadable literal falls
 // back to its raw text, which matches no known event and lands status on
@@ -124,7 +124,7 @@ function recognizeManagedTables(
   )
 }
 
-// Orca owns two things here: whatever sits inside a matched marker pair, and
+// Quirky owns two things here: whatever sits inside a matched marker pair, and
 // every table it can positively recognize wherever that table ended up.
 function findOwnedRegions(
   configText: string,
@@ -205,7 +205,7 @@ export function removeManagedKimiHooks(
 // Events a managed table is live for, counted wherever the table sits (by script
 // filename, so a moved userData path is still seen). Status must include tables
 // stranded outside the markers — those still fire, so reporting them absent
-// would tell the user a hook is uninstalled while Orca keeps receiving events.
+// would tell the user a hook is uninstalled while Quirky keeps receiving events.
 export function readManagedKimiHookEvents(
   configText: string,
   isManagedCommand: ManagedCommandMatcher

@@ -17,7 +17,7 @@ the resumable JSONL route, not every whole-document/import reader.
 ## Reproduce
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc docs/audits/transcript-record-retention/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc docs/audits/transcript-record-retention/reproduce.mjs
 ```
 
 The script writes a 64 MiB synthetic record in a temporary local file and bundles
@@ -45,7 +45,7 @@ tests across the reader and cache-recovery suites passed (nine overlap). The
 regressions cover all three assembly paths, exact byte boundaries, Unicode,
 large multi-record files, iterator cleanup, and unchanged cached resume state
 followed by successful repair. Full typecheck, final node typecheck, lint, and
-changed-code quality passed. Tests used `ORCA_BACKGROUND_LAUNCH=1`.
+changed-code quality passed. Tests used `QUIRKY_BACKGROUND_LAUNCH=1`.
 
 This is another reachable allocation mechanism within the app process group.
 #19831 does not establish an oversized transcript record. In the reported build

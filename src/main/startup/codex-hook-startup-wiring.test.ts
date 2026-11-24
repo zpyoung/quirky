@@ -18,7 +18,7 @@ vi.mock('../codex/codex-hook-reconcile', () => ({ startCodexHooks: fixture.start
 vi.mock('../agent-hooks/local-agent-cli-presence', () => ({
   hydrateAgentCliShellPath: () => fixture.pathReady
 }))
-// Why the real predicate: the start must read the same opt-out the rest of Orca does.
+// Why the real predicate: the start must read the same opt-out the rest of Quirky does.
 vi.mock(
   '../agent-hooks/managed-agent-hook-controls',
   async () => await import('../../shared/agent-status-hooks-setting')
@@ -75,8 +75,8 @@ vi.mock('./startup-diagnostics', () => ({ logStartupMilestone: vi.fn() }))
 vi.mock('../opencode/opencode-status-plugin-startup-refresh', () => ({
   refreshInstalledOpenCodeStatusPlugins: vi.fn()
 }))
-vi.mock('../orcad/orcad-artifact-cache-retention', () => ({
-  pruneDesktopOrcadArtifactCache: vi.fn()
+vi.mock('../quirkyd/quirkyd-artifact-cache-retention', () => ({
+  pruneDesktopQuirkydArtifactCache: vi.fn()
 }))
 
 import { initializeReadyRuntimeServices } from './main-process-ready-runtime'

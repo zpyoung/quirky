@@ -47,7 +47,7 @@ describe('fetchPrHeadTrackingRef', () => {
     expect(gitExecFileAsyncMock).not.toHaveBeenCalled()
   })
 
-  it('fetches a GitHub pull head into its remote-scoped Orca ref for local repos', async () => {
+  it('fetches a GitHub pull head into its remote-scoped Quirky ref for local repos', async () => {
     const localRef = await fetchGitHubPullRequestHeadRef(
       { path: '/repo', connectionId: null },
       'origin',
@@ -56,11 +56,16 @@ describe('fetchPrHeadTrackingRef', () => {
 
     // The fetch is bounded so a stalled remote can't hang PR resolution.
     expect(gitExecFileAsyncMock).toHaveBeenCalledWith(
-      ['fetch', '--no-tags', 'origin', `+refs/pull/42/head:refs/orca/pull/${ORIGIN_COMPONENT}/42`],
+      [
+        'fetch',
+        '--no-tags',
+        'origin',
+        `+refs/pull/42/head:refs/quirky/pull/${ORIGIN_COMPONENT}/42`
+      ],
       { cwd: '/repo', timeout: REVIEW_HEAD_FETCH_TIMEOUT_MS }
     )
     expect(localRef).toBe(githubPullRequestHeadLocalRef(ORIGIN_COMPONENT, 42))
-    expect(localRef).toBe(`refs/orca/pull/${ORIGIN_COMPONENT}/42`)
+    expect(localRef).toBe(`refs/quirky/pull/${ORIGIN_COMPONENT}/42`)
   })
 
   it('fails the pull-head fetch when the remote is not configured', async () => {
@@ -90,7 +95,12 @@ describe('fetchPrHeadTrackingRef', () => {
       wslDistro: 'Ubuntu'
     })
     expect(gitExecFileAsyncMock).toHaveBeenCalledWith(
-      ['fetch', '--no-tags', 'origin', `+refs/pull/42/head:refs/orca/pull/${ORIGIN_COMPONENT}/42`],
+      [
+        'fetch',
+        '--no-tags',
+        'origin',
+        `+refs/pull/42/head:refs/quirky/pull/${ORIGIN_COMPONENT}/42`
+      ],
       { cwd: '/repo', wslDistro: 'Ubuntu', timeout: REVIEW_HEAD_FETCH_TIMEOUT_MS }
     )
   })

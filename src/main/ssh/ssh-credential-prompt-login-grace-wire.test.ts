@@ -35,7 +35,7 @@ describe('a password prompt the server gives up on', () => {
   const sockets = new Set<Connection>()
 
   beforeEach(() => {
-    profile = mkdtempSync(join(tmpdir(), 'orca-login-grace-wire-'))
+    profile = mkdtempSync(join(tmpdir(), 'quirky-login-grace-wire-'))
     initSshHostKeyStoreFile(join(profile, 'host-keys.json'))
     vi.stubEnv('SSH_AUTH_SOCK', '')
     vi.mocked(resolveWithSshG).mockResolvedValue(

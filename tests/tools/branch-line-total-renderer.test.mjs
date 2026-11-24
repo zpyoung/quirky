@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,7 +15,7 @@ async function git(repo, ...args) {
 }
 
 it('removes a published deletion total when the host finds an untracked recreation', async () => {
-  const repo = await mkdtemp(join(tmpdir(), 'orca-renderer-branch-total-'))
+  const repo = await mkdtemp(join(tmpdir(), 'quirky-renderer-branch-total-'))
   invalidateGitReadCaches()
   try {
     await git(repo, 'init', '-q')

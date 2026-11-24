@@ -60,7 +60,7 @@ describe('project registration dedupes only against rows on the same host', () =
   let root: string
 
   beforeEach(async () => {
-    root = await realpath(await mkdtemp(join(tmpdir(), 'orca-runtime-host-dedupe-')))
+    root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-runtime-host-dedupe-')))
   })
 
   afterEach(async () => {

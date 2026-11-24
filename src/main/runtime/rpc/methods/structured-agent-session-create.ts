@@ -21,7 +21,7 @@ import type {
 import { structuredAgentSessionOptionOverridesRefusal } from '../../../native-chat/agent-session-wire/structured-agent-session-options-read'
 import { savedAgentSessionCatalogModels } from '../../../native-chat/agent-session-wire/structured-agent-session-pick-reply'
 import type { StructuredAgentSessionCreateOptions } from '../../../native-chat/agent-session-wire/structured-agent-session-create'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import {
   captureStructuredAgentCliSource,
   type StructuredAgentCliSourceEvidence
@@ -31,7 +31,7 @@ import {
   resolveUncommittedStructuredCreate,
   type StructuredCreateRefused
 } from './structured-agent-session-precommit-refusal'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { structuredAgentSessionClosedBeforeCreate } from './structured-agent-session-close-before-create'
 import { structuredLaunchSeedOnSavedListing } from '../../session-tabs/structured-launch-seed-listing'
 
@@ -73,7 +73,7 @@ export function structuredAgentSessionCreateIntentFingerprint(params: {
 /** The pre-commit half. Throws; the caller is expected to run it inside
  *  `resolveUncommittedStructuredCreate` so a failure reaches the client as a refusal. */
 export async function prepareStructuredAgentSessionCreateForWorktree(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   /** Installs the host lazily; called at the same point the RPC handler always installed it. */
   ensureHost: () => Promise<StructuredAgentSessionHost>
   envelope: AgentSessionMutationEnvelope
@@ -191,7 +191,7 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
 
 /** The commit half. Past `attach`, a failure no longer proves the session does not exist. */
 export async function commitStructuredAgentSessionCreate(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   caller: StructuredAgentSessionCaller
   prepared: PreparedStructuredAgentSessionCreate
   activate: boolean
@@ -209,7 +209,7 @@ export async function commitStructuredAgentSessionCreate(args: {
         ? {
             // A chat closed while it was being made gets no tab to show before main closes it.
             publishTab: () =>
-              ORCA_LAYOUT_OWNER_IS_MAIN &&
+              QUIRKY_LAYOUT_OWNER_IS_MAIN &&
               structuredAgentSessionClosedBeforeCreate(prepared.attachParams.envelope.sessionId)
                 ? Promise.resolve()
                 : args.runtime.publishStructuredAgentSessionTab({
@@ -234,7 +234,7 @@ export async function commitStructuredAgentSessionCreate(args: {
   }
   // A chat closed while it was being made gets no tab to show before main closes it.
   if (
-    ORCA_LAYOUT_OWNER_IS_MAIN &&
+    QUIRKY_LAYOUT_OWNER_IS_MAIN &&
     structuredAgentSessionClosedBeforeCreate(result.value.sessionId)
   ) {
     return result
@@ -269,7 +269,7 @@ export async function commitStructuredAgentSessionCreate(args: {
 }
 
 export async function createStructuredAgentSessionForWorktree(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   ensureHost: () => Promise<StructuredAgentSessionHost>
   caller: StructuredAgentSessionCaller
   envelope: AgentSessionMutationEnvelope

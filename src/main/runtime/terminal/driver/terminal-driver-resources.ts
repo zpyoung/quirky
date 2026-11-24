@@ -15,14 +15,14 @@ import type {
 } from '../../../../shared/runtime-terminal-contracts'
 import type { ExactWorkerProviderSession } from '../../../../shared/orchestration-worker-output'
 import type { RuntimeProviderSnapshotReadOptions } from '../../runtime-terminal-contracts'
-import { OrcaRuntimeWithFitOverrideListeners } from '../lifecycle/terminal-view-resources'
+import { QuirkyRuntimeWithFitOverrideListeners } from '../lifecycle/terminal-view-resources'
 import type {
   DriverState,
   ApplyLayoutResult,
   PtyLayoutTarget,
   LayoutQueueEntry,
   PtyLayoutState
-} from '../../orca-runtime-core'
+} from '../../quirky-runtime-core'
 
 import { RuntimeTerminalDriverController } from '../../runtime-terminal-driver-controller'
 import { RuntimeEdgeCommandController } from '../../runtime-edge-command-controller'
@@ -38,10 +38,10 @@ import { RuntimeWorktreeBaseReconciliation } from '../../runtime-worktree-base-r
 import { RuntimeWorktreeRemovalInFlight } from '../../runtime-worktree-removal-in-flight'
 import { ServeBrowserTabs } from '../../serve-browser-tabs'
 import type { ServeBrowserPageState } from '../../serve-browser-tab-layout'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { LayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 
-export abstract class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideListeners {
+export abstract class QuirkyRuntimeWithTerminalDrivers extends QuirkyRuntimeWithFitOverrideListeners {
   declare registerSubscriptionCleanup: RuntimeServiceCommandSurface['registerSubscriptionCleanup']
   declare cleanupSubscription: RuntimeServiceCommandSurface['cleanupSubscription']
 
@@ -146,7 +146,7 @@ export abstract class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitO
     hostId: (worktreeId) => this.getWorkspaceSessionHostIdForWorktree(worktreeId),
     save: (worktreeId, session) => this.setWorkspaceSessionForWorktree(worktreeId, session),
     // Switch point: a layout-owner build writes served tabs through `layout.apply`.
-    ...(ORCA_LAYOUT_OWNER_IS_MAIN
+    ...(QUIRKY_LAYOUT_OWNER_IS_MAIN
       ? {
           applyLayout: async (command: LayoutCommand, hostId: ExecutionHostId) => {
             const store = this.requireStore()

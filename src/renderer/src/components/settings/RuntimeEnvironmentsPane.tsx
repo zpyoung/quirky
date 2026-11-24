@@ -246,7 +246,7 @@ export function RuntimeEnvironmentsPane({
         <p className="text-xs text-destructive">
           {translate(
             'auto.components.settings.managedServers.loadFailed',
-            'Orca couldn’t load SSH hosts and unfinished moves. Reopen Settings to try again.'
+            'Quirky couldn’t load SSH hosts and unfinished moves. Reopen Settings to try again.'
           )}
         </p>
       ) : null}

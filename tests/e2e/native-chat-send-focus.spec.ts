@@ -1,7 +1,7 @@
 // Clicking Send or Stop leaves focus in the composer, as Enter does, after the button disables.
 
 import type { Locator, Page } from '@stablyai/playwright-test'
-import { expect } from './helpers/orca-app'
+import { expect } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { buildFakeAgentCommandOverride } from './helpers/fake-agent-command-override'
 import { SUPPORTED, createChatOnHost, test } from './helpers/structured-claude-stub'
@@ -45,7 +45,7 @@ async function openChat(page: Page, claudeCommand: string) {
 test.describe('a click on the native chat composer button keeps focus in the composer', () => {
   test.skip(!SUPPORTED, 'the Claude stub wrapper is POSIX-only')
 
-  test('when Send disables at the end of the turn', async ({ orcaPage: page, claudeStub }) => {
+  test('when Send disables at the end of the turn', async ({ quirkyPage: page, claudeStub }) => {
     const { composer, send, stop, reply } = await openChat(page, claudeStub.command)
     await page.keyboard.type('hello')
     await send.click()
@@ -54,7 +54,10 @@ test.describe('a click on the native chat composer button keeps focus in the com
     await expect.poll(() => focusIsIn(composer)).toBe(true)
   })
 
-  test('when Stop disables while the stop is in flight', async ({ orcaPage: page, claudeStub }) => {
+  test('when Stop disables while the stop is in flight', async ({
+    quirkyPage: page,
+    claudeStub
+  }) => {
     const { composer, send, stop } = await openChat(page, claudeStub.command)
     // The stub runs a prompt containing "slow" until it is interrupted.
     await page.keyboard.type('slow')

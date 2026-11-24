@@ -1,5 +1,5 @@
 // A newer build's row kind is never damage: like a newer row version, it fails this build's load as
-// a newer Orca's chat with every row kept, so the newer build still reads the whole chat after an
+// a newer Quirky's chat with every row kept, so the newer build still reads the whole chat after an
 // upgrade.
 // A row whose stored sequence and body disagree is damage, which fails the load with every row kept.
 
@@ -19,7 +19,7 @@ import {
   insertTestJournalRowJson,
   liveTestJournalRows,
   openTestJournalHostDatabase,
-  SAVED_BY_NEWER_ORCA
+  SAVED_BY_NEWER_QUIRKY
 } from './journal-host-database-test-support'
 import { parseJournalRow, type JournalRow } from './journal-row-schema'
 import {
@@ -45,7 +45,7 @@ export function registerJournalUnknownRowKindTests(): void {
   const journals = createTrackedJournalOpener()
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-journal-newer-kind-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-journal-newer-kind-'))
   })
 
   afterEach(async () => {
@@ -208,7 +208,7 @@ export function registerJournalUnknownRowKindTests(): void {
   })
 
   describe("a journal holding a newer build's row kind", () => {
-    it("fails the load as a newer Orca's chat, keeps every row, and reads whole once the kind is known", async () => {
+    it("fails the load as a newer Quirky's chat, keeps every row, and reads whole once the kind is known", async () => {
       const first = await open()
       for (const ordinal of [0, 1, 2, 3]) {
         await first.appendItem(item(ordinal), { kind: 'status', text: `item ${ordinal}` }, SCOPE)
@@ -220,8 +220,8 @@ export function registerJournalUnknownRowKindTests(): void {
 
       await rewriteClosed((put) => put(3, newer))
       const refused = stored()
-      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
-      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
+      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
+      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
       expect(stored()).toEqual(refused)
       expect(stored().find((row) => row.seq === 3)?.rowJson).toBe(newer)
 
@@ -232,10 +232,10 @@ export function registerJournalUnknownRowKindTests(): void {
       expect(upgraded.cursor().sequence).toBe(6)
     })
 
-    it("fails the load as a newer Orca's chat with nothing deleted when the row names another sequence than its key", async () => {
+    it("fails the load as a newer Quirky's chat with nothing deleted when the row names another sequence than its key", async () => {
       const epoch = await journalWithOneItem()
       await rewriteClosed((put) => put(3, JSON.stringify(newerRow(epoch, 9))))
-      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
+      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
       expect(storedKinds()).toEqual([
         [1, 'epoch'],
         [2, 'item'],

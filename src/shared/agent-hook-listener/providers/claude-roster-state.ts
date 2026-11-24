@@ -30,7 +30,7 @@ const CLAUDE_SESSION_OWNER_EVENTS: ReadonlySet<string> = new Set([
 
 /** A pane whose `session_id` changed is running a different conversation, so claims the previous one
  *  owned are void — the hook-independent backstop for /clear, relaunch and resume. Modern Claude
- *  emits SessionEnd on /clear, but Orca previously did not install it and older binaries emit none.
+ *  emits SessionEnd on /clear, but Quirky previously did not install it and older binaries emit none.
  *
  *  Voids only what the replaced session provably owned. Deliberately NOT voided:
  *  - `claudeRunningNonAgentTaskPaneKeys`: a background shell is an OS process that survives /clear,
@@ -186,7 +186,7 @@ export function markClaudeLeadTurnInterrupted(
   }
 }
 
-/** Rebuild a pane's working roster from a persisted snapshot; live activity confirms a seed, a complete task inventory may reap an unconfirmed one whose finish hook arrived while Orca was offline. */
+/** Rebuild a pane's working roster from a persisted snapshot; live activity confirms a seed, a complete task inventory may reap an unconfirmed one whose finish hook arrived while Quirky was offline. */
 export function seedClaudeSubagentRosterFromSnapshots(
   state: HookListenerState,
   paneKey: string,
@@ -206,7 +206,7 @@ export function seedClaudeSubagentRosterFromSnapshots(
       startedAt: snapshot.startedAt,
       agentType: snapshot.agentType,
       description: snapshot.description,
-      // Why: the seed can be a phantom (child finished while Orca was down, SubagentStop lost); let a PRESENT background_tasks list omitting the id remove it, not gate the pane 'working' forever.
+      // Why: the seed can be a phantom (child finished while Quirky was down, SubagentStop lost); let a PRESENT background_tasks list omitting the id remove it, not gate the pane 'working' forever.
       backgroundTasksAuthoritative: true,
       // Why: no child event in this runtime has confirmed the seed, so it must not count as live child work.
       restoredFromSnapshot: true

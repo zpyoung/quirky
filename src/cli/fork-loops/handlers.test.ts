@@ -74,7 +74,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('orca loop capability gate', () => {
+describe('quirky loop capability gate', () => {
   it.each<[string, [string, string][]]>([
     [
       'loop create',
@@ -122,7 +122,7 @@ describe('orca loop capability gate', () => {
   })
 })
 
-describe('orca loop create', () => {
+describe('quirky loop create', () => {
   it('maps every flag to a LoopCreateInput', async () => {
     primeCapabilities()
     callMock
@@ -337,7 +337,7 @@ describe('orca loop create', () => {
   })
 })
 
-describe('orca loop read commands', () => {
+describe('quirky loop read commands', () => {
   it('lists loops, filtering by worktree', async () => {
     primeCapabilities()
     callMock
@@ -420,7 +420,7 @@ describe('orca loop read commands', () => {
   })
 })
 
-describe('orca loop control commands', () => {
+describe('quirky loop control commands', () => {
   it('pauses after the current iteration', async () => {
     primeCapabilities()
     callMock.mockResolvedValueOnce(response(snapshot({ state: 'running' })))
@@ -512,7 +512,7 @@ describe('orca loop control commands', () => {
   })
 })
 
-describe('orca loop edit', () => {
+describe('quirky loop edit', () => {
   it('sends only the sections the flags touch, merged with the current config', async () => {
     primeCapabilities()
     const current = snapshot()
@@ -698,7 +698,7 @@ describe('orca loop edit', () => {
   })
 })
 
-describe('orca loop registration', () => {
+describe('quirky loop registration', () => {
   it('declares a spec and a manifest key for every handler', () => {
     const specPaths = new Set(COMMAND_SPECS.map((spec) => spec.path.join(' ')))
     const manifestKeys = new Set(

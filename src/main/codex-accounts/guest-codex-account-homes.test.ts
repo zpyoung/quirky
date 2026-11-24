@@ -15,12 +15,12 @@ describe.skipIf(process.platform === 'win32')('guest Codex account homes', () =>
   function makeAccountHome(accountId: string, marker = `${accountId}\n`): string {
     const accountHome = join(root, accountId, 'home')
     mkdirSync(accountHome, { recursive: true })
-    writeFileSync(join(accountHome, '.orca-managed-home'), marker, 'utf-8')
+    writeFileSync(join(accountHome, '.quirky-managed-home'), marker, 'utf-8')
     return accountHome
   }
 
   beforeEach(() => {
-    home = realpathSync(mkdtempSync(join(tmpdir(), 'orca-guest-codex-homes-')))
+    home = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-guest-codex-homes-')))
     root = join(home, ...GUEST_CODEX_ACCOUNTS_ROOT_SEGMENTS)
     mkdirSync(root, { recursive: true })
   })
@@ -44,7 +44,7 @@ describe.skipIf(process.platform === 'win32')('guest Codex account homes', () =>
   it('refuses a user CODEX_HOME outside the account root', () => {
     const own = join(home, 'my-codex', 'home')
     mkdirSync(own, { recursive: true })
-    writeFileSync(join(own, '.orca-managed-home'), 'my-codex\n', 'utf-8')
+    writeFileSync(join(own, '.quirky-managed-home'), 'my-codex\n', 'utf-8')
     expect(resolveGuestCodexAccountHome(own, home)).toBe(null)
     expect(resolveGuestCodexAccountHome(join(home, '.codex'), home)).toBe(null)
     expect(resolveGuestCodexAccountHome(undefined, home)).toBe(null)
@@ -56,7 +56,7 @@ describe.skipIf(process.platform === 'win32')('guest Codex account homes', () =>
   it('refuses an account entry linked out of the root', () => {
     const outside = join(home, 'elsewhere', 'home')
     mkdirSync(outside, { recursive: true })
-    writeFileSync(join(outside, '.orca-managed-home'), 'linked\n', 'utf-8')
+    writeFileSync(join(outside, '.quirky-managed-home'), 'linked\n', 'utf-8')
     symlinkSync(join(home, 'elsewhere'), join(root, 'linked'))
     expect(resolveGuestCodexAccountHome(join(root, 'linked', 'home'), home)).toBe(null)
   })

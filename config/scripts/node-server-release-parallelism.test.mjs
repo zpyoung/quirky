@@ -37,9 +37,9 @@ it.each([
 })
 
 it('uses the shared page for qualification and builds locally only when its producer is skipped', () => {
-  const download = persistence.steps.find((step) => step.with?.name === 'orcad-mobile-web-bundle')
+  const download = persistence.steps.find((step) => step.with?.name === 'quirkyd-mobile-web-bundle')
   const build = persistence.steps.find((step) => step.uses?.includes('build-mobile-web-bundle'))
-  const serverBuild = persistence.steps.find((step) => step.run === 'pnpm build:orcad')
+  const serverBuild = persistence.steps.find((step) => step.run === 'pnpm build:quirkyd')
   expect(download.uses).toBe('actions/download-artifact@v8')
   expect(download.with.path).toBe('out/mobile-web')
   expect(persistence.steps.indexOf(download)).toBeLessThan(persistence.steps.indexOf(serverBuild))
@@ -132,11 +132,11 @@ it.each(['persistence', 'linux_glibc_floor', 'linux_musl'])(
 it('prepares every native lane and builds with the shared page', () => {
   for (const name of ['persistence', 'linux_glibc_floor', 'linux_musl']) {
     const job = workflow.jobs[name]
-    const download = job.steps.findIndex((step) => step.with?.name === 'orcad-mobile-web-bundle')
+    const download = job.steps.findIndex((step) => step.with?.name === 'quirkyd-mobile-web-bundle')
     const prepare = job.steps.findIndex(
       (step) =>
-        step.uses?.includes('prepare-orcad-prebuilds') ||
-        step.run?.includes('pnpm build:orcad-prebuilds')
+        step.uses?.includes('prepare-quirkyd-prebuilds') ||
+        step.run?.includes('pnpm build:quirkyd-prebuilds')
     )
     expect(job.needs).toEqual(['changes', 'mobile_web_bundle'])
     expect(prepare).toBeGreaterThan(-1)
@@ -150,11 +150,11 @@ it('prepares every native lane and builds with the shared page', () => {
   )
   const cleanup = alpine.find((step) => step.name === 'Clean up the Alpine qualification container')
   expect(prepare.run).toContain('mkdir -p out/mobile-web')
-  expect(prepare.run).toContain('--detach --name orcad-alpine')
-  expect(prepare.run).toContain('docker exec -i orcad-alpine')
-  expect(prepare.run).not.toContain('pnpm build:orcad\n')
-  expect(verify.run).toContain('docker exec -i orcad-alpine')
-  expect(verify.run).toContain('pnpm build:orcad\n')
+  expect(prepare.run).toContain('--detach --name quirkyd-alpine')
+  expect(prepare.run).toContain('docker exec -i quirkyd-alpine')
+  expect(prepare.run).not.toContain('pnpm build:quirkyd\n')
+  expect(verify.run).toContain('docker exec -i quirkyd-alpine')
+  expect(verify.run).toContain('pnpm build:quirkyd\n')
   expect(verify.run).toContain('pnpm test:node-server --artifact')
   expect(cleanup.if).toBe('always()')
 })

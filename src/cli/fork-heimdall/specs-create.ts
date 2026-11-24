@@ -16,7 +16,7 @@ export const HEIMDALL_CREATE_SPECS: CommandSpec[] = [
     path: ['heimdall', 'create', 'objective'],
     summary: 'Enroll an objective watcher',
     usage:
-      'orca heimdall create objective [--objective <text>|--objective-file <path>] [--plan-file <path>] [--worktree <selector>] [--spec <json|@file>] [--hours <n|none>] [--turns <n|none>] [--json]',
+      'quirky heimdall create objective [--objective <text>|--objective-file <path>] [--plan-file <path>] [--worktree <selector>] [--spec <json|@file>] [--hours <n|none>] [--turns <n|none>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       ...COMMON_CREATE_FLAGS,
@@ -40,27 +40,27 @@ export const HEIMDALL_CREATE_SPECS: CommandSpec[] = [
       'Use --cap <key>=<off|gated|on> to override a capability, repeat --territory and --role-agent, and use --no-lanes to disable lanes.'
     ],
     examples: [
-      'orca heimdall create objective --objective "Ship the report export" --worktree active',
-      'orca heimdall create objective --objective-file ./objective.txt --plan-file ./plan.md --cap land=gated --territory src/** --territory tests/**'
+      'quirky heimdall create objective --objective "Ship the report export" --worktree active',
+      'quirky heimdall create objective --objective-file ./objective.txt --plan-file ./plan.md --cap land=gated --territory src/** --territory tests/**'
     ]
   },
   {
     path: ['heimdall', 'create', 'hosted-review'],
     summary: 'Enroll a hosted-review watcher',
     usage:
-      'orca heimdall create hosted-review [--worktree <selector>] [--spec <json|@file>] [--hours <n|none>] [--turns <n|none>] [--json]',
+      'quirky heimdall create hosted-review [--worktree <selector>] [--spec <json|@file>] [--hours <n|none>] [--turns <n|none>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, ...COMMON_CREATE_FLAGS, 'branch-update', 'merge-method'],
     repeatableFlags: ['cap'],
     notes: [
       'Without --worktree, the runtime resolves the active workspace; hosted-review watchers require a Git worktree.',
       '--spec is a partial JSON object with kindPayload, capabilities, budget, owner, or ownerInterventionCapability fields; explicit flags override it.',
       'Hosted-review defaults match the renderer: all four capabilities off, a four-hour budget, and provider-default merge method.',
-      'Hosted-review creation requires the host-derived payload capability; update or restart Orca if the selected runtime lacks it.',
+      'Hosted-review creation requires the host-derived payload capability; update or restart Quirky if the selected runtime lacks it.',
       'Candidate branch, provider, reviewNumber, and reviewUrl fields in --spec do not bypass this capability gate.'
     ],
     examples: [
-      'orca heimdall create hosted-review --worktree active',
-      'orca heimdall create hosted-review --worktree branch:feature/report --cap fixChecks=gated --branch-update rebase'
+      'quirky heimdall create hosted-review --worktree active',
+      'quirky heimdall create hosted-review --worktree branch:feature/report --cap fixChecks=gated --branch-update rebase'
     ]
   }
 ]

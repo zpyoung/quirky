@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GhExecOptions } from '../../../git/command-runner/gh-exec-file'
 import { RpcDispatcher } from '../../../runtime/rpc/dispatcher'
 import { GITHUB_PULL_REQUEST_METHODS } from '../../../runtime/rpc/methods/github-pull-request-methods'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 const { ghMock, resolverMock } = vi.hoisted(() => ({ ghMock: vi.fn(), resolverMock: vi.fn() }))
 vi.mock('../../gh-utils', () => ({ ghExecFileAsync: ghMock, acquire: vi.fn(), release: vi.fn() }))
 vi.mock('../../github-api-repository', () => ({ resolveGitHubRepoExecution: resolverMock }))
@@ -50,7 +50,7 @@ function dispatcher(): RpcDispatcher {
   }
   return new RpcDispatcher({
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This explicit registry invokes only getRuntimeId and getRepoPRCheckDetails.
-    runtime: runtime as unknown as OrcaRuntimeService,
+    runtime: runtime as unknown as QuirkyRuntimeService,
     methods: GITHUB_PULL_REQUEST_METHODS
   })
 }

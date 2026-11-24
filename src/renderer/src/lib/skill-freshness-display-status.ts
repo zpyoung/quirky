@@ -1,5 +1,5 @@
 import {
-  isOrcaSkillLockSource,
+  isQuirkySkillLockSource,
   isSkillCopyNeedingAttention,
   isSkillScanIssueNeedingAttention,
   skillPlacementParticipatesInGlobalFreshness,
@@ -17,11 +17,11 @@ export function getSkillFreshnessDisplayStatus(
   skillName: string
 ): SkillFreshnessDisplayStatus {
   if (inventory?.eligibleUpdateNames.includes(skillName)) {
-    // Why: a same-named copy Orca did not install is offered unselected in the dialog,
+    // Why: a same-named copy Quirky did not install is offered unselected in the dialog,
     // but never advertised; "up to date" would be false, so report presence only.
     return inventory.installations.some(
       (installation) =>
-        installation.name === skillName && isOrcaSkillLockSource(installation.lockSource)
+        installation.name === skillName && isQuirkySkillLockSource(installation.lockSource)
     )
       ? 'update-available'
       : 'installed'
@@ -34,7 +34,7 @@ export function getSkillFreshnessDisplayStatus(
     }
     // Why: a project's or plugin's own copy is outside the global updater's reach, so it
     // can neither stand in as evidence this skill is installed globally nor make the badge
-    // amber over drift Orca has no way to fix.
+    // amber over drift Quirky has no way to fix.
     if (!skillPlacementParticipatesInGlobalFreshness(installation)) {
       continue
     }
@@ -49,7 +49,7 @@ export function getSkillFreshnessDisplayStatus(
     return 'installed'
   }
   // Why: an unreadable plugin path could hide a copy of any known skill, so it stays
-  // fail-closed — but only for skills Orca actually found somewhere. Flagging a skill
+  // fail-closed — but only for skills Quirky actually found somewhere. Flagging a skill
   // that isn't installed at all blames it for a fault in someone else's plugin.
   if (inventory?.scanIssues.some(isSkillScanIssueNeedingAttention)) {
     return 'needs-attention'

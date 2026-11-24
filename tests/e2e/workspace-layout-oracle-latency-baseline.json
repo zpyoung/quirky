@@ -1,8 +1,8 @@
 {
-  "about": "Non-gating baseline from tests/e2e/workspace-layout-oracle-latency.spec.ts on main, with no layout subscriber. Milliseconds; inAppCommit/inAppDrawn are the in-window clock, outer includes one DevTools round trip. Event-loop delay is main's, beyond the 10 ms sampling interval. Taken with ORCA_LAYOUT_ORACLE_LATENCY_SAMPLES=100.",
+  "about": "Non-gating baseline from tests/e2e/workspace-layout-oracle-latency.spec.ts on main, with no layout subscriber. Milliseconds; inAppCommit/inAppDrawn are the in-window clock, outer includes one DevTools round trip. Event-loop delay is main's, beyond the 10 ms sampling interval. Taken with QUIRKY_LAYOUT_ORACLE_LATENCY_SAMPLES=100.",
   "main": "73c53311dc03659f79375f79ac01dff1c9c66863",
   "darwin": {
-    "machine": "Apple M5 Pro, macOS 27.0, hidden window (ORCA_BACKGROUND_LAUNCH=1)",
+    "machine": "Apple M5 Pro, macOS 27.0, hidden window (QUIRKY_BACKGROUND_LAUNCH=1)",
     "latency": {
       "split (idle)": {
         "n": 100,

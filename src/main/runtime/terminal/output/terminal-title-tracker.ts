@@ -1,5 +1,5 @@
 import type { TerminalTitleFactMeta } from '../../../../shared/terminal-output-side-effects'
-import { OrcaRuntimeWithEmitDaemonPtyTransientFact } from './terminal-transient-facts'
+import { QuirkyRuntimeWithEmitDaemonPtyTransientFact } from './terminal-transient-facts'
 import { getDecorativeTitleGateKey } from '../../../../shared/agent-decorative-title-signature'
 import { shouldEmitTitleFactForFrame } from '../../decorative-title-fact-emission'
 import type { RuntimePtyTitleTrackerEntry } from '../../runtime-terminal-state-records'
@@ -7,7 +7,7 @@ import { createTerminalTitleTracker } from '../../../../shared/terminal-output-s
 import type { AgentStatus } from '../../../../shared/agent-detection'
 import type { TerminalGitHubPRLink } from '../../../../shared/terminal-github-pr-link-detector'
 
-export abstract class OrcaRuntimeWithGetUnpersistedTrackedTitleForPty extends OrcaRuntimeWithEmitDaemonPtyTransientFact {
+export abstract class QuirkyRuntimeWithGetUnpersistedTrackedTitleForPty extends QuirkyRuntimeWithEmitDaemonPtyTransientFact {
   protected abstract recheckHookAgentPresenceForPty(
     ptyId: string,
     exitedSince?: number

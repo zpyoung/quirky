@@ -1,4 +1,4 @@
-// Why (#19334): the archive hook is a user's last chance to save work off a checkout Orca is
+// Why (#19334): the archive hook is a user's last chance to save work off a checkout Quirky is
 // about to delete. A failed hook used to be logged and stepped over, so the delete went ahead
 // with nothing archived. It is a precondition, evaluated before any stop/delete mutation.
 

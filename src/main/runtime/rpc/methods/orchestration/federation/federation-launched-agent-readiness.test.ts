@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolveWorkerStartReadinessTimeoutMs } from '../../../../../../shared/orchestration-timing-budgets'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationDb } from '../../../../orchestration/db'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
 import { configureFederationWorkerRuntime } from './federation-runtime.test-support'
@@ -20,10 +20,10 @@ describe('federated worker first dispatch readiness', () => {
     vi.restoreAllMocks()
   })
 
-  function createWorkerHost(): OrcaRuntimeService {
+  function createWorkerHost(): QuirkyRuntimeService {
     const db = new OrchestrationDb(':memory:')
     databases.push(db)
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     configureFederationWorkerRuntime(runtime)
     vi.spyOn(runtime, 'waitForFreshWorkerComposer').mockResolvedValue({
@@ -37,7 +37,7 @@ describe('federated worker first dispatch readiness', () => {
   }
 
   async function attach(
-    runtime: OrcaRuntimeService,
+    runtime: QuirkyRuntimeService,
     target: { agent: string } | { terminal: string }
   ): Promise<unknown> {
     const method = ORCHESTRATION_METHODS.find(

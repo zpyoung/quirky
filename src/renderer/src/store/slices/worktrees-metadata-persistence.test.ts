@@ -161,9 +161,9 @@ describe('worktree remote runtime mutations', () => {
   it('persists SSH-owned worktree metadata through local IPC even when a runtime is focused', async () => {
     const store = createTestStore()
     const wt = makeWorktree({
-      id: 'repo-ssh::/home/orca/wt1',
+      id: 'repo-ssh::/home/quirky/wt1',
       repoId: 'repo-ssh',
-      path: '/home/orca/wt1',
+      path: '/home/quirky/wt1',
       hostId: 'ssh:ssh-1'
     })
     store.setState({
@@ -171,7 +171,7 @@ describe('worktree remote runtime mutations', () => {
       repos: [
         {
           id: 'repo-ssh',
-          path: '/home/orca/repo',
+          path: '/home/quirky/repo',
           displayName: 'SSH Repo',
           badgeColor: '#000',
           addedAt: 0,

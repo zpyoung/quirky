@@ -4,7 +4,7 @@ import {
   requestMicrophonePermissionsAsync,
   tearDown,
   toggleRecording
-} from '@orca/expo-two-way-audio'
+} from '@quirky/expo-two-way-audio'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { BRIDGE_AUDIO_INTERRUPTIONS } from '../mobile-web-shell/bridge/bridge-audio-verbs'
 import { createMicrophoneScreenLock } from './microphone-screen-lock'
@@ -13,7 +13,7 @@ import type { NativeAudioEngine } from './native-audio'
 /**
  * The device calls the audio verbs actually make, and the screen an open microphone holds.
  *
- * Separated from the servers for the media device's reason: importing `@orca/expo-two-way-audio`
+ * Separated from the servers for the media device's reason: importing `@quirky/expo-two-way-audio`
  * reaches a JSI binding that only exists in a device build, so a module naming it cannot be driven
  * in a unit test at all — and the platform facts worth naming are here rather than spread through
  * the handler.
@@ -31,7 +31,7 @@ export const NATIVE_AUDIO_DEVICE_SAMPLE_RATE = 16_000
 
 /** One tag for the one microphone this process has. Module-private: the lock is taken by whichever
  *  device-side capture opened the mic, and no caller of either ever names it. */
-const MICROPHONE_SCREEN_LOCK_TAG = 'orca-microphone'
+const MICROPHONE_SCREEN_LOCK_TAG = 'quirky-microphone'
 
 /**
  * The screen lock both device-side captures share, and the app's only reach for `expo-keep-awake`.

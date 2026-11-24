@@ -1,6 +1,6 @@
 // Why: deriving a virtual key code from a character's own char code collides with editing
 // keys — '&' (38) arrives as VK_UP and '.' (46) as VK_DELETE, so Blink runs the caret
-// command and silently drops the character. This table maps Orca key names ("a", "&",
+// command and silently drops the character. This table maps Quirky key names ("a", "&",
 // "Ctrl+Shift+K", "Alt+ArrowDown", "F5") to the CDP key event a US-layout keyboard
 // would produce; anything it cannot express returns null so the caller can fall back.
 

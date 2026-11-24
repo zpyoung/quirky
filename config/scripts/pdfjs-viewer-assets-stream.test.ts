@@ -29,7 +29,7 @@ let root: string
 let middleware: Connect.NextHandleFunction
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-pdfjs-stream-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-pdfjs-stream-'))
   mkdirSync(join(root, 'wasm'))
   mkdirSync(join(root, 'cmaps'))
   writeFileSync(join(root, 'wasm', 'fixture.wasm'), Buffer.alloc(1024 * 1024, 1))

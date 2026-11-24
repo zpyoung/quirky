@@ -470,7 +470,7 @@ describe('useStructuredAgentSessionOptions', () => {
       })
       await waitFor(() =>
         expect(mocks.toastError).toHaveBeenCalledWith(
-          "The setting wasn't changed. Orca on the computer running this chat has hit a request limit. Update Orca there, then try again."
+          "The setting wasn't changed. Quirky on the computer running this chat has hit a request limit. Update Quirky there, then try again."
         )
       )
       expect(mocks.enqueue).not.toHaveBeenCalled()
@@ -698,7 +698,7 @@ describe('useStructuredAgentSessionOptions', () => {
   })
 
   it.each([
-    // Claude replies with the values Orca set, so an effort it keeps is not in the reply.
+    // Claude replies with the values Quirky set, so an effort it keeps is not in the reply.
     {
       agent: 'claude' as const,
       tiers: [[], []],

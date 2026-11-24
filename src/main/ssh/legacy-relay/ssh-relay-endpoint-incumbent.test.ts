@@ -1,6 +1,6 @@
 import type * as ExecCommandModule from '../remote-exec/remote-exec-command'
 import { describe, expect, it, vi } from 'vitest'
-import { RELAY_LSOF_PROBE_JS } from '@orca/process-host/posix-lsof-probe'
+import { RELAY_LSOF_PROBE_JS } from '@quirky/process-host/posix-lsof-probe'
 
 const execCommand = vi.fn()
 vi.mock('../remote-exec/remote-exec-command', async (importOriginal) => ({
@@ -22,12 +22,12 @@ import { getRemoteHostPlatform } from '../ssh-remote-platform'
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The mocked execCommand never dereferences the connection; the Windows path returns before using it.
 const connection = {} as SshConnection
 
-const SOCK = '/home/u/.orca-remote/relay-0.1.0+aaaa/relay-deadbeef.sock'
+const SOCK = '/home/u/.quirky-remote/relay-0.1.0+aaaa/relay-deadbeef.sock'
 const POSIX_HOST = getRemoteHostPlatform('linux-x64')
 const WINDOWS_HOST = getRemoteHostPlatform('win32-x64')
 
 function probeOutput(lines: string[]): string {
-  return ['ORCA-INCUMBENT-BEGIN', ...lines, 'ORCA-INCUMBENT-END'].join('\n')
+  return ['QUIRKY-INCUMBENT-BEGIN', ...lines, 'QUIRKY-INCUMBENT-END'].join('\n')
 }
 
 describe('parseRelayEndpointIncumbentProbe', () => {

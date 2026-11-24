@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { HOSTED_REVIEW_METHODS } from './hosted-review'
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -18,12 +18,12 @@ describe('hosted review RPC methods', () => {
         number: 12,
         title: 'Feature',
         state: 'open',
-        url: 'https://github.com/acme/orca/pull/12',
+        url: 'https://github.com/acme/quirky/pull/12',
         status: 'success',
         updatedAt: '2026-05-10T00:00:00.000Z',
         mergeable: 'MERGEABLE'
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: HOSTED_REVIEW_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -51,7 +51,7 @@ describe('hosted review RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getHostedReviewForBranch: vi.fn().mockResolvedValue(null)
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: HOSTED_REVIEW_METHODS })
 
     await dispatcher.dispatch(
@@ -74,7 +74,7 @@ describe('hosted review RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getHostedReviewForBranch: vi.fn().mockResolvedValue(null)
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: HOSTED_REVIEW_METHODS })
 
     await dispatcher.dispatch(
@@ -104,7 +104,7 @@ describe('hosted review RPC methods', () => {
         head: 'feature/create-pr',
         title: 'Create PR'
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: HOSTED_REVIEW_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -147,7 +147,7 @@ describe('hosted review RPC methods', () => {
       getRuntimeId: () => 'test-runtime',
       createHostedReview: vi.fn(),
       createStackedHostedReview: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: HOSTED_REVIEW_METHODS })
     const create = {
       repo: 'repo-1',
@@ -173,9 +173,9 @@ describe('hosted review RPC methods', () => {
       createHostedReview: vi.fn().mockResolvedValue({
         ok: true,
         number: 51,
-        url: 'https://github.com/acme/orca/pull/51'
+        url: 'https://github.com/acme/quirky/pull/51'
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: HOSTED_REVIEW_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -213,11 +213,11 @@ describe('hosted review RPC methods', () => {
       createStackedHostedReview: vi.fn().mockResolvedValue({
         ok: true,
         number: 52,
-        url: 'https://github.com/acme/orca/pull/52',
+        url: 'https://github.com/acme/quirky/pull/52',
         stackNumber: 60,
-        parentReview: { number: 51, url: 'https://github.com/acme/orca/pull/51' }
+        parentReview: { number: 51, url: 'https://github.com/acme/quirky/pull/51' }
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: HOSTED_REVIEW_METHODS })
 
     const response = await dispatcher.dispatch(

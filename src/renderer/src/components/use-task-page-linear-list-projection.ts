@@ -1,6 +1,6 @@
 import type { TaskPageLinearListSelectionModel } from './use-task-page-linear-list-selection'
 import { useMemo, useCallback, useEffect } from 'react'
-import { filterLinearIssuesBySearchQuery } from '@/components/task-page-linear-in-orca-issues'
+import { filterLinearIssuesBySearchQuery } from '@/components/task-page-linear-in-quirky-issues'
 import {
   clampLinearIssueListLimit,
   LINEAR_ISSUE_LIST_MAX
@@ -39,12 +39,12 @@ export function useTaskPageLinearListProjectionPrelude(model: TaskPageLinearList
   } = model
   const filteredLinearIssues = useMemo(() => {
     const searchedIssues =
-      linearMode === 'in-orca'
+      linearMode === 'in-quirky'
         ? filterLinearIssuesBySearchQuery(displayedLinearIssues, appliedLinearSearch)
         : displayedLinearIssues
-    // Why: 'in-orca' is scoped by local workspace links, not by team, and it has no "Fetch more" —
+    // Why: 'in-quirky' is scoped by local workspace links, not by team, and it has no "Fetch more" —
     // a team filter would silently drop a linked ticket with no way to recover it.
-    if (activeLinearIssueContextLabel || linearMode === 'in-orca') {
+    if (activeLinearIssueContextLabel || linearMode === 'in-quirky') {
       return searchedIssues
     }
     // Why: team options can arrive after issue rows render; treat an empty selection as "all" until reconciliation sets teams.

@@ -28,11 +28,11 @@ const RUNS_BOUND_TO_PANE_SQL = `SELECT ${RUN_COLUMN_LIST} FROM runs
          WHERE coordinator_pane_key IS NOT NULL AND legacy = 0
            AND ${RUN_PANE_KEY_MATCH_SUFFIX_SQL} = ?
          ORDER BY rowid`
-// Why: one statement so pane and Orca session id matches keep a single rowid order; the JS predicate decides.
+// Why: one statement so pane and Quirky session id matches keep a single rowid order; the JS predicate decides.
 const RUNS_BOUND_TO_COORDINATOR_SQL = `SELECT ${RUN_COLUMN_LIST} FROM runs
          WHERE legacy = 0 AND (
            (coordinator_pane_key IS NOT NULL AND ${RUN_PANE_KEY_MATCH_SUFFIX_SQL} = ?)
-           OR coordinator_orca_session_id = ?
+           OR coordinator_quirky_session_id = ?
          )
          ORDER BY rowid`
 
@@ -143,16 +143,16 @@ export function getCurrentRunForCoordinator(
   return run ? exposeRunTimestamps(run) : undefined
 }
 
-/** Runs bound to this caller by pane or by Orca session id; a caller without one matches as before. */
+/** Runs bound to this caller by pane or by Quirky session id; a caller without one matches as before. */
 export function runsBoundToCoordinator(
   this: OrchestrationDb,
   caller: OrchestrationCoordinatorKey
 ): RunRow[] {
-  if (caller.orcaSessionId === null) {
+  if (caller.quirkySessionId === null) {
     return caller.paneKey === null ? [] : this.runsBoundToPane(caller.paneKey)
   }
   const suffix = caller.paneKey === null ? null : paneKeyMatchSuffix(caller.paneKey)
-  const rows = this.db.prepare(RUNS_BOUND_TO_COORDINATOR_SQL).all(suffix, caller.orcaSessionId)
+  const rows = this.db.prepare(RUNS_BOUND_TO_COORDINATOR_SQL).all(suffix, caller.quirkySessionId)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: SELECT * over this table returns the row shape its schema and row type define, like every row cast in db/.
   return (rows as RunRow[]).filter((run) => runBoundToCoordinator(run, caller))
 }
@@ -171,8 +171,8 @@ export function unbindOtherRunsForCoordinator(
       this.db
         .prepare(
           `UPDATE runs
-           SET coordinator_handle = NULL, coordinator_pane_key = NULL, coordinator_orca_session_id = NULL,
-               coordinator_orca_session_id_generation = NULL,
+           SET coordinator_handle = NULL, coordinator_pane_key = NULL, coordinator_quirky_session_id = NULL,
+               coordinator_quirky_session_id_generation = NULL,
                consumer_generation = consumer_generation + 1,
                updated_at = datetime('now')
            WHERE id = ?`

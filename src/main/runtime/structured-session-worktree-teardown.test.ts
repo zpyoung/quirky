@@ -316,7 +316,7 @@ describe('worktree teardown and structured agent sessions', () => {
 
   it('closes best-effort for a folder-workspace removal, which requires no stop proof', async () => {
     // Those paths sweep and kill PTYs without `requirePhysicalStop`, so the structured sweep used
-    // to no-op there and left a live session bound to a workspace Orca was about to forget. They
+    // to no-op there and left a live session bound to a workspace Quirky was about to forget. They
     // do not refuse: the root is shared so no checkout vanishes, and one of them is a never-throw
     // forget that a refusal would wedge.
     const host = installHost({ records: [record('s1', WORKTREE)] })
@@ -496,7 +496,7 @@ describe('worktree teardown and structured agent sessions', () => {
 
   it('separates a close it could not confirm from one it watched stay attached', async () => {
     // `src/shared/worktree/removal.ts` keeps these two apart on purpose: a user waiving "we could
-    // not confirm" is making a different decision than one discarding a conversation Orca just saw
+    // not confirm" is making a different decision than one discarding a conversation Quirky just saw
     // running. The toast branches on this marker, so flattening them makes one of the two a lie.
     installHost({ records: [record('s1', WORKTREE)], unverifiable: new Set(['s1']) })
     const unconfirmed = await killAllProcessesForWorktree(WORKTREE, destructiveDeps()).catch(
@@ -790,7 +790,7 @@ describe('worktree teardown and structured agent sessions', () => {
 
   it('retires the chat tab for a folder-workspace removal too', async () => {
     // No checkout vanishes there, but the workspace metadata does, so a republished tab at the
-    // next launch points at a workspace Orca has forgotten. That path already drops the tab for
+    // next launch points at a workspace Quirky has forgotten. That path already drops the tab for
     // the sessions it DID close, so leaving the detached ones is the inconsistency being fixed.
     const host = installHost({
       records: [record('s1', WORKTREE)],

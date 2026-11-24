@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { MOBILE_SNAPSHOT_BYTE_BUDGET } from '../../../scrollback-limits'
 import { buildSnapshotFrameMeta } from './terminal-snapshot-payload'
 import { serializeBudgetedMobileSnapshot } from './terminal-snapshot-publication'
 
-function historyRuntime(bytesPerRow: number): Pick<OrcaRuntimeService, 'serializeTerminalBuffer'> {
+function historyRuntime(
+  bytesPerRow: number
+): Pick<QuirkyRuntimeService, 'serializeTerminalBuffer'> {
   return {
     serializeTerminalBuffer: vi.fn(
       async (_ptyId: string, options?: { scrollbackRows?: number }) => ({

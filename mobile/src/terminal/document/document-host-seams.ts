@@ -138,8 +138,8 @@ declare global {
      * The WebView page writes these ahead of the document script: the text scale its view mounted
      * at, and whether that view was shown then.
      */
-    __orcaTerminalTextScale?: unknown
-    __orcaTerminalShown?: unknown
+    __quirkyTerminalTextScale?: unknown
+    __quirkyTerminalShown?: unknown
   }
   const Terminal: new (options: Record<string, unknown>) => TerminalDocumentTerminal
 }
@@ -234,10 +234,10 @@ export function windowHasEngine() {
 }
 
 export function windowStart(): TerminalDocumentStart {
-  const scale = window.__orcaTerminalTextScale
+  const scale = window.__quirkyTerminalTextScale
   return {
     textScale: typeof scale === 'number' && scale > 0 ? scale : 1,
-    shown: window.__orcaTerminalShown !== false
+    shown: window.__quirkyTerminalShown !== false
   }
 }
 

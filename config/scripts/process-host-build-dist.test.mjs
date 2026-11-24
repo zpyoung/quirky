@@ -17,7 +17,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 const realPackageDir = resolve('src/packages/process-host')
@@ -25,7 +25,7 @@ const buildScript = join(realPackageDir, 'scripts', 'build-dist.mjs')
 const packageRequire = createRequire(join(realPackageDir, 'package.json'))
 const tsxCli = packageRequire.resolve('tsx/cli')
 const realCompilerDir = dirname(packageRequire.resolve('typescript/package.json'))
-const nodeExecutable = process.env.ORCA_TEST_NODE_EXECUTABLE ?? process.execPath
+const nodeExecutable = process.env.QUIRKY_TEST_NODE_EXECUTABLE ?? process.execPath
 const temporaryRoots = []
 let seededDist
 let releaseSeed
@@ -37,7 +37,7 @@ afterEach(() => {
 })
 
 function fixture(onTestFinished, distSeed) {
-  const root = mkdtempSync(join(tmpdir(), 'orca-process-host-build-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-process-host-build-'))
   if (onTestFinished) {
     onTestFinished(() => rmSync(root, { recursive: true, force: true }))
   }
@@ -77,7 +77,7 @@ function fixture(onTestFinished, distSeed) {
 }
 
 function runBuild(packageDir, { script = buildScript, cwd = realPackageDir } = {}) {
-  const args = [tsxCli, '--conditions=orca-source', script, ...(packageDir ? [packageDir] : [])]
+  const args = [tsxCli, '--conditions=quirky-source', script, ...(packageDir ? [packageDir] : [])]
   return runProcess({ program: nodeExecutable, args, cwd, timeoutMs: 120_000 })
 }
 
@@ -381,8 +381,8 @@ while (!existsSync(${JSON.stringify(finished)}) || reads === 0) {
     writeFileSync(
       join(packageDir, 'package.json'),
       JSON.stringify({
-        name: '@orca/process-host',
-        exports: { '.': { 'orca-source': './src/run-process.ts' } }
+        name: '@quirky/process-host',
+        exports: { '.': { 'quirky-source': './src/run-process.ts' } }
       })
     )
     // The script imports runProcess through its own package name; forward to the real one.
@@ -402,7 +402,7 @@ while (!existsSync(${JSON.stringify(finished)}) || reads === 0) {
       join(packageDir, 'node_modules', 'proper-lockfile'),
       'junction'
     )
-    const linkRoot = mkdtempSync(join(tmpdir(), 'orca-process-host-link-'))
+    const linkRoot = mkdtempSync(join(tmpdir(), 'quirky-process-host-link-'))
     temporaryRoots.push(linkRoot)
     const linkDir = join(linkRoot, 'package')
     symlinkSync(packageDir, linkDir, 'junction')

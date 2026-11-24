@@ -5,7 +5,7 @@ import { resolveEditorOpenTargetGroupId } from './editor-open-target-group'
 import { areEditorPreviewTabsEnabled } from './editor-preview-tab-setting'
 import { isEditorTabContentType, type EditorTabContentType } from './editor-tab-content-type'
 import { getOpenFileExecutionHostId } from '@/lib/unified-tab-host-ownership'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { recordOpenedEditorTabInLayoutOwner } from './editor-tab-layout-owner'
 
 export function openWorkspaceEditorItem(
@@ -52,7 +52,7 @@ export function openWorkspaceEditorItem(
     ...(selection === 'background' ? { recordFocus: false } : {})
   })
   // Switch point: main records the tab the window just drew, under its ids.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN && created) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN && created) {
     recordOpenedEditorTabInLayoutOwner(state, created)
   }
   return created?.id ?? fileId

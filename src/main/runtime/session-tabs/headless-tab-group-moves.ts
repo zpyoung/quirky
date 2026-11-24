@@ -12,27 +12,27 @@ import {
 import { randomUUID } from 'node:crypto'
 import { withSelectedTabs } from '../headless-tab-group-selection'
 import type { TabGroupLayoutNode } from '../../../shared/tab-types'
-import type { OrcaRuntimeWithPersistHeadlessTerminalTitle } from '../workspaces/workspace-file-session-targets'
-import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
+import type { QuirkyRuntimeWithPersistHeadlessTerminalTitle } from '../workspaces/workspace-file-session-targets'
+import type { QuirkyRuntimeWithPruneMobileSessionTabGroupLayout } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
 
 export abstract class RuntimeHeadlessTabGroups extends RuntimeHeadlessTabProperties {
   protected abstract resolveMobileSessionHostTabId(
     ...args: Parameters<
-      OrcaRuntimeWithPersistHeadlessTerminalTitle['resolveMobileSessionHostTabId']
+      QuirkyRuntimeWithPersistHeadlessTerminalTitle['resolveMobileSessionHostTabId']
     >
-  ): ReturnType<OrcaRuntimeWithPersistHeadlessTerminalTitle['resolveMobileSessionHostTabId']>
+  ): ReturnType<QuirkyRuntimeWithPersistHeadlessTerminalTitle['resolveMobileSessionHostTabId']>
 
   protected abstract normalizeMobileSessionTabOrder(
     ...args: Parameters<
-      OrcaRuntimeWithPersistHeadlessTerminalTitle['normalizeMobileSessionTabOrder']
+      QuirkyRuntimeWithPersistHeadlessTerminalTitle['normalizeMobileSessionTabOrder']
     >
-  ): ReturnType<OrcaRuntimeWithPersistHeadlessTerminalTitle['normalizeMobileSessionTabOrder']>
+  ): ReturnType<QuirkyRuntimeWithPersistHeadlessTerminalTitle['normalizeMobileSessionTabOrder']>
 
   protected abstract toMobileSessionTabsResult(
     ...args: Parameters<
-      OrcaRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']
+      QuirkyRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']
     >
-  ): ReturnType<OrcaRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']>
+  ): ReturnType<QuirkyRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']>
 
   protected moveHeadlessMobileSessionTab(
     worktreeId: string,

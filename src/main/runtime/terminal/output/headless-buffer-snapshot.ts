@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithVisibleSnapshotPreview } from './terminal-visible-state'
+import { QuirkyRuntimeWithVisibleSnapshotPreview } from './terminal-visible-state'
 import type { TerminalOscLinkRange } from '../../../../shared/terminal-osc-link-ranges'
 import { parseTerminalKittyKeyboardFlags } from '../../../../shared/terminal-kitty-keyboard-flags'
 import type {
@@ -7,7 +7,7 @@ import type {
 } from '../../runtime-terminal-contracts'
 import { randomUUID } from 'node:crypto'
 
-export abstract class OrcaRuntimeWithSerializeHeadlessTerminalBuffer extends OrcaRuntimeWithVisibleSnapshotPreview {
+export abstract class QuirkyRuntimeWithSerializeHeadlessTerminalBuffer extends QuirkyRuntimeWithVisibleSnapshotPreview {
   /** Keyed by the attachment that carries each one, so releasing it forgets the terminal. */
   protected readonly orchestrationCompatibilitySshTerminals = new Map<
     string,

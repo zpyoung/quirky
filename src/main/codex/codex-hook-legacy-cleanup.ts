@@ -24,12 +24,12 @@ import { runExclusivelyForCodexTrustConfig } from './codex-trust-config-mutation
 import { getRealHomeHookKeySourcePaths } from './codex-real-home-hooks-json'
 import { mutateRealHomeHooksPreservingUserTrust } from './codex-user-hook-trust-moves'
 
-const LEGACY_ORCA_PROFILE_NAME = 'orca-agent-status'
-const LEGACY_ORCA_PROFILE_BLOCK_START = '# BEGIN ORCA AGENT STATUS HOOKS'
-const LEGACY_ORCA_PROFILE_BLOCK_END = '# END ORCA AGENT STATUS HOOKS'
+const LEGACY_QUIRKY_PROFILE_NAME = 'quirky-agent-status'
+const LEGACY_QUIRKY_PROFILE_BLOCK_START = '# BEGIN QUIRKY AGENT STATUS HOOKS'
+const LEGACY_QUIRKY_PROFILE_BLOCK_END = '# END QUIRKY AGENT STATUS HOOKS'
 
 function getLegacyCodexProfileTomlPath(): string {
-  return join(getSystemCodexHomePath(), `${LEGACY_ORCA_PROFILE_NAME}.config.toml`)
+  return join(getSystemCodexHomePath(), `${LEGACY_QUIRKY_PROFILE_NAME}.config.toml`)
 }
 
 export function cleanupLegacySystemManagedHooks(): Promise<void> {
@@ -42,9 +42,9 @@ export function cleanupLegacySystemManagedHooks(): Promise<void> {
 }
 
 /**
- * Removes only retired Orca command forms from the user's ~/.codex/hooks.json.
+ * Removes only retired Quirky command forms from the user's ~/.codex/hooks.json.
  *
- * Why never the current entry or its trust: every Orca instance on this HOME
+ * Why never the current entry or its trust: every Quirky instance on this HOME
  * shares that entry, and this runs on every install, including launch prep for
  * any pane. Removing it is reserved for an explicit opt-out.
  */
@@ -94,10 +94,10 @@ async function sweepLegacySystemManagedHooks(): Promise<void> {
     }
   }
 
-  // Why: Codex hooks moved to Orca's managed CODEX_HOME in #2350; hooks from before then would keep external Codex sessions reporting into Orca.
+  // Why: Codex hooks moved to Quirky's managed CODEX_HOME in #2350; hooks from before then would keep external Codex sessions reporting into Quirky.
   if (removedManagedHook) {
-    // Why: this is the user's system hooks file, not Orca's runtime copy.
-    // Remove only retired Orca hook entries and preserve other managers' metadata.
+    // Why: this is the user's system hooks file, not Quirky's runtime copy.
+    // Remove only retired Quirky hook entries and preserve other managers' metadata.
     const hooksWritePath = resolveHooksJsonWritePath(legacyConfigPath)
     mutateRealHomeHooksPreservingUserTrust({
       sourcePaths,
@@ -111,7 +111,7 @@ async function sweepLegacySystemManagedHooks(): Promise<void> {
         ) {
           // Why: another process may have saved since the read; never replace
           // that newer dotfiles generation with this stale parse.
-          throw new Error('System Codex hooks changed since Orca read them')
+          throw new Error('System Codex hooks changed since Quirky read them')
         }
         writeHooksJson(hooksWritePath, { ...config, hooks: nextHooks }, { preserveMode: true })
       }
@@ -122,8 +122,8 @@ async function sweepLegacySystemManagedHooks(): Promise<void> {
 
 export function stripLegacyManagedProfileBlock(content: string): string {
   const regions = findManagedTomlBlocks(content, {
-    startMarker: LEGACY_ORCA_PROFILE_BLOCK_START,
-    endMarker: LEGACY_ORCA_PROFILE_BLOCK_END
+    startMarker: LEGACY_QUIRKY_PROFILE_BLOCK_START,
+    endMarker: LEGACY_QUIRKY_PROFILE_BLOCK_END
   })
   // A stray marker above a complete block must not hide it: take the first
   // terminated region and leave the orphan (and the user text around it) alone.
@@ -164,7 +164,7 @@ function cleanupLegacyCodexProfileHooks(): void {
   if (next === existing) {
     return
   }
-  // Why: #2778 wrote Orca hooks into a Codex profile file; runtime CODEX_HOME supersedes it, so remove only Orca's marked block.
+  // Why: #2778 wrote Quirky hooks into a Codex profile file; runtime CODEX_HOME supersedes it, so remove only Quirky's marked block.
   if (next.trim().length === 0) {
     unlinkSync(profilePath)
   } else {

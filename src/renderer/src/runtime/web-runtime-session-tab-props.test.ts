@@ -88,7 +88,7 @@ describe('setWebRuntimeTabProps', () => {
   })
 
   it('pushes pin to the host via session.tabs.setTabProps for a remote tab', async () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', false)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', false)
     mocks.getState.mockReturnValue(ownedBy(RUNTIME_ROW))
     const runtimeCall = vi.fn().mockResolvedValue({ id: 'p', ok: true, result: { updated: true } })
     stubRuntimeEnvironmentBridge({ call: runtimeCall })
@@ -115,7 +115,7 @@ describe('setWebRuntimeTabProps', () => {
   })
 
   it('maps mirrored browser/editor unified ids before setting host tab props', async () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', false)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', false)
     mocks.getState.mockReturnValue(ownedBy(RUNTIME_ROW))
     mocks.resolveHostSessionTabIdForWebSessionTab.mockImplementation(
       (_state, args: { tabId: string }) =>
@@ -146,7 +146,7 @@ describe('setWebRuntimeTabProps', () => {
   })
 
   it('no-ops for a worktree with no runtime environment (local tab)', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', false)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', false)
     mocks.getState.mockReturnValue(ownedBy({ hostId: 'local' }))
     const runtimeCall = vi.fn()
     stubRuntimeEnvironmentBridge({ call: runtimeCall })
@@ -158,7 +158,7 @@ describe('setWebRuntimeTabProps', () => {
   })
 
   it('refuses a local twin of the paired server instead of pushing to either host', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', false)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', false)
     mocks.getState.mockReturnValue(ownedBy({ hostId: 'local' }, RUNTIME_ROW))
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const runtimeCall = vi.fn()
@@ -174,7 +174,7 @@ describe('setWebRuntimeTabProps', () => {
   })
 
   it('does not push an unstamped row to the focused server', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', false)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', false)
     mocks.getState.mockReturnValue({
       settings: { activeRuntimeEnvironmentId: ENVIRONMENT_ID },
       runtimeEnvironments: [{ id: ENVIRONMENT_ID }],

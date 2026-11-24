@@ -13,7 +13,7 @@ import {
 } from './host-descriptor'
 
 function profile(): string {
-  return mkdtempSync(join(tmpdir(), 'orca-host-descriptor-'))
+  return mkdtempSync(join(tmpdir(), 'quirky-host-descriptor-'))
 }
 
 function storedId(userDataPath: string): unknown {

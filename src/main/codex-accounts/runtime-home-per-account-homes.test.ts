@@ -234,7 +234,7 @@ describe('CodexRuntimeHomeService', () => {
     // A managed home that has lost its auth.json (only the marker remains).
     const brokenHome = join(testState.userDataDir, 'codex-accounts', 'account-1', 'home')
     mkdirSync(brokenHome, { recursive: true })
-    writeFileSync(join(brokenHome, '.orca-managed-home'), 'account-1\n', 'utf-8')
+    writeFileSync(join(brokenHome, '.quirky-managed-home'), 'account-1\n', 'utf-8')
     const settings = createSettings({
       realHomeRoutable: true,
       codexManagedAccounts: [
@@ -312,7 +312,7 @@ describe('CodexRuntimeHomeService', () => {
 
   it('includes WSL account homes in session discovery', async () => {
     const wslHome =
-      '\\\\wsl.localhost\\Ubuntu\\home\\me\\.local\\share\\orca\\codex-accounts\\account-1\\home'
+      '\\\\wsl.localhost\\Ubuntu\\home\\me\\.local\\share\\quirky\\codex-accounts\\account-1\\home'
     const store = createStore(
       createSettings({
         codexManagedAccounts: [
@@ -322,7 +322,7 @@ describe('CodexRuntimeHomeService', () => {
             managedHomePath: wslHome,
             managedHomeRuntime: 'wsl',
             wslDistro: 'Ubuntu',
-            wslLinuxHomePath: '/home/me/.local/share/orca/codex-accounts/account-1/home',
+            wslLinuxHomePath: '/home/me/.local/share/quirky/codex-accounts/account-1/home',
             providerAccountId: null,
             workspaceLabel: null,
             workspaceAccountId: null,
@@ -340,7 +340,7 @@ describe('CodexRuntimeHomeService', () => {
   })
 
   it('surfaces per-account rollouts for session discovery on the mirror lane', async () => {
-    // A custom CODEX_HOME keeps the system default on Orca's mirror, but managed
+    // A custom CODEX_HOME keeps the system default on Quirky's mirror, but managed
     // accounts still launch from their own homes and accumulate rollouts there.
     const home1 = createManagedAuth(
       testState.userDataDir,

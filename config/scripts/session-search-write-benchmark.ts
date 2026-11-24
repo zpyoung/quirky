@@ -88,7 +88,7 @@ async function checkpointedFileBytes(db: SyncDatabase, path: string): Promise<nu
 
 // The default corpus puts tool output at about half the message text; set this
 // far higher to price the tool-row cap against the real 80-97 % band.
-const toolResultWords = Number(process.env.ORCA_SEARCH_BENCH_TOOL_WORDS ?? 200)
+const toolResultWords = Number(process.env.QUIRKY_SEARCH_BENCH_TOOL_WORDS ?? 200)
 const corpus = await writeSyntheticTranscriptCorpus({ toolResultWords })
 const indexPath = join(corpus.root, 'index.sqlite')
 try {
@@ -180,7 +180,7 @@ try {
 
 // Phase two: one transcript far larger than any real one, to price the ceiling
 // that decides whether a file commits once or in chunks.
-const largeTurns = Number(process.env.ORCA_SEARCH_BENCH_LARGE_TURNS ?? 23_000)
+const largeTurns = Number(process.env.QUIRKY_SEARCH_BENCH_LARGE_TURNS ?? 23_000)
 const large = await writeSyntheticTranscriptCorpus({
   sessions: 1,
   turnsPerSession: largeTurns,

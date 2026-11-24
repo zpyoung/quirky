@@ -95,7 +95,7 @@ export function formatHostList(result: { hosts: HostListEntry[] }): string {
   const kindLabel: Record<HostListEntry['kind'], string> = {
     local: 'local',
     ssh: 'ssh target',
-    environment: 'orca server'
+    environment: 'quirky server'
   }
   return result.hosts
     .map(
@@ -140,7 +140,9 @@ export function formatCliStatus(status: CliStatusResult): string {
     `runtimeConnectionState: ${status.runtime.connectionState ?? 'unknown'}`,
     `runtimeId: ${status.runtime.runtimeId ?? 'none'}`,
     `graphState: ${status.graph.state}`,
-    ...(status.caller === undefined ? [] : [`orcaSessionId: ${formatStatusCaller(status.caller)}`])
+    ...(status.caller === undefined
+      ? []
+      : [`quirkySessionId: ${formatStatusCaller(status.caller)}`])
   ].join('\n')
 }
 
@@ -148,7 +150,7 @@ function formatStatusCaller(caller: CliStatusCaller): string {
   if ('refusal' in caller) {
     return `none (refused: ${caller.refusal.code})`
   }
-  return `${caller.orcaSessionId}${caller.live ? '' : ' (not live)'}`
+  return `${caller.quirkySessionId}${caller.live ? '' : ' (not live)'}`
 }
 
 export function formatStatus(status: CliStatusResult): string {

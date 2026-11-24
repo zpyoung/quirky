@@ -11,13 +11,13 @@ const root = resolve(import.meta.dirname, '../..')
 
 describe.skipIf(process.platform !== 'darwin')('native ShipIt scheduling', () => {
   it('changes only ProcessType in the real Electron job, retaining native install and retry settings', () => {
-    const work = mkdtempSync(join(tmpdir(), 'orca-shipit-contract-'))
-    const bundleId = `com.orca.shipit-contract.${work.split('-').at(-1).toLowerCase()}`
+    const work = mkdtempSync(join(tmpdir(), 'quirky-shipit-contract-'))
+    const bundleId = `com.quirky.shipit-contract.${work.split('-').at(-1).toLowerCase()}`
     try {
       for (const arch of ['x64', 'arm64']) {
         buildMacShipItScheduling(join(work, arch), arch)
       }
-      const addon = join(work, process.arch, 'orca_shipit_scheduling.node')
+      const addon = join(work, process.arch, 'quirky_shipit_scheduling.node')
       // Loading outside Electron must fail safely when Squirrel is absent.
       expect(require(addon).configure()).toBe(false)
       const compatibilityProbe = join(work, 'unsupported-api')
@@ -61,7 +61,7 @@ describe.skipIf(process.platform !== 'darwin')('native ShipIt scheduling', () =>
         execFileSync(electron, ['-e', 'console.log(require(process.argv[1]).configure())', addon], {
           encoding: 'utf8',
           timeout: 20_000,
-          env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1', ELECTRON_RUN_AS_NODE: '1' }
+          env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1', ELECTRON_RUN_AS_NODE: '1' }
         }).trim()
       ).toBe('true')
       const frameworks = resolve(dirname(electron), '../Frameworks')
@@ -69,7 +69,7 @@ describe.skipIf(process.platform !== 'darwin')('native ShipIt scheduling', () =>
         execFileSync(executable, [frameworks, addon], {
           encoding: 'utf8',
           timeout: 20_000,
-          env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+          env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
         })
       )
       expect(job.ProcessType).toBe('Interactive')

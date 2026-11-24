@@ -1,6 +1,6 @@
 /** E2E coverage for copying provider identity from the exact terminal pane. */
 
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   ensureTerminalVisible,
   getActiveTabId,
@@ -12,16 +12,16 @@ import { openTerminalContextMenu } from './helpers/terminal-pane-title-actions'
 
 const SESSION_ID = 'e2e-terminal-pane-session'
 
-test('terminal pane context menu copies its agent session ID', async ({ orcaPage }) => {
-  await waitForSessionReady(orcaPage)
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
+test('terminal pane context menu copies its agent session ID', async ({ quirkyPage }) => {
+  await waitForSessionReady(quirkyPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
 
-  const tabId = await getActiveTabId(orcaPage)
+  const tabId = await getActiveTabId(quirkyPage)
   if (!tabId) {
     throw new Error('No active terminal tab')
   }
-  const snapshot = await waitForPaneIdentitySnapshot(orcaPage, 1)
+  const snapshot = await waitForPaneIdentitySnapshot(quirkyPage, 1)
   const leafId = snapshot.panes[0]?.leafId
   if (!leafId) {
     throw new Error('No active terminal pane')
@@ -30,7 +30,7 @@ test('terminal pane context menu copies its agent session ID', async ({ orcaPage
 
   // Keep this independent of an installed provider CLI while exercising the
   // durable pane identity used when transient live status has been cleared.
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     ({ paneKey, tabId, worktreeId, sessionId }) => {
       const state = window.__store?.getState()
       if (!state) {
@@ -50,7 +50,7 @@ test('terminal pane context menu copies its agent session ID', async ({ orcaPage
   await expect
     .poll(
       () =>
-        orcaPage.evaluate(
+        quirkyPage.evaluate(
           ({ paneKey }) =>
             window.__store?.getState().sleepingAgentSessionsByPaneKey[paneKey]?.providerSession.id,
           { paneKey }
@@ -59,9 +59,9 @@ test('terminal pane context menu copies its agent session ID', async ({ orcaPage
     )
     .toBe(SESSION_ID)
 
-  await openTerminalContextMenu(orcaPage)
+  await openTerminalContextMenu(quirkyPage)
 
-  const identityItems = await orcaPage.getByRole('menuitem').allInnerTexts()
+  const identityItems = await quirkyPage.getByRole('menuitem').allInnerTexts()
   const sessionIdIndex = identityItems.indexOf('Copy Session ID')
   expect(identityItems.slice(sessionIdIndex, sessionIdIndex + 3)).toEqual([
     'Copy Session ID',
@@ -69,11 +69,11 @@ test('terminal pane context menu copies its agent session ID', async ({ orcaPage
     'Copy Pane ID'
   ])
 
-  const copyItem = orcaPage.getByRole('menuitem', { name: 'Copy Session ID', exact: true })
+  const copyItem = quirkyPage.getByRole('menuitem', { name: 'Copy Session ID', exact: true })
   await expect(copyItem).toBeVisible()
   await copyItem.click()
 
   await expect
-    .poll(() => orcaPage.evaluate(() => window.api.ui.readClipboardText()), { timeout: 3_000 })
+    .poll(() => quirkyPage.evaluate(() => window.api.ui.readClipboardText()), { timeout: 3_000 })
     .toBe(SESSION_ID)
 })

@@ -14,7 +14,7 @@ import { homedir, tmpdir } from 'node:os'
 import type * as Os from 'node:os'
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { parseQoderSessionFile } from '../ai-vault/session-scanner-qoder-parser'
 
@@ -28,11 +28,11 @@ import { qoderHookService } from './hook-service'
 import { markQoderWorkspaceTrusted } from './workspace-trust'
 import { AgentHookServer } from '../agent-hooks/server'
 
-it.skipIf(process.env.ORCA_REAL_QODER_CLI_TEST !== '1')(
+it.skipIf(process.env.QUIRKY_REAL_QODER_CLI_TEST !== '1')(
   'generates and resumes a real task through managed hooks',
   async () => {
     const realHome = homedir()
-    sandbox.home = await realpath(await mkdtemp(join(tmpdir(), 'orca-qoder-real-')))
+    sandbox.home = await realpath(await mkdtemp(join(tmpdir(), 'quirky-qoder-real-')))
     const config = join(sandbox.home, '.qoder')
     const workspace = join(sandbox.home, 'folder')
     const proofFile = `qoder-proof-${randomUUID()}.txt`
@@ -62,16 +62,17 @@ it.skipIf(process.env.ORCA_REAL_QODER_CLI_TEST !== '1')(
       )
       expect(qoderHookService.install().state).toBe('installed')
       markQoderWorkspaceTrusted(workspace, sandbox.home)
-      await server.start({ env: 'production', userDataPath: join(sandbox.home, 'orca') })
+      await server.start({ env: 'production', userDataPath: join(sandbox.home, 'quirky') })
       const env = {
         ...process.env,
         HOME: sandbox.home,
         USERPROFILE: sandbox.home,
         ...server.buildPtyEnv(),
-        ORCA_PANE_KEY: makePaneKey(randomUUID(), randomUUID()),
-        ORCA_BACKGROUND_LAUNCH: '1'
+        QUIRKY_PANE_KEY: makePaneKey(randomUUID(), randomUUID()),
+        QUIRKY_BACKGROUND_LAUNCH: '1'
       }
-      const command = process.env.ORCA_QODER_CLI_PATH ?? join(realHome, '.local', 'bin', 'qodercli')
+      const command =
+        process.env.QUIRKY_QODER_CLI_PATH ?? join(realHome, '.local', 'bin', 'qodercli')
       const version = await runProcess({ program: command, args: ['--version'], env })
       expect(version.code).toBe(0)
       const args = [
@@ -158,7 +159,7 @@ it.skipIf(process.env.ORCA_REAL_QODER_CLI_TEST !== '1')(
           expect.objectContaining({ event: 'Stop', state: 'done', agent: 'qoder' })
         ])
       )
-      const evidencePath = process.env.ORCA_QODER_PROOF_PATH
+      const evidencePath = process.env.QUIRKY_QODER_PROOF_PATH
       if (evidencePath) {
         await writeFile(
           evidencePath,

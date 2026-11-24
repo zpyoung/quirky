@@ -1,6 +1,6 @@
 import type { MobileTerminalCreateOptions } from './mobile-terminal-renderer-create'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-session-contracts'
-import { OrcaRuntimeWithFailedStartPanes } from './failed-start-pane'
+import { QuirkyRuntimeWithFailedStartPanes } from './failed-start-pane'
 import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type {
@@ -10,10 +10,10 @@ import type {
 import type { RuntimeNavigationTarget } from '../../../../shared/runtime-navigation'
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../../shared/runtime-types'
 import { navigationTargetsHost } from '../../../../shared/runtime-navigation'
-import { MOBILE_TERMINAL_CREATE_RESULT_TTL_MS } from '../../orca-runtime-core'
+import { MOBILE_TERMINAL_CREATE_RESULT_TTL_MS } from '../../quirky-runtime-core'
 import { seedResumeLaunchIdentity } from '../../../ipc/pty/pane/resume-launch-identity'
 
-export abstract class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRuntimeWithFailedStartPanes {
+export abstract class QuirkyRuntimeWithCreateMobileSessionTerminal extends QuirkyRuntimeWithFailedStartPanes {
   protected abstract runCreateMobileSessionTerminal(
     worktreeSelector: string,
     opts?: MobileTerminalCreateOptions

@@ -25,10 +25,10 @@ const root = fileURLToPath(new URL('../..', import.meta.url))
 const output = path.join(root, '.build/preflight-benchmark')
 const reportName = parityOnly ? 'compiler-parity' : 'compilers'
 mkdirSync(output, { recursive: true })
-const bun = process.env.ORCA_BENCHMARK_BUN ?? 'bun'
+const bun = process.env.QUIRKY_BENCHMARK_BUN ?? 'bun'
 const env = {
   ...process.env,
-  ORCA_BACKGROUND_LAUNCH: '1',
+  QUIRKY_BACKGROUND_LAUNCH: '1',
   GOMAXPROCS: '4',
   GOMEMLIMIT: NATIVE_COMPILER_MEMORY_LIMIT
 }

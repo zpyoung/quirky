@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import { getCachedWorktrees } from '../cache/worktree-cache'
 import { loadPinnedIds } from '../storage/preferences'
 import { loadHosts, updateLastConnected } from '../transport/host-store'
@@ -39,7 +39,7 @@ export function useHostScreenIdentity(args: {
   // Load persisted pins from local cache; view settings are no longer local (they sync via ui.get).
   useEffect(() => {
     // Switch point: a feed-built list takes pins from the host alone.
-    if (!hostId || ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+    if (!hostId || QUIRKY_SIDEBAR_INPUTS_IS_MAIN) {
       return
     }
     let stale = false

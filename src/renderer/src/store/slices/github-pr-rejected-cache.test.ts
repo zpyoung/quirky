@@ -28,25 +28,25 @@ describe.each(['manual', 'coordinator'] as const)('%s rejected PR cache results'
   it.each([
     {
       name: 'clears a rejected integration PR even at its merged head',
-      rejectedUrl: 'https://github.com/acme/orca/pull/12',
+      rejectedUrl: 'https://github.com/acme/quirky/pull/12',
       head: 'merged-head',
       preserves: false
     },
     {
       name: 'clears a rejected integration PR at a confirmed contained commit',
-      rejectedUrl: 'https://github.com/acme/orca/pull/12',
+      rejectedUrl: 'https://github.com/acme/quirky/pull/12',
       head: 'contained-head',
       preserves: false
     },
     {
       name: 'preserves a merged PR when the rejected number belongs to another repository',
-      rejectedUrl: 'https://github.com/other/orca/pull/12',
+      rejectedUrl: 'https://github.com/other/quirky/pull/12',
       head: 'merged-head',
       preserves: true
     },
     {
       name: 'preserves a merged PR when the rejected number belongs to another server',
-      rejectedUrl: 'https://github.example.com/acme/orca/pull/12',
+      rejectedUrl: 'https://github.example.com/acme/quirky/pull/12',
       head: 'merged-head',
       preserves: true
     }
@@ -61,7 +61,7 @@ describe.each(['manual', 'coordinator'] as const)('%s rejected PR cache results'
     const cachedPR = makePR({
       number: 12,
       state: 'merged',
-      url: 'https://github.com/acme/orca/pull/12',
+      url: 'https://github.com/acme/quirky/pull/12',
       headSha: 'merged-head',
       confirmedContainedHeadOid: 'contained-head'
     })

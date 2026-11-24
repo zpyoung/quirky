@@ -42,7 +42,7 @@ export const NativeChatSessionOptionPick = z.union([
     .strict()
 ])
 
-// Any agent Orca launches: picks are keyed by agent id, and every native chat agent remembers them.
+// Any agent Quirky launches: picks are keyed by agent id, and every native chat agent remembers them.
 const NativeChatSessionOptionAgent = z.string().refine(isTuiAgent, { message: 'Unknown agent' })
 
 export const NativeChatSessionOptionsMutation = z.discriminatedUnion('type', [

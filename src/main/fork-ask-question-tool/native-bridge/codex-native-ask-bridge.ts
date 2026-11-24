@@ -88,7 +88,7 @@ async function answerThroughOwner(args: {
     session.connection.respondWithError(
       args.request.id,
       CODEX_USER_INPUT_REFUSED,
-      `Orca could not relay ${CODEX_USER_INPUT_METHOD} to the watcher owner: ${error instanceof Error ? error.message : String(error)}`
+      `Quirky could not relay ${CODEX_USER_INPUT_METHOD} to the watcher owner: ${error instanceof Error ? error.message : String(error)}`
     )
   }
 }
@@ -121,7 +121,7 @@ export function bridgeCodexUserInput(
     session.connection.respondWithError(
       request.id,
       CODEX_USER_INPUT_REFUSED,
-      `Orca could not relay this question to the watcher owner (${reason}). ${NO_OWNER_ANSWER}`
+      `Quirky could not relay this question to the watcher owner (${reason}). ${NO_OWNER_ANSWER}`
     )
     return true
   }

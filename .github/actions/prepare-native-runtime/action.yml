@@ -65,11 +65,11 @@ runs:
         test -n "$pnpm_version"
         printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
         printf 'key=native-modules-%s-%s-%s-%s-node%s-pnpm%s-%s\n' "$RUNNER_OS" "$scope" "$RUNNER_ARCH" "$NATIVE_RUNTIME" "$NODE_VERSION" "$pnpm_version" "$NATIVE_SOURCE_HASH" >> "$GITHUB_OUTPUT"
-        cat >> "$GITHUB_OUTPUT" <<'ORCA_NATIVE_CACHE_PATHS'
-        path<<ORCA_NATIVE_BUILD_DIRECTORIES
+        cat >> "$GITHUB_OUTPUT" <<'QUIRKY_NATIVE_CACHE_PATHS'
+        path<<QUIRKY_NATIVE_BUILD_DIRECTORIES
         node_modules/.pnpm/node-pty@*/node_modules/node-pty/build
-        ORCA_NATIVE_BUILD_DIRECTORIES
-        ORCA_NATIVE_CACHE_PATHS
+        QUIRKY_NATIVE_BUILD_DIRECTORIES
+        QUIRKY_NATIVE_CACHE_PATHS
 
     - name: Restore compiled native modules
       id: native-cache-restore

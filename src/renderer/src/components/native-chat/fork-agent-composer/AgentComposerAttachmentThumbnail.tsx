@@ -62,7 +62,7 @@ function attachmentPreviewConnectionId(terminalTabId: string): string | null {
 function useAttachmentThumbnailSource(path: string, terminalTabId: string): string | undefined {
   const [source, setSource] = useState<string>()
   // Blob URLs are dropped and re-read when the window regains focus, so an
-  // image replaced outside Orca doesn't keep showing its stale pixels.
+  // image replaced outside Quirky doesn't keep showing its stale pixels.
   const [cacheGeneration, setCacheGeneration] = useState(0)
 
   useEffect(() => onImageCacheInvalidated(() => setCacheGeneration((current) => current + 1)), [])

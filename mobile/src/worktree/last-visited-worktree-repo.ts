@@ -1,7 +1,7 @@
 import { persistMirrored } from '../storage/mirrored-storage-keys'
 import { getRepoIdFromMobileWorktreeId } from '../session/mobile-session-route-helpers'
 
-export const LAST_VISITED_WORKTREE_STORAGE_KEY = 'orca:last-visited-worktree'
+export const LAST_VISITED_WORKTREE_STORAGE_KEY = 'quirky:last-visited-worktree'
 
 export type LastVisitedWorktreeRecord = {
   hostId: string

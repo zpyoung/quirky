@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   cleanupGoldenWorktree,
   createGoldenWorktree,
@@ -13,7 +13,7 @@ import {
 import { waitForSessionReady } from './helpers/store'
 
 test('@golden opens an unstaged file diff from Source Control', async ({
-  orcaPage,
+  quirkyPage,
   testRepoPath,
   registerPostElectronShutdownCleanup
 }) => {
@@ -21,32 +21,32 @@ test('@golden opens an unstaged file diff from Source Control', async ({
   registerPostElectronShutdownCleanup(async () => cleanupGoldenWorktree(testRepoPath, fixture))
   seedGoldenSourceEdit(fixture.worktreePath)
 
-  await waitForSessionReady(orcaPage)
-  await openGoldenSourceControl(orcaPage, testRepoPath, fixture)
+  await waitForSessionReady(quirkyPage)
+  await openGoldenSourceControl(quirkyPage, testRepoPath, fixture)
 
-  const changedFile = orcaPage
+  const changedFile = quirkyPage
     .locator('[data-testid="source-control-entry"]')
     .filter({ hasText: path.basename(GOLDEN_CHANGED_PATH) })
   await expect(changedFile).toBeVisible({ timeout: 15_000 })
   await changedFile.click()
 
-  await expect(orcaPage.locator('.monaco-diff-editor')).toBeVisible({ timeout: 20_000 })
+  await expect(quirkyPage.locator('.monaco-diff-editor')).toBeVisible({ timeout: 20_000 })
   await expect(
-    orcaPage
+    quirkyPage
       .locator('.original-in-monaco-diff-editor .view-line')
       .filter({ hasText: GOLDEN_REMOVED_LINE })
   ).toBeVisible()
   await expect(
-    orcaPage
+    quirkyPage
       .locator('.modified-in-monaco-diff-editor .view-line')
       .filter({ hasText: GOLDEN_ADDED_LINE })
   ).toBeVisible()
-  await expect(orcaPage.locator('.editor-header-path').first()).toHaveAttribute(
+  await expect(quirkyPage.locator('.editor-header-path').first()).toHaveAttribute(
     'title',
     `${realpathSync(path.join(fixture.worktreePath, GOLDEN_CHANGED_PATH)).replaceAll('\\', '/')} (diff)`
   )
 
-  const probe = orcaPage.getByRole('button', { name: /Source Control/ })
+  const probe = quirkyPage.getByRole('button', { name: /Source Control/ })
   await probe.focus()
   await expect(probe).toBeFocused()
 })

@@ -1,4 +1,4 @@
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { worktreeIdsEqual } from '../../../shared/worktree/id'
 import type { useAppStore } from '@/store'
@@ -115,7 +115,7 @@ function adoptHostOwnedSurface(
   const known = tabExists(store, owner.tabId)
   // Switch point, a paired server's workspace (the gate blocks those before any sweep today; a
   // local one returns before this): frames draw the server's pane; the window makes none.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN && !known) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN && !known) {
     return framesShowRecordedPane(worktreeId, owner)
   }
   if (bindLivePtyToExactSurface(store, worktreeId, owner)) {
@@ -216,7 +216,7 @@ export async function adoptLiveWorkspacePtySurfaces(
       continue
     }
     const mainPlaces =
-      ORCA_LAYOUT_OWNER_IS_MAIN && runtimeEnvironmentIdUnlessTwin(getState(), worktreeId) === null
+      QUIRKY_LAYOUT_OWNER_IS_MAIN && runtimeEnvironmentIdUnlessTwin(getState(), worktreeId) === null
     // Switch point: main placed the workspace's unshown terminals before answering (the listing's
     // placeUnshownLiveTerminals), so a pane main names is the surface and main's frames draw it.
     // The window writes nothing. A paired server's workspace keeps today's path.

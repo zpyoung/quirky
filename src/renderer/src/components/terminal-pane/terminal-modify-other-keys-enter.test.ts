@@ -61,7 +61,7 @@ function resolveForPane(event: TerminalShortcutEvent, modes: TerminalKittyKeyboa
     undefined,
     undefined,
     () => false,
-    'orca-first',
+    'quirky-first',
     undefined,
     () => modes.modifyOtherKeys
   )

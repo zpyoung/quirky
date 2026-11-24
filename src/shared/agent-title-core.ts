@@ -155,7 +155,7 @@ export function isClaudeIdentityFrameTitle(title: string): boolean {
 
 // Why: `cursor` is also an ordinary editor noun that other agents type into their own
 // task-summary titles, so a name token is not identity. Cursor's identifying titles are
-// a closed set (the native literal plus the labels Orca synthesizes from Cursor hooks),
+// a closed set (the native literal plus the labels Quirky synthesizes from Cursor hooks),
 // so match that vocabulary instead.
 export function isCursorAgentTitle(title: string | null | undefined): boolean {
   if (typeof title !== 'string') {
@@ -176,7 +176,7 @@ export function isCursorAgentTitle(title: string | null | undefined): boolean {
 }
 
 // Why: cursor-agent re-emits its bare native title every redraw, which would stomp
-// Orca's hook-synthesized spinner state, but only once a Cursor-owned title already
+// Quirky's hook-synthesized spinner state, but only once a Cursor-owned title already
 // owns the pane. A hookless Cursor pane still needs the literal once, for identity.
 export function shouldSuppressCursorNativeTitle(lastEmittedTitle: string | null): boolean {
   return lastEmittedTitle !== null && isCursorAgentTitle(lastEmittedTitle)

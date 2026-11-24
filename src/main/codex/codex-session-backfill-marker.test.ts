@@ -71,7 +71,7 @@ function readMarker(): Record<string, unknown> {
 }
 
 beforeEach(() => {
-  stateDir = mkdtempSync(join(tmpdir(), 'orca-codex-marker-'))
+  stateDir = mkdtempSync(join(tmpdir(), 'quirky-codex-marker-'))
   markerPath = join(stateDir, 'backfill-complete.json')
 })
 

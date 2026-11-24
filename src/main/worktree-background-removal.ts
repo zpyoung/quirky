@@ -258,7 +258,7 @@ async function settleBackgroundWorktreeRemoval(
     }
     console.warn(`[worktrees] background removal of ${record.worktreePath} failed`, error)
     settle = (settlement) => settlement.reject(error)
-    // Why: Git drops the registration even when it fails to delete the checkout, and Orca lists
+    // Why: Git drops the registration even when it fails to delete the checkout, and Quirky lists
     // workspaces from Git, so without the record the leftover would vanish with no way to retry.
     failure = await failureLeftByGit(record, error, job.cleanupPushTargetRemote)
   } finally {

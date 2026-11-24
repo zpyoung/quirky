@@ -20,7 +20,7 @@ vi.mock('electron', () => ({
 
 describe('findTerminalTabIdForLeaf after persistPtyBinding grafts a leaf', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
   afterEach(async () => {
     await closeTestStores()

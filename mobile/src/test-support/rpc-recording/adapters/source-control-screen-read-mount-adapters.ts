@@ -147,7 +147,7 @@ export function sourceControlScreenReadMountAdapters(
           connState: 'connected',
           hostId: HOST,
           worktreeId: WORKTREE,
-          name: 'orca',
+          name: 'quirky',
           // Only the session origin previews in place; any other pushes a route instead.
           origin: 'session',
           embedded: true,

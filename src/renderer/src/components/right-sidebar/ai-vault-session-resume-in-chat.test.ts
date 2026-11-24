@@ -9,13 +9,13 @@ type ResumeInChatSession = Parameters<
   typeof resolveAiVaultSessionResumeInChatEligibility
 >[0]['session']
 
-const WORKSPACE_PATH = '/repo/orca'
+const WORKSPACE_PATH = '/repo/quirky'
 
 function session(overrides: Partial<ResumeInChatSession> = {}): ResumeInChatSession {
   return {
     agent: 'claude',
     cwd: WORKSPACE_PATH,
-    filePath: '/home/dev/.claude/projects/-repo-orca/session-1.jsonl',
+    filePath: '/home/dev/.claude/projects/-repo-quirky/session-1.jsonl',
     executionHostId: 'local',
     messageCount: 12,
     previewMessages: [],
@@ -28,7 +28,7 @@ function eligibility(
 ) {
   return resolveAiVaultSessionResumeInChatEligibility({
     session: session(),
-    targetWorkspaceId: 'repo-1::/repo/orca',
+    targetWorkspaceId: 'repo-1::/repo/quirky',
     targetWorkspacePath: WORKSPACE_PATH,
     structuredRouteAvailable: true,
     ...overrides
@@ -37,7 +37,7 @@ function eligibility(
 
 describe('resolveAiVaultSessionResumeInChatEligibility', () => {
   it('offers the chat for a local Claude row in its own workspace', () => {
-    expect(eligibility()).toEqual({ available: true, workspaceId: 'repo-1::/repo/orca' })
+    expect(eligibility()).toEqual({ available: true, workspaceId: 'repo-1::/repo/quirky' })
   })
 
   it.each<AiVaultSession['agent']>(['grok', 'omp', 'opencode', 'opencode2', 'pi'])(
@@ -45,7 +45,7 @@ describe('resolveAiVaultSessionResumeInChatEligibility', () => {
     (agent) => {
       expect(eligibility({ session: session({ agent }) })).toEqual({
         available: true,
-        workspaceId: 'repo-1::/repo/orca'
+        workspaceId: 'repo-1::/repo/quirky'
       })
     }
   )
@@ -66,7 +66,7 @@ describe('resolveAiVaultSessionResumeInChatEligibility', () => {
       eligibility({
         session: {
           ...session(),
-          structuredSession: { sessionId: 'claude_1', workspaceId: 'repo-1::/repo/orca' }
+          structuredSession: { sessionId: 'claude_1', workspaceId: 'repo-1::/repo/quirky' }
         }
       })
     ).toEqual({ available: false, reason: 'already-structured' })
@@ -157,8 +157,8 @@ describe('workspace matching, which binds the agents that store conversations pe
   it('treats Windows spellings of one directory as the same workspace', () => {
     expect(
       eligibility({
-        session: session({ cwd: 'C:\\Users\\Dev\\repo\\Orca\\' }),
-        targetWorkspacePath: 'c:/users/dev/repo/orca'
+        session: session({ cwd: 'C:\\Users\\Dev\\repo\\Quirky\\' }),
+        targetWorkspacePath: 'c:/users/dev/repo/quirky'
       })
     ).toMatchObject({ available: true })
   })
@@ -166,18 +166,18 @@ describe('workspace matching, which binds the agents that store conversations pe
 
 describe('aiVaultSessionCwdMatchesWorkspace', () => {
   it('ignores separator, case, and a trailing slash', () => {
-    expect(aiVaultSessionCwdMatchesWorkspace('C:\\repo\\Orca', 'c:/repo/orca')).toBe(true)
-    expect(aiVaultSessionCwdMatchesWorkspace('/repo/orca/', '/repo/orca')).toBe(true)
-    expect(aiVaultSessionCwdMatchesWorkspace(' /repo/orca ', '/repo/orca')).toBe(true)
+    expect(aiVaultSessionCwdMatchesWorkspace('C:\\repo\\Quirky', 'c:/repo/quirky')).toBe(true)
+    expect(aiVaultSessionCwdMatchesWorkspace('/repo/quirky/', '/repo/quirky')).toBe(true)
+    expect(aiVaultSessionCwdMatchesWorkspace(' /repo/quirky ', '/repo/quirky')).toBe(true)
   })
 
   it('never calls a missing path a match', () => {
-    expect(aiVaultSessionCwdMatchesWorkspace(null, '/repo/orca')).toBe(false)
-    expect(aiVaultSessionCwdMatchesWorkspace('/repo/orca', null)).toBe(false)
+    expect(aiVaultSessionCwdMatchesWorkspace(null, '/repo/quirky')).toBe(false)
+    expect(aiVaultSessionCwdMatchesWorkspace('/repo/quirky', null)).toBe(false)
     expect(aiVaultSessionCwdMatchesWorkspace('', '')).toBe(false)
   })
 
   it('does not treat a sibling directory as the same workspace', () => {
-    expect(aiVaultSessionCwdMatchesWorkspace('/repo/orca-2', '/repo/orca')).toBe(false)
+    expect(aiVaultSessionCwdMatchesWorkspace('/repo/quirky-2', '/repo/quirky')).toBe(false)
   })
 })

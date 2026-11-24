@@ -2,8 +2,8 @@ import { posix, win32 } from 'node:path'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import { getManagedScriptPath } from './codex-hook-definition'
 
-// Why enumerated: every Orca build and instance writes the same current command,
-// so "any Orca-looking entry that is not mine" would strip a newer or older
+// Why enumerated: every Quirky build and instance writes the same current command,
+// so "any Quirky-looking entry that is not mine" would strip a newer or older
 // build's live entry. Only forms no build writes any more may be swept.
 // #1019: `/bin/sh "<userData>/agent-hooks/codex-hook.sh"`.
 const DOUBLE_QUOTED_SH = /^\/bin\/sh "([^"]+)"$/
@@ -34,7 +34,7 @@ function unquotePosix(quoted: string): string {
   return quoted.slice(1, -1).replaceAll("'\\''", "'")
 }
 
-/** True only for a Codex hook command a retired Orca build wrote into ~/.codex. */
+/** True only for a Codex hook command a retired Quirky build wrote into ~/.codex. */
 export function isRetiredCodexHookCommand(command: string | undefined): boolean {
   if (!command) {
     return false

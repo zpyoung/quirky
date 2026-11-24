@@ -6,7 +6,7 @@
 // it to the listener, so a launcher that takes stdin away from the hook fails here (#14818).
 // Every agent that registers a managed .cmd runs here under the shell its vendor uses.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { createServer, type Server } from 'node:http'
 import { lstatSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
@@ -28,7 +28,7 @@ vi.mock('./windows-native-hook-executable', async (importOriginal) => ({
 
 vi.mock('electron', () => ({
   app: {
-    getPath: () => '/tmp/orca-user-data'
+    getPath: () => '/tmp/quirky-user-data'
   }
 }))
 
@@ -94,7 +94,7 @@ async function startHookListener(): Promise<{
     })
     req.on('end', () => {
       const form = new URLSearchParams(body)
-      const token = req.headers['x-orca-agent-hook-token']
+      const token = req.headers['x-quirky-agent-hook-token']
       posts.push({
         payload: form.get('payload'),
         paneKey: form.get('paneKey'),
@@ -198,7 +198,7 @@ const CMD_PYTHON_SHELL: Runner = {
   verbatim: true
 }
 
-// Orca's TOML basic strings use only escapes that a JSON string decodes identically.
+// Quirky's TOML basic strings use only escapes that a JSON string decodes identically.
 function readTomlEventCommands(path: string, event: string): string[] {
   const block = new RegExp(`^event = "${event}"\\r?\\ncommand = ("(?:[^"\\\\]|\\\\.)*")$`, 'gm')
   return [...readFileSync(path, 'utf8').matchAll(block)].map((match) =>
@@ -218,7 +218,7 @@ function readEvent(path: string, event: string): (string | undefined)[] {
 
 // The pre-forward-slash bare path: Git Bash strips its backslashes and exits 127.
 const legacyBackslashEntry = (home: string, script: string): Entry => ({
-  hooks: [{ command: join(home, '.orca', 'agent-hooks', script) }]
+  hooks: [{ command: join(home, '.quirky', 'agent-hooks', script) }]
 })
 
 function writeHooks(
@@ -254,8 +254,8 @@ const PROVIDERS: Provider[] = [
   },
   {
     // A spaced home cannot carry the bare exe path, so that profile falls back to the `.cmd` hook.
-    name: 'Claude (orca-agent-hook.exe)',
-    script: 'orca-agent-hook.exe',
+    name: 'Claude (quirky-agent-hook.exe)',
+    script: 'quirky-agent-hook.exe',
     stdout: '{}',
     install: () => {
       bundledHook.path = buildWindowsNativeHookExecutable()
@@ -308,13 +308,13 @@ const PROVIDERS: Provider[] = [
     runners: [POWERSHELL_GEMINI]
   },
   {
-    // dsh-hooks.json is Orca-owned and rewritten whole, so there is no stale entry to sweep.
+    // dsh-hooks.json is Quirky-owned and rewritten whole, so there is no stale entry to sweep.
     name: 'DSH',
     script: 'dsh-hook.cmd',
     stdout: '',
     install: () => new DshHookService().install(),
     commands: (home) =>
-      readEvent(join(home, '.orca', 'agent-hooks', 'dsh-hooks.json'), 'UserPromptSubmit'),
+      readEvent(join(home, '.quirky', 'agent-hooks', 'dsh-hooks.json'), 'UserPromptSubmit'),
     runners: [POWERSHELL_DSH]
   },
   {
@@ -348,10 +348,10 @@ const PROVIDERS: Provider[] = [
     script: 'copilot-hook.cmd',
     stdout: '{}',
     install: () => new CopilotHookService().install(),
-    commands: (home) => readEvent(join(home, '.copilot', 'hooks', 'orca.json'), 'Stop'),
+    commands: (home) => readEvent(join(home, '.copilot', 'hooks', 'quirky.json'), 'Stop'),
     seedStale: (home, stale) =>
       writeHooks(
-        join(home, '.copilot', 'hooks', 'orca.json'),
+        join(home, '.copilot', 'hooks', 'quirky.json'),
         { Stop: [{ powershell: stale }] },
         { version: 1 }
       ),
@@ -364,9 +364,9 @@ const PROVIDERS: Provider[] = [
     script: 'grok-hook.cmd',
     stdout: '',
     install: () => new GrokHookService().install(),
-    commands: (home) => readEvent(join(home, '.grok', 'hooks', 'orca-status.json'), 'Stop'),
+    commands: (home) => readEvent(join(home, '.grok', 'hooks', 'quirky-status.json'), 'Stop'),
     seedStale: (home, stale) =>
-      writeHooks(join(home, '.grok', 'hooks', 'orca-status.json'), {
+      writeHooks(join(home, '.grok', 'hooks', 'quirky-status.json'), {
         Stop: [{ hooks: [{ command: stale }] }, legacyBackslashEntry(home, 'grok-hook.cmd')]
       }),
     runners: [CMD_PLAIN, GIT_BASH, POWERSHELL_PLAIN]
@@ -418,13 +418,13 @@ function seedCmdAutoRunTarget(home: string): void {
   writeFileSync(join(home, '.cmd_aliases.cmd'), '@echo off\r\n', 'utf8')
 }
 
-// Why: strip every inherited ORCA_* so an endpoint file from a live Orca can never redirect the
+// Why: strip every inherited QUIRKY_* so an endpoint file from a live Quirky can never redirect the
 // hook's POST away from this listener.
 function hookEnvironment(extra: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const base = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('ORCA_'))
+    Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('QUIRKY_'))
   )
-  return { ...base, ORCA_BACKGROUND_LAUNCH: '1', ...extra }
+  return { ...base, QUIRKY_BACKGROUND_LAUNCH: '1', ...extra }
 }
 
 describe('Windows managed hook launcher', () => {
@@ -432,7 +432,7 @@ describe('Windows managed hook launcher', () => {
   // this keeps a ConPTY host from being reintroduced unnoticed by a POSIX-only CI leg.
   it('does not re-host the hook on a pseudoconsole', () => {
     const hook = getWindowsManagedLifecycleHook(
-      'C:\\Users\\alice\\.orca\\agent-hooks\\claude-hook.cmd'
+      'C:\\Users\\alice\\.quirky\\agent-hooks\\claude-hook.cmd'
     )
     expect(hook.command).not.toMatch(/conhost/i)
     expect(hook.args).toBeUndefined()
@@ -458,7 +458,7 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
   it.each(CASES)(
     '$name delivers the piped payload through its runners (home "$homeName")',
     async (provider) => {
-      root = mkdtempSync(join(tmpdir(), 'orca-hook-payload-'))
+      root = mkdtempSync(join(tmpdir(), 'quirky-hook-payload-'))
       const home = join(root, provider.homeName)
       mkdirSync(home)
       homedirMock.mockReturnValue(home)
@@ -477,7 +477,7 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
         vi.stubEnv(name, undefined)
       }
       seedCmdAutoRunTarget(home)
-      const scriptPath = join(home, '.orca', 'agent-hooks', provider.script)
+      const scriptPath = join(home, '.quirky', 'agent-hooks', provider.script)
       provider.seedStale?.(home, wrapWindowsHookCommand(scriptPath))
       expect(provider.install().state).toBe('installed')
 
@@ -505,9 +505,9 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
       const env = hookEnvironment({
         USERPROFILE: home,
         HOME: home,
-        ORCA_AGENT_HOOK_PORT: String(listener.port),
-        ORCA_AGENT_HOOK_TOKEN: HOOK_TOKEN,
-        ORCA_PANE_KEY: PANE_KEY
+        QUIRKY_AGENT_HOOK_PORT: String(listener.port),
+        QUIRKY_AGENT_HOOK_TOKEN: HOOK_TOKEN,
+        QUIRKY_PANE_KEY: PANE_KEY
       })
       const run = (runner: Runner, runEnv: NodeJS.ProcessEnv) =>
         runProcess({
@@ -541,10 +541,10 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
         // Why: compat consumers gate the tool call on parseable stdout (#14818).
         expect(result.stdout.trim(), `${runner.name} stdout`).toBe(provider.stdout)
 
-        // Outside an Orca pane the hook exits without posting or waiting on stdin (#11549).
-        const outsideOrca = await run(runner, hookEnvironment({ USERPROFILE: home, HOME: home }))
-        expect(outsideOrca.timedOut, `${runner.name} outside Orca timed out`).toBe(false)
-        expect(outsideOrca.code, `${runner.name} outside Orca exit code`).toBe(0)
+        // Outside an Quirky pane the hook exits without posting or waiting on stdin (#11549).
+        const outsideQuirky = await run(runner, hookEnvironment({ USERPROFILE: home, HOME: home }))
+        expect(outsideQuirky.timedOut, `${runner.name} outside Quirky timed out`).toBe(false)
+        expect(outsideQuirky.code, `${runner.name} outside Quirky exit code`).toBe(0)
         expect(listener.posts).toHaveLength(before + 1)
       }
       // Why: several shell launches, a real install and a cold exe build can overrun the default.
@@ -556,7 +556,7 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
   // reach it. Only bites where HKCU AutoRun targets %USERPROFILE%\.cmd_aliases.cmd (the control
   // below proves it did); elsewhere cmd.exe runs no AutoRun at all.
   it('Copilot answers exactly {} when the cmd AutoRun prints', async () => {
-    root = mkdtempSync(join(tmpdir(), 'orca-hook-autorun-'))
+    root = mkdtempSync(join(tmpdir(), 'quirky-hook-autorun-'))
     const home = join(root, 'user')
     mkdirSync(home)
     homedirMock.mockReturnValue(home)
@@ -566,7 +566,7 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
     vi.stubEnv('COPILOT_HOME', undefined)
     writeFileSync(join(home, '.cmd_aliases.cmd'), '@echo autorun-noise\r\n', 'utf8')
     expect(new CopilotHookService().install().state).toBe('installed')
-    const [command] = readEvent(join(home, '.copilot', 'hooks', 'orca.json'), 'PreToolUse')
+    const [command] = readEvent(join(home, '.copilot', 'hooks', 'quirky.json'), 'PreToolUse')
     if (!command) {
       throw new Error('Missing managed Copilot PreToolUse command')
     }

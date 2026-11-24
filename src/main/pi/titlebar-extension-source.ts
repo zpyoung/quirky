@@ -2,7 +2,7 @@ import { getPiTitlebarLifetimeSourceLines } from './titlebar-extension-lifetime-
 import type { PiAgentKind } from '../../shared/pi-agent-kind'
 import { getPiOmpRuntimeDetectionSourceLines } from './agent-status-runtime-detection-source'
 
-export const ORCA_PI_EXTENSION_FILE = 'orca-titlebar-spinner.ts'
+export const QUIRKY_PI_EXTENSION_FILE = 'quirky-titlebar-spinner.ts'
 
 export function getPiTitlebarExtensionSource(kind: PiAgentKind = 'pi'): string {
   // Why: OMP reports input waits through its own approval events, which the status
@@ -74,7 +74,7 @@ export function getPiTitlebarExtensionSource(kind: PiAgentKind = 'pi'): string {
     '// close a maintenance spinner — cap it so idle maintenance cannot strand a working title.',
     'const IDLE_COMPACTION_MAX_FRAMES = Math.ceil(300000 / FRAME_INTERVAL_MS)',
     '',
-    '// Why: `-` is the plain separator; `!` is the state marker Orca reads as needs-input',
+    '// Why: `-` is the plain separator; `!` is the state marker Quirky reads as needs-input',
     '// (src/shared/pi-state-title-marker.ts), so mobile and the CLI see the wait too.',
     'function getMarkedTitle(pi, marker) {',
     '  const cwd = process.cwd().split(/[\\\\/]/).filter(Boolean).at(-1) || process.cwd()',
@@ -100,15 +100,15 @@ export function getPiTitlebarExtensionSource(kind: PiAgentKind = 'pi'): string {
     '}',
     '',
     'export default function (pi) {',
-    '  if (!process.env.ORCA_PANE_KEY) return',
+    '  if (!process.env.QUIRKY_PANE_KEY) return',
     ...(kind === 'pi'
       ? [
           '  // Why: child agents inherit the pane env, and the spinner is harmlessly',
           '  // per-process — but the needs-input marker is status the pane reports, so only',
-          '  // one process may assert it. Mirrors ORCA_PI_STATUS_OWNED in the status hook.',
-          '  const markerOwnerPid = process.env.ORCA_PI_TITLE_MARKER_OWNED',
+          '  // one process may assert it. Mirrors QUIRKY_PI_STATUS_OWNED in the status hook.',
+          '  const markerOwnerPid = process.env.QUIRKY_PI_TITLE_MARKER_OWNED',
           '  const ownsMarker = !markerOwnerPid || markerOwnerPid === String(process.pid)',
-          '  if (ownsMarker) process.env.ORCA_PI_TITLE_MARKER_OWNED = String(process.pid)'
+          '  if (ownsMarker) process.env.QUIRKY_PI_TITLE_MARKER_OWNED = String(process.pid)'
         ]
       : []),
 

@@ -1,8 +1,8 @@
 import { browserSessionRegistry } from './browser-session-registry'
 import type { BrowserSessionRegistryProfileOptions } from './browser-session-registry'
 import { collectOrphanedBrowserRoutePartitionStorage } from './browser-route-partition-storage-runtime'
-import { configureRouteSessionsForOrcaProfile } from './browser-route-session-runtime'
-import { configurePairedRuntimeBrowserClientHostsForOrcaProfile } from './paired-runtime-browser-client-host-runtime'
+import { configureRouteSessionsForQuirkyProfile } from './browser-route-session-runtime'
+import { configurePairedRuntimeBrowserClientHostsForQuirkyProfile } from './paired-runtime-browser-client-host-runtime'
 
 let initialized = false
 
@@ -16,13 +16,13 @@ export function initializeBrowserSessionsForApp(
   }
 
   if (activeProfile) {
-    browserSessionRegistry.configureForOrcaProfile(activeProfile)
-    configureRouteSessionsForOrcaProfile({
-      orcaProfileId: activeProfile.orcaProfileId,
+    browserSessionRegistry.configureForQuirkyProfile(activeProfile)
+    configureRouteSessionsForQuirkyProfile({
+      quirkyProfileId: activeProfile.quirkyProfileId,
       profileDirectory: activeProfile.profileDirectory
     })
-    configurePairedRuntimeBrowserClientHostsForOrcaProfile({
-      orcaProfileId: activeProfile.orcaProfileId
+    configurePairedRuntimeBrowserClientHostsForQuirkyProfile({
+      quirkyProfileId: activeProfile.quirkyProfileId
     })
     void collectOrphanedBrowserRoutePartitionStorage(activeProfile.listLocalSshTargetIds).catch(
       (error) => {

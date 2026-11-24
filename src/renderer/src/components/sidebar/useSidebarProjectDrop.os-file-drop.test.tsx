@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
   }
   const runtimeEnvironments: {
     id: string
-    orcadDeployment?: { kind: 'wsl'; distro: string; localPort: number; remotePort: number }
+    quirkydDeployment?: { kind: 'wsl'; distro: string; localPort: number; remotePort: number }
   }[] = []
   return {
     state: { settings, runtimeEnvironments, openModal: vi.fn() },
@@ -113,7 +113,7 @@ describe('Explorer folder drops for a WSL host (Windows)', () => {
     mocks.state.runtimeEnvironments = [
       {
         id: 'wsl:Ubuntu',
-        orcadDeployment: { kind: 'wsl', distro: 'Ubuntu', localPort: 4100, remotePort: 4200 }
+        quirkydDeployment: { kind: 'wsl', distro: 'Ubuntu', localPort: 4100, remotePort: 4200 }
       }
     ]
   })

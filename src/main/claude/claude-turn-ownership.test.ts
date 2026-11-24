@@ -1,5 +1,5 @@
 // Which turn a Stop is allowed to interrupt, for turns the provider opened on its
-// own as well as turns Orca's own send echo opened.
+// own as well as turns Quirky's own send echo opened.
 
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentJournalItemBody } from '../../shared/agent-session-journal-types'

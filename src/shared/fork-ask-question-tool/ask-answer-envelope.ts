@@ -1,5 +1,5 @@
 /**
- * Answer-envelope shapes for `orca ask` (logic.md § Answer contract). Dependency-free by
+ * Answer-envelope shapes for `quirky ask` (logic.md § Answer contract). Dependency-free by
  * design: mobile mirrors this file verbatim as its own copy of the wire contract.
  */
 
@@ -64,11 +64,11 @@ export type AskResultBody = {
 }
 
 export type AskRegisteredEnvelope = { status: 'registered'; askId: string }
-/** `instruction` is a human-readable instruction to resume blocking, e.g. `orca ask wait --id <askId>`. */
+/** `instruction` is a human-readable instruction to resume blocking, e.g. `quirky ask wait --id <askId>`. */
 export type AskPendingEnvelope = { status: 'pending'; askId: string; instruction: string }
 
 export function pendingEnvelope(askId: string): AskPendingEnvelope {
-  return { status: 'pending', askId, instruction: `orca ask wait --id ${askId}` }
+  return { status: 'pending', askId, instruction: `quirky ask wait --id ${askId}` }
 }
 export type AskAnsweredEnvelope = { status: 'answered'; askId: string } & AskResultBody
 export type AskPartialEnvelope = { status: 'partial'; askId: string } & AskResultBody

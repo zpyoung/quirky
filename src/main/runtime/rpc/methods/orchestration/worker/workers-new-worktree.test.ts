@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../../../../shared/protocol-version'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationDb } from '../../../../orchestration/db'
 import { RpcDispatcher } from '../../../dispatcher'
 import type { RpcRequest } from '../../../core'
@@ -13,16 +13,16 @@ import { prepareFederationWorkerLaunchOnHost } from './worker-opencode-model-pre
 import { FederationAttachStartParams } from '../federation/federation-start-schema'
 
 describe('orchestration new-worktree workers', () => {
-  type CreateWorktreeResult = Awaited<ReturnType<OrcaRuntimeService['createManagedWorktree']>>
+  type CreateWorktreeResult = Awaited<ReturnType<QuirkyRuntimeService['createManagedWorktree']>>
   const coordinatorPaneKey = 'tab_coord:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let runId: string
   const paths: string[] = []
 
   beforeEach(() => {
     db = new OrchestrationDb(':memory:')
-    runtime = new OrcaRuntimeService()
+    runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     runId = db.createRun({
       objective: 'Test new-worktree workers',
@@ -69,7 +69,7 @@ describe('orchestration new-worktree workers', () => {
     vi.spyOn(runtime, 'waitForSetupTerminalCompletion').mockReturnValue(
       new Promise(() => undefined)
     )
-    vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('orca')
+    vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('quirky')
     vi.spyOn(runtime, 'sendTerminalAgentPrompt').mockResolvedValue({
       handle: 'term_worker',
       accepted: true,
@@ -290,13 +290,13 @@ describe('orchestration new-worktree workers', () => {
 
   it('injects the execution host CLI command without a Dispatch capability', async () => {
     mockCreatedWorktree()
-    vi.mocked(runtime.getTerminalOrchestrationCliCommand).mockReturnValue('orca-ide')
+    vi.mocked(runtime.getTerminalOrchestrationCliCommand).mockReturnValue('quirky-ide')
 
     await startWorker({ worktree: 'new-top-level' })
 
     const prompt = vi.mocked(runtime.sendTerminalAgentPrompt).mock.calls[0]?.[1] ?? ''
-    expect(prompt).toContain('orca-ide orchestration send')
-    expect(prompt).not.toMatch(/(^|\s)orca orchestration send/)
+    expect(prompt).toContain('quirky-ide orchestration send')
+    expect(prompt).not.toMatch(/(^|\s)quirky orchestration send/)
   })
 
   it('passes exact repo, base, metadata, lineage, and setup choices to worktree creation', async () => {
@@ -667,7 +667,7 @@ describe('orchestration new-worktree workers', () => {
   })
 
   it('replays a dispatch-input failure after restart without creating another worker', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-worker-start-replay-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-worker-start-replay-'))
     paths.push(dir)
     db.close()
     db = new OrchestrationDb(join(dir, 'orchestration.db'))
@@ -709,7 +709,7 @@ describe('orchestration new-worktree workers', () => {
     db.close()
 
     db = new OrchestrationDb(join(dir, 'orchestration.db'))
-    const restartedRuntime = new OrcaRuntimeService()
+    const restartedRuntime = new QuirkyRuntimeService()
     restartedRuntime.setOrchestrationDb(db)
     vi.spyOn(restartedRuntime, 'getTerminalPaneKey').mockImplementation((handle) =>
       handle === 'term_coord_reminted'
@@ -764,10 +764,10 @@ describe('orchestration new-worktree workers', () => {
   it('persists pre-effect, post-effect, and post-input stages in order', async () => {
     mockCreatedWorktree({ hookFound: false })
     let finishWait:
-      | ((value: Awaited<ReturnType<OrcaRuntimeService['waitForTerminal']>>) => void)
+      | ((value: Awaited<ReturnType<QuirkyRuntimeService['waitForTerminal']>>) => void)
       | undefined
     let finishPrompt:
-      | ((value: Awaited<ReturnType<OrcaRuntimeService['sendTerminalAgentPrompt']>>) => void)
+      | ((value: Awaited<ReturnType<QuirkyRuntimeService['sendTerminalAgentPrompt']>>) => void)
       | undefined
     vi.mocked(runtime.waitForTerminal).mockImplementationOnce(
       async () =>

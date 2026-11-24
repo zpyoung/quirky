@@ -26,8 +26,8 @@ describe('isDirectInvocation', () => {
   const toWin32FileUrl = (windowsPath) => new URL(`file:///${windowsPath.replaceAll('\\', '/')}`)
 
   it('matches a Windows entry path, which the file:// template form never does', () => {
-    const scriptPath = 'C:\\orca\\config\\scripts\\build-mobile-web-app-bundle.mjs'
-    const moduleUrl = 'file:///C:/orca/config/scripts/build-mobile-web-app-bundle.mjs'
+    const scriptPath = 'C:\\quirky\\config\\scripts\\build-mobile-web-app-bundle.mjs'
+    const moduleUrl = 'file:///C:/quirky/config/scripts/build-mobile-web-app-bundle.mjs'
     const keepAsIs = (path) => path
     expect(
       isDirectInvocation(moduleUrl, scriptPath, {
@@ -35,7 +35,7 @@ describe('isDirectInvocation', () => {
         realpath: keepAsIs
       })
     ).toBe(true)
-    // The regression this guards: `file://${argv[1]}` yields file://C:\orca\... on Windows,
+    // The regression this guards: `file://${argv[1]}` yields file://C:\quirky\... on Windows,
     // so the builder exited 0 having written nothing and packaging failed downstream.
     expect(`file://${scriptPath}`).not.toBe(moduleUrl)
   })
@@ -46,7 +46,7 @@ describe('running a builder through a symlink', () => {
   // entry path, `node /tmp/<link>` compared /tmp against /private/tmp and the builder exited 0
   // having written nothing — a green packaging job with no bundle in it.
   it('still recognises the entry module', async () => {
-    const scratch = await mkdtemp(join(tmpdir(), 'orca-script-entry-link-'))
+    const scratch = await mkdtemp(join(tmpdir(), 'quirky-script-entry-link-'))
     try {
       const moduleUrl = new URL('./script-entry-detection.mjs', import.meta.url).href
       const real = join(scratch, 'entry.mjs')

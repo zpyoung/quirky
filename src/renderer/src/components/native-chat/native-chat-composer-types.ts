@@ -23,7 +23,7 @@ import type { NativeChatLocalCommandAnswer } from './use-native-chat-local-comma
 import type { NativeChatRecallSource } from './native-chat-sent-prompt-history'
 
 export type NativeChatComposerErrorDetail = {
-  /** Error text Orca did not write, shown apart and copyable. */
+  /** Error text Quirky did not write, shown apart and copyable. */
   errorText?: string
   /** A refused command's cause: its line is said only while that still holds. */
   refusedWhile?: StructuredAgentSessionCommandRefusalCause

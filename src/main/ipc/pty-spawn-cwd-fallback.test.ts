@@ -30,7 +30,7 @@ vi.mock('../wsl', async (importOriginal) =>
 vi.mock('node:fs/promises', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).fsPromisesModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -142,7 +142,7 @@ describe('registerPtyHandlers', () => {
   it('falls back to the worktree root when a saved local cwd no longer exists', async () => {
     registerPtyHandlers(mainWindow as never)
     // Why: issue #7239 reproduced in a Japanese-named worktree; the fallback must return the selected worktree path verbatim.
-    const worktreePath = '/Users/motoki/orca/workspaces/nakamuramotoki/Fableと議論'
+    const worktreePath = '/Users/motoki/quirky/workspaces/nakamuramotoki/Fableと議論'
     const missingCwd = `${worktreePath}/deleted-folder`
     statSyncMock.mockImplementation((target: string) => {
       if (target === missingCwd) {

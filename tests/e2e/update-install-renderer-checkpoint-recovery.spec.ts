@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 
 // Only the prefix is contract: the checkpoint error appends the swallowed persist
 // cause (STA-5505), whose wording belongs to whatever threw.
@@ -11,17 +11,17 @@ const CHECKPOINT_ERROR_PREFIX = 'Renderer shutdown checkpoint was not completed:
 const CORRUPT_HISTORY_ENTRY = { url: null, title: 'corrupt persisted history', lastVisitedAt: 0 }
 
 test('recovers update install from a corrupt clean session but preserves dirty drafts', async ({
-  orcaPage,
+  quirkyPage,
   testRepoPath
 }) => {
   const fallbackLogs: string[] = []
-  orcaPage.on('console', (message) => {
+  quirkyPage.on('console', (message) => {
     if (message.text().includes('Full renderer session snapshot failed; using durable session')) {
       fallbackLogs.push(message.text())
     }
   })
 
-  const dirtyResult = await orcaPage.evaluate(
+  const dirtyResult = await quirkyPage.evaluate(
     async ({ filePath, worktreeId, corruptEntry }) => {
       const store = window.__store
       if (!store) {
@@ -53,7 +53,9 @@ test('recovers update install from a corrupt clean session but preserves dirty d
     },
     {
       filePath: path.join(testRepoPath, 'checkpoint-draft.txt'),
-      worktreeId: await orcaPage.evaluate(() => window.__store?.getState().activeWorktreeId ?? ''),
+      worktreeId: await quirkyPage.evaluate(
+        () => window.__store?.getState().activeWorktreeId ?? ''
+      ),
       corruptEntry: CORRUPT_HISTORY_ENTRY
     }
   )
@@ -63,7 +65,7 @@ test('recovers update install from a corrupt clean session but preserves dirty d
   // survives V8 rewording of "Cannot read properties of null".
   expect(dirtyResult).toContain('toLowerCase')
 
-  const cleanResult = await orcaPage.evaluate(async (corruptEntry) => {
+  const cleanResult = await quirkyPage.evaluate(async (corruptEntry) => {
     const store = window.__store
     if (!store) {
       throw new Error('window.__store is not available')

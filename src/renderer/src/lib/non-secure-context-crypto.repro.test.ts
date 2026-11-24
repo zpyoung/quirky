@@ -24,16 +24,16 @@ describe('non-secure context (plain HTTP LAN web client)', () => {
   // mismatches and the user is re-prompted to approve a hook they already
   // trusted on the desktop app.
   it('produces the same hash as crypto.subtle did in a secure context', async () => {
-    const { hashOrcaHookScript } = await import('./orca-hook-trust')
+    const { hashQuirkyHookScript } = await import('./quirky-hook-trust')
     const secureHash = await (async () => {
       Object.defineProperty(globalThis, 'crypto', { configurable: true, value: realCrypto })
-      return hashOrcaHookScript('echo hi')
+      return hashQuirkyHookScript('echo hi')
     })()
     Object.defineProperty(globalThis, 'crypto', {
       configurable: true,
       value: createNonSecureContextCrypto(realCrypto)
     })
-    expect(await hashOrcaHookScript('echo hi')).toBe(secureHash)
+    expect(await hashQuirkyHookScript('echo hi')).toBe(secureHash)
   })
 
   // Regression for #19667: the store builds this sequencer at module load, so a throw here

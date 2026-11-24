@@ -1,5 +1,5 @@
 /**
- * A structured session's child env beside a HOME whose login profiles put a stand-in global `orca`
+ * A structured session's child env beside a HOME whose login profiles put a stand-in global `quirky`
  * first, as `/usr/local/bin` often is. Shared by the bash suite (every lane) and the zsh suite
  * (the real-shell lane, which installs zsh).
  */
@@ -8,7 +8,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { sealedChildEnv } from './structured-session-child-env.test-support'
 
 const SESSION_ID = 'f7a1c0de-1111-4222-8333-444455556666'
@@ -25,7 +25,7 @@ function writeStub(path: string, says: string): void {
 }
 
 export function createLoginShellHarness(): LoginShellHarness {
-  const root = mkdtempSync(join(tmpdir(), 'orca-login-shell-cli-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-login-shell-cli-'))
   const home = join(root, 'home')
   const globalBin = join(root, 'global-bin')
   const userData = join(root, 'user-data')
@@ -33,9 +33,9 @@ export function createLoginShellHarness(): LoginShellHarness {
   for (const dir of [home, globalBin, appCliBin]) {
     mkdirSync(dir, { recursive: true })
   }
-  writeStub(join(globalBin, 'orca'), 'global')
-  writeStub(join(appCliBin, 'orca'), 'app')
-  writeStub(join(appCliBin, 'orca-dev'), 'app')
+  writeStub(join(globalBin, 'quirky'), 'global')
+  writeStub(join(appCliBin, 'quirky'), 'app')
+  writeStub(join(appCliBin, 'quirky-dev'), 'app')
   const prependGlobal = `export PATH="${globalBin}:$PATH"\n`
   writeFileSync(join(home, '.zprofile'), prependGlobal)
   writeFileSync(join(home, '.bash_profile'), prependGlobal)

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExecutionHostNotDispatchableError } from '../../../providers/execution-host-provider-dispatch'
 import { RuntimeTerminalFileGrants, type RuntimeTerminalFileGrantHost } from './file-grants'
 
-const artifactPath = join(tmpdir(), 'orca-grant-ownership.txt')
+const artifactPath = join(tmpdir(), 'quirky-grant-ownership.txt')
 const ttl = 10 * 60 * 1000
 
 function createGrants(

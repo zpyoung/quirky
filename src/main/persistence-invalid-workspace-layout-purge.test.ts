@@ -23,7 +23,7 @@ import { dropWorkspacesTheListingInvalidates } from './persistence/restoring-ses
 import { WorkspaceLayoutStream } from './runtime/workspace-layout-stream'
 import { windowViewSaveForMain } from './persistence/window-save-view'
 
-vi.mock('../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()
@@ -74,7 +74,7 @@ const storedKeys = (store: ReturnType<typeof createStore>, hostId?: string): str
 
 describe('main drops the layout of workspaces the catalog no longer validates', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-invalid-layout-purge-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-invalid-layout-purge-'))
   })
 
   afterEach(async () => {

@@ -7,7 +7,10 @@ import { executeAgentLaunch, type AgentLaunchExecution } from './agent-launch-ex
 import type { AgentLaunchIntent } from '../../shared/agent-launch-intent'
 import { STRUCTURED_ACCOUNT_ENV_IGNORED_WARNING } from '../../shared/agent-launch-account-env'
 
-const ACCOUNT_ENV = { CLAUDE_CONFIG_DIR: '/home/u/.orca/claude/a', CODEX_HOME: '/home/u/.codex-b' }
+const ACCOUNT_ENV = {
+  CLAUDE_CONFIG_DIR: '/home/u/.quirky/claude/a',
+  CODEX_HOME: '/home/u/.codex-b'
+}
 
 function harness(structured: boolean) {
   const createWorktree = vi.fn(async (args: { startupAgent: string | undefined }) => ({

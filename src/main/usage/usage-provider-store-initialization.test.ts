@@ -129,7 +129,7 @@ function nextTurn(): Promise<void> {
 }
 
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), 'orca-usage-loading-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-usage-loading-'))
   cacheFile = join(directory, 'usage.json')
   stores = []
   releasePending = []

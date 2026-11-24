@@ -32,23 +32,23 @@ describe('skill freshness name-scoped update eligibility', () => {
   it('offers a name when at least one supported placement is outdated', () => {
     expect(
       eligibleSkillUpdateNames([
-        placement('orca-cli'),
-        placement('orca-cli', {
-          id: 'orca-cli-claude',
+        placement('quirky-cli'),
+        placement('quirky-cli', {
+          id: 'quirky-cli-claude',
           rootId: 'home-claude',
           topology: 'provider-alias',
           status: 'current'
         })
       ])
-    ).toEqual(['orca-cli'])
+    ).toEqual(['quirky-cli'])
   })
 
   it.each([null, 'acme/agent-skills'])(
     'offers an outdated copy whatever the lock says installed it (%s)',
     (lockSource) => {
       // Why: ownership only decides preselection; #21495 came from gating on the lock.
-      expect(eligibleSkillUpdateNames([placement('orca-cli', { lockSource })])).toEqual([
-        'orca-cli'
+      expect(eligibleSkillUpdateNames([placement('quirky-cli', { lockSource })])).toEqual([
+        'quirky-cli'
       ])
     }
   )
@@ -64,10 +64,10 @@ describe('skill freshness name-scoped update eligibility', () => {
     (status, topology) => {
       expect(
         eligibleSkillUpdateNames([
-          placement('orca-cli'),
-          placement('orca-cli', { id: `outlier-${status}-${topology}`, status, topology })
+          placement('quirky-cli'),
+          placement('quirky-cli', { id: `outlier-${status}-${topology}`, status, topology })
         ])
-      ).toEqual(['orca-cli'])
+      ).toEqual(['quirky-cli'])
     }
   )
 
@@ -76,11 +76,11 @@ describe('skill freshness name-scoped update eligibility', () => {
     (topology) => {
       expect(
         eligibleSkillUpdateNames([
-          placement('orca-cli'),
-          placement('orca-cli', {
-            id: `orca-cli-${topology}`,
+          placement('quirky-cli'),
+          placement('quirky-cli', {
+            id: `quirky-cli-${topology}`,
             rootId: 'home-claude',
-            unresolvedPath: '/home/.claude/skills/orca-cli',
+            unresolvedPath: '/home/.claude/skills/quirky-cli',
             topology,
             status: topology === 'broken-link' ? 'inaccessible' : 'outdated'
           })
@@ -92,9 +92,9 @@ describe('skill freshness name-scoped update eligibility', () => {
   it('withholds the update when the convergent copy itself is inaccessible', () => {
     expect(
       eligibleSkillUpdateNames([
-        placement('orca-cli', { id: 'blocked-canonical', status: 'inaccessible' }),
-        placement('orca-cli', {
-          id: 'orca-cli-claude',
+        placement('quirky-cli', { id: 'blocked-canonical', status: 'inaccessible' }),
+        placement('quirky-cli', {
+          id: 'quirky-cli-claude',
           rootId: 'home-claude',
           topology: 'provider-alias',
           status: 'outdated'
@@ -123,10 +123,10 @@ describe('skill freshness name-scoped update eligibility', () => {
   it('does not offer a skill that exists only as a standalone copy', () => {
     expect(
       eligibleSkillUpdateNames([
-        placement('orca-cli', {
+        placement('quirky-cli', {
           rootId: 'home-gemini',
-          unresolvedPath: '/home/.gemini/skills/orca-cli',
-          resolvedPath: '/home/.gemini/skills/orca-cli',
+          unresolvedPath: '/home/.gemini/skills/quirky-cli',
+          resolvedPath: '/home/.gemini/skills/quirky-cli',
           topology: 'independent-copy'
         })
       ])
@@ -144,11 +144,11 @@ describe('skill freshness name-scoped update eligibility', () => {
   })
 
   it('canonicalizes only names that are safe to put on a command line', () => {
-    expect(canonicalizeSkillUpdateNames(['orchestration', 'orca-cli', 'orca-cli'])).toEqual([
-      'orca-cli',
+    expect(canonicalizeSkillUpdateNames(['orchestration', 'quirky-cli', 'quirky-cli'])).toEqual([
+      'quirky-cli',
       'orchestration'
     ])
     expect(canonicalizeSkillUpdateNames([])).toBeNull()
-    expect(canonicalizeSkillUpdateNames(['orca-cli;echo unsafe'])).toBeNull()
+    expect(canonicalizeSkillUpdateNames(['quirky-cli;echo unsafe'])).toBeNull()
   })
 })

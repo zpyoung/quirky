@@ -45,7 +45,7 @@ vi.mock('../../shared/secure-path-windows-acl', async () => {
 
 const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!
 const envelope = (key: string): string =>
-  `orca-zcode-plan-api-key:v1:plaintext:${Buffer.from(key).toString('base64')}`
+  `quirky-zcode-plan-api-key:v1:plaintext:${Buffer.from(key).toString('base64')}`
 const previousEnvelope = envelope('previous-key')
 const competingEnvelope = envelope('competing-key')
 let caseHome: string
@@ -54,11 +54,11 @@ let store: typeof ZcodePlanApiKeyStore
 let writer: typeof SecureFile
 
 beforeEach(async () => {
-  caseHome = mkdtempSync(join(tmpdir(), 'orca-rollback-publication-'))
+  caseHome = mkdtempSync(join(tmpdir(), 'quirky-rollback-publication-'))
   vi.stubEnv('HOME', caseHome)
   vi.stubEnv('USERPROFILE', caseHome)
-  keyPath = join(caseHome, '.orca', 'zcode-plan-api-key.enc')
-  mkdirSync(join(caseHome, '.orca'))
+  keyPath = join(caseHome, '.quirky', 'zcode-plan-api-key.enc')
+  mkdirSync(join(caseHome, '.quirky'))
   restriction.mockReset().mockReturnValue(false)
   vi.spyOn(console, 'warn').mockImplementation(() => undefined)
   Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
@@ -82,7 +82,7 @@ function publishDuringRollbackStaging(outcome: boolean | 'throws'): void {
   let stagedRestrictions = 0
   restriction.mockImplementation((targetPath) => {
     if (targetPath.endsWith('.tmp') && ++stagedRestrictions === 2) {
-      const competingPath = join(caseHome, '.orca', 'competing-envelope')
+      const competingPath = join(caseHome, '.quirky', 'competing-envelope')
       writeFileSync(competingPath, competingEnvelope)
       renameSync(competingPath, keyPath)
       if (outcome === 'throws') {
@@ -112,7 +112,7 @@ describe('rollback publication with real filesystem writes and renames', () => {
       expect(readFileSync(keyPath, 'utf8')).toBe(competingEnvelope)
       expect(readFileSync(keyPath, 'utf8')).not.toBe(envelope('attempted-key'))
       expect(store.readZcodePlanApiKey()).toBe('competing-key')
-      expect(readdirSync(join(caseHome, '.orca'))).toEqual(['zcode-plan-api-key.enc'])
+      expect(readdirSync(join(caseHome, '.quirky'))).toEqual(['zcode-plan-api-key.enc'])
     }
   )
 
@@ -123,7 +123,7 @@ describe('rollback publication with real filesystem writes and renames', () => {
 
     expect(readFileSync(keyPath, 'utf8')).toBe(previousEnvelope)
     expect(store.readZcodePlanApiKey()).toBe('previous-key')
-    expect(readdirSync(join(caseHome, '.orca'))).toEqual(['zcode-plan-api-key.enc'])
+    expect(readdirSync(join(caseHome, '.quirky'))).toEqual(['zcode-plan-api-key.enc'])
   })
 
   it('removes the owned rejected plaintext when no previous envelope exists', () => {
@@ -131,7 +131,7 @@ describe('rollback publication with real filesystem writes and renames', () => {
 
     expect(existsSync(keyPath)).toBe(false)
     expect(store.readZcodePlanApiKey()).toBeNull()
-    expect(readdirSync(join(caseHome, '.orca'))).toEqual([])
+    expect(readdirSync(join(caseHome, '.quirky'))).toEqual([])
   })
 
   it.each([false, true])(
@@ -153,7 +153,7 @@ describe('rollback publication with real filesystem writes and renames', () => {
 
       expect(existsSync(keyPath)).toBe(previous)
       expect(store.readZcodePlanApiKey()).toBe(previous ? 'previous-key' : null)
-      expect(readdirSync(join(caseHome, '.orca'))).toEqual(
+      expect(readdirSync(join(caseHome, '.quirky'))).toEqual(
         previous ? ['zcode-plan-api-key.enc'] : []
       )
       if (previous) {
@@ -171,6 +171,6 @@ describe('rollback publication with real filesystem writes and renames', () => {
 
     expect(readFileSync(keyPath, 'utf8')).toBe(competingEnvelope)
     expect(store.readZcodePlanApiKey()).toBe('previous-key')
-    expect(readdirSync(join(caseHome, '.orca'))).toEqual(['zcode-plan-api-key.enc'])
+    expect(readdirSync(join(caseHome, '.quirky'))).toEqual(['zcode-plan-api-key.enc'])
   })
 })

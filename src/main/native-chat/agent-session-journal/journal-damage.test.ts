@@ -24,7 +24,7 @@ import {
   liveTestJournalRows,
   updateTestJournalRowJson,
   deleteTestJournalRow,
-  SAVED_BY_NEWER_ORCA
+  SAVED_BY_NEWER_QUIRKY
 } from './journal-host-database-test-support'
 
 const IDENTITY: AgentSessionJournalIdentity = {
@@ -87,7 +87,7 @@ async function writeChat(): Promise<void> {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-journal-damage-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-journal-damage-'))
   clock = 1_000
 })
 
@@ -148,7 +148,7 @@ describe('a damaged chat', () => {
     })
   })
 
-  it("reads past damage to a newer build's row, which fails the load as a newer Orca's instead", async () => {
+  it("reads past damage to a newer build's row, which fails the load as a newer Quirky's instead", async () => {
     await writeChat()
     withJournalDatabase((db) => {
       updateTestJournalRowJson(db, IDENTITY.sessionId, 3, '}{')
@@ -157,7 +157,7 @@ describe('a damaged chat', () => {
     })
     const before = storedRows()
 
-    await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
+    await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
     expect(storedRows()).toEqual(before)
   })
 })

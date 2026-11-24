@@ -36,7 +36,7 @@ function resolveOverride(
     : null
 }
 
-// Windows starts .exe/.com directly and .cmd/.bat through Orca's shim handling; an extensionless
+// Windows starts .exe/.com directly and .cmd/.bat through Quirky's shim handling; an extensionless
 // file would fail to spawn with no word about the setting.
 function spawnableOn(platform: NodeJS.Platform, command: string): boolean {
   return platform !== 'win32' || /\.(exe|com|cmd|bat)$/i.test(command)
@@ -72,7 +72,7 @@ export function resolveStructuredAgentCommand(
 /** What a lookup searched: the env whose PATH it used, and the directory its program starts in. */
 export type ProgramSearch<T> = {
   env: (resolved: T) => NodeJS.ProcessEnv | undefined
-  /** Orca's own working directory when absent. */
+  /** Quirky's own working directory when absent. */
   cwd?: () => Promise<string> | string
 }
 

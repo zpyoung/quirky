@@ -7,8 +7,8 @@ import { getLedgerPanelWorkspaceIdentity } from './ledger-panel-workspace-identi
 const groupedFolder = { id: 'f1', name: 'Notes', projectGroupId: 'g1' } as FolderWorkspace
 const worktree = { id: 'repo::/path', displayName: 'fix-login', repoId: 'repo' } as Worktree
 const groupedWorktree = { ...worktree, projectGroupId: 'g2' } as Worktree
-const repos = [{ id: 'repo', displayName: 'orca' } as Repo]
-const groupedRepos = [{ id: 'repo', displayName: 'orca', projectGroupId: 'g3' } as Repo]
+const repos = [{ id: 'repo', displayName: 'quirky' } as Repo]
+const groupedRepos = [{ id: 'repo', displayName: 'quirky', projectGroupId: 'g3' } as Repo]
 
 describe('ledger panel workspace identity', () => {
   it('names a folder workspace from the scoped key', () => {

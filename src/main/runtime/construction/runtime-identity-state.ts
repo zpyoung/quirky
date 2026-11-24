@@ -37,7 +37,7 @@ import type {
 } from '../runtime-pty-controller-contract'
 import type { RuntimeLeafRecord, PtyRegistrationClaim } from '../runtime-terminal-state-records'
 import type { TerminalHandleRecord } from '../runtime-terminal-contracts'
-import type { PtyIncarnationHandleRecord } from '../orca-runtime-core'
+import type { PtyIncarnationHandleRecord } from '../quirky-runtime-core'
 import { MailPointerRepointScheduler } from '../orchestration/mail-pointer-repoint-scheduler'
 import { RuntimeTerminalWaiterRegistry } from '../terminal/wait/terminal-waiter-registry'
 import { RuntimeTerminalWriter } from '../runtime-terminal-writer'
@@ -51,7 +51,7 @@ import {
   TUI_IDLE_DEFAULT_TIMEOUT_MS,
   TUI_IDLE_POLL_INTERVAL_MS,
   TUI_IDLE_QUIESCENCE_MS
-} from '../orca-runtime-postlude'
+} from '../quirky-runtime-postlude'
 import { RuntimeTerminalWait as RuntimeTerminalWaitController } from '../terminal/wait/terminal-wait'
 import type { PtyLivenessVerdict } from '../../../shared/pty-liveness-verdict'
 import type { TerminalDockPaneState } from '../../../shared/fork-terminal-dock/terminal-dock-pane-state'
@@ -59,7 +59,7 @@ import type { HostScopedWorktreeKey } from '../../../shared/worktree/host-qualif
 
 import { RuntimeConstructionServices } from './runtime-construction-services'
 
-export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServices {
+export abstract class QuirkyRuntimeWithRuntimeId extends RuntimeConstructionServices {
   protected readonly runtimeId = randomUUID()
 
   protected readonly startedAt = Date.now()
@@ -274,8 +274,8 @@ export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServic
   protected pendingMobileSessionPtyAggregateInventoryRefresh: Promise<PtyControllerInventory | null> | null =
     null
 
-  /** The agent Orca believes owns this pane, for tui-idle evidence ranking. Launch
-   *  authority first; the live foreground agent covers panes Orca did not launch. */
+  /** The agent Quirky believes owns this pane, for tui-idle evidence ranking. Launch
+   *  authority first; the live foreground agent covers panes Quirky did not launch. */
   protected getPaneAgentForTuiIdle(ptyId: string | null | undefined): TuiAgent | null {
     if (!ptyId) {
       return null

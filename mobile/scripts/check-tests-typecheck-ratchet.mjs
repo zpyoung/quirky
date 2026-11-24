@@ -1,4 +1,4 @@
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -36,7 +36,7 @@ export const TESTS_OUTSIDE_PROGRAM = new Map([
   ],
   [
     'src/transport/mobile-relay-browser-cancel-budget.test.ts',
-    'Node-side: imports @orca/process-host, checked against @types/node rather than RN libs'
+    'Node-side: imports @quirky/process-host, checked against @types/node rather than RN libs'
   ]
 ])
 
@@ -158,7 +158,7 @@ function runTsc(root, args, compiler) {
 // One pass answers both questions: --listFiles names the program, the diagnostics name the failures.
 export function collectTypecheckPass(root = process.cwd()) {
   const compiler = resolveMobileTypecheckCompiler()
-  const cache = process.env.ORCA_MOBILE_TYPECHECK_CACHE_DIR
+  const cache = process.env.QUIRKY_MOBILE_TYPECHECK_CACHE_DIR
   const result = runTsc(
     root,
     [
@@ -198,7 +198,7 @@ function printAddedFailure(added) {
     console.error(`    • ${entry}`)
   }
   console.error('')
-  console.error('  See the errors with:  pnpm --filter orca-mobile typecheck:tests')
+  console.error('  See the errors with:  pnpm --filter quirky-mobile typecheck:tests')
   console.error('')
   console.error('  A type-level pin in an unchecked test proves nothing, which is the whole reason')
   console.error('  this gate exists. Fix the test rather than adding it to the baseline.')
@@ -224,7 +224,7 @@ function printStaleFailure(stale) {
   }
   console.error('')
   console.error(
-    `  ✅  Fix it (one command):  pnpm --filter orca-mobile check:tests-typecheck --prune`
+    `  ✅  Fix it (one command):  pnpm --filter quirky-mobile check:tests-typecheck --prune`
   )
   console.error('')
 }

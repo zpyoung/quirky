@@ -26,7 +26,7 @@ function uses(source, file = 'src/main/consumer.ts') {
 }
 
 function tree(files) {
-  const root = mkdtempSync(path.join(tmpdir(), 'orca-main-sync-spawn-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'quirky-main-sync-spawn-'))
   roots.push(root)
   for (const [file, source] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(root, file)), { recursive: true })
@@ -81,7 +81,7 @@ describe('main sync-spawn ratchet', () => {
       ['execSync']
     ],
     [
-      "import { runProcessSync } from '@orca/process-host'\nconst run = options.run ?? runProcessSync\nrun(a)\nrun(b)",
+      "import { runProcessSync } from '@quirky/process-host'\nconst run = options.run ?? runProcessSync\nrun(a)\nrun(b)",
       3,
       ['runProcessSync']
     ],
@@ -111,7 +111,7 @@ describe('main sync-spawn ratchet', () => {
       ['execFileSync']
     ],
     [
-      "import { runProcessSync } from '@orca/process-host'\nconst run = runProcessSync<string>",
+      "import { runProcessSync } from '@quirky/process-host'\nconst run = runProcessSync<string>",
       1,
       ['runProcessSync']
     ]
@@ -125,9 +125,9 @@ describe('main sync-spawn ratchet', () => {
     "import type { execFileSync } from 'node:child_process'\nexecFileSync('x')",
     "import { type spawnSync } from 'child_process'\nspawnSync('x')",
     "import * as cp from 'child_process'\ntype Run = typeof cp.execFileSync",
-    "import { runProcessSync } from '@orca/process-host'\ntype O = { run?: typeof runProcessSync }",
-    "import { runProcess } from '@orca/process-host'\nrunProcess(spec)",
-    "import { runProcessSync } from '@orca/process-host/process-spec'\nrunProcessSync(spec)",
+    "import { runProcessSync } from '@quirky/process-host'\ntype O = { run?: typeof runProcessSync }",
+    "import { runProcess } from '@quirky/process-host'\nrunProcess(spec)",
+    "import { runProcessSync } from '@quirky/process-host/process-spec'\nrunProcessSync(spec)",
     "import { writeSecureFile } from './secure-file'\nwriteSecureFile(p, v)",
     "import { execFileSync } from 'child_process'\nconst o = { execFileSync: 1 }\no.execFileSync",
     'const other = { spawnSync() {} }\nother.spawnSync()',
@@ -210,7 +210,7 @@ describe('main sync-spawn ratchet', () => {
         Object.entries({
           'src/main/legacy.ts': sync,
           'src/shared/new.ts':
-            "import { runProcessSync } from '@orca/process-host'\nrunProcessSync(s)",
+            "import { runProcessSync } from '@quirky/process-host'\nrunProcessSync(s)",
           'src/main/clean.ts': "import { spawn } from 'node:child_process'\nspawn('a')",
           'src/main/consumer.test.ts': sync,
           'src/main/fixtures/script.ts': sync,
@@ -228,7 +228,7 @@ describe('main sync-spawn ratchet', () => {
 
   it('gives each gated family its own advice', () => {
     expect(adviceFor(['execFileSync', 'runProcessSync'])).toBe(
-      'execFileSync, runProcessSync: use runProcess or spawnProcess from @orca/process-host.'
+      'execFileSync, runProcessSync: use runProcess or spawnProcess from @quirky/process-host.'
     )
     expect(adviceFor(['restrictWindowsPathSync'])).toContain(
       "use restrictWindowsDirectory for a directory, or raise this file's count in config/main-sync-spawn-baseline.txt"
@@ -249,7 +249,7 @@ describe('main sync-spawn ratchet', () => {
     const error = captureErrors()
     expect(main(root)).toBe(1)
     expect(error.mock.calls.map(([line]) => line)).toEqual([
-      '::error file=src/main/launch.ts::1 synchronous launch use(s), baseline allows 0. They block the main thread. spawnSync: use runProcess or spawnProcess from @orca/process-host.'
+      '::error file=src/main/launch.ts::1 synchronous launch use(s), baseline allows 0. They block the main thread. spawnSync: use runProcess or spawnProcess from @quirky/process-host.'
     ])
     writeFileSync(path.join(root, BASELINE), '1 src/main/launch.ts\n')
     expect(main(root)).toBe(0)

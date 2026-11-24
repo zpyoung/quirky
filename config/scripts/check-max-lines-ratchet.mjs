@@ -105,7 +105,7 @@ const RATCHET = {
   collect: collectCurrentSuppressions,
   fix: [
     'An `inline` entry added an eslint/oxlint-disable max-lines comment; a `mobile-config` entry',
-    'added a per-file max-lines bump in mobile/.oxlintrc.json. Orca caps file size (300',
+    'added a per-file max-lines bump in mobile/.oxlintrc.json. Quirky caps file size (300',
     '.ts/.mts/.cts / 400 .tsx / 600 .mjs / 800 test — non-blank, non-comment lines).',
     'Fix it: SPLIT the file into focused modules — do NOT suppress the rule.'
   ]

@@ -22,7 +22,7 @@ import { emptySplitGroup, insertSplitGroup } from '../slices/tabs/tabs-group-act
 import { ownsGlobalSelection } from '../global-selection-owner'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
   recordCreatedTerminalTabInLayoutOwner,
   terminalTabCreateCommand,
@@ -139,7 +139,7 @@ export function createTerminalTabCreationActions(
           ...(options?.pendingActivationSpawn ? { pendingActivationSpawn: true } : {})
         }
         // Switch point: a tab main already made is drawn with main's creation facts.
-        if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
           tab = withMainTerminalFacts(tab)
         }
         if (options?.launchAgent === 'zcode') {
@@ -288,7 +288,7 @@ export function createTerminalTabCreationActions(
         }
       })
       // Switch point: main writes the tab under these ids before any later command names it.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         recordCreatedTerminalTabInLayoutOwner(get(), terminalTabCreateCommand(get(), tab))
       }
       if (options?.initialPtyId) {

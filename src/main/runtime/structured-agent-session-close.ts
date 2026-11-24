@@ -13,7 +13,7 @@
 
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import { retireSettledStructuredWorkerTab } from './structured-agent-session-tab-retirement'
 import {
   observeStructuredSession,
@@ -29,7 +29,7 @@ export type StructuredAgentSessionCloseOutcome = {
 
 export type StructuredAgentSessionCloseOptions = {
   runtime?: Pick<
-    OrcaRuntimeService,
+    QuirkyRuntimeService,
     'forgetStructuredSessionMail' | 'retireStructuredAgentSessionTabFromSnapshot'
   >
   /**

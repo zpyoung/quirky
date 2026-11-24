@@ -90,7 +90,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
   }
 
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-ipc-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-ipc-'))
     activeRuntimeEnvironmentId = null
     store = {
       getSettings: () => ({ activeRuntimeEnvironmentId }),
@@ -342,7 +342,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
         lastError: 'closed'
       })
       sendRemoteRuntimeRequestMock.mockRejectedValue(
-        new Error('Could not connect to the remote Orca runtime.')
+        new Error('Could not connect to the remote Quirky runtime.')
       )
 
       const add = handler<

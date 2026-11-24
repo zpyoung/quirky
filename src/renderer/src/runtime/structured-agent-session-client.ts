@@ -152,7 +152,7 @@ export async function callStructuredAgentSession<TResult>(
       AGENT_SESSION_REWIND_RUNTIME_CAPABILITY
     ))
   ) {
-    throw new Error('Rewinding requires a newer Orca server. Update the server and try again.')
+    throw new Error('Rewinding requires a newer Quirky server. Update the server and try again.')
   }
   const timeoutMs = STRUCTURED_AGENT_SESSION_METHOD_TIMEOUT_MS.get(method)
   return timeoutMs === undefined && !options.skipCompatibilityCheck

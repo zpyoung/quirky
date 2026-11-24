@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Ratchet gate for Electron imports reachable from the Orca runtime, the CLI and structured chat.
+ * Ratchet gate for Electron imports reachable from the Quirky runtime, the CLI and structured chat.
  *
  * The runtime and the CLI boot on plain Node, where Electron is unavailable. Keep desktop
  * dependencies out of their graphs, including structured chat not yet wired into the runtime.
@@ -27,19 +27,19 @@ import { createWorkspaceSourceResolver } from './workspace-source-exports.mjs'
 const ROOT = path.join(import.meta.dirname, '..', '..')
 
 // The module graphs that boot on plain Node: the runtime service, the RPC server that
-// fronts it, orcad, and the CLI.
+// fronts it, quirkyd, and the CLI.
 const ENTRY_POINTS = [
-  path.join(ROOT, 'src', 'main', 'runtime', 'orca-runtime.ts'),
+  path.join(ROOT, 'src', 'main', 'runtime', 'quirky-runtime.ts'),
   path.join(ROOT, 'src', 'main', 'runtime', 'runtime-rpc.ts'),
-  // Why orcad too: it imports ipc/pty directly to install the PTY controller, so its
+  // Why quirkyd too: it imports ipc/pty directly to install the PTY controller, so its
   // graph is strictly larger than the two runtime entries. Measuring only those let the
   // two numbers drift — the gate would read zero while the shipped artifact regressed.
-  path.join(ROOT, 'src', 'main', 'orcad', 'main.ts'),
+  path.join(ROOT, 'src', 'main', 'quirkyd', 'main.ts'),
   // Why the CLI: it runs under ELECTRON_RUN_AS_NODE, and its tsconfig follows imports into src/main.
   path.join(ROOT, 'src', 'cli', 'index.ts')
 ]
 
-// Code that must run in orcad whether or not a runtime entry reaches it yet. Whole directories,
+// Code that must run in quirkyd whether or not a runtime entry reaches it yet. Whole directories,
 // so a new file is covered by default; src/main/runtime still holds desktop-only code (browser
 // commands, desktop relay), so only its structured-chat files are entries there.
 export const STRUCTURED_CHAT_LANES = [
@@ -125,7 +125,7 @@ export async function collectElectronImporters(entryPoints, { plugins = [] } = {
   const workspaceSources = {
     name: 'runtime-workspace-sources',
     setup(pluginBuild) {
-      pluginBuild.onResolve({ filter: /^@orca\// }, ({ path: specifier }) => {
+      pluginBuild.onResolve({ filter: /^@quirky\// }, ({ path: specifier }) => {
         const source = workspace.resolve(specifier)
         return source ? { path: source.path } : undefined
       })
@@ -175,10 +175,10 @@ export async function main({ plugins = [] } = {}) {
   })
   if (current.length > 0) {
     console.error(
-      `[runtime-electron-ratchet] ${current.length} module(s) reachable from the Orca runtime, the CLI or structured-chat code import electron:
+      `[runtime-electron-ratchet] ${current.length} module(s) reachable from the Quirky runtime, the CLI or structured-chat code import electron:
 ${current.map((file) => `  + ${file}`).join('\n')}
 
-The runtime and structured chat must run in orcad, the headless runtime, and the CLI runs on
+The runtime and structured chat must run in quirkyd, the headless runtime, and the CLI runs on
 plain Node; Electron is unavailable in both. That holds for structured-chat code the runtime
 doesn't load yet, so renaming or moving the file is not a fix. Put the Electron facility behind a port in src/main/host/ and
 depend on the port, or drop the import that pulls Electron in.`

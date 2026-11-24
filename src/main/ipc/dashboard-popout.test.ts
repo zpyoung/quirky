@@ -64,7 +64,7 @@ const CARD = {
   worktreeId: 'worktree-1',
   tabId: 'tab-1',
   leafId: 'leaf-1',
-  repoName: 'Orca',
+  repoName: 'Quirky',
   worktreeName: 'Dashboard',
   startedAt: 1,
   finishedAt: null,
@@ -99,9 +99,9 @@ function makeStore(enabled = true) {
 
 // These cases exercise foreground behavior against Electron mocks.
 beforeEach(() => {
-  vi.stubEnv('ORCA_BACKGROUND_LAUNCH', undefined)
-  vi.stubEnv('ORCA_E2E_HEADLESS', undefined)
-  vi.stubEnv('ORCA_E2E_HEADFUL', undefined)
+  vi.stubEnv('QUIRKY_BACKGROUND_LAUNCH', undefined)
+  vi.stubEnv('QUIRKY_E2E_HEADLESS', undefined)
+  vi.stubEnv('QUIRKY_E2E_HEADFUL', undefined)
 })
 afterEach(() => vi.unstubAllEnvs())
 

@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 import type { Page } from '@stablyai/playwright-test'
 import { RuntimeClient } from '../../src/cli/runtime/client'
 import type { RuntimeTerminalListResult } from '../../src/shared/runtime-types'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForActiveTerminalManager } from './helpers/terminal'
 import { parkHiddenTabBehindDecoy } from './helpers/terminal-hidden-parking'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
@@ -13,11 +13,11 @@ import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } fro
 const execFileAsync = promisify(execFile)
 const PARKING_DELAY_MS = 500
 const LAYOUT_OWNER_BUILD = existsSync(
-  path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')
+  path.join(process.cwd(), 'out', 'main', 'QUIRKY_LAYOUT_OWNER_MAIN')
 )
 
 test.use({
-  orcaAppExtraEnv: { ORCA_E2E_TERMINAL_PARKING_DELAY_MS: String(PARKING_DELAY_MS) }
+  quirkyAppExtraEnv: { QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS: String(PARKING_DELAY_MS) }
 })
 
 type SplitOutcome = { ok: true } | { ok: false; error: string }
@@ -32,7 +32,7 @@ async function runCliSplit(
     await execFileAsync(
       process.execPath,
       [
-        path.join(repoRoot, 'config', 'scripts', 'orca-dev.mjs'),
+        path.join(repoRoot, 'config', 'scripts', 'quirky-dev.mjs'),
         'terminal',
         'split',
         '--terminal',
@@ -43,7 +43,7 @@ async function runCliSplit(
       ],
       {
         cwd: repoRoot,
-        env: { ...process.env, ORCA_DEV_USER_DATA_PATH: userDataDir },
+        env: { ...process.env, QUIRKY_DEV_USER_DATA_PATH: userDataDir },
         timeout: 30_000
       }
     )
@@ -121,20 +121,20 @@ function windowLeafIdsOf(page: Page, tabId: string): Promise<string[]> {
 // Main writes the split and starts its terminal itself, so a busy window never holds the CLI up.
 test('a CLI split of a parked tab answers promptly while the window is busy', async ({
   electronApp,
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   test.skip(!LAYOUT_OWNER_BUILD, 'layout-owner build only')
   test.setTimeout(180_000)
-  await waitForSessionReady(orcaPage)
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
+  await waitForSessionReady(quirkyPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
   const userDataDir = await electronApp.evaluate(({ app }) => app.getPath('userData'))
   const client = new RuntimeClient(userDataDir, 30_000)
-  const tabId = await createActiveTab(orcaPage, worktreeId)
+  const tabId = await createActiveTab(quirkyPage, worktreeId)
   const source = await handleFor(client, worktreeId, tabId)
-  await parkHiddenTabBehindDecoy(orcaPage, worktreeId, tabId, { parkDelayMs: PARKING_DELAY_MS })
-  await stallRenderer(orcaPage, 8_000)
+  await parkHiddenTabBehindDecoy(quirkyPage, worktreeId, tabId, { parkDelayMs: PARKING_DELAY_MS })
+  await stallRenderer(quirkyPage, 8_000)
   const startedAt = Date.now()
   const outcome = await runCliSplit(userDataDir, source, 'echo started-by-main')
   const elapsedMs = Date.now() - startedAt
@@ -150,20 +150,20 @@ test('a CLI split of a parked tab answers promptly while the window is busy', as
 // command runs, and the window shows the pane from main's layout once it is free.
 test('a CLI split runs its command while the window is stalled, and the window shows the pane', async ({
   electronApp,
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   test.skip(!LAYOUT_OWNER_BUILD, 'layout-owner build only')
   test.setTimeout(180_000)
-  await waitForSessionReady(orcaPage)
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
+  await waitForSessionReady(quirkyPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
   const userDataDir = await electronApp.evaluate(({ app }) => app.getPath('userData'))
   const client = new RuntimeClient(userDataDir, 30_000)
-  const tabId = await createActiveTab(orcaPage, worktreeId)
+  const tabId = await createActiveTab(quirkyPage, worktreeId)
   const source = await handleFor(client, worktreeId, tabId)
-  await parkHiddenTabBehindDecoy(orcaPage, worktreeId, tabId, { parkDelayMs: PARKING_DELAY_MS })
-  await stallRenderer(orcaPage, 11_000)
+  await parkHiddenTabBehindDecoy(quirkyPage, worktreeId, tabId, { parkDelayMs: PARKING_DELAY_MS })
+  await stallRenderer(quirkyPage, 11_000)
   const marker = testInfo.outputPath(`split-ran-${Date.now()}`)
   mkdirSync(path.dirname(marker), { recursive: true })
   const outcome = await runCliSplit(userDataDir, source, `touch '${marker}'`)
@@ -185,6 +185,6 @@ test('a CLI split runs its command while the window is stalled, and the window s
     .toBe(2)
   // Past the stall, the window holds both panes main has.
   await expect
-    .poll(async () => (await windowLeafIdsOf(orcaPage, tabId)).sort(), { timeout: 30_000 })
+    .poll(async () => (await windowLeafIdsOf(quirkyPage, tabId)).sort(), { timeout: 30_000 })
     .toEqual(tabLeafIds)
 })

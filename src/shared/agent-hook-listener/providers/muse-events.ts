@@ -28,7 +28,7 @@ function isChildSessionEvent(pane: MusePaneState, hookPayload: Record<string, un
     return false
   }
   // Why: Muse 1.3 child sessions reuse their session id as turn id; that covers a child whose
-  // SubagentStart predates this listener (Orca restart, relay reconnect).
+  // SubagentStart predates this listener (Quirky restart, relay reconnect).
   return pane.childSessionIds.has(sessionId) || readString(hookPayload, 'turn_id') === sessionId
 }
 

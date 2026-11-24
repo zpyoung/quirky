@@ -112,7 +112,7 @@ function clickLink({
 }
 
 describe('rich Markdown alternate browser click', () => {
-  it.each([true, false])('opens Orca when the system browser is primary (Mac: %s)', (isMac) => {
+  it.each([true, false])('opens Quirky when the system browser is primary (Mac: %s)', (isMac) => {
     expect(clickLink({ isMac })).toBe(true)
     expect(createBrowserTab).toHaveBeenCalledWith('wt-1', 'https://example.com/docs', {
       activate: true
@@ -122,7 +122,7 @@ describe('rich Markdown alternate browser click', () => {
   })
 
   it.each([true, false])(
-    'opens the system browser when Orca is primary (invert: %s)',
+    'opens the system browser when Quirky is primary (invert: %s)',
     (inverts) => {
       routing.settings = {
         openLinksInApp: true,
@@ -137,7 +137,7 @@ describe('rich Markdown alternate browser click', () => {
   it.each<HttpLinkSourceOwner>([
     { kind: 'ssh', connectionId: 'conn-1' },
     { kind: 'runtime', runtimeEnvironmentId: 'env-1' }
-  ])('opens the alternate Orca browser on the source owner: %j', (sourceOwner) => {
+  ])('opens the alternate Quirky browser on the source owner: %j', (sourceOwner) => {
     expect(clickLink({ sourceOwner })).toBe(true)
     expect(openOwnedBrowser).toHaveBeenCalledWith({
       workspaceId: 'wt-1',

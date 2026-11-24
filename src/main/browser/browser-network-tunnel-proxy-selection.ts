@@ -16,7 +16,7 @@ export type BrowserNetworkTunnelProxy =
   | { kind: 'unsupported'; protocol: string }
 
 /**
- * The upstream proxy a tunneled connection must use: Orca's proxy setting first, then the
+ * The upstream proxy a tunneled connection must use: Quirky's proxy setting first, then the
  * environment's HTTPS/ALL/HTTP_PROXY, each with its own bypass list — the precedence the
  * host's own browser sessions apply (proxy-settings.ts).
  */
@@ -71,7 +71,7 @@ function normalizeHost(host: string): string {
 
 /**
  * Bypass rules: `*`, `<local>`, `.suffix`/`*suffix`, `host:port`, IPv4 CIDR. A bare host is exact
- * in Orca's setting (Chromium reads it so) and covers subdomains in NO_PROXY (curl/Go/Python).
+ * in Quirky's setting (Chromium reads it so) and covers subdomains in NO_PROXY (curl/Go/Python).
  */
 export function matchesProxyBypassRules(
   target: Pick<BrowserNetworkTunnelOpen, 'host' | 'port'>,

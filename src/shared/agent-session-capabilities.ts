@@ -17,13 +17,13 @@ export type AgentSessionCapabilities = {
   /** Prompts may carry images. */
   imagePrompts: boolean
   /** A message sent while a turn runs: handed to the running agent at once (`inject`), or held by
-   *  Orca and sent as the next prompt once the turn ends (`queue`). */
+   *  Quirky and sent as the next prompt once the turn ends (`queue`). */
   steering: 'inject' | 'queue'
   /**
    * Who applies the user's permission setting. `provider`: the agent is launched with it and
-   * confines its own work. `orca`: Orca answers every permission request the agent sends by the
+   * confines its own work. `quirky`: Quirky answers every permission request the agent sends by the
    * session's setting (a protocol-driven agent's value). The agent's own settings still decide
    * WHEN it asks, so only what it asks about is covered, never a sandbox.
    */
-  approvalEnforcement: 'provider' | 'orca'
+  approvalEnforcement: 'provider' | 'quirky'
 }

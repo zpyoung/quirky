@@ -272,7 +272,7 @@ export function finalizeManagedStatusLineRemoval(
   }
 }
 
-/** Remove Orca's managed status line and restore its captured predecessor when safe. */
+/** Remove Quirky's managed status line and restore its captured predecessor when safe. */
 export function removeManagedStatusLine(
   config: HooksConfig,
   scriptFileName = getStatusLineScriptFileName()

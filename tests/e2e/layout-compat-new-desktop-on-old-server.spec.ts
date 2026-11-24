@@ -4,17 +4,17 @@
  * reconnects after the server restarts. Each step records the old server's `session.tabs.list`
  * and the pane tree the desktop holds and draws; the rework's frozen adapter must match them.
  *
- * Needs ORCA_CROSS_VERSION_PACKAGED_EXECUTABLE (CI: packaged-browser-e2e.yml, job layout-compat).
+ * Needs QUIRKY_CROSS_VERSION_PACKAGED_EXECUTABLE (CI: packaged-browser-e2e.yml, job layout-compat).
  */
 import type { Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchPairedElectronClient } from './helpers/paired-electron-client'
 import {
   launchPackagedServeHost,
   packagedExecutable,
   packagedExecutableMissing,
   PACKAGED_EXECUTABLE_ENV
-} from './helpers/packaged-old-orca'
+} from './helpers/packaged-old-quirky'
 import {
   expectLayoutCompatBaseline,
   expectReconnectedPaneEcho,
@@ -78,7 +78,7 @@ async function dragDivider(page: Page): Promise<void> {
 }
 
 test.describe('layout compat: current desktop on a released server', () => {
-  test.skip(packagedExecutableMissing, `${PACKAGED_EXECUTABLE_ENV} must point at a released Orca`)
+  test.skip(packagedExecutableMissing, `${PACKAGED_EXECUTABLE_ENV} must point at a released Quirky`)
 
   test('new-desktop-on-old-server: split, divider drag, pane rename, reconnect', async ({
     testRepoPath

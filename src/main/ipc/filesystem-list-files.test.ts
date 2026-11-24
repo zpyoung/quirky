@@ -41,7 +41,7 @@ import type { ChildProcess } from 'node:child_process'
 import { FileListingCancelledError } from '../../shared/file-listing-cancellation'
 
 const BUNDLED_RG = '/bundled/rg'
-const BUNDLED_ERROR = "Orca's bundled search tool (ripgrep) could not start"
+const BUNDLED_ERROR = "Quirky's bundled search tool (ripgrep) could not start"
 
 function createMockProcess(): ChildProcess {
   const p = new EventEmitter() as unknown as ChildProcess

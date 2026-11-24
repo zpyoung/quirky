@@ -25,7 +25,7 @@ export function createClaudePluginImageFixture(
   for (const directory of [cwd, config, join(plugin, '.claude-plugin'), join(plugin, 'hooks')]) {
     mkdirSync(directory, { recursive: true })
   }
-  const temporaryRoot = mkdtempSync(join(tmpdir(), 'orca-claude-image-acceptance-'))
+  const temporaryRoot = mkdtempSync(join(tmpdir(), 'quirky-claude-image-acceptance-'))
   const file = join(temporaryRoot, 'synthetic.png')
   writeFileSync(file, image([40, 240, 40, 255], [240, 200, 40, 255]))
   const png = image([240, 40, 40, 255], [40, 80, 240, 255]).toString('base64')
@@ -40,10 +40,10 @@ export function createClaudePluginImageFixture(
   writeFileSync(
     join(plugin, '.claude-plugin', 'plugin.json'),
     JSON.stringify({
-      name: 'orca-image-acceptance',
+      name: 'quirky-image-acceptance',
       version: '0.1.0',
       description: 'Session-only terminal image acceptance fixture',
-      author: { name: 'Orca contributors' }
+      author: { name: 'Quirky contributors' }
     })
   )
   writeFileSync(join(plugin, 'hooks', 'hooks.json'), '{"modules":["./register.js"]}')
@@ -75,7 +75,7 @@ export function register(on) {
   const launcher = join(root, 'launch-claude.cjs')
   writeFileSync(
     launcher,
-    `const {spawnProcess}=require(${JSON.stringify(createRequire(join(process.cwd(), 'package.json')).resolve('@orca/process-host'))});
+    `const {spawnProcess}=require(${JSON.stringify(createRequire(join(process.cwd(), 'package.json')).resolve('@quirky/process-host'))});
 const env={...process.env,CLAUDE_CONFIG_DIR:${JSON.stringify(config)},CLAUDE_CODE_TMPDIR:${JSON.stringify(join(temporaryRoot, 'cli-cache'))},CLAUDE_CODE_ENABLE_FUNCTION_HOOKS:'1',CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:'1',DISABLE_AUTOUPDATER:'1',COLORTERM:'truecolor'};
 for(const key of ['NO_COLOR','ANTHROPIC_API_KEY','ANTHROPIC_AUTH_TOKEN','CLAUDE_CODE_OAUTH_TOKEN','CLAUDECODE','CLAUDE_CODE_ENTRYPOINT','CLAUDE_CODE_SESSION_ID','CLAUDE_CODE_CHILD_SESSION','CLAUDE_CODE_SESSION_KIND']) delete env[key];
 ${force === true ? "env.CLAUDE_CODE_FORCE_TERMINAL_IMAGES='1';" : force === false ? 'delete env.CLAUDE_CODE_FORCE_TERMINAL_IMAGES;' : ''}

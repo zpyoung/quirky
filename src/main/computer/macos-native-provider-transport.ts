@@ -97,14 +97,14 @@ export async function startMacOSNativeProviderSocket({
   isCurrent: (socketPath: string) => boolean
   providerProcess: MacOSProviderProcessOwner
 }): Promise<StartedMacOSProviderSocket> {
-  const socketDirectory = mkdtempSync(join(tmpdir(), 'orca-computer-use-'))
+  const socketDirectory = mkdtempSync(join(tmpdir(), 'quirky-computer-use-'))
   chmodSync(socketDirectory, 0o700)
   const socketPath = join(socketDirectory, 'provider.sock')
   const socketToken = randomUUID()
   const socketTokenPath = join(socketDirectory, 'provider.token')
   writeFileSync(socketTokenPath, socketToken, { encoding: 'utf8', mode: 0o600 })
   // Why: launching the nested helper via LaunchServices can make TCC evaluate
-  // Orca.app as responsible; the signed helper executable owns this grant.
+  // Quirky.app as responsible; the signed helper executable owns this grant.
   const provider = spawnProvider(helperExecutablePath, socketPath, socketTokenPath)
   // Why: own the helper from birth. Adopting only after connect leaves a window
   // where a quit during startup strands it with nobody holding the handle.

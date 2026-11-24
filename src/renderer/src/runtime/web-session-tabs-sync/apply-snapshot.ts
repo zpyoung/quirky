@@ -1,5 +1,5 @@
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import type {
   WebSessionTabsBatchContext,
@@ -36,9 +36,9 @@ export function applyWebSessionTabsSnapshotWithContext(
     return state
   }
   const worktreeId = rawSnapshot.worktree
-  // Switch point: ORCA_LAYOUT_OWNER_IS_MAIN && — every mirror write (single, batch, operations) passes here.
+  // Switch point: QUIRKY_LAYOUT_OWNER_IS_MAIN && — every mirror write (single, batch, operations) passes here.
   const previousSnapshotTabIds =
-    ORCA_LAYOUT_OWNER_IS_MAIN && options?.contentScope !== 'agent-session'
+    QUIRKY_LAYOUT_OWNER_IS_MAIN && options?.contentScope !== 'agent-session'
       ? indexMirroredTerminalSurfaces(environmentId, rawSnapshot)
       : null
   const frameDrawnPreviousTabIds =

@@ -104,11 +104,11 @@ export async function prepareRuntimePtySpawn(
     }
   }
   ctx.env = ctx.claudeAuth ? { ...args.env, ...ctx.claudeAuth.envPatch } : args.env
-  ctx.requestedAgentTeamsPath = ctx.env?.ORCA_AGENT_TEAMS_TEAM_ID
+  ctx.requestedAgentTeamsPath = ctx.env?.QUIRKY_AGENT_TEAMS_TEAM_ID
     ? ctx.env[resolvePathEnvKey(ctx.env, process.platform)]
     : undefined
   if (args.preAllocatedHandle) {
-    ctx.env = { ...ctx.env, ORCA_TERMINAL_HANDLE: args.preAllocatedHandle }
+    ctx.env = { ...ctx.env, QUIRKY_TERMINAL_HANDLE: args.preAllocatedHandle }
   }
   if (ctx.env) {
     // Why a copy: without a handle or Claude auth this is still the caller's env, which a split reuses.
@@ -148,7 +148,7 @@ export async function prepareRuntimePtySpawn(
   ctx.selectedCodexHomePath = hostEnv.selectedCodexHomePath
   ctx.codexResumeHomeSelected = hostEnv.codexResumeHomeSelected
   ctx.skipCodexHomeEnv = hostEnv.skipCodexHomeEnv
-  ctx.stripInheritedOrcaCodexHome = hostEnv.stripInheritedOrcaCodexHome
+  ctx.stripInheritedQuirkyCodexHome = hostEnv.stripInheritedQuirkyCodexHome
 
   return null
 }

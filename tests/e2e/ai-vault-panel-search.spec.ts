@@ -1,10 +1,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 
 test('panel consent enables real local transcript search; clearing restores history', async ({
   electronApp,
-  orcaPage,
+  quirkyPage,
   seededRepoPath
 }, testInfo) => {
   const home = await electronApp.evaluate(({ app }) => app.getPath('home'))
@@ -34,18 +34,18 @@ test('panel consent enables real local transcript search; clearing restores hist
       .map((record) => JSON.stringify(record))
       .join('\n')}\n`
   )
-  await orcaPage.evaluate(() => {
+  await quirkyPage.evaluate(() => {
     const state = window.__store?.getState()
     state?.setRightSidebarOpen(true)
     state?.setRightSidebarTab('vault')
     state?.setRightSidebarWidth(400)
   })
-  await orcaPage.getByRole('button', { name: 'Agents', exact: true }).click()
-  await orcaPage.getByRole('radio', { name: 'All', exact: true }).click()
-  const input = orcaPage.getByRole('textbox', { name: 'Search sessions', exact: true })
+  await quirkyPage.getByRole('button', { name: 'Agents', exact: true }).click()
+  await quirkyPage.getByRole('radio', { name: 'All', exact: true }).click()
+  const input = quirkyPage.getByRole('textbox', { name: 'Search sessions', exact: true })
   await input.fill('nebulariver')
-  await expect(orcaPage.getByText('Enable full-text search?', { exact: false })).toBeVisible()
-  const cdp = await orcaPage.context().newCDPSession(orcaPage)
+  await expect(quirkyPage.getByText('Enable full-text search?', { exact: false })).toBeVisible()
+  const cdp = await quirkyPage.context().newCDPSession(quirkyPage)
   async function screenshot(name: string) {
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' })
     const screenshotPath = testInfo.outputPath(name)
@@ -53,69 +53,69 @@ test('panel consent enables real local transcript search; clearing restores hist
     await testInfo.attach(name, { path: screenshotPath, contentType: 'image/png' })
   }
   await screenshot('consent.png')
-  await orcaPage.getByRole('button', { name: 'Enable', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Enable', exact: true }).click()
   // Indexed searches are snapshots; enabling starts indexing independently of the panel.
   await expect
     .poll(
       () =>
-        orcaPage.evaluate(
+        quirkyPage.evaluate(
           async () => (await window.api.aiVault.searchStatus('local')).filesIndexed
         ),
       { timeout: 30_000 }
     )
     .toBeGreaterThan(0)
-  await orcaPage.getByRole('button', { name: 'Refresh Session History', exact: true }).click()
-  await expect(orcaPage.locator('mark').filter({ hasText: 'nebulariver' })).toBeVisible()
-  await expect(orcaPage.getByText('Synthetic panel transcript', { exact: true })).toBeVisible()
+  await quirkyPage.getByRole('button', { name: 'Refresh Session History', exact: true }).click()
+  await expect(quirkyPage.locator('mark').filter({ hasText: 'nebulariver' })).toBeVisible()
+  await expect(quirkyPage.getByText('Synthetic panel transcript', { exact: true })).toBeVisible()
   await screenshot('results.png')
-  await orcaPage.getByTitle('Drag to resume in a new tab', { exact: true }).click()
-  await expect(orcaPage.locator('mark').filter({ hasText: 'nebulariver' })).toBeVisible()
-  await orcaPage.getByTitle('Drag to resume in a new tab', { exact: true }).click()
-  const title = orcaPage.getByText('Synthetic panel transcript', { exact: true })
+  await quirkyPage.getByTitle('Drag to resume in a new tab', { exact: true }).click()
+  await expect(quirkyPage.locator('mark').filter({ hasText: 'nebulariver' })).toBeVisible()
+  await quirkyPage.getByTitle('Drag to resume in a new tab', { exact: true }).click()
+  const title = quirkyPage.getByText('Synthetic panel transcript', { exact: true })
   await expect(title).toHaveAttribute('draggable', 'true')
   const drag = await title.evaluate((element) => {
     const dataTransfer = new DataTransfer()
     element.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }))
-    const payload = dataTransfer.getData('application/x-orca-ai-vault-session')
+    const payload = dataTransfer.getData('application/x-quirky-ai-vault-session')
     element.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer }))
     return payload
   })
   expect(JSON.parse(drag)).toMatchObject({ sessionId, sessionExecutionHostId: 'local' })
   await title.click({ button: 'right' })
   await expect(
-    orcaPage.getByRole('menuitem', { name: 'Copy Session ID', exact: true })
+    quirkyPage.getByRole('menuitem', { name: 'Copy Session ID', exact: true })
   ).toBeVisible()
-  await orcaPage.keyboard.press('Escape')
-  await expect(orcaPage.locator('[role="menu"]')).toHaveCount(0)
-  await orcaPage.evaluate(async () => {
+  await quirkyPage.keyboard.press('Escape')
+  await expect(quirkyPage.locator('[role="menu"]')).toHaveCount(0)
+  await quirkyPage.evaluate(async () => {
     await window.__store?.getState().updateSettingsOrThrow({ theme: 'dark' })
     window.__store?.getState().setRightSidebarWidth(280)
   })
-  await expect(orcaPage.locator('html')).toHaveClass(/dark/)
+  await expect(quirkyPage.locator('html')).toHaveClass(/dark/)
   await screenshot('results-dark-narrow.png')
   await title.click({ button: 'right' })
-  await orcaPage.getByRole('menuitem', { name: 'Delete', exact: true }).click()
-  await orcaPage.getByRole('button', { name: 'Delete', exact: true }).click()
+  await quirkyPage.getByRole('menuitem', { name: 'Delete', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Delete', exact: true }).click()
   await expect(title).toHaveCount(0)
-  await expect(orcaPage.locator('mark')).toHaveCount(0)
+  await expect(quirkyPage.locator('mark')).toHaveCount(0)
   await input.fill('nothingmatchesprseven')
   await expect(
-    orcaPage.getByText('No matching sessions in the indexed history.', { exact: false })
+    quirkyPage.getByText('No matching sessions in the indexed history.', { exact: false })
   ).toBeVisible()
   await screenshot('empty.png')
   await input.press('Escape')
   await expect(input).toHaveValue('')
-  await expect(orcaPage.getByText('Indexed history · best matches', { exact: false })).toHaveCount(
-    0
-  )
+  await expect(
+    quirkyPage.getByText('Indexed history · best matches', { exact: false })
+  ).toHaveCount(0)
   await cdp.detach()
 })
 
 test('panel renders transport failure and unavailable reasons without a local fallback', async ({
   electronApp,
-  orcaPage
+  quirkyPage
 }, testInfo) => {
-  await orcaPage.evaluate(async () => {
+  await quirkyPage.evaluate(async () => {
     await window.__store
       ?.getState()
       .updateSettingsOrThrow({ aiVaultSearch: { enabled: true, historyDays: null } })
@@ -128,24 +128,24 @@ test('panel renders transport failure and unavailable reasons without a local fa
       throw new Error('Synthetic transport failure')
     })
   })
-  const input = orcaPage.getByRole('textbox', { name: 'Search sessions', exact: true })
+  const input = quirkyPage.getByRole('textbox', { name: 'Search sessions', exact: true })
   await input.fill('needle')
   await expect(
-    orcaPage.getByText('Could not search this computer.', { exact: false })
+    quirkyPage.getByText('Could not search this computer.', { exact: false })
   ).toBeVisible()
-  await orcaPage.screenshot({ path: testInfo.outputPath('failure.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('failure.png') })
   for (const reason of ['disabled', 'not-ready', 'no-service'] as const) {
     await electronApp.evaluate(({ ipcMain }, value) => {
       ipcMain.removeHandler('aiVault:searchSessions')
       ipcMain.handle('aiVault:searchSessions', () => ({ kind: 'unavailable', reason: value }))
     }, reason)
-    await orcaPage.getByRole('button', { name: 'Try again', exact: true }).click()
+    await quirkyPage.getByRole('button', { name: 'Try again', exact: true }).click()
     const copy =
       reason === 'disabled'
         ? 'Search is disabled on this computer.'
         : reason === 'not-ready'
           ? 'The search index is not ready yet.'
           : 'Search is unavailable on this computer.'
-    await expect(orcaPage.getByText(copy, { exact: false })).toBeVisible()
+    await expect(quirkyPage.getByText(copy, { exact: false })).toBeVisible()
   }
 })

@@ -47,7 +47,7 @@ describe('Antigravity raw captured readiness', () => {
   // hold for one poll. Keeping the refusal short keeps seven transcripts off the suite's clock.
   const READY_TIMEOUT_MS = 2_000
   const REFUSAL_TIMEOUT_MS = 600
-  /** Antigravity's binary, as Orca launches and probes it (`tui-agent-config.ts` detectCmd). */
+  /** Antigravity's binary, as Quirky launches and probes it (`tui-agent-config.ts` detectCmd). */
   const ANTIGRAVITY_COMMAND = 'agy'
   // String.fromCharCode, not a literal: the formatter rewrites an escape sequence into a raw
   // control byte in source, which is unreadable and survives badly in diffs.
@@ -214,7 +214,7 @@ describe('Antigravity raw captured readiness', () => {
             readFileSync(path, 'utf8'),
             transcript.expectReady ? READY_TIMEOUT_MS : REFUSAL_TIMEOUT_MS
           )
-          // A silent dialog carries no blocked-signal wording, so the assertion is only that Orca
+          // A silent dialog carries no blocked-signal wording, so the assertion is only that Quirky
           // does not call the pane ready and type a prompt into a dialog that owns the screen.
           expect({ ready: verdict.ready, outcome: verdict.outcome }).toMatchObject({
             ready: shipped

@@ -1,12 +1,12 @@
 import { app } from 'electron'
 import { dirname, resolve } from 'node:path'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { applyBackgroundActivationPolicy } from './foreground-activation-policy'
 
 /**
- * orcad's browser sidecar runs from the installed app bundle. On macOS 27 LaunchServices registers
- * it even when orcad was started over SSH, and routes the user's opens (Dock, Spotlight, Finder,
- * `open`, orca:// links) to the first registered instance of the bundle, whatever its activation
+ * quirkyd's browser sidecar runs from the installed app bundle. On macOS 27 LaunchServices registers
+ * it even when quirkyd was started over SSH, and routes the user's opens (Dock, Spotlight, Finder,
+ * `open`, quirky:// links) to the first registered instance of the bundle, whatever its activation
  * policy. The sidecar passes each one to a new desktop instance instead of presenting its profile.
  */
 export function handOffToDesktopApp(
@@ -34,7 +34,7 @@ export function handOffToDesktopApp(
 }
 
 function launchDesktopInstance(args: readonly string[], executablePath: string | undefined): void {
-  // `Orca.app/Contents/MacOS/Orca` → `Orca.app`.
+  // `Quirky.app/Contents/MacOS/Quirky` → `Quirky.app`.
   const bundlePath = resolve(dirname(executablePath ?? app.getPath('exe')), '..', '..')
   const child = spawnProcess({
     program: '/usr/bin/open',
@@ -52,8 +52,8 @@ function launchDesktopInstance(args: readonly string[], executablePath: string |
 
 function isAutomatedLaunch(env: Readonly<Record<string, string | undefined>>): boolean {
   return (
-    env.ORCA_BACKGROUND_LAUNCH === '1' ||
-    Object.keys(env).some((key) => key.startsWith('ORCA_E2E_') && Boolean(env[key]))
+    env.QUIRKY_BACKGROUND_LAUNCH === '1' ||
+    Object.keys(env).some((key) => key.startsWith('QUIRKY_E2E_') && Boolean(env[key]))
   )
 }
 

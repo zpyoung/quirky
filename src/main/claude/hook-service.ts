@@ -234,7 +234,7 @@ export class ClaudeHookService {
     return next
   }
 
-  // Why: a Claude that predates statusLine discards the whole settings file over Orca's; dropping the
+  // Why: a Claude that predates statusLine discards the whole settings file over Quirky's; dropping the
   // marker with it keeps an upgrade from reading the removal as the user's opt-out.
   private retireManagedStatusLine(config: HooksConfig): HooksConfig {
     const { config: next, changed } = removeManagedStatusLine(
@@ -260,7 +260,7 @@ export class ClaudeHookService {
     // Why: remote Windows is unsupported; local process.platform cannot identify the remote OS.
     const remoteConfigPath = getRemoteConfigPath(remoteHome, this.options.settings)
     const remoteScriptFileName = getPosixManagedScriptFileName(this.options.settings)
-    const remoteScriptPath = `${remoteHome.replace(/\/$/, '')}/.orca/agent-hooks/${remoteScriptFileName}`
+    const remoteScriptPath = `${remoteHome.replace(/\/$/, '')}/.quirky/agent-hooks/${remoteScriptFileName}`
     // Why: surface fallible SFTP installs as structured errors.
     try {
       const config = await readHooksJsonRemote(sftp, remoteConfigPath)
@@ -335,7 +335,7 @@ export class ClaudeHookService {
     finalizeManagedStatusLineRemoval(getStatusLineScriptFileName(this.options.settings))
     if (this.options.agent === 'claude') {
       try {
-        // Why: an Orca-level uninstall resets the opt-out memory so a later re-enable installs the statusline again.
+        // Why: an Quirky-level uninstall resets the opt-out memory so a later re-enable installs the statusline again.
         rmSync(getStatusLineInstallMarkerPath(this.options.settings), { force: true })
       } catch {
         // ignore — marker cleanup is best-effort

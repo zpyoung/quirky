@@ -28,7 +28,7 @@ const RUNTIME_TOO_LARGE_ERROR = 'file_too_large'
 
 /** Previews fail closed on a host without scoped reads. */
 const RUNTIME_DOC_PREVIEW_UPDATE_REQUIRED_MESSAGE =
-  'Secure document previews require a newer Orca on the paired machine. Update it and try again.'
+  'Secure document previews require a newer Quirky on the paired machine. Update it and try again.'
 
 function isTooLargeReadError(error: unknown): boolean {
   return error instanceof Error && error.message === RUNTIME_TOO_LARGE_ERROR

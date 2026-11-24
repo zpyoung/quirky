@@ -15,7 +15,7 @@ assert.equal(patches.length, versions.sources.length)
 const fixedSources = new Map()
 const baselineSources = new Map()
 const evaluatedSourceHashes = {}
-const sourceMapPath = process.env.ORCA_SPAWN_INPUT_PROOF_SOURCE_MAP
+const sourceMapPath = process.env.QUIRKY_SPAWN_INPUT_PROOF_SOURCE_MAP
 const sourceOverrides = sourceMapPath ? JSON.parse(readText(path.resolve(sourceMapPath))) : null
 if (sourceMapPath) {
   assert.equal(typeof sourceOverrides, 'object')

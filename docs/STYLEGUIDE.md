@@ -1,10 +1,10 @@
-# Orca UI Style Guide
+# Quirky UI Style Guide
 
-This is the **UI/visual design** doc for Orca — color tokens, typography, component selection, and UX rules. It is _not_ an architecture doc; for system-level design see code and inline comments. Token values live in `src/renderer/src/assets/main.css` (canonical); this file documents the _roles and rules_ for using them.
+This is the **UI/visual design** doc for Quirky — color tokens, typography, component selection, and UX rules. It is _not_ an architecture doc; for system-level design see code and inline comments. Token values live in `src/renderer/src/assets/main.css` (canonical); this file documents the _roles and rules_ for using them.
 
 ## Overview
 
-Orca is an Electron desktop app for orchestrating coding agents across git worktrees. Orca's chrome is **monochrome and quiet** — neutral grays carry it, color is reserved for state (selection ring, destructive, git decorations). The native chat transcript is a documented exception, where color is load-bearing rather than decorative — see [Tool activity colors](#tool-activity-colors). The product spends most of its time hosting other people's tools (Monaco, xterm, Markdown previews), so Orca's own UI should recede and frame.
+Quirky is an Electron desktop app for orchestrating coding agents across git worktrees. Quirky's chrome is **monochrome and quiet** — neutral grays carry it, color is reserved for state (selection ring, destructive, git decorations). The native chat transcript is a documented exception, where color is load-bearing rather than decorative — see [Tool activity colors](#tool-activity-colors). The product spends most of its time hosting other people's tools (Monaco, xterm, Markdown previews), so Quirky's own UI should recede and frame.
 
 When in doubt:
 
@@ -78,7 +78,7 @@ The native chat transcript colors tool lines on one axis: five hues answer _what
 | `--tool-search` | `#4f4fc4` | 6.47:1    | `#9a9ae6` | 7.67:1    | Locating something   | Grep, Glob             |
 | `--tool-net`    | `#6a4fb0` | 6.25:1    | `#b39ddb` | 8.26:1    | Reaching the network | WebFetch, WebSearch    |
 
-`--tool-write` is the only warm hue, and that's deliberate: amber means the agent touched your files. The four cool hues recede into chrome; the one warm hue is the thing worth noticing. An unrecognized tool name takes no category and renders exactly as it does today — neutral, no glyph. Orca hosts agents whose tool vocabularies it doesn't control, so a classifier that guessed would mislabel third-party tools with confident color.
+`--tool-write` is the only warm hue, and that's deliberate: amber means the agent touched your files. The four cool hues recede into chrome; the one warm hue is the thing worth noticing. An unrecognized tool name takes no category and renders exactly as it does today — neutral, no glyph. Quirky hosts agents whose tool vocabularies it doesn't control, so a classifier that guessed would mislabel third-party tools with confident color.
 
 Any tool hue must clear a contrast floor:
 
@@ -150,7 +150,7 @@ The chat root (`.native-chat-appearance`) redefines these steps as ratios of the
 
 ## Elevation & shadows
 
-Orca uses shadows sparingly. Three levels in practice:
+Quirky uses shadows sparingly. Three levels in practice:
 
 1. **Inset hairline** — `border` + `border` token. The default. Almost everything sits at this level.
 2. **Subtle lift** — `shadow-xs` + a single-token border. Outline buttons, embedded cards.
@@ -291,7 +291,7 @@ These are the rules a contributor will most often get wrong if they're working i
 
 ### Screen UX review rubric
 
-Use this rubric when reviewing any Orca IDE screen, screenshot, or prototype. A good review should name the highest-impact friction first, then give concrete changes the implementer can make.
+Use this rubric when reviewing any Quirky IDE screen, screenshot, or prototype. A good review should name the highest-impact friction first, then give concrete changes the implementer can make.
 
 #### Review output format
 
@@ -351,12 +351,12 @@ When there's no sibling, match the surrounding chrome — button sizes, icon wei
 
 ## Cross-platform
 
-Orca runs on macOS, Linux, and Windows. Every UI change must hold up on all three, in both light and dark mode.
+Quirky runs on macOS, Linux, and Windows. Every UI change must hold up on all three, in both light and dark mode.
 
 - **Modifier keys:** Never hardcode `e.metaKey`. Use `navigator.userAgent.includes('Mac')` to choose `metaKey` on Mac and `ctrlKey` on Linux/Windows. Electron menu accelerators should use `CmdOrCtrl`.
 - **Shortcut labels:** Display `⌘` / `⇧` on Mac; display `Ctrl+` / `Shift+` on other platforms. The label must reflect the actual binding for that platform.
 - **Window chrome:** macOS shows traffic lights; the titlebar reserves an 80px gutter (`titlebar-traffic-light-pad`) so they don't overlap content. Don't put hit targets in that band on Mac.
-- **SSH:** Many users run Orca on a remote machine. Loading states, focus management, and animations must hold up under 50–200 ms of extra latency. Test under simulated latency (or actual SSH) — local-only verification isn't enough. See _UX rules → 1_.
+- **SSH:** Many users run Quirky on a remote machine. Loading states, focus management, and animations must hold up under 50–200 ms of extra latency. Test under simulated latency (or actual SSH) — local-only verification isn't enough. See _UX rules → 1_.
 
 ## When this guide is silent
 

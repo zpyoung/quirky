@@ -9,7 +9,7 @@ import type { HomeWorktreeSummary, HostWorktreeInfo } from './home-worktree-info
 function worktree(worktreeId: string): HomeWorktreeSummary {
   return {
     worktreeId,
-    repo: 'orca',
+    repo: 'quirky',
     branch: 'main',
     displayName: worktreeId,
     liveTerminalCount: 0

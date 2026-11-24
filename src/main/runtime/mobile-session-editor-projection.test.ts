@@ -8,7 +8,7 @@ import {
 
 const mocks = vi.hoisted(() => ({ layoutOwnerIsMain: true }))
 vi.mock('../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return mocks.layoutOwnerIsMain
   }
 }))
@@ -17,8 +17,8 @@ beforeEach(() => {
   mocks.layoutOwnerIsMain = true
 })
 
-const WT = 'repo-1::/Users/dev/orca'
-const FILE = '/Users/dev/orca/notes.ts'
+const WT = 'repo-1::/Users/dev/quirky'
+const FILE = '/Users/dev/quirky/notes.ts'
 
 /** A persisted editor tab whose unified tab names its file by the owned id. */
 function ownedSession(): WorkspaceSessionState {

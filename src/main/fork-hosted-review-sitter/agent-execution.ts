@@ -10,7 +10,7 @@ import { inspectHostedReviewSitterPolicy } from './agent-policy'
 import type { HostedReviewSitterGitExecution } from './provider-git'
 
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{40,64}$/i
-const HEIMDALL_ATTEMPT_TRAILER = 'Orca-Heimdall-Attempt'
+const HEIMDALL_ATTEMPT_TRAILER = 'Quirky-Heimdall-Attempt'
 
 export type PublishAction = PublishFixAction | PublishConflictResolutionAction
 

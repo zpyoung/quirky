@@ -1,7 +1,7 @@
 /**
  * Where dictation's audio comes from, as the hook that drives it sees it.
  *
- * One seam, two hosts. Natively it is `@orca/expo-two-way-audio` called directly; on the page it is
+ * One seam, two hosts. Natively it is `@quirky/expo-two-way-audio` called directly; on the page it is
  * `native.audio.start|read|stop` over the bridge. Everything above it — the five composer states,
  * the generation guards, the pending-audio budget, where a transcript is routed — is the same code
  * on both, because the part that differs is the capability and the part that does not is the

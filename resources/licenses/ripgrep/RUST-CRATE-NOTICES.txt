@@ -8,7 +8,7 @@ Additional third-party terms are preserved alongside the elected license.
 
 This is a conservative superset: it includes build and test dependencies as well as
 runtime dependencies for macOS, Linux and Windows. The EFI/WASI-only packages r-efi,
-wasip2 and wit-bindgen are excluded because Orca ships no EFI or WASI ripgrep target.
+wasip2 and wit-bindgen are excluded because Quirky ships no EFI or WASI ripgrep target.
 Ripgrep's workspace crates use its MIT/Unlicense terms, supplied separately in
 LICENSE-MIT and UNLICENSE. Native-library notices are supplied alongside this file.
 

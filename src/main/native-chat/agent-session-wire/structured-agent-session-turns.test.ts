@@ -43,7 +43,7 @@ afterEach(async () => {
 
 describe('performCancel', () => {
   it('acknowledges only the request and leaves the running lifecycle row intact', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-turn-cancel-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-turn-cancel-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     const lifecycleIdentity = {
       provider: 'legacy' as const,
@@ -93,7 +93,7 @@ describe('performCancel', () => {
   })
 
   it('hands the adapter a live-turn read of the published journal', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-turn-cancel-live-turn-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-turn-cancel-live-turn-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     const lifecycleIdentity = {
       provider: 'legacy' as const,
@@ -148,7 +148,7 @@ describe('performCancel', () => {
   })
 
   it('keeps the running lifecycle when cancellation cannot be confirmed', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-turn-cancel-unconfirmed-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-turn-cancel-unconfirmed-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     await journal.appendItem(
       {
@@ -196,7 +196,7 @@ describe('performCancel', () => {
   })
 
   it('stops background tasks without interrupting the foreground turn or writing a row', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-background-task-cancel-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-background-task-cancel-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     const cancelTurn = vi.fn(async () => ({ cancelled: true }))
     const stopBackgroundTasks = vi.fn(async () => ({ cancelled: true }))
@@ -237,7 +237,7 @@ describe('performCancel', () => {
   })
 
   it('routes one background task id without interrupting the foreground turn or writing a row', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-background-task-targeted-cancel-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-background-task-targeted-cancel-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     const cancelTurn = vi.fn(async () => ({ cancelled: true }))
     const stopBackgroundTasks = vi.fn(async () => ({ cancelled: true }))
@@ -278,7 +278,7 @@ describe('performCancel', () => {
   })
 
   it('omits an earlier listed Stop when its same-ID lifetime restarts during acceptance', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-background-stop-lifetime-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-background-stop-lifetime-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     const owner = new StructuredAgentSessionStatusOwnership(() => undefined)
     const live = (restart = false): AgentChildWorkEvidence => ({
@@ -341,7 +341,7 @@ describe('performCancel', () => {
   })
 
   it('does not close the agent when a refused helper appears during a listed Stop all', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-background-stop-refused-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-background-stop-refused-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     const server = new AgentHookServer()
     let refuse = false
@@ -451,7 +451,7 @@ describe('performCancel', () => {
       onJournal?: (journal: AgentSessionJournal) => void
     }
   ) {
-    root = await mkdtemp(join(tmpdir(), 'orca-background-task-failed-cancel-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-background-task-failed-cancel-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     untargeted?.onJournal?.(journal)
     const cancelTurn = vi.fn(async () => ({ cancelled: true }))
@@ -611,7 +611,7 @@ describe('what a conversation Stop reports when the provider stopped nothing', (
     input: { turnId?: string; withdrewQueued?: boolean },
     turnRow: 'none' | 'running' | 'landing' = 'none'
   ) {
-    root = await mkdtemp(join(tmpdir(), 'orca-turn-cancel-report-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-turn-cancel-report-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     const openTurn = () =>
       journal.appendItem(
@@ -695,7 +695,7 @@ describe('what a conversation Stop reports when the provider stopped nothing', (
 
 describe('the note a Stop writes', () => {
   it('belongs to the turn whose row was emitted just before the Stop, with no flush', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-turn-cancel-note-scope-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-turn-cancel-note-scope-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
     deferred.bind({ journal, fence: 1, publish: () => {} })

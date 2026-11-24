@@ -12,7 +12,7 @@ import {
 } from '../../../src/shared/agent-session-host-authority'
 import type { AgentSessionRecordStore } from '../../../src/main/runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../../src/main/runtime/agent-session-record-store-test-harness'
-import type { OrcaRuntimeService } from '../../../src/main/runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../src/main/runtime/quirky-runtime'
 import { RpcDispatcher } from '../../../src/main/runtime/rpc/dispatcher'
 import {
   runtimeStub,
@@ -39,7 +39,7 @@ let store: AgentSessionRecordStore
 beforeEach(async () => {
   createStructuredSession.mockReset()
   createStructuredSession.mockResolvedValue({ ok: true, value: { sessionId: 'session-1' } })
-  directory = await mkdtemp(join(tmpdir(), 'orca-mobile-launch-replay-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-mobile-launch-replay-'))
   store = await openTestAgentSessionRecordStore(directory)
   setAgentLaunchRecordStore(store)
 })
@@ -64,7 +64,7 @@ function mobileLaunch(
     (host) =>
       new RpcDispatcher({
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture implements the launch handler and dispatcher metadata dependencies.
-        runtime: host as unknown as OrcaRuntimeService,
+        runtime: host as unknown as QuirkyRuntimeService,
         methods: AGENT_LAUNCH_METHODS
       })
   )
@@ -177,7 +177,7 @@ describe('a + menu launch into an open workspace', () => {
     const runtime = { ...runtimeStub(), getRuntimeId: () => 'runtime-1' }
     const dispatcher = new RpcDispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture implements the launch handler and dispatcher metadata dependencies.
-      runtime: runtime as unknown as OrcaRuntimeService,
+      runtime: runtime as unknown as QuirkyRuntimeService,
       methods: AGENT_LAUNCH_METHODS
     })
     const attempts: unknown[] = []
@@ -230,7 +230,7 @@ describe('a + menu launch into an open workspace', () => {
     const runtime = { ...runtimeStub(), getRuntimeId: () => 'runtime-1' }
     const dispatcher = new RpcDispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture implements the launch handler and dispatcher metadata dependencies.
-      runtime: runtime as unknown as OrcaRuntimeService,
+      runtime: runtime as unknown as QuirkyRuntimeService,
       methods: AGENT_LAUNCH_METHODS
     })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch reaches only these transport members; requests use the real host dispatcher.

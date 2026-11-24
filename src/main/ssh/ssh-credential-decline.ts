@@ -48,7 +48,7 @@ export function clearSshCredentialDeclined(targetId: string): void {
 
 /** An explicit connect to a server reached over SSH is a sign-in to that SSH host too. */
 export function clearSshCredentialDeclinedForEnvironment(
-  environment: Pick<KnownRuntimeEnvironment, 'orcadDeployment' | 'sshAccess'>
+  environment: Pick<KnownRuntimeEnvironment, 'quirkydDeployment' | 'sshAccess'>
 ): void {
   const targetId = getRuntimeSshAccess(environment)?.sshTargetId
   if (targetId) {

@@ -219,7 +219,7 @@ describe('a structured chat launch on a paired server', () => {
       expect(settlement).toEqual(expect.objectContaining({ kind: 'failed', notified: true }))
       expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining('Claude'), {
         description: expect.stringMatching(
-          kind === 'unverified' ? /confirm the host's permissions for Claude/ : /older Orca/
+          kind === 'unverified' ? /confirm the host's permissions for Claude/ : /older Quirky/
         )
       })
       expect(mocks.launchAgentInNewTab).not.toHaveBeenCalled()

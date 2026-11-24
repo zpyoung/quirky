@@ -15,7 +15,7 @@ export function addLifecycleRejectionMarker(
   }
   return JSON.stringify({
     ...parsed,
-    _orcaLifecycleRejection: {
+    _quirkyLifecycleRejection: {
       code,
       reason,
       ...(details?.originalReason === undefined ? {} : { originalReason: details.originalReason }),
@@ -32,7 +32,7 @@ export function readLifecycleRejectionMarker(
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return null
     }
-    const marker = '_orcaLifecycleRejection' in value ? value._orcaLifecycleRejection : null
+    const marker = '_quirkyLifecycleRejection' in value ? value._quirkyLifecycleRejection : null
     if (!marker || typeof marker !== 'object' || Array.isArray(marker)) {
       return null
     }

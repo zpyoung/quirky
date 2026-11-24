@@ -14,7 +14,7 @@ afterEach(() => {
 })
 
 function fixture(files = {}) {
-  const root = mkdtempSync(path.join(tmpdir(), 'orca-import-boundaries-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'quirky-import-boundaries-'))
   roots.push(root)
   for (const [file, contents] of Object.entries({
     'src/packages/process-host/package.json': JSON.stringify({ exports: { '.': './index.ts' } }),
@@ -34,7 +34,7 @@ it('parses candidate files once and reports violations from both guards', () => 
   const error = vi.spyOn(console, 'error').mockImplementation(() => {})
   const parseSpecifiers = vi.fn(collectModuleSpecifiers)
   const root = fixture({
-    'src/main/consumer.ts': `import '@orca/process-host/private'
+    'src/main/consumer.ts': `import '@quirky/process-host/private'
       const entry = '../shared/workspace-layout/old-client/inner'
       require(entry)`
   })
@@ -59,9 +59,9 @@ it('uses fresh inputs on every invocation, including newly added files', () => {
 it('does not cache a file across an edit at the same path', () => {
   vi.spyOn(console, 'log').mockImplementation(() => {})
   vi.spyOn(console, 'error').mockImplementation(() => {})
-  const root = fixture({ 'src/main/consumer.ts': "import '@orca/process-host'" })
+  const root = fixture({ 'src/main/consumer.ts': "import '@quirky/process-host'" })
   expect(main(root)).toBe(0)
-  writeFileSync(path.join(root, 'src/main/consumer.ts'), "import '@orca/process-host/private'")
+  writeFileSync(path.join(root, 'src/main/consumer.ts'), "import '@quirky/process-host/private'")
   expect(main(root)).toBe(1)
 })
 

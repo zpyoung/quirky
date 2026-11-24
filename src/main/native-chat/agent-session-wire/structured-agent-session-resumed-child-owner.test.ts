@@ -27,7 +27,7 @@ const journals = createTrackedJournalOpener()
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-resumed-child-owner-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-resumed-child-owner-'))
 })
 
 afterEach(async () => {

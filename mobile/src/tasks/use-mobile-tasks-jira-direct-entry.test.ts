@@ -16,13 +16,13 @@ vi.mock('./mobile-tasks-legacy-foundation', async () => import('./mobile-tasks-i
 
 const issue: JiraIssue = {
   id: '1',
-  key: 'ORCA-7',
+  key: 'QUIRKY-7',
   title: 'Start from mobile Jira',
-  url: 'https://acme.atlassian.net/browse/ORCA-7',
+  url: 'https://acme.atlassian.net/browse/QUIRKY-7',
   siteId: 'site-a',
   description: '',
   labels: [],
-  project: { id: 'p', key: 'ORCA', name: 'Orca' },
+  project: { id: 'p', key: 'QUIRKY', name: 'Quirky' },
   issueType: { id: 'task', name: 'Task' },
   status: { id: 'open', name: 'Open', categoryKey: 'new', categoryName: 'To Do' },
   updatedAt: '2026-01-01T00:00:00Z',

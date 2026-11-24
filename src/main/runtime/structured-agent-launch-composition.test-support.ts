@@ -117,7 +117,7 @@ export function createAcpStructuredLaunchResolver(
   return withTestSpawnToken(
     acpStructuredAgentDefinition(spec),
     launchSources(deps),
-    acpStructuredLaunchPart(spec, { dataDirectory: '/orca-data', ...deps }),
+    acpStructuredLaunchPart(spec, { dataDirectory: '/quirky-data', ...deps }),
     null
   )
 }

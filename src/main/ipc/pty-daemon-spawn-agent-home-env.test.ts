@@ -30,7 +30,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -80,7 +80,7 @@ describe('registerPtyHandlers', () => {
           rows: 24,
           command: 'codex resume session-a',
           env: { CODEX_HOME: '/custom/codex', REMOVE_ME: 'stale' },
-          envToDelete: ['CODEX_HOME', 'ORCA_CODEX_HOME', 'REMOVE_ME'],
+          envToDelete: ['CODEX_HOME', 'QUIRKY_CODEX_HOME', 'REMOVE_ME'],
           launchAgent: 'codex',
           resumeProviderSession: {
             key: 'session_id',
@@ -92,7 +92,7 @@ describe('registerPtyHandlers', () => {
         const env = daemonSpawn.mock.calls.at(-1)![0].env
         expect(selectedHome).not.toHaveBeenCalled()
         expect(env.CODEX_HOME).toBe(systemHome)
-        expect(env.ORCA_CODEX_HOME).toBe(systemHome)
+        expect(env.QUIRKY_CODEX_HOME).toBe(systemHome)
         expect(env.REMOVE_ME).toBeUndefined()
       })
       it('keeps the authoritative home for runtime-created daemon resumes', async () => {
@@ -143,7 +143,7 @@ describe('registerPtyHandlers', () => {
           rows: 24,
           command: 'codex resume session-a',
           env: { CODEX_HOME: '/custom/codex', REMOVE_ME: 'stale' },
-          envToDelete: ['CODEX_HOME', 'ORCA_CODEX_HOME', 'REMOVE_ME'],
+          envToDelete: ['CODEX_HOME', 'QUIRKY_CODEX_HOME', 'REMOVE_ME'],
           launchAgent: 'codex',
           resumeProviderSession: {
             key: 'session_id',
@@ -154,10 +154,10 @@ describe('registerPtyHandlers', () => {
 
         const spawnOptions = daemonSpawn.mock.calls.at(-1)?.[0] as DaemonSpawnCall
         expect(spawnOptions.env.CODEX_HOME).toBe(systemHome)
-        expect(spawnOptions.env.ORCA_CODEX_HOME).toBe(systemHome)
+        expect(spawnOptions.env.QUIRKY_CODEX_HOME).toBe(systemHome)
         expect(spawnOptions.env.REMOVE_ME).toBeUndefined()
         expect(spawnOptions.envToDelete ?? []).not.toContain('CODEX_HOME')
-        expect(spawnOptions.envToDelete ?? []).not.toContain('ORCA_CODEX_HOME')
+        expect(spawnOptions.envToDelete ?? []).not.toContain('QUIRKY_CODEX_HOME')
         expect(spawnOptions.envToDelete).toContain('REMOVE_ME')
       })
       it('prepares Codex launch state before a daemon-backed interactive launch', async () => {
@@ -189,16 +189,16 @@ describe('registerPtyHandlers', () => {
         expect(env.HTTPS_PROXY).toBe('http://proxy.example:8080')
         expect(env.NO_PROXY).toBe('localhost,*.internal')
       })
-      it('strips the daemon-inherited Orca-owned CODEX_HOME for real-home routing', async () => {
+      it('strips the daemon-inherited Quirky-owned CODEX_HOME for real-home routing', async () => {
         const spawnOptions = await daemonSpawnAndGetOptions(
           {},
           () => null,
           () => ({ codexSystemDefaultRealHomeEnabled: true }) as never,
-          { CODEX_HOME: '/managed/home', ORCA_CODEX_HOME: '/managed/home' }
+          { CODEX_HOME: '/managed/home', QUIRKY_CODEX_HOME: '/managed/home' }
         )
         expect(spawnOptions.env.CODEX_HOME).toBeUndefined()
-        expect(spawnOptions.env.ORCA_CODEX_HOME).toBeUndefined()
-        expect(spawnOptions.envToDelete).toEqual(expect.arrayContaining(['ORCA_CODEX_HOME']))
+        expect(spawnOptions.env.QUIRKY_CODEX_HOME).toBeUndefined()
+        expect(spawnOptions.envToDelete).toEqual(expect.arrayContaining(['QUIRKY_CODEX_HOME']))
         // The daemon compares its own merged values before deleting CODEX_HOME.
         expect(spawnOptions.envToDelete).not.toContain('CODEX_HOME')
       })
@@ -207,15 +207,15 @@ describe('registerPtyHandlers', () => {
           {},
           () => null,
           () => ({ codexSystemDefaultRealHomeEnabled: true }) as never,
-          { CODEX_HOME: '/home/me/.config/codex', ORCA_CODEX_HOME: undefined }
+          { CODEX_HOME: '/home/me/.config/codex', QUIRKY_CODEX_HOME: undefined }
         )
-        expect(spawnOptions.envToDelete).toEqual(expect.arrayContaining(['ORCA_CODEX_HOME']))
+        expect(spawnOptions.envToDelete).toEqual(expect.arrayContaining(['QUIRKY_CODEX_HOME']))
         expect(spawnOptions.envToDelete).not.toEqual(expect.arrayContaining(['CODEX_HOME']))
       })
       it('does not strip the daemon-inherited CODEX_HOME when the flag is OFF', async () => {
         const spawnOptions = await daemonSpawnAndGetOptions({}, () => null, undefined, {
           CODEX_HOME: '/managed/home',
-          ORCA_CODEX_HOME: '/managed/home'
+          QUIRKY_CODEX_HOME: '/managed/home'
         })
         expect(spawnOptions.envToDelete ?? []).not.toEqual(expect.arrayContaining(['CODEX_HOME']))
       })
@@ -237,14 +237,14 @@ describe('registerPtyHandlers', () => {
         )
       })
       it('strips an inherited agent session id', async () => {
-        // Why: a daemon forked by an Orca launched inside a structured session inherits its id,
+        // Why: a daemon forked by an Quirky launched inside a structured session inherits its id,
         // and every daemon pane would present that session as its orchestration caller.
         const inherited = await daemonSpawnAndGetOptions(undefined, undefined, undefined, {
-          ORCA_AGENT_SESSION_ID: 'a0b1c2d3-0000-4000-8000-00000000abcd',
-          ORCA_STRUCTURED_SESSION: '1'
+          QUIRKY_AGENT_SESSION_ID: 'a0b1c2d3-0000-4000-8000-00000000abcd',
+          QUIRKY_STRUCTURED_SESSION: '1'
         })
         expect(inherited.envToDelete).toEqual(
-          expect.arrayContaining(['ORCA_AGENT_SESSION_ID', 'ORCA_STRUCTURED_SESSION'])
+          expect.arrayContaining(['QUIRKY_AGENT_SESSION_ID', 'QUIRKY_STRUCTURED_SESSION'])
         )
       })
       it('preserves an explicitly requested Claude child-session stamp', async () => {
@@ -261,7 +261,7 @@ describe('registerPtyHandlers', () => {
         )
         expect(spawnOptions.env.CLAUDE_CODE_CHILD_SESSION).toBe('1')
       })
-      it('prepends the bare-orca CLI shim dir to PATH for packaged Linux spawns', async () => {
+      it('prepends the bare-quirky CLI shim dir to PATH for packaged Linux spawns', async () => {
         const originalPlatform = process.platform
         Object.defineProperty(process, 'platform', {
           configurable: true,
@@ -273,11 +273,11 @@ describe('registerPtyHandlers', () => {
             PATH: ['/usr/local/bin', '/usr/bin'].join(delimiter)
           })
           const entries = env.PATH.split(delimiter)
-          const shimDir = join('/tmp/orca-user-data', 'linux-orca-cli-shim')
-          // Why: bare `orca` must resolve to the Orca CLI before /usr/bin/orca (the GNOME screen reader) in Orca terminals (#7904).
+          const shimDir = join('/tmp/quirky-user-data', 'linux-quirky-cli-shim')
+          // Why: bare `quirky` must resolve to the Quirky CLI before /usr/bin/quirky (the GNOME screen reader) in Quirky terminals (#7904).
           expect(entries.indexOf(shimDir)).toBeGreaterThanOrEqual(0)
           expect(entries.indexOf(shimDir)).toBeLessThan(entries.indexOf('/usr/bin'))
-          expect(env.ORCA_CLI_COMMAND).toBeUndefined()
+          expect(env.QUIRKY_CLI_COMMAND).toBeUndefined()
         } finally {
           Object.defineProperty(process, 'platform', {
             configurable: true,
@@ -289,11 +289,11 @@ describe('registerPtyHandlers', () => {
         const resourcesPathDescriptor = Object.getOwnPropertyDescriptor(process, 'resourcesPath')
         Object.defineProperty(process, 'resourcesPath', {
           configurable: true,
-          value: '/tmp/orca-resources'
+          value: '/tmp/quirky-resources'
         })
         try {
           const env = await daemonSpawnAndGetEnv({ PATH: '/usr/bin' })
-          expect(env.PATH.split(delimiter)[0]).toBe(join('/tmp/orca-resources', 'bin'))
+          expect(env.PATH.split(delimiter)[0]).toBe(join('/tmp/quirky-resources', 'bin'))
         } finally {
           if (resourcesPathDescriptor) {
             Object.defineProperty(process, 'resourcesPath', resourcesPathDescriptor)
@@ -304,20 +304,20 @@ describe('registerPtyHandlers', () => {
       })
       it('injects the agent-hook receiver env on the daemon path', async () => {
         const env = await daemonSpawnAndGetEnv({})
-        expect(env.ORCA_AGENT_HOOK_PORT).toBe('5678')
-        expect(env.ORCA_AGENT_HOOK_TOKEN).toBe('agent-token')
+        expect(env.QUIRKY_AGENT_HOOK_PORT).toBe('5678')
+        expect(env.QUIRKY_AGENT_HOOK_TOKEN).toBe('agent-token')
       })
       it('deletes stale Claude scoped settings env from daemon-hosted PTYs', async () => {
         const spawnOptions = await daemonSpawnAndGetOptions({}, undefined, undefined, {
-          ORCA_CLAUDE_AGENT_STATUS_SETTINGS:
-            '/tmp/orca/agent-hooks/claude-agent-status-settings.json'
+          QUIRKY_CLAUDE_AGENT_STATUS_SETTINGS:
+            '/tmp/quirky/agent-hooks/claude-agent-status-settings.json'
         })
-        expect(spawnOptions.env.ORCA_CLAUDE_AGENT_STATUS_SETTINGS).toBeUndefined()
+        expect(spawnOptions.env.QUIRKY_CLAUDE_AGENT_STATUS_SETTINGS).toBeUndefined()
         expect(spawnOptions.envToDelete).toEqual(
-          expect.arrayContaining(['ORCA_CLAUDE_AGENT_STATUS_SETTINGS'])
+          expect.arrayContaining(['QUIRKY_CLAUDE_AGENT_STATUS_SETTINGS'])
         )
-        expect(spawnOptions.env.ORCA_AGENT_HOOK_PORT).toBe('5678')
-        expect(spawnOptions.env.ORCA_AGENT_HOOK_TOKEN).toBe('agent-token')
+        expect(spawnOptions.env.QUIRKY_AGENT_HOOK_PORT).toBe('5678')
+        expect(spawnOptions.env.QUIRKY_AGENT_HOOK_TOKEN).toBe('agent-token')
       })
       it('asks surviving pre-upgrade daemons to delete legacy attribution env', async () => {
         const spawnOptions = await daemonSpawnAndGetOptions({})
@@ -325,8 +325,8 @@ describe('registerPtyHandlers', () => {
         expect(spawnOptions.envToDelete).toEqual(
           expect.arrayContaining([...LEGACY_TERMINAL_SHIM_REMOTE_ENV_KEYS])
         )
-        expect(spawnOptions.envToDelete).not.toContain('ORCA_REAL_GIT')
-        expect(spawnOptions.envToDelete).not.toContain('ORCA_REAL_GH')
+        expect(spawnOptions.envToDelete).not.toContain('QUIRKY_REAL_GIT')
+        expect(spawnOptions.envToDelete).not.toContain('QUIRKY_REAL_GH')
       })
       it('deletes stale Claude scoped settings env from runtime-created daemon PTYs', async () => {
         type RuntimeSpawnController = {
@@ -348,8 +348,8 @@ describe('registerPtyHandlers', () => {
           onPtyExit: vi.fn(),
           onPtyData: vi.fn()
         }
-        process.env.ORCA_CLAUDE_AGENT_STATUS_SETTINGS =
-          '/tmp/orca/agent-hooks/claude-agent-status-settings.json'
+        process.env.QUIRKY_CLAUDE_AGENT_STATUS_SETTINGS =
+          '/tmp/quirky/agent-hooks/claude-agent-status-settings.json'
         handlers.clear()
         registerPtyHandlers(mainWindow as never, runtime as never)
         const controller = runtime.setPtyController.mock.calls[0]?.[0] as RuntimeSpawnController
@@ -357,12 +357,12 @@ describe('registerPtyHandlers', () => {
         await controller.spawn({ cols: 80, rows: 24, worktreeId: 'wt-runtime', env: {} })
 
         const spawnOptions = daemonSpawn.mock.calls.at(-1)?.[0] as DaemonSpawnCall
-        expect(spawnOptions.env.ORCA_CLAUDE_AGENT_STATUS_SETTINGS).toBeUndefined()
+        expect(spawnOptions.env.QUIRKY_CLAUDE_AGENT_STATUS_SETTINGS).toBeUndefined()
         expect(spawnOptions.envToDelete).toEqual(
-          expect.arrayContaining(['ORCA_CLAUDE_AGENT_STATUS_SETTINGS'])
+          expect.arrayContaining(['QUIRKY_CLAUDE_AGENT_STATUS_SETTINGS'])
         )
-        expect(spawnOptions.env.ORCA_AGENT_HOOK_PORT).toBe('5678')
-        expect(spawnOptions.env.ORCA_AGENT_HOOK_TOKEN).toBe('agent-token')
+        expect(spawnOptions.env.QUIRKY_AGENT_HOOK_PORT).toBe('5678')
+        expect(spawnOptions.env.QUIRKY_AGENT_HOOK_TOKEN).toBe('agent-token')
       })
       it('asks surviving pre-upgrade daemons to delete legacy attribution env for runtime PTYs', async () => {
         type RuntimeSpawnController = {
@@ -392,11 +392,11 @@ describe('registerPtyHandlers', () => {
         expect(spawnOptions.envToDelete).toEqual(
           expect.arrayContaining([...LEGACY_TERMINAL_SHIM_REMOTE_ENV_KEYS])
         )
-        expect(spawnOptions.envToDelete).not.toContain('ORCA_REAL_GIT')
-        expect(spawnOptions.envToDelete).not.toContain('ORCA_REAL_GH')
+        expect(spawnOptions.envToDelete).not.toContain('QUIRKY_REAL_GIT')
+        expect(spawnOptions.envToDelete).not.toContain('QUIRKY_REAL_GH')
       })
       it('strips inherited Claude child-session stamps from runtime-created PTYs', async () => {
-        // Why: the runtime controller is the `orca` CLI / automation spawn path and
+        // Why: the runtime controller is the `quirky` CLI / automation spawn path and
         // assembles envToDelete separately from the renderer's pty:spawn handler;
         // without its own case the two paths can silently drift apart.
         type RuntimeSpawnController = {

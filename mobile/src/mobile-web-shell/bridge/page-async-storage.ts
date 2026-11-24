@@ -50,7 +50,7 @@ export class PageStorageRefusedError extends Error {
   readonly key: string
 
   constructor(key: string, refusal: PageStorageRefusal) {
-    super(`Orca could not save ${key}: ${REFUSAL_SENTENCES[refusal]}.`)
+    super(`Quirky could not save ${key}: ${REFUSAL_SENTENCES[refusal]}.`)
     this.name = 'PageStorageRefusedError'
     this.refusal = refusal
     this.key = key

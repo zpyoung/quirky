@@ -6,7 +6,7 @@ import {
   XTERM_COMPOSITION_SESSION_START_EVENT
 } from './terminal-ime-composition-route'
 
-export const TERMINAL_IME_COMPOSER_PLACEHOLDER_CLASS = 'orca-ime-composer-placeholder'
+export const TERMINAL_IME_COMPOSER_PLACEHOLDER_CLASS = 'quirky-ime-composer-placeholder'
 
 function compositionSessionId(event: Event): number | null {
   if (!(event instanceof CustomEvent)) {

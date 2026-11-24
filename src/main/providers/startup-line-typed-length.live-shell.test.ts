@@ -1,7 +1,7 @@
 /**
  * Real-zsh proof for the typed launch lines `startup-line-prompt-carry.ts` lets a prompt ride: a
  * multi-line line whose every line fits the per-line budget, up to the whole-line budget, reaches
- * zsh intact through Orca's own wrapper, ready marker and startup write.
+ * zsh intact through Quirky's own wrapper, ready marker and startup write.
  *
  * Why a slow user config too: the write is released 1.5 s after spawn even without the marker, and
  * then lands while the terminal is still line-buffered, where macOS keeps at most MAX_CANON bytes of
@@ -52,8 +52,8 @@ function promptLines(lineCount: number, perLine: number): string {
 let home = ''
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'orca-typed-line-home-'))
-  setTestUserDataPath(mkdtempSync(join(tmpdir(), 'orca-typed-line-ud-')))
+  home = mkdtempSync(join(tmpdir(), 'quirky-typed-line-home-'))
+  setTestUserDataPath(mkdtempSync(join(tmpdir(), 'quirky-typed-line-ud-')))
 })
 
 afterEach(() => {
@@ -91,8 +91,8 @@ async function typeIntoZsh(text: string, userConfigSeconds: number): Promise<str
     cols: 200,
     rows: 40,
     cwd: home,
-    // Why ORCA_ORIG_ZDOTDIR: the user's config is read from the sandbox home, not the real one.
-    env: { ...env, ...launch.env, ORCA_ORIG_ZDOTDIR: home, TERM: 'xterm-256color' }
+    // Why QUIRKY_ORIG_ZDOTDIR: the user's config is read from the sandbox home, not the real one.
+    env: { ...env, ...launch.env, QUIRKY_ORIG_ZDOTDIR: home, TERM: 'xterm-256color' }
   })
   const scan = createShellStartupOutputScanState()
   let resolveReady: ((signal: { postMarkerBytesObserved: boolean }) => void) | null = null

@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { buildAgentStartupPlan } from './tui-agent-startup'
 
 const roots: string[] = []
@@ -22,7 +22,7 @@ const shells = ['bash', 'zsh', 'fish'].filter(
 it.each(shells)(
   'preserves same-shell function argv, one launch and exit status in %s',
   async (shell) => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-fresh-shell-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-fresh-shell-'))
     roots.push(root)
     const config = join(root, 'fresh settings.yml')
     const capture = join(root, 'argv')
@@ -43,7 +43,7 @@ it.each(shells)(
       program: shell,
       args: ['-c', define + plan!.launchCommand],
       cwd: root,
-      env: { ...process.env, ORCA_OMP_FRESH_CONFIG: config, CAPTURE: capture }
+      env: { ...process.env, QUIRKY_OMP_FRESH_CONFIG: config, CAPTURE: capture }
     })
     expect(result.code).toBe(17)
     expect(await readFile(capture, 'utf8')).toBe(`--config\n${config}\ntask with spaces\n`)
@@ -53,13 +53,13 @@ it.each(shells)(
       program: shell,
       args: ['-c', define + plan!.launchCommand],
       cwd: root,
-      env: { ...process.env, ORCA_OMP_FRESH_CONFIG: config, CAPTURE: capture }
+      env: { ...process.env, QUIRKY_OMP_FRESH_CONFIG: config, CAPTURE: capture }
     })
     expect(missing.code).not.toBe(0)
     expect(missing.stderr).toContain('fresh OMP settings are unavailable')
     await expect(readFile(capture)).rejects.toMatchObject({ code: 'ENOENT' })
     const unsetEnv: NodeJS.ProcessEnv = { ...process.env, CAPTURE: capture }
-    delete unsetEnv.ORCA_OMP_FRESH_CONFIG
+    delete unsetEnv.QUIRKY_OMP_FRESH_CONFIG
     const unset = await runProcess({
       program: shell,
       args: ['-c', (shell === 'fish' ? '' : 'set -u; ') + define + plan!.launchCommand],

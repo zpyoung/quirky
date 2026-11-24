@@ -3,7 +3,7 @@ import {
   getDevBundlePlistPatches,
   getDevHelperPlistPatches
 } from '../../../config/scripts/dev-electron-bundle-identity.mjs'
-import { isOrcaAttributedPrompt } from '../macos-tcc-prompt-watch'
+import { isQuirkyAttributedPrompt } from '../macos-tcc-prompt-watch'
 
 describe('dev bundle TCC attribution', () => {
   it('counts prompts attributed to the app and helper identities emitted by the dev runner', () => {
@@ -11,7 +11,7 @@ describe('dev bundle TCC attribution', () => {
       const identifier = patches.find((patch) => patch.key === 'CFBundleIdentifier')?.value
       expect(identifier).toBeDefined()
       expect(
-        isOrcaAttributedPrompt({
+        isQuirkyAttributedPrompt({
           service: 'kTCCServiceSystemPolicyAppData',
           accessingIdentifier: 'find',
           responsibleIdentifier: identifier ?? ''
@@ -26,7 +26,7 @@ describe('dev bundle TCC attribution', () => {
     )?.value
     expect(identifier).toBeDefined()
     expect(
-      isOrcaAttributedPrompt({
+      isQuirkyAttributedPrompt({
         service: 'kTCCServiceSystemPolicyAppData',
         accessingIdentifier: 'find',
         responsibleIdentifier: `${identifier}.unrelated`

@@ -1,6 +1,6 @@
-import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout as PruneMobileSessionTabGroupLayoutMethods } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
+import type { QuirkyRuntimeWithPruneMobileSessionTabGroupLayout as PruneMobileSessionTabGroupLayoutMethods } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
 import type { RuntimeHeadlessTabGroups as HeadlessTabGroupsMethods } from './headless-tab-group-moves'
-import { OrcaRuntimeWithCloseMobileSessionTab } from '../session-lifecycle/close/close-mobile-session-tab'
+import { QuirkyRuntimeWithCloseMobileSessionTab } from '../session-lifecycle/close/close-mobile-session-tab'
 import type {
   BrowserTabInfo,
   RuntimeMobileSessionAgentTab,
@@ -23,7 +23,7 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { structuredSessionTabRetired } from '../structured-worker-custody'
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 
-export abstract class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWithCloseMobileSessionTab {
+export abstract class QuirkyRuntimeWithCloseStructuredAgentSessionTab extends QuirkyRuntimeWithCloseMobileSessionTab {
   protected abstract getListedBrowserTabsByPageId(worktreeId: string): Map<string, BrowserTabInfo>
   protected abstract getMobileTerminalLeafPtyIds(
     ...args: Parameters<PruneMobileSessionTabGroupLayoutMethods['getMobileTerminalLeafPtyIds']>
@@ -44,7 +44,7 @@ export abstract class OrcaRuntimeWithCloseStructuredAgentSessionTab extends Orca
     const host = getStructuredAgentSessionHost()
     if (host) {
       if (typeof host.setSessionTabVisibility === 'function') {
-        // The restore index is bookkeeping: one that cannot be written (a newer Orca's records, a
+        // The restore index is bookkeeping: one that cannot be written (a newer Quirky's records, a
         // failing disk) is reported, and the tab still closes.
         await host.setSessionTabVisibility(tab.sessionId, false).catch((error: unknown) => {
           host.deps.logger.warn('recording a closed chat tab failed', {

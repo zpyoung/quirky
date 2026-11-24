@@ -66,7 +66,7 @@ async function recoveryFixture(): Promise<RecoveryFixture> {
   const { parent, root, remote, target } = await createLandingRepositoryFixture(
     temporaryDirectories,
     {
-      tempPrefix: 'orca-objective-recovery-',
+      tempPrefix: 'quirky-objective-recovery-',
       userName: 'Objective Recovery Test',
       userEmail: 'objective@example.test'
     }
@@ -152,7 +152,7 @@ async function committedRecoveryFixture() {
   await git(fixture.root, [
     'commit',
     '-m',
-    `Recoverable commit\n\nOrca-Heimdall-Attempt: ${evidenceKey}`
+    `Recoverable commit\n\nQuirky-Heimdall-Attempt: ${evidenceKey}`
   ])
   const postCommitIdentity = await computeWorkspaceContentIdentity(fixture.target)
   return { fixture, action, beforeIdentity, postCommitIdentity }

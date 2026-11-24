@@ -18,7 +18,7 @@ afterEach(() => {
 })
 
 function executable() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-command-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-command-'))
   scratch.push(directory)
   const command = join(directory, 'agent custom')
   writeFileSync(command, '#!/bin/sh\nexit 0\n')

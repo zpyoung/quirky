@@ -40,7 +40,7 @@ describe('floating workspace directory', () => {
   let userDataDir: string
 
   beforeEach(async () => {
-    tempRoot = await mkdtemp(path.join(os.tmpdir(), 'orca-floating-workspace-'))
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), 'quirky-floating-workspace-'))
     homeDir = path.join(tempRoot, 'home')
     userDataDir = path.join(tempRoot, 'user-data')
     await mkdir(homeDir)

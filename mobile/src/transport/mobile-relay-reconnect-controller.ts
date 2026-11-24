@@ -142,7 +142,7 @@ export class RelayReconnectController {
     this.activeRelayConnectedAt = null
     // Why: direct auth resolves the same desktop device registry, so a live direct
     // session disproves revocation even though relay is still gated — and it is the
-    // desktop, awake and running Orca.
+    // desktop, awake and running Quirky.
     this.evidence.clear()
     if (needsCredentialRefresh) {
       // Why: the rejected credential stays unusable until its replacement is

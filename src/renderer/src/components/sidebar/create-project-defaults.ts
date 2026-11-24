@@ -4,11 +4,11 @@ function pathSeparatorFor(pathValue: string): '/' | '\\' {
   return pathValue.includes('\\') ? '\\' : '/'
 }
 
-/** True only for `{home}/orca/projects` on the usual OS home layouts. A configured
- *  directory that merely ends in `orca/projects` (e.g. `/data/orca/projects`) must
+/** True only for `{home}/quirky/projects` on the usual OS home layouts. A configured
+ *  directory that merely ends in `quirky/projects` (e.g. `/data/quirky/projects`) must
  *  stay verbatim — the `~` shorthand would otherwise lie. */
 function isHomeProjectsFallback(pathValue: string): boolean {
-  return /^(?:\/(?:Users|home)\/[^/]+|[A-Za-z]:[\\/]Users[\\/][^\\/]+)[\\/]orca[\\/]projects$/.test(
+  return /^(?:\/(?:Users|home)\/[^/]+|[A-Za-z]:[\\/]Users[\\/][^\\/]+)[\\/]quirky[\\/]projects$/.test(
     pathValue
   )
 }
@@ -42,7 +42,7 @@ export function getDefaultCreateProjectParent(homeDir: string): string {
   if (!trimmedHomeDir) {
     return ''
   }
-  return joinCreateProjectPath(joinCreateProjectPath(trimmedHomeDir, 'orca'), 'projects')
+  return joinCreateProjectPath(joinCreateProjectPath(trimmedHomeDir, 'quirky'), 'projects')
 }
 
 export function getCreateProjectDefaultParentAutoFill({
@@ -97,7 +97,7 @@ export function formatCreateProjectParentSummary({
     !isRemoteHost &&
     isHomeProjectsFallback(trimmedParent)
   ) {
-    return '~/orca/projects'
+    return '~/quirky/projects'
   }
   return trimmedParent
 }

@@ -20,7 +20,7 @@ export const OMP_SESSION_OPTION_CATALOG: AgentSessionOptionCatalog = {
     launchArgs: (value) => ['--model', String(value)],
     removeAgentArgs: (tokens) => removeAgentArgOption('omp', tokens, ['--model']),
     // OMP only opens its TUI picker for /model; our extension applies the exact selector.
-    midSession: { kind: 'command', build: (value) => `/orca-model ${String(value)}` }
+    midSession: { kind: 'command', build: (value) => `/quirky-model ${String(value)}` }
   },
   // Why: with no seed there is nothing to keep; a persisted id the host no longer
   // lists is a fatal `--model` at launch, so discovery must be able to retire it.

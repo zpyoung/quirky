@@ -11,7 +11,7 @@ import { normalizeHermesEvent } from '../../shared/agent-hook-listener/providers
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import type { TuiAgent } from '../../shared/tui-agent'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
@@ -23,7 +23,7 @@ vi.mock('electron', () => ({
 describe('Hermes captured hook readiness', () => {
   const captured = readFileSync(join(__dirname, '__fixtures__', 'hermes-tui-ready.txt'), 'utf8')
 
-  /** The real payload Orca's managed Hermes plugin produces for `eventName`, wired through the
+  /** The real payload Quirky's managed Hermes plugin produces for `eventName`, wired through the
    *  same normalizer the hook relay uses — so a regression in the event mapping fails here too,
    *  not only in the provider's own unit test. */
   const status = (eventName: string, payload: Record<string, unknown> = {}): string => {
@@ -44,7 +44,7 @@ describe('Hermes captured hook readiness', () => {
   describe('Hermes TUI readiness from a captured PTY', () => {
     it('settles tui-idle on the session-boundary row a freshly launched Hermes emits', async () => {
       const { runtime, handle } = await readyPane()
-      // What Orca's own managed plugin sends for `on_session_start`.
+      // What Quirky's own managed plugin sends for `on_session_start`.
       runtime.onPtyData(
         TRANSCRIPT_PANE_PTY_ID,
         status('on_session_start', { session_id: 's1' }),
@@ -252,7 +252,7 @@ describe('Canonical hook status readiness', () => {
     rows: (handle: string) => AgentStatusIpcPayload[]
     launchAgent?: TuiAgent
     data?: string
-    afterCreate?: (runtime: OrcaRuntimeService, handle: string) => unknown
+    afterCreate?: (runtime: QuirkyRuntimeService, handle: string) => unknown
   }): Promise<string> {
     let handle = ''
     const pane = await createTranscriptPane(
@@ -323,14 +323,14 @@ describe('Canonical hook status readiness', () => {
     // Both write funnels record input (terminal-run-facts-input.test.ts), the user's keys included:
     // typing `pi` to restart the agent in the same shell must not read the old process's done.
     it.each([
-      ['a prompt Orca sent', 'next task\r'],
+      ['a prompt Quirky sent', 'next task\r'],
       ['the user restarting the agent in the same shell', 'pi\r']
     ])('reads no done from before %s', async (_label, input) => {
       const before = Date.now() - 1000
       const rows = (): AgentStatusIpcPayload[] => [
         row({ receivedAt: before, stateStartedAt: before })
       ]
-      const typeAt = (at: number) => (runtime: OrcaRuntimeService) => {
+      const typeAt = (at: number) => (runtime: QuirkyRuntimeService) => {
         runtime.terminalRunFacts.recordInput(TRANSCRIPT_PANE_PTY_ID, 'driving', input, at)
       }
       expect(await waitOutcome({ rows, afterCreate: typeAt(before - 1) })).toBe('ready')

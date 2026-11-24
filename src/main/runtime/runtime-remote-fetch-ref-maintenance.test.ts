@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Why: Orca's fetches are what create the loose-ref backlog (they suppress
+// Why: Quirky's fetches are what create the loose-ref backlog (they suppress
 // git's auto-maintenance), so the fetch controller is where the idle sweep has
 // to be armed. These tests pin that wiring and the per-repo busy signal it
 // hands the sweep.

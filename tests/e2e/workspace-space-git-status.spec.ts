@@ -2,20 +2,20 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { loadWorktreesUntilPathsPresent } from './helpers/worktree-registration'
 
 test.describe('Workspace Space git status checks', () => {
   test('checks every scanned deletable row, including rows after the first 50', async ({
     electronApp,
-    orcaPage,
+    quirkyPage,
     testRepoPath
   }) => {
-    // Why: on symlinked tmpdirs (/var→/private/var on macOS, /tmp→… on CI) Orca
+    // Why: on symlinked tmpdirs (/var→/private/var on macOS, /tmp→… on CI) Quirky
     // registers worktrees under their realpath, so the parent must be canonical
     // before `git worktree add` or the recorded paths won't match and rows drop.
     const worktreeParent = realpathSync(
-      mkdtempSync(path.join(os.tmpdir(), 'orca-space-git-status-'))
+      mkdtempSync(path.join(os.tmpdir(), 'quirky-space-git-status-'))
     )
     const worktreePaths = Array.from({ length: 60 }, (_, index) =>
       path.join(worktreeParent, `worktree-${index}`)
@@ -32,7 +32,7 @@ test.describe('Workspace Space git status checks', () => {
         realpathSync(worktreePath)
       )
 
-      const repoId = await orcaPage.evaluate((testRepoPath) => {
+      const repoId = await quirkyPage.evaluate((testRepoPath) => {
         const store = window.__store
         if (!store) {
           throw new Error('Expected e2e store to be exposed')
@@ -46,9 +46,9 @@ test.describe('Workspace Space git status checks', () => {
 
       // Why: the 60 worktrees were added via raw git, so poll past the 5s scan
       // cache TTL until every path registers before deriving the space rows.
-      await loadWorktreesUntilPathsPresent(orcaPage, repoId, registeredWorktreePaths)
+      await loadWorktreesUntilPathsPresent(quirkyPage, repoId, registeredWorktreePaths)
 
-      const rowDisplayNames = await orcaPage.evaluate(
+      const rowDisplayNames = await quirkyPage.evaluate(
         async ({ testRepoPath, worktreePaths }) => {
           const store = window.__store
           if (!store) {

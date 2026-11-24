@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Run: ORCA_REVIEW_RAIL_BENCH=1 pnpm test src/renderer/src/components/editor/rich-markdown-review-rail-benchmark.test.ts
+// Run: QUIRKY_REVIEW_RAIL_BENCH=1 pnpm test src/renderer/src/components/editor/rich-markdown-review-rail-benchmark.test.ts
 import { expect, it, vi } from 'vitest'
 import { Editor as TiptapEditor } from '@tiptap/core'
 import { createRichMarkdownExtensions } from './rich-markdown-extensions'
@@ -74,7 +74,7 @@ function measureReviewNoteHeights(
   return measuredHeights
 }
 
-it.skipIf(process.env.ORCA_REVIEW_RAIL_BENCH !== '1')(
+it.skipIf(process.env.QUIRKY_REVIEW_RAIL_BENCH !== '1')(
   'benchmarks full review rail measurements',
   () => {
     for (const blockCount of [250, 1000]) {

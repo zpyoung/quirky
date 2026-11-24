@@ -20,15 +20,15 @@ describe.runIf(process.platform !== 'win32')('a structured session in a zsh logi
     harness.dispose()
   })
 
-  it("resolves this app's CLI through ORCA_CLI_COMMAND in `zsh -lc`", async () => {
+  it("resolves this app's CLI through QUIRKY_CLI_COMMAND in `zsh -lc`", async () => {
     // Positive control: the profile really does put the global install first for a bare name.
-    expect(await harness.run({ program: '/bin/zsh', args: ['-lc', 'orca'] })).toBe('global')
-    expect(await harness.run({ program: '/bin/zsh', args: ['-lc', '"$ORCA_CLI_COMMAND"'] })).toBe(
+    expect(await harness.run({ program: '/bin/zsh', args: ['-lc', 'quirky'] })).toBe('global')
+    expect(await harness.run({ program: '/bin/zsh', args: ['-lc', '"$QUIRKY_CLI_COMMAND"'] })).toBe(
       'app'
     )
   })
 
-  it("keeps bare `orca` this app's CLI in a zsh that reads no login profile", async () => {
-    expect(await harness.run({ program: '/bin/zsh', args: ['-c', 'orca'] })).toBe('app')
+  it("keeps bare `quirky` this app's CLI in a zsh that reads no login profile", async () => {
+    expect(await harness.run({ program: '/bin/zsh', args: ['-c', 'quirky'] })).toBe('app')
   })
 })

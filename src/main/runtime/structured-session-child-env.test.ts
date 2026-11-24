@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
 import { resolveProviderChildEnv } from '../provider-process/provider-process-launch'
 
-const shim = vi.hoisted(() => ({ ensureLinuxTerminalOrcaCliShimDir: vi.fn() }))
-vi.mock('../cli/linux-terminal-orca-cli-shim', () => shim)
+const shim = vi.hoisted(() => ({ ensureLinuxTerminalQuirkyCliShimDir: vi.fn() }))
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () => shim)
 
 import {
   SEALED_TEST_SPAWN_TOKEN,
@@ -19,9 +19,9 @@ import {
 } from './structured-worker-identity'
 
 const SESSION_ID = 'f7a1c0de-1111-4222-8333-444455556666'
-const USER_DATA = '/data/orca'
+const USER_DATA = '/data/quirky'
 const RESOURCES = '/app/Resources'
-const SHIM_DIR = join(USER_DATA, 'linux-orca-cli-shim')
+const SHIM_DIR = join(USER_DATA, 'linux-quirky-cli-shim')
 
 const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!
 const resourcesDescriptor = Object.getOwnPropertyDescriptor(process, 'resourcesPath')
@@ -45,8 +45,8 @@ function registerWorker(): string {
 }
 
 beforeEach(() => {
-  shim.ensureLinuxTerminalOrcaCliShimDir.mockReset()
-  shim.ensureLinuxTerminalOrcaCliShimDir.mockReturnValue(SHIM_DIR)
+  shim.ensureLinuxTerminalQuirkyCliShimDir.mockReset()
+  shim.ensureLinuxTerminalQuirkyCliShimDir.mockReturnValue(SHIM_DIR)
   Object.defineProperty(process, 'resourcesPath', { configurable: true, value: RESOURCES })
 })
 
@@ -62,7 +62,7 @@ afterEach(() => {
 
 describe('sealStructuredSessionChild identity', () => {
   it("gives an ordinary chat session its own id and this app's CLI, and no terminal identity", () => {
-    // The id names the caller, so a bare `orca orchestration check` acts as this session instead of
+    // The id names the caller, so a bare `quirky orchestration check` acts as this session instead of
     // guessing a terminal — every guess landed on a sibling pane, and `check` consumed its mail.
     pinPlatform('linux')
     installFakeAppEnvironment({ isPackaged: () => true, getPath: () => USER_DATA })
@@ -70,26 +70,26 @@ describe('sealStructuredSessionChild identity', () => {
     const env = sealedChildEnv(SESSION_ID, childEnv)
     expect(env).toEqual({
       PATH: `${SHIM_DIR}:/usr/bin`,
-      ORCA_AGENT_SESSION_ID: SESSION_ID,
+      QUIRKY_AGENT_SESSION_ID: SESSION_ID,
       // For a CLI that predates the id, which refuses on it instead of guessing a sibling.
-      ORCA_STRUCTURED_SESSION: '1',
-      ORCA_CLI_COMMAND: join(SHIM_DIR, 'orca'),
-      ORCA_CLI_BIN_DIR: SHIM_DIR,
+      QUIRKY_STRUCTURED_SESSION: '1',
+      QUIRKY_CLI_COMMAND: join(SHIM_DIR, 'quirky'),
+      QUIRKY_CLI_BIN_DIR: SHIM_DIR,
       // The instance that minted the id, so any current CLI dials it rather than the default.
-      ORCA_USER_DATA_PATH: USER_DATA,
+      QUIRKY_USER_DATA_PATH: USER_DATA,
       // Empty, which the CLI reads as unset, so a profile's selector cannot send it elsewhere.
-      ORCA_ENVIRONMENT: '',
-      ORCA_PAIRING_CODE: '',
-      ORCA_REMOTE_PAIRING: '',
-      ORCA_AGENT_SESSION_SPAWN_TOKEN: SEALED_TEST_SPAWN_TOKEN
+      QUIRKY_ENVIRONMENT: '',
+      QUIRKY_PAIRING_CODE: '',
+      QUIRKY_REMOTE_PAIRING: '',
+      QUIRKY_AGENT_SESSION_SPAWN_TOKEN: SEALED_TEST_SPAWN_TOKEN
     })
     // A chat names itself by its id alone: no handle, no pane key.
-    expect(env.ORCA_TERMINAL_HANDLE).toBeUndefined()
-    expect(env.ORCA_PANE_KEY).toBeUndefined()
+    expect(env.QUIRKY_TERMINAL_HANDLE).toBeUndefined()
+    expect(env.QUIRKY_PANE_KEY).toBeUndefined()
     expect(childEnv).toEqual({ PATH: '/usr/bin' })
   })
 
-  it.each(['ORCA_ENVIRONMENT', 'ORCA_PAIRING_CODE', 'ORCA_REMOTE_PAIRING'])(
+  it.each(['QUIRKY_ENVIRONMENT', 'QUIRKY_PAIRING_CODE', 'QUIRKY_REMOTE_PAIRING'])(
     "keeps an inherited %s from sending the agent's CLI to another server",
     (key) => {
       installFakeAppEnvironment({ isPackaged: () => true, getPath: () => USER_DATA })
@@ -99,21 +99,21 @@ describe('sealStructuredSessionChild identity', () => {
       const launch = { env: sealedChildEnv(SESSION_ID, inherited) }
       const childEnv = resolveProviderChildEnv(launch, inherited)
       expect(childEnv).toMatchObject({
-        ORCA_USER_DATA_PATH: USER_DATA,
-        ORCA_ENVIRONMENT: '',
-        ORCA_PAIRING_CODE: '',
-        ORCA_REMOTE_PAIRING: ''
+        QUIRKY_USER_DATA_PATH: USER_DATA,
+        QUIRKY_ENVIRONMENT: '',
+        QUIRKY_PAIRING_CODE: '',
+        QUIRKY_REMOTE_PAIRING: ''
       })
     }
   )
 
-  it('replaces an id inherited from an Orca launched inside another session', () => {
+  it('replaces an id inherited from an Quirky launched inside another session', () => {
     installFakeAppEnvironment({ isPackaged: () => false, getPath: () => USER_DATA })
     const env = sealedChildEnv(SESSION_ID, {
-      ORCA_AGENT_SESSION_ID: 'a0b1c2d3-0000-4000-8000-00000000abcd',
+      QUIRKY_AGENT_SESSION_ID: 'a0b1c2d3-0000-4000-8000-00000000abcd',
       PATH: '/usr/bin'
     })
-    expect(env.ORCA_AGENT_SESSION_ID).toBe(SESSION_ID)
+    expect(env.QUIRKY_AGENT_SESSION_ID).toBe(SESSION_ID)
   })
 
   it('gives a structured worker its id and keeps the handle it was minted', () => {
@@ -122,13 +122,13 @@ describe('sealStructuredSessionChild identity', () => {
     installFakeAppEnvironment({ isPackaged: () => false, getPath: () => USER_DATA })
     const handle = registerWorker()
     const env = sealedChildEnv(SESSION_ID, { PATH: '/usr/bin' })
-    expect(env.ORCA_AGENT_SESSION_ID).toBe(SESSION_ID)
-    expect(env.ORCA_TERMINAL_HANDLE).toBe(handle)
+    expect(env.QUIRKY_AGENT_SESSION_ID).toBe(SESSION_ID)
+    expect(env.QUIRKY_TERMINAL_HANDLE).toBe(handle)
   })
 
   describe.each(['chat', 'worker'] as const)("reaches this app's CLI as a %s", (kind) => {
     it('reaches a headless host CLI without Electron resources', () => {
-      const launcher = join(USER_DATA, 'cli', 'bin', 'orca')
+      const launcher = join(USER_DATA, 'cli', 'bin', 'quirky')
       installFakeAppEnvironment({
         isPackaged: () => true,
         getPath: () => USER_DATA,
@@ -136,19 +136,19 @@ describe('sealStructuredSessionChild identity', () => {
       })
       const env = sealedChildEnv(SESSION_ID, {
         PATH: '/usr/bin',
-        ORCA_USER_DATA_PATH: '/other/profile',
-        ORCA_ENVIRONMENT: 'stale-shell-selection',
-        ORCA_PAIRING_CODE: 'stale-pairing',
-        ORCA_REMOTE_PAIRING: 'stale-remote-pairing'
+        QUIRKY_USER_DATA_PATH: '/other/profile',
+        QUIRKY_ENVIRONMENT: 'stale-shell-selection',
+        QUIRKY_PAIRING_CODE: 'stale-pairing',
+        QUIRKY_REMOTE_PAIRING: 'stale-remote-pairing'
       })
-      expect(env.ORCA_CLI_COMMAND).toBe(launcher)
-      expect(env.ORCA_USER_DATA_PATH).toBe(USER_DATA)
+      expect(env.QUIRKY_CLI_COMMAND).toBe(launcher)
+      expect(env.QUIRKY_USER_DATA_PATH).toBe(USER_DATA)
       expect(env).toMatchObject({
-        ORCA_ENVIRONMENT: '',
-        ORCA_PAIRING_CODE: '',
-        ORCA_REMOTE_PAIRING: ''
+        QUIRKY_ENVIRONMENT: '',
+        QUIRKY_PAIRING_CODE: '',
+        QUIRKY_REMOTE_PAIRING: ''
       })
-      expect(env.ORCA_AGENT_SESSION_ID).toBe(SESSION_ID)
+      expect(env.QUIRKY_AGENT_SESSION_ID).toBe(SESSION_ID)
       expect(env.PATH).toBe(`${join(USER_DATA, 'cli', 'bin')}:/usr/bin`)
     })
     beforeEach(() => {
@@ -157,13 +157,13 @@ describe('sealStructuredSessionChild identity', () => {
       }
     })
 
-    it('on packaged Linux, through the bare-orca shim, named by absolute path', () => {
-      // Without this the child's first `orca orchestration check` execs GNOME Orca — the CLI
-      // installs as `orca-ide` on Linux (stablyai/orca#7904) — and the dispatch hangs to timeout.
+    it('on packaged Linux, through the bare-quirky shim, named by absolute path', () => {
+      // Without this the child's first `quirky orchestration check` execs GNOME Quirky — the CLI
+      // installs as `quirky-ide` on Linux (stablyai/orca#7904) — and the dispatch hangs to timeout.
       pinPlatform('linux')
       installFakeAppEnvironment({ isPackaged: () => true, getPath: () => USER_DATA })
       const env = sealedChildEnv(SESSION_ID, { PATH: '/usr/bin:/bin' })
-      expect(env.ORCA_CLI_COMMAND).toBe(join(SHIM_DIR, 'orca'))
+      expect(env.QUIRKY_CLI_COMMAND).toBe(join(SHIM_DIR, 'quirky'))
       expect(env.PATH).toBe(`${SHIM_DIR}:/usr/bin:/bin`)
     })
 
@@ -172,7 +172,7 @@ describe('sealStructuredSessionChild identity', () => {
       installFakeAppEnvironment({ isPackaged: () => true, getPath: () => USER_DATA })
       const env = sealedChildEnv(SESSION_ID, { PATH: '/usr/bin' })
       expect(env.PATH).toBe(`${join(RESOURCES, 'bin')}:/usr/bin`)
-      expect(env.ORCA_CLI_COMMAND).toBe(join(RESOURCES, 'bin', 'orca'))
+      expect(env.QUIRKY_CLI_COMMAND).toBe(join(RESOURCES, 'bin', 'quirky'))
     })
 
     it('on packaged Windows, through the bundled CLI dir under the env block spelling', () => {
@@ -181,9 +181,9 @@ describe('sealStructuredSessionChild identity', () => {
       const env = sealedChildEnv(SESSION_ID, { Path: 'C:\\Windows' })
       expect(env.Path).toBe(`${join(RESOURCES, 'bin')};C:\\Windows`)
       expect(env.PATH).toBeUndefined()
-      // The native launcher: `orca.cmd` refuses message bodies cmd.exe would mangle.
-      expect(env.ORCA_CLI_COMMAND).toBe(join(RESOURCES, 'bin', 'orca.exe'))
-      expect(env.ORCA_CLI_BIN_DIR).toBeUndefined()
+      // The native launcher: `quirky.cmd` refuses message bodies cmd.exe would mangle.
+      expect(env.QUIRKY_CLI_COMMAND).toBe(join(RESOURCES, 'bin', 'quirky.exe'))
+      expect(env.QUIRKY_CLI_BIN_DIR).toBeUndefined()
     })
 
     it('unpackaged, through the dev launcher dir', () => {
@@ -191,25 +191,25 @@ describe('sealStructuredSessionChild identity', () => {
       installFakeAppEnvironment({ isPackaged: () => false, getPath: () => USER_DATA })
       const env = sealedChildEnv(SESSION_ID, { PATH: '/usr/bin' })
       expect(env.PATH).toBe(`${join(USER_DATA, 'cli', 'bin')}:/usr/bin`)
-      expect(env.ORCA_CLI_COMMAND).toBe(join(USER_DATA, 'cli', 'bin', 'orca-dev'))
+      expect(env.QUIRKY_CLI_COMMAND).toBe(join(USER_DATA, 'cli', 'bin', 'quirky-dev'))
     })
   })
 
-  it('omits the CLI command when no launcher resolves, never naming a bare `orca`', () => {
+  it('omits the CLI command when no launcher resolves, never naming a bare `quirky`', () => {
     // On packaged Linux the shim can fail to resolve (no bundled launcher, an unverified AppImage);
-    // a bare `orca` there is GNOME's screen reader, and an inherited value names another app's CLI.
+    // a bare `quirky` there is GNOME's screen reader, and an inherited value names another app's CLI.
     pinPlatform('linux')
     installFakeAppEnvironment({ isPackaged: () => true, getPath: () => USER_DATA })
-    shim.ensureLinuxTerminalOrcaCliShimDir.mockReturnValue(null)
+    shim.ensureLinuxTerminalQuirkyCliShimDir.mockReturnValue(null)
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const env = sealedChildEnv(SESSION_ID, {
       PATH: '/usr/bin',
-      ORCA_CLI_COMMAND: '/Applications/Other Orca.app/Contents/Resources/bin/orca',
-      ORCA_USER_DATA_PATH: '/data/other-orca'
+      QUIRKY_CLI_COMMAND: '/Applications/Other Quirky.app/Contents/Resources/bin/quirky',
+      QUIRKY_USER_DATA_PATH: '/data/other-quirky'
     })
-    expect(env).not.toHaveProperty('ORCA_CLI_COMMAND')
+    expect(env).not.toHaveProperty('QUIRKY_CLI_COMMAND')
     expect(env.PATH).toBe('/usr/bin')
-    expect(env.ORCA_USER_DATA_PATH).toBe(USER_DATA)
+    expect(env.QUIRKY_USER_DATA_PATH).toBe(USER_DATA)
     expect(console.warn).toHaveBeenCalledOnce()
   })
 
@@ -220,14 +220,14 @@ describe('sealStructuredSessionChild identity', () => {
     installFakeAppEnvironment({ isPackaged: () => true, getPath: () => USER_DATA })
     registerWorker()
     const env = sealedChildEnv(SESSION_ID, { PATH: '/usr/bin' })
-    expect(env.ORCA_PANE_KEY).toBeUndefined()
+    expect(env.QUIRKY_PANE_KEY).toBeUndefined()
     expect(Object.keys(env).filter((key) => key.includes('PANE'))).toEqual([])
   })
 
   it('never names the WSL-scoped launcher, because a structured worker cannot run in WSL', () => {
-    // `orca-ide` is the literal the PTY lane exports for WSL only. A structured session that
+    // `quirky-ide` is the literal the PTY lane exports for WSL only. A structured session that
     // resolves to a WSL distro is refused a host scope, so it never becomes a worker at all —
-    // which is why the bare-`orca` shim, not the literal, is the right fix on Linux.
+    // which is why the bare-`quirky` shim, not the literal, is the right fix on Linux.
     expect(
       structuredWorkerHostScope({
         executionHostId: 'local',
@@ -239,6 +239,8 @@ describe('sealStructuredSessionChild identity', () => {
     pinPlatform('linux')
     installFakeAppEnvironment({ isPackaged: () => true, getPath: () => USER_DATA })
     registerWorker()
-    expect(sealedChildEnv(SESSION_ID, { PATH: '/usr/bin' }).ORCA_CLI_COMMAND).not.toBe('orca-ide')
+    expect(sealedChildEnv(SESSION_ID, { PATH: '/usr/bin' }).QUIRKY_CLI_COMMAND).not.toBe(
+      'quirky-ide'
+    )
   })
 })

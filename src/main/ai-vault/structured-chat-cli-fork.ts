@@ -37,7 +37,7 @@ function assertNativeConversationContent(snapshot: AgentJournalSnapshot): void {
     }
     const identity = parseAgentJournalItemKey(itemId)
     const submission = submissions.get(itemId)
-    if (submission?.dispatchState === 'accepted' || (identity && identity.provider !== 'orca')) {
+    if (submission?.dispatchState === 'accepted' || (identity && identity.provider !== 'quirky')) {
       return true
     }
     // Write-ahead messages alone prove neither provider content nor failed delivery.

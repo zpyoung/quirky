@@ -6,7 +6,7 @@ vi.mock('./local-pty-foreground-command-line', () => ({
   readLocalPtyForegroundCommandLine: readCommandLineMock
 }))
 
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { FOREGROUND_COMMAND_READS } from '../../shared/foreground-command-settle'
 import type { RuntimeTerminalAgentStatusEvent } from './runtime-terminal-contracts'
 
@@ -15,13 +15,13 @@ const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const PANE_KEY = `tab-1:${LEAF_ID}`
 
 function createRuntime(): {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   statuses: RuntimeTerminalAgentStatusEvent[]
   channelOrder: string[]
 } {
   const statuses: RuntimeTerminalAgentStatusEvent[] = []
   const channelOrder: string[] = []
-  const runtime = new OrcaRuntimeService(undefined, undefined, {
+  const runtime = new QuirkyRuntimeService(undefined, undefined, {
     onTerminalAgentStatus: (event) => {
       statuses.push(event)
       channelOrder.push(`status:${event.payload.state}`)

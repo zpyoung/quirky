@@ -8,10 +8,10 @@ import {
   writeSidecarSnapshot
 } from './sidecar-snapshot-file'
 
-const RECORDS_FILE_NAME = 'orca-worktree-removals.json'
+const RECORDS_FILE_NAME = 'quirky-worktree-removals.json'
 const RECORDS_VERSION = 1
 
-/** A local worktree removal Orca accepted; everything a restart needs to run the same delete. */
+/** A local worktree removal Quirky accepted; everything a restart needs to run the same delete. */
 export type WorktreeRemovalRecord = {
   worktreeId: string
   repoId: string

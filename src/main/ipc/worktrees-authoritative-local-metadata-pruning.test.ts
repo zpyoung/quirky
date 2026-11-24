@@ -208,7 +208,7 @@ describe('authoritative local worktree metadata pruning integration', () => {
       await Promise.resolve()
       return rows
     })
-    // A worktree deleted outside Orca strands its status row unless the prune retires it.
+    // A worktree deleted outside Quirky strands its status row unless the prune retires it.
     const stalePane = makePaneKey('tab-stale', '11111111-1111-4111-8111-111111111111')
     const livePane = makePaneKey('tab-live', '22222222-2222-4222-8222-222222222222')
     const working = { state: 'working', prompt: 'p', agentType: 'codex' } as const

@@ -16,7 +16,7 @@ const NOW = 1_800_000_000_000
 const roots: string[] = []
 
 async function liveStore(): Promise<AgentSessionRecordStore> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-lease-renewer-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-lease-renewer-'))
   roots.push(root)
   const store = await openTestAgentSessionRecordStore(root)
   const reserved = await store.reserveOwner({

@@ -30,7 +30,7 @@ function item(
 ): Extract<JournalLifecycleMutationInput, { kind: 'item' }> {
   return {
     kind: 'item',
-    identity: { provider: 'orca', clientMessageId: `item:${index}` },
+    identity: { provider: 'quirky', clientMessageId: `item:${index}` },
     body: { kind: 'tool-call', name: 'shell', input: { command: text }, state: 'failed' },
     turnScope: AGENT_JOURNAL_THREAD_SCOPE
   }
@@ -131,7 +131,7 @@ describe('journal lifecycle batch partitioning', () => {
       const mutations = Array.from(
         { length: random(230) },
         (_, index): JournalLifecycleMutationInput => {
-          const identity = { provider: 'orca' as const, clientMessageId: `item:"\\界😀:${index}` }
+          const identity = { provider: 'quirky' as const, clientMessageId: `item:"\\界😀:${index}` }
           if (index % 23 === 0) {
             return { kind: 'tombstone', identity }
           }

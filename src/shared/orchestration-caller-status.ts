@@ -1,10 +1,10 @@
 /**
- * The calling agent's Orca session ID (`orca_session_id:<id>`), as the host resolved it from the
+ * The calling agent's Quirky session ID (`quirky_session_id:<id>`), as the host resolved it from the
  * session id injected into the caller's environment; never from a flag. Terminal agents have none
- * yet. `orca status --json` reports it as `caller`.
+ * yet. `quirky status --json` reports it as `caller`.
  */
 export type OrchestrationCallerSession = {
-  orcaSessionId: string
+  quirkySessionId: string
   live: boolean
 }
 
@@ -20,11 +20,11 @@ export type OrchestrationCallerRefusal = {
  */
 export type CliStatusCaller = OrchestrationCallerSession | OrchestrationCallerRefusal
 
-/** `null`: the caller is not an Orca session. */
+/** `null`: the caller is not an Quirky session. */
 export type OrchestrationCallerShowResult = { caller: OrchestrationCallerSession | null }
 
-/** `orchestration.sessionAddress`: a session's Orca session ID, its `/clear` root's. */
-export type OrchestrationSessionAddressResult = { orcaSessionId: string }
+/** `orchestration.sessionAddress`: a session's Quirky session ID, its `/clear` root's. */
+export type OrchestrationSessionAddressResult = { quirkySessionId: string }
 
 /** Where a party is now: a chat at its `/clear` lineage's live session, or a terminal. */
 export type OrchestrationPartyLocation =

@@ -100,7 +100,7 @@ describe('account CLI handlers', () => {
   const originalElectronRunAsNode = process.env.ELECTRON_RUN_AS_NODE
   const originalPathAlias = process.env.Path
   const originalWslDistroName = process.env.WSL_DISTRO_NAME
-  const originalBridgeDistro = process.env.ORCA_CLI_WSL_DISTRO
+  const originalBridgeDistro = process.env.QUIRKY_CLI_WSL_DISTRO
   const callMock = vi.fn()
   const client = { call: callMock } as unknown as RuntimeClient
   let logSpy: ReturnType<typeof vi.spyOn>
@@ -149,7 +149,7 @@ describe('account CLI handlers', () => {
     // Why: a test run inside a real distro carries WSL_DISTRO_NAME, which would
     // leak WSL attribution into every faked-win32 add below.
     delete process.env.WSL_DISTRO_NAME
-    delete process.env.ORCA_CLI_WSL_DISTRO
+    delete process.env.QUIRKY_CLI_WSL_DISTRO
   })
 
   afterEach(() => {
@@ -166,9 +166,9 @@ describe('account CLI handlers', () => {
       process.env.Path = originalPathAlias
     }
     if (originalBridgeDistro === undefined) {
-      delete process.env.ORCA_CLI_WSL_DISTRO
+      delete process.env.QUIRKY_CLI_WSL_DISTRO
     } else {
-      process.env.ORCA_CLI_WSL_DISTRO = originalBridgeDistro
+      process.env.QUIRKY_CLI_WSL_DISTRO = originalBridgeDistro
     }
     if (originalWslDistroName === undefined) {
       delete process.env.WSL_DISTRO_NAME
@@ -345,7 +345,7 @@ describe('account CLI handlers', () => {
   it('uses the explicit bridge distro over an ambient environment or another distro cwd', async () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     process.env.WSL_DISTRO_NAME = 'stale-Windows-value'
-    process.env.ORCA_CLI_WSL_DISTRO = 'Debian'
+    process.env.QUIRKY_CLI_WSL_DISTRO = 'Debian'
 
     await ACCOUNT_HANDLERS['account add'](
       context('claude', false, String.raw`\\wsl.localhost\Ubuntu-22.04\home\user`)
@@ -362,7 +362,7 @@ describe('account CLI handlers', () => {
     'attributes %s from a Windows mount to the bridge distro',
     async (agent) => {
       Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      process.env.ORCA_CLI_WSL_DISTRO = 'Ubuntu Work'
+      process.env.QUIRKY_CLI_WSL_DISTRO = 'Ubuntu Work'
       await ACCOUNT_HANDLERS['account add'](context(agent, false, String.raw`C:\work with spaces`))
       expect(
         callMock.mock.calls.some(
@@ -390,7 +390,7 @@ describe('account CLI handlers', () => {
       // WSL_DISTRO_NAME there names the CLI's own environment, not a target lane.
       Object.defineProperty(process, 'platform', { configurable: true, value: platform })
       process.env.WSL_DISTRO_NAME = 'Ubuntu-22.04'
-      process.env.ORCA_CLI_WSL_DISTRO = 'Ubuntu-22.04'
+      process.env.QUIRKY_CLI_WSL_DISTRO = 'Ubuntu-22.04'
 
       await ACCOUNT_HANDLERS['account add'](context('codex'))
 
@@ -545,7 +545,7 @@ describe('account CLI handlers', () => {
       })
 
       await expect(ACCOUNT_HANDLERS['account add'](context(agent))).rejects.toThrow(
-        'The running Orca runtime is too old to add accounts from the CLI.'
+        'The running Quirky runtime is too old to add accounts from the CLI.'
       )
       expect(callMock).toHaveBeenCalledOnce()
       expect(callMock).toHaveBeenCalledWith('status.get')
@@ -694,7 +694,7 @@ describe('account CLI handlers', () => {
 
     expect(logSpy).toHaveBeenCalledWith(
       expect.stringContaining(
-        '  old@example.com (active) (sign in again in Orca Settings > AI Provider Accounts)\n  ok@example.com\n'
+        '  old@example.com (active) (sign in again in Quirky Settings > AI Provider Accounts)\n  ok@example.com\n'
       )
     )
   })

@@ -1,25 +1,25 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 
 test.use({ seedTestRepo: false })
 
 test('global Auto syncs native defaults only for supporting agents and persists', async ({
-  orcaPage
+  quirkyPage
 }) => {
-  await waitForSessionReady(orcaPage)
-  await orcaPage.evaluate(() => {
+  await waitForSessionReady(quirkyPage)
+  await quirkyPage.evaluate(() => {
     const store = window.__store
     if (!store) {
-      throw new Error('Orca store is unavailable')
+      throw new Error('Quirky store is unavailable')
     }
     return store.getState().updateSettingsOrThrow({ nativeChatPermissionMode: 'accept-edits' })
   })
-  await orcaPage.getByRole('button', { name: 'Settings', exact: true }).click()
-  await orcaPage.getByRole('button', { name: 'Agents', exact: true }).click()
-  const group = orcaPage.getByRole('radiogroup', { name: 'Agent Permissions' })
-  const others = orcaPage.getByRole('radiogroup', { name: 'Permissions for other agents' })
+  await quirkyPage.getByRole('button', { name: 'Settings', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Agents', exact: true }).click()
+  const group = quirkyPage.getByRole('radiogroup', { name: 'Agent Permissions' })
+  const others = quirkyPage.getByRole('radiogroup', { name: 'Permissions for other agents' })
   const readArgs = () =>
-    orcaPage.evaluate(async () => {
+    quirkyPage.evaluate(async () => {
       const settings = await window.api.settings.get()
       return {
         claude: settings.agentDefaultArgs?.claude,
@@ -64,10 +64,10 @@ test('global Auto syncs native defaults only for supporting agents and persists'
     grokNative: 'ask'
   })
 
-  await orcaPage.reload()
-  await orcaPage.waitForFunction(() => Boolean(window.__store))
-  await waitForSessionReady(orcaPage)
-  await orcaPage.getByRole('button', { name: 'Agents', exact: true }).click()
+  await quirkyPage.reload()
+  await quirkyPage.waitForFunction(() => Boolean(window.__store))
+  await waitForSessionReady(quirkyPage)
+  await quirkyPage.getByRole('button', { name: 'Agents', exact: true }).click()
   await expect(group.getByRole('radio', { name: 'Auto', exact: true })).toHaveAttribute(
     'aria-checked',
     'true'

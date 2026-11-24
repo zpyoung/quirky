@@ -315,7 +315,7 @@ describe('externalLink', () => {
   it('refuses a scheme the grant does not cover, as a frame the reader never accepts', () => {
     const bridge = harness()
     bridge.host.receive(clientFrame({ type: 'ready' }))
-    for (const url of ['javascript:alert(1)', 'file:///etc/passwd', 'orca-mobile-web://s/x']) {
+    for (const url of ['javascript:alert(1)', 'file:///etc/passwd', 'quirky-mobile-web://s/x']) {
       bridge.host.receive(open(url))
     }
     expect(bridge.externalLinks).toEqual([])

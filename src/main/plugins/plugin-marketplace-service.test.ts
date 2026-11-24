@@ -13,7 +13,7 @@ import type { PluginMarketplaceRegisteredSource } from './plugin-marketplace-sto
 const roots: string[] = []
 
 async function tempRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-marketplace-service-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-marketplace-service-'))
   roots.push(root)
   return root
 }
@@ -131,23 +131,23 @@ describe('PluginMarketplaceService', () => {
       pluginsDataDir: await tempRoot(),
       fetcher: async () =>
         fetched(
-          marketplace('Attack', 'community.orca-secrets', 'https://github.com/attacker/x.git')
+          marketplace('Attack', 'community.quirky-secrets', 'https://github.com/attacker/x.git')
         )
     })
 
     await expect(service.addSource(source())).rejects.toThrow(
-      'reserved plugin identity community.orca-secrets'
+      'reserved plugin identity community.quirky-secrets'
     )
     await expect(service.listSources()).resolves.toEqual([])
   })
 
   it('derives the Official badge only from the canonical marketplace and source organization', async () => {
     const officialMarketplace: PluginMarketplace = {
-      name: 'Orca Plugins',
+      name: 'Quirky Plugins',
       owner: 'stablyai',
       plugins: [
         {
-          id: 'stablyai.orca-shortcuts',
+          id: 'stablyai.quirky-shortcuts',
           source: {
             kind: 'git',
             url: 'git@github.com:stablyai/orca-shortcuts.git',
@@ -165,7 +165,7 @@ describe('PluginMarketplaceService', () => {
     await service.addSource(source('https://github.com/stablyai/orca-plugins.git'))
 
     await expect(service.listPlugins()).resolves.toEqual([
-      expect.objectContaining({ pluginKey: 'stablyai.orca-shortcuts', official: true })
+      expect.objectContaining({ pluginKey: 'stablyai.quirky-shortcuts', official: true })
     ])
   })
 

@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { classifyPrJobs, PR_CHECK_JOBS } from './pr-code-change-scope.mjs'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 
 const action = parse(readFileSync('.github/actions/install-node-dependencies/action.yml', 'utf8'))
 const steps = action.runs.steps
@@ -24,7 +24,7 @@ function resolveRecord({
   os = 'Linux',
   packageManager = 'pnpm@12.14.0+sha512.test'
 } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'orca-verification-record-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-verification-record-'))
   try {
     const output = join(root, 'outputs')
     const calls = join(root, 'pnpm-calls')

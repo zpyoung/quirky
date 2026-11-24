@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createSequencedSetupAgentCommands } from './setup-agent-sequencing'
 
 // Why: the POSIX gate evals the agent in a fresh `bash -lc`, which never reads
-// Orca's shell wrapper, so it must carry the codex --no-daemon rule itself.
+// Quirky's shell wrapper, so it must carry the codex --no-daemon rule itself.
 const roots: string[] = []
 const gates: ChildProcess[] = []
 
@@ -20,7 +20,7 @@ afterEach(() => {
 })
 
 function prepareGate(startupCommand: string) {
-  const root = mkdtempSync(join(tmpdir(), 'orca-gate-codex-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-gate-codex-'))
   roots.push(root)
   const bin = join(root, 'bin')
   mkdirSync(bin)
@@ -69,7 +69,7 @@ describe.skipIf(process.platform === 'win32')('sequenced setup gate runs codex',
   it.each([
     ['an old binary', 'codex --yolo', '--no-alt-screen', {}],
     ['a subcommand that needs the shared server', 'codex agents', '--no-daemon', {}],
-    ['the opt-out', 'codex --yolo', '--no-daemon', { ORCA_CODEX_ISOLATE: '0' }]
+    ['the opt-out', 'codex --yolo', '--no-daemon', { QUIRKY_CODEX_ISOLATE: '0' }]
   ])('unchanged for %s', (_case, command, help, env) => {
     expect(runGate(command, help, env)).toBe(`ARGV:${command.slice('codex '.length)}\n`)
   })

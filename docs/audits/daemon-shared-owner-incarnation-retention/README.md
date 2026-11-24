@@ -34,14 +34,14 @@ Additional assertions preserve a same-ID successor on another provider, an uncha
 Run from the repository root with its dependencies installed:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/daemon-shared-owner-incarnation-retention/reproduce.cjs
-ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/daemon/daemon-shared-owner-incarnation-retention.test.ts src/main/daemon/daemon-session-owner-resolution.test.ts src/main/daemon/degraded-daemon-pty-provider.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/daemon-shared-owner-incarnation-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/daemon/daemon-shared-owner-incarnation-retention.test.ts src/main/daemon/daemon-session-owner-resolution.test.ts src/main/daemon/degraded-daemon-pty-provider.test.ts
 ```
 
 The runner accepts an optional output filename as its first argument. On macOS, the Electron runtime control is:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron docs/audits/daemon-shared-owner-incarnation-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron docs/audits/daemon-shared-owner-incarnation-retention/reproduce.cjs
 ```
 
 On Linux or Windows, use the corresponding installed Electron binary with the same environment variables. It runs as Node and never displays a window.
@@ -49,7 +49,7 @@ On Linux or Windows, use the corresponding installed Electron binary with the sa
 The baseline test overlay reverses only the fenced product patch in memory:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/daemon-shared-owner-incarnation-retention/before.config.mjs src/main/daemon/daemon-shared-owner-incarnation-retention.test.ts src/main/daemon/daemon-session-owner-resolution.test.ts src/main/daemon/degraded-daemon-pty-provider.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/daemon-shared-owner-incarnation-retention/before.config.mjs src/main/daemon/daemon-shared-owner-incarnation-retention.test.ts src/main/daemon/daemon-session-owner-resolution.test.ts src/main/daemon/degraded-daemon-pty-provider.test.ts
 ```
 
 Expected: exactly the new repeated-retirement assertion fails before the fix; the other 53 tests pass. All 54 pass with the fix.

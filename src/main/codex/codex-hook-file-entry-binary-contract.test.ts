@@ -47,7 +47,7 @@ import {
 
 vi.mock('../codex-cli/command', async (importOriginal) => ({
   ...(await importOriginal<typeof CodexCommand>()),
-  resolveCodexCommand: () => process.env.ORCA_CODEX_HOOK_CONTRACT_BINARY ?? 'codex'
+  resolveCodexCommand: () => process.env.QUIRKY_CODEX_HOOK_CONTRACT_BINARY ?? 'codex'
 }))
 vi.mock('electron', () => ({
   app: {
@@ -59,23 +59,23 @@ vi.mock('electron', () => ({
 
 import { CodexHookService } from './hook-service'
 
-// Why this file exists: Orca approves its status hook in managed Codex homes
+// Why this file exists: Quirky approves its status hook in managed Codex homes
 // and in ~/.codex with the hash Codex reports for it in a throwaway home. Only a
 // real binary can say whether that hash is the same wherever the entry sits,
-// whether Codex then lists Orca's entry as trusted, and whether it runs in a real
+// whether Codex then lists Quirky's entry as trusted, and whether it runs in a real
 // turn with no review. If any of those drift, users meet a review screen or lose
 // status while every unit test stays green.
 
 const execFileAsync = promisify(execFile)
-const binary = process.env.ORCA_CODEX_HOOK_CONTRACT_BINARY
-const expectedVersion = process.env.ORCA_CODEX_HOOK_CONTRACT_VERSION
+const binary = process.env.QUIRKY_CODEX_HOOK_CONTRACT_BINARY
+const expectedVersion = process.env.QUIRKY_CODEX_HOOK_CONTRACT_VERSION
 const TIMEOUT_MS = 60_000
 
-describe.runIf(process.env.ORCA_CODEX_HOOK_CONTRACT_REQUIRED === '1' && !binary)(
+describe.runIf(process.env.QUIRKY_CODEX_HOOK_CONTRACT_REQUIRED === '1' && !binary)(
   'codex hook file-entry contract prerequisites',
   () => {
     it('was given a Codex binary to run against', () => {
-      expect.fail('ORCA_CODEX_HOOK_CONTRACT_REQUIRED=1 but no binary was given')
+      expect.fail('QUIRKY_CODEX_HOOK_CONTRACT_REQUIRED=1 but no binary was given')
     })
   }
 )
@@ -88,7 +88,7 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
 
   beforeAll(async () => {
     // Why a disposable HOME: nothing here may read or write the user's own ~/.codex.
-    root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-codex-hook-contract-')))
+    root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-codex-hook-contract-')))
     const version = await execFileAsync(binary!, ['--version'], {
       timeout: TIMEOUT_MS,
       env: { ...process.env, HOME: join(root, 'version-home'), CODEX_HOME: join(root, 'v') }
@@ -107,7 +107,7 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
     vi.stubEnv('HOME', home)
     vi.stubEnv('USERPROFILE', home)
     vi.stubEnv('CODEX_HOME', join(root, 'never-used-codex-home'))
-    vi.stubEnv('ORCA_USER_DATA_PATH', join(home, 'user-data'))
+    vi.stubEnv('QUIRKY_USER_DATA_PATH', join(home, 'user-data'))
     // Why: the app's userData always exists; the memo is written there.
     mkdirSync(join(home, 'user-data'))
     const codexVersion = await probeCodexVersion(binary!)
@@ -128,7 +128,7 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
   const command = (): string => getCodexManagedHookInstallMaterial().command
   const accountHome = (): string => join(home, 'user-data', 'codex-accounts', 'one', 'home')
 
-  /** Orca's entry installed into a managed account home, approved with the derived hashes. */
+  /** Quirky's entry installed into a managed account home, approved with the derived hashes. */
   async function installManagedHome(): Promise<void> {
     mkdirSync(join(home, '.codex'), { recursive: true })
     // Why saved: the app's lookup then re-probes the version and finds the answer, with no second hooks/list.
@@ -137,7 +137,7 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
     expect((await new CodexHookService().install(accountHome())).state).toBe('installed')
   }
 
-  async function orcaListings(codexHome: string): Promise<CodexListedHook[]> {
+  async function quirkyListings(codexHome: string): Promise<CodexListedHook[]> {
     // Why a cwd outside any project: only the home's own hooks.json is listed.
     const cwd = mkdtempSync(join(root, 'cwd-'))
     return (await listCodexHooks(binary!, codexHome, cwd)).filter(
@@ -145,7 +145,7 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
     )
   }
 
-  it("hashes Orca's entry alike at group 0, after another group, and from a trusted project", async () => {
+  it("hashes Quirky's entry alike at group 0, after another group, and from a trusted project", async () => {
     const scratch = mkdtempSync(join(root, 'scratch-'))
     const project = mkdtempSync(join(root, 'project-'))
     mkdirSync(join(project, '.codex'))
@@ -173,19 +173,19 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
       )
       expect(copies.map((copy) => copy?.currentHash)).toEqual([hash, hash, hash])
     }
-    // Why: every pinned Codex knows every event Orca installs into, and hashes each.
+    // Why: every pinned Codex knows every event Quirky installs into, and hashes each.
     expect(Object.keys(hashes).sort()).toEqual(
       CODEX_EVENTS.map((eventName) => CODEX_EVENT_LABEL[eventName]).sort()
     )
     expect(Object.values(hashes).every((hash) => typeof hash === 'string')).toBe(true)
   })
 
-  it('lists every entry Orca wrote in a managed home as trusted and enabled, and writes nothing on a list', async () => {
+  it('lists every entry Quirky wrote in a managed home as trusted and enabled, and writes nothing on a list', async () => {
     await installManagedHome()
     const files = ['hooks.json', 'config.toml'].map((name) => join(accountHome(), name))
     const before = files.map((file) => readFileSync(file, 'utf-8'))
 
-    const listings = await orcaListings(accountHome())
+    const listings = await quirkyListings(accountHome())
 
     expect(listings.map((listing) => listing.key.split(':').at(-3)).sort()).toEqual(
       Object.keys(hashes).sort()
@@ -193,7 +193,7 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
     expect(listings.every((listing) => listing.trustStatus === 'trusted')).toBe(true)
     expect(listings.every((listing) => listing.enabled !== false)).toBe(true)
     expect(files.map((file) => readFileSync(file, 'utf-8'))).toEqual(before)
-    // Why: the key Orca approves is the one Codex lists for its managed-home entry.
+    // Why: the key Quirky approves is the one Codex lists for its managed-home entry.
     const stop = listings.find((listing) => listing.key.includes(':stop:'))
     expect(normalizeHookTrustKeyForLookup(stop!.key)).toBe(
       normalizeHookTrustKeyForLookup(
@@ -225,7 +225,7 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
             '-c',
             'model_provider=mock',
             '-c',
-            `model_providers.mock={name="mock",base_url="http://127.0.0.1:${port(model)}/v1",wire_api="responses",env_key="ORCA_CONTRACT_MOCK_KEY"}`,
+            `model_providers.mock={name="mock",base_url="http://127.0.0.1:${port(model)}/v1",wire_api="responses",env_key="QUIRKY_CONTRACT_MOCK_KEY"}`,
             'exec',
             '--skip-git-repo-check',
             'say hi'
@@ -237,10 +237,10 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
               PATH: process.env.PATH,
               HOME: home,
               CODEX_HOME: accountHome(),
-              ORCA_CONTRACT_MOCK_KEY: 'x',
-              ORCA_PANE_KEY: 'contract-pane',
-              ORCA_AGENT_HOOK_PORT: String(port(receiver)),
-              ORCA_AGENT_HOOK_TOKEN: 'contract-token'
+              QUIRKY_CONTRACT_MOCK_KEY: 'x',
+              QUIRKY_PANE_KEY: 'contract-pane',
+              QUIRKY_AGENT_HOOK_PORT: String(port(receiver)),
+              QUIRKY_AGENT_HOOK_TOKEN: 'contract-token'
             }
           }
         )
@@ -289,14 +289,14 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
   )
 
   describe('~/.codex', () => {
-    /** A disposable HOME whose ~/.codex holds Orca's reconciled entry; a symlink, so both key spellings count. */
+    /** A disposable HOME whose ~/.codex holds Quirky's reconciled entry; a symlink, so both key spellings count. */
     async function freshRealHomeWithEntry(name: string): Promise<void> {
       home = join(root, `${name}-home`)
       symlinkSync(mkdtempSync(join(root, `${name}-`)), home, 'junction')
       vi.stubEnv('HOME', home)
       vi.stubEnv('USERPROFILE', home)
       vi.stubEnv('CODEX_HOME', '')
-      vi.stubEnv('ORCA_USER_DATA_PATH', join(home, 'user-data'))
+      vi.stubEnv('QUIRKY_USER_DATA_PATH', join(home, 'user-data'))
       mkdirSync(join(home, 'user-data'))
       await reconcileRealHome()
     }
@@ -336,7 +336,7 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
       )
     }
 
-    it('lists every entry Orca wrote as trusted and enabled, and a second check writes nothing', async () => {
+    it('lists every entry Quirky wrote as trusted and enabled, and a second check writes nothing', async () => {
       await freshRealHomeWithEntry('trusted')
       const files = ['hooks.json', 'config.toml'].map((name) => join(realCodexHome(), name))
       const before = files.map((file) => readFileSync(file, 'utf-8'))
@@ -442,7 +442,7 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
           '-c',
           'model_provider=mock',
           '-c',
-          `model_providers.mock={name="mock",base_url="http://127.0.0.1:${port(model)}/v1",wire_api="responses",env_key="ORCA_CONTRACT_MOCK_KEY"}`,
+          `model_providers.mock={name="mock",base_url="http://127.0.0.1:${port(model)}/v1",wire_api="responses",env_key="QUIRKY_CONTRACT_MOCK_KEY"}`,
           '-c',
           'check_for_update_on_startup=false',
           '-c',
@@ -456,10 +456,10 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
             HOME: home,
             ...codexHomeEnv,
             TERM: 'xterm-256color',
-            ORCA_CONTRACT_MOCK_KEY: 'x',
-            ORCA_PANE_KEY: 'contract-pane',
-            ORCA_AGENT_HOOK_PORT: String(port(receiver)),
-            ORCA_AGENT_HOOK_TOKEN: 'contract-token'
+            QUIRKY_CONTRACT_MOCK_KEY: 'x',
+            QUIRKY_PANE_KEY: 'contract-pane',
+            QUIRKY_AGENT_HOOK_PORT: String(port(receiver)),
+            QUIRKY_AGENT_HOOK_TOKEN: 'contract-token'
           }
         }
       )

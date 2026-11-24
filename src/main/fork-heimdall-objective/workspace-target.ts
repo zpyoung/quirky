@@ -5,7 +5,7 @@ import {
   requireLocalRuntimeFileRoute,
   type ResolvedRuntimeFileTarget
 } from '../runtime/files/file-target'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { ObjectiveWorkspaceTarget } from './content-identity'
 import { composeWorktreeId } from '../../shared/worktree/id'
 
@@ -29,10 +29,10 @@ function assertResolvedAuthority(
 
 /** Resolves the workspace on its execution host; an unreachable/remote-runtime target fails closed. */
 export async function resolveObjectiveWorkspaceTarget(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   enrollment: WatcherEnrollment
 ): Promise<ObjectiveWorkspaceTarget> {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolveRuntimeGitTarget/resolveRuntimeFileTarget are installed on OrcaRuntimeService's prototype at construction but aren't part of its exported command-surface type, which only lists IPC-facing methods.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolveRuntimeGitTarget/resolveRuntimeFileTarget are installed on QuirkyRuntimeService's prototype at construction but aren't part of its exported command-surface type, which only lists IPC-facing methods.
   const resolver = runtime as unknown as ObjectiveRuntimeResolver
   const folderWorktreeId =
     enrollment.worktreeId && parseWorkspaceKey(enrollment.worktreeId)?.type === 'folder'

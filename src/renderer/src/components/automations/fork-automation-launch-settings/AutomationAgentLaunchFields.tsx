@@ -18,7 +18,7 @@ type AutomationAgentLaunchFieldsProps = {
   onDraftChange: (updater: (current: AutomationDraft) => AutomationDraft) => void
 }
 
-/** Render the Orca automation agent picker and its model/effort launch settings. */
+/** Render the Quirky automation agent picker and its model/effort launch settings. */
 export function AutomationAgentLaunchFields({
   draft,
   settings,
@@ -33,7 +33,7 @@ export function AutomationAgentLaunchFields({
       : isEmptyAgentLaunchOverrides(draft.launchOverrides)
         ? translate(
             'auto.components.automations.AutomationAgentLaunchFields.launchSettingsUnsupported',
-            "This automation's host doesn't support launch settings. Update the remote Orca server."
+            "This automation's host doesn't support launch settings. Update the remote Quirky server."
           )
         : translate(
             'auto.components.automations.AutomationAgentLaunchFields.launchSettingsNotSaved',

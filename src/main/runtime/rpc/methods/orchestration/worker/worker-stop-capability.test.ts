@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_RUNTIME_CAPABILITY } from '../../../../../../shared/protocol-version'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import { ORCHESTRATION_WORKER_STOP_METHODS } from './worker-stop'
 
@@ -35,7 +35,7 @@ describe('federated worker stop capability', () => {
         peerFingerprint: 'peer-linux'
       }),
       callOrchestrationWorkerServer
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const method = ORCHESTRATION_WORKER_STOP_METHODS[0]!
 
     await expect(

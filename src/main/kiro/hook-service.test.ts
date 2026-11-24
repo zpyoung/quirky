@@ -9,14 +9,14 @@ import { KiroHookService } from './hook-service'
 import { getKiroManagedCommandMatcher, KIRO_HOOK_EVENTS } from './hook-settings'
 
 // Why both names: os.homedir() reads $HOME on POSIX and %USERPROFILE% on Windows; setting
-// only one would let a run edit the developer's real ~/.kiro or ~/.orca.
+// only one would let a run edit the developer's real ~/.kiro or ~/.quirky.
 let home: string
 let originalHome: string | undefined
 let originalUserProfile: string | undefined
 let originalKiroHome: string | undefined
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'orca-kiro-hook-'))
+  home = mkdtempSync(join(tmpdir(), 'quirky-kiro-hook-'))
   originalHome = process.env.HOME
   originalUserProfile = process.env.USERPROFILE
   process.env.HOME = home
@@ -49,7 +49,7 @@ const agentPath = (name: string): string => join(agentsDir(), `${name}.json`)
 const scriptPath = (): string =>
   join(
     home,
-    '.orca',
+    '.quirky',
     'agent-hooks',
     process.platform === 'win32' ? 'kiro-hook.cmd' : 'kiro-hook.sh'
   )
@@ -128,7 +128,7 @@ describe('KiroHookService', () => {
 
     const result = service.getStatus()
     expect(result.state).toBe('partial')
-    expect(result.detail).toContain('later.json has no Orca hooks')
+    expect(result.detail).toContain('later.json has no Quirky hooks')
   })
 
   it('reports a missing launcher as partial instead of installed', () => {

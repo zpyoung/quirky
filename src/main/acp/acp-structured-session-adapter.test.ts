@@ -76,8 +76,8 @@ describe('ACP structured session adapter: acquire', () => {
           resolveWorkspacePath: async () => '/workspace/project',
           resolveEnvironment: async () => ({
             PATH: '/usr/bin',
-            ORCA_PANE_KEY: 'tab-1:pane-1',
-            ORCA_AGENT_HOOK_PORT: '1234'
+            QUIRKY_PANE_KEY: 'tab-1:pane-1',
+            QUIRKY_AGENT_HOOK_PORT: '1234'
           }),
           resolveCommand: () => '/opt/bin/grok',
           readJournal: () => null
@@ -88,11 +88,15 @@ describe('ACP structured session adapter: acquire', () => {
     const launch = rig.child().launch
     expect(launch.envToDelete).toEqual(expect.arrayContaining([...STRUCTURED_CHILD_ENV_TO_DELETE]))
     expect(launch.envToDelete).toEqual(
-      expect.arrayContaining(['ORCA_PANE_KEY', 'ORCA_AGENT_PANE', ...AGENT_HOOK_RUNTIME_ENV_KEYS])
+      expect.arrayContaining([
+        'QUIRKY_PANE_KEY',
+        'QUIRKY_AGENT_PANE',
+        ...AGENT_HOOK_RUNTIME_ENV_KEYS
+      ])
     )
     expect(launch.env).toMatchObject({
-      ORCA_AGENT_SESSION_ID: SESSION,
-      ORCA_AGENT_SESSION_SPAWN_TOKEN: 'spawn-1'
+      QUIRKY_AGENT_SESSION_ID: SESSION,
+      QUIRKY_AGENT_SESSION_SPAWN_TOKEN: 'spawn-1'
     })
   })
 
@@ -205,7 +209,7 @@ describe('ACP structured session adapter: turns', () => {
         {
           sessionId: SESSION,
           clientMessageId: 'send-1',
-          providerIdentity: { provider: 'orca', clientMessageId: 'send-1' }
+          providerIdentity: { provider: 'quirky', clientMessageId: 'send-1' }
         }
       ])
     )
@@ -503,11 +507,11 @@ describe('Grok launch spec', () => {
       '--always-approve',
       'stdio'
     ])
-    expect(GROK.args({ fullAccess: true, pluginDir: '/orca/visuals' })).toEqual([
+    expect(GROK.args({ fullAccess: true, pluginDir: '/quirky/visuals' })).toEqual([
       'agent',
       '--always-approve',
       '--plugin-dir',
-      '/orca/visuals',
+      '/quirky/visuals',
       'stdio'
     ])
     expect(GROK.env).toEqual({})

@@ -1,7 +1,7 @@
 # Legacy profile JSON
 
 SQLite is the only ordinary writable profile backend. This folder retains import,
-explicit export and recovery for `orca-data.json`; it does not provide a second
+explicit export and recovery for `quirky-data.json`; it does not provide a second
 live store or refresh JSON on shutdown, update or profile maintenance.
 
 | Code                                                                   | Purpose                                                                                                                                                                            |
@@ -18,20 +18,20 @@ source can still be read as JSON, but every profile changed by a transfer or an
 offline settings command must first establish SQLite authority. The original
 JSON remains unchanged after import and may be much older than SQLite.
 
-Before using a JSON-only build, stop Orca and run the current bundled CLI's
-`orca profile state rollback --latest-json --profile-id <id>` for each profile.
+Before using a JSON-only build, stop Quirky and run the current bundled CLI's
+`quirky profile state rollback --latest-json --profile-id <id>` for each profile.
 Omitting `--profile-id` selects the active profile without changing the index. It exports the latest committed
 SQLite state and selects that JSON after archiving the current database and
 recovery artifacts. Do this on the machine that owns the profile, including SSH
 hosts. An interrupted command preserves recovery evidence; inspect
-`orca profile state exports` and select the retained `--revision` to retry after
+`quirky profile state exports` and select the retained `--revision` to retry after
 the database has been removed. The in-app updater refuses releases below v1.4.214, the first stable SQLite
 release, including pinned and local builds. Install a JSON-only build manually
 only after converting every profile. Older SQLite-capable builds still require
 a compatible database schema.
 
 If an older build has already edited JSON separately, startup refuses to choose
-silently between it and SQLite. `orca profile state rollback --current-json`
+silently between it and SQLite. `quirky profile state rollback --current-json`
 selects those edits and archives both copies; it does not merge divergent
 histories. `--current-sqlite` keeps SQLite authority and explicitly republishes accepted
 JSON; `--latest-json` converts SQLite state for a JSON-only runtime.

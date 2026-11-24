@@ -86,17 +86,19 @@ function StructuredChatTab(): ReactNode {
 describe('a structured chat tab', () => {
   beforeEach(() => {
     items.list = []
-    callRuntimeRpc.mockReset().mockResolvedValue({ orcaSessionId: `orca_session_id:${SESSION}` })
+    callRuntimeRpc
+      .mockReset()
+      .mockResolvedValue({ quirkySessionId: `quirky_session_id:${SESSION}` })
     Object.assign(window, {
       api: { ui: { writeClipboardText: vi.fn().mockResolvedValue(undefined) } }
     })
   })
 
-  it("offers Copy Orca Session ID, asking the tab's host for this session's Orca session ID", async () => {
+  it("offers Copy Quirky Session ID, asking the tab's host for this session's Quirky session ID", async () => {
     renderToStaticMarkup(<StructuredChatTab />)
 
     const item = items.list.find(
-      (candidate) => childrenText(candidate.children) === 'Copy Orca Session ID'
+      (candidate) => childrenText(candidate.children) === 'Copy Quirky Session ID'
     )
     item?.onSelect?.()
 

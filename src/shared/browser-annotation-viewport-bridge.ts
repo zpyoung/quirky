@@ -27,9 +27,9 @@ export type BrowserAnnotationViewportBridgeOptions = {
 }
 
 export const BROWSER_ANNOTATION_VIEWPORT_BRIDGE_WORLD_ID = 1207
-export const BROWSER_ANNOTATION_VIEWPORT_MESSAGE_PREFIX = '__orca_annotation_viewport__:'
+export const BROWSER_ANNOTATION_VIEWPORT_MESSAGE_PREFIX = '__quirky_annotation_viewport__:'
 // Set by the grab overlay on the element it froze on, so the isolated bridge can measure it.
-export const BROWSER_GRAB_SELECTED_ATTRIBUTE = 'data-orca-grab-selected'
+export const BROWSER_GRAB_SELECTED_ATTRIBUTE = 'data-quirky-grab-selected'
 
 export function isValidBrowserAnnotationViewportBridgeToken(value: unknown): value is string {
   return typeof value === 'string' && /^[a-zA-Z0-9_-]{16,80}$/.test(value)
@@ -79,8 +79,8 @@ export function buildBrowserAnnotationViewportBridgeScript({
   const selectionId = ${JSON.stringify(selectionId ?? null)};
   const token = ${JSON.stringify(token)};
   const prefix = ${JSON.stringify(BROWSER_ANNOTATION_VIEWPORT_MESSAGE_PREFIX)};
-  const stateKey = '__orcaBrowserAnnotationViewportBridge';
-  const hostAttribute = 'data-orca-browser-annotation-overlay';
+  const stateKey = '__quirkyBrowserAnnotationViewportBridge';
+  const hostAttribute = 'data-quirky-browser-annotation-overlay';
   const selectedAttribute = ${JSON.stringify(BROWSER_GRAB_SELECTED_ATTRIBUTE)};
   const markerSize = 24;
 

@@ -6,8 +6,8 @@ const { join, resolve } = require('node:path')
 const { build } = require('esbuild')
 const { applyPatch, parsePatch, reversePatch } = require('diff')
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1')
 }
 if (process.argv[2] === '--proof-child' && typeof global.gc !== 'function') {
   throw new Error('Child proof requires --expose-gc')
@@ -24,7 +24,7 @@ const hookPoint = '    if (currentFolder.depth > options.maxDepth) {'
 assert.equal(original.split(hookPoint).length, 2)
 assert.equal(baseline.split(hookPoint).length, 2)
 const sha256 = (text) => createHash('sha256').update(text).digest('hex')
-const scratch = mkdtempSync(join(tmpdir(), 'orca-nested-queue-proof-'))
+const scratch = mkdtempSync(join(tmpdir(), 'quirky-nested-queue-proof-'))
 const branchCount = 96
 const rulesPerBranch = 64
 const pauseLeaf = branchCount - 2
@@ -48,7 +48,7 @@ async function run(mode) {
   }
   const observedSource = source.replace(
     hookPoint,
-    `    globalThis.__orcaObserveNestedQueue(currentFolder, foldersToTraverse, nextFolderIndex)\n${
+    `    globalThis.__quirkyObserveNestedQueue(currentFolder, foldersToTraverse, nextFolderIndex)\n${
       hookPoint
     }`
   )
@@ -85,7 +85,7 @@ async function run(mode) {
   const references = []
   const visits = []
   let pausedState
-  globalThis.__orcaObserveNestedQueue = (current, queue, head) => {
+  globalThis.__quirkyObserveNestedQueue = (current, queue, head) => {
     references.push({
       path: current.path,
       record: new WeakRef(current),
@@ -159,7 +159,7 @@ async function run(mode) {
   }
   release()
   const result = await resultPromise
-  delete globalThis.__orcaObserveNestedQueue
+  delete globalThis.__quirkyObserveNestedQueue
   await gc()
   const afterCompletion = references.filter(({ record }) => record.deref()).length
   assert.equal(result.repos.length, 0)
@@ -276,7 +276,7 @@ async function main() {
       })
     )
   } finally {
-    delete globalThis.__orcaObserveNestedQueue
+    delete globalThis.__quirkyObserveNestedQueue
     rmSync(scratch, { recursive: true, force: true })
   }
 }

@@ -240,10 +240,7 @@ describe('resolveHandoffTranscript', () => {
 
   it('reports an SSH target as unverifiable', async () => {
     await expect(
-      resolveHandoffTranscript(
-        request({ connectionId: 'build-box' }),
-        deps()
-      )
+      resolveHandoffTranscript(request({ connectionId: 'build-box' }), deps())
     ).resolves.toEqual({ outcome: 'unverifiable', reason: 'host-unavailable' })
   })
 })

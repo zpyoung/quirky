@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AI_VAULT_AGENTS } from '../../../../shared/ai-vault-types'
 import { RpcDispatcher } from '../dispatcher'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { AI_VAULT_METHODS } from './ai-vault'
 import { fakeSearchService } from '../../../../shared/ai-vault-search-test-fixture'
 import { createSessionSearchClient } from '../../../../shared/ai-vault-search-client'
@@ -12,7 +12,7 @@ afterEach(() => setSessionSearchService(null))
 
 function dispatcher(legacy = false) {
   return new RpcDispatcher({
-    runtime: new OrcaRuntimeService(),
+    runtime: new QuirkyRuntimeService(),
     methods: legacy ? [] : AI_VAULT_METHODS
   })
 }
@@ -123,7 +123,7 @@ describe('session search runtime RPC', () => {
       const service = fakeSearchService()
       setSessionSearchService(service)
       const rpc = new RpcDispatcher({
-        runtime: new OrcaRuntimeService(),
+        runtime: new QuirkyRuntimeService(),
         methods: AI_VAULT_METHODS.filter((method) => method.name !== 'aiVault.searchStatus')
       })
       const replies: unknown[] = []
@@ -177,7 +177,7 @@ describe('session search consent over the runtime RPC', () => {
     params
   })
 
-  function consentDispatcher(runtime = new OrcaRuntimeService()) {
+  function consentDispatcher(runtime = new QuirkyRuntimeService()) {
     const setSessionSearchEnabled = vi.fn(async () => {})
     // Overrides the surface-installed method, which proves it is there to override.
     Object.assign(runtime, { setSessionSearchEnabled })
@@ -247,7 +247,7 @@ describe('session search consent over the runtime RPC', () => {
   })
 
   it('reports the host refusal when this runtime has no settings store', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const dispatcher = new RpcDispatcher({ runtime, methods: AI_VAULT_METHODS })
     let raw = ''
     await dispatcher.dispatchStreaming(

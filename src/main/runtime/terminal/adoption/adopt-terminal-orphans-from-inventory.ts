@@ -5,7 +5,7 @@ import {
 } from '../../pty-recorded-surface-topology'
 import { resolveStructuredWorkerAuthority } from '../../structured-worker-authority'
 import type { RuntimeLeafRecord } from '../../runtime-terminal-state-records'
-import { OrcaRuntimeWithSubscribeToTerminalResize } from '../layout/terminal-resize-listeners'
+import { QuirkyRuntimeWithSubscribeToTerminalResize } from '../layout/terminal-resize-listeners'
 import type {
   RuntimeMobileSessionTabsResult,
   RuntimeTerminalOrphanAdoptionRequest,
@@ -20,7 +20,7 @@ import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import { getLatestPtyTitle } from '../../runtime-worktree-status-projection'
 import type { PtyLivenessVerdict } from '../../../../shared/pty-liveness-verdict'
 
-export abstract class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends OrcaRuntimeWithSubscribeToTerminalResize {
+export abstract class QuirkyRuntimeWithAdoptTerminalOrphansFromInventory extends QuirkyRuntimeWithSubscribeToTerminalResize {
   protected abstract issueHandle(leaf: RuntimeLeafRecord): string
 
   protected abstract getPaneKeyForTerminalHandle(handle: string): string | null
@@ -180,12 +180,12 @@ export abstract class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends O
     // Refusing is the only safe answer when more than one leaf could be meant.
     //
     // `check` resolves through the `--terminal` scope, which still guesses, and a DISPATCHED
-    // structured worker is covered by the `ORCA_TERMINAL_HANDLE` its child is spawned with. That
+    // structured worker is covered by the `QUIRKY_TERMINAL_HANDLE` its child is spawned with. That
     // was once written as covering structured sessions generally, and it never did: an ordinary
     // structured chat session is not in the worker registry, so it is spawned with no handle at
     // all, and the guess below handed it a sibling's pane — which a destructive `check` then
     // consumed. `requireUnambiguous` does not save it either, because with exactly one terminal
-    // pane the guess resolves. Such a child now carries `ORCA_STRUCTURED_SESSION` and the CLI
+    // pane the guess resolves. Such a child now carries `QUIRKY_STRUCTURED_SESSION` and the CLI
     // refuses before reaching here (`shared/structured-session-marker.ts`).
     const candidates: RuntimeLeafRecord[] = []
     for (const leaf of this.leaves.values()) {

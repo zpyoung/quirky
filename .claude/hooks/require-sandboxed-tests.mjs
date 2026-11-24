@@ -8,7 +8,7 @@
  * script names are read from package.json rather than hardcoded, so a renamed
  * or newly added vitest script is covered without editing this file.
  *
- * Set ORCA_ALLOW_LOCAL_TESTS=1 in the environment (settings.local.json or your
+ * Set QUIRKY_ALLOW_LOCAL_TESTS=1 in the environment (settings.local.json or your
  * shell) to disable the guard. An inline `VAR=1 pnpm test` prefix does not
  * reach this process, and is rejected with that explanation.
  */
@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const PROJECT_DIR = path.resolve(import.meta.dirname, '../..')
-const OVERRIDE_ENV = 'ORCA_ALLOW_LOCAL_TESTS'
+const OVERRIDE_ENV = 'QUIRKY_ALLOW_LOCAL_TESTS'
 
 /** Wrappers that delegate to the real command rather than being one. */
 const TRANSPARENT_WRAPPERS = new Set([
@@ -229,8 +229,8 @@ function deny(offence) {
     '  pnpm test:sandbox --shards=16 --only=3            # one shard',
     '  pnpm test:sandbox --shards=16 --only=3 -- <args>  # extra vitest args',
     '',
-    'The host comes from ORCA_SANDBOX_DOCKER_HOST, so no --docker-host flag is needed.',
-    'Per-shard logs land in .orca-sandbox-logs/.'
+    'The host comes from QUIRKY_SANDBOX_DOCKER_HOST, so no --docker-host flag is needed.',
+    'Per-shard logs land in .quirky-sandbox-logs/.'
   ]
 
   if (offence.inlineOverride) {

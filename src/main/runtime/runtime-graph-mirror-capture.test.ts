@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { pickStoredFields } from '../../shared/workspace-layout/stored-record-fields'
 import { titleAfterConfirmedShell } from '../../shared/terminal-pane-title-reset'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { RUNTIME_LEAF_PTY_FACT_FIELDS } from './runtime-leaf-record-projection'
 import {
   LEAF_1,
@@ -35,7 +35,7 @@ type MirrorMaps = {
   ptysById: Map<string, RuntimePtyWorktreeRecord>
 }
 
-function makeRuntime(): { runtime: OrcaRuntimeService; mirror: () => MirrorMaps } {
+function makeRuntime(): { runtime: QuirkyRuntimeService; mirror: () => MirrorMaps } {
   const session = getDefaultWorkspaceSession()
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: graph sync and PTY registration read only these store methods.
   const store = {
@@ -48,7 +48,7 @@ function makeRuntime(): { runtime: OrcaRuntimeService; mirror: () => MirrorMaps 
     getSettings: () => ({}),
     getProjects: () => []
   } as never
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new QuirkyRuntimeService(store)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: reads the mirror's own maps, which are protected on the runtime.
   const mirror = (): MirrorMaps => runtime as unknown as MirrorMaps
   return { runtime, mirror }

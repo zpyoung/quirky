@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeMobileMarkdownPreviewHtml } from './mobile-markdown-preview-html'
 
-const marker = '\uE000ORCA_MD_CODE_'
+const marker = '\uE000QUIRKY_MD_CODE_'
 const suffix = '\uE000'
 
 describe('mobile Markdown code placeholder collisions', () => {

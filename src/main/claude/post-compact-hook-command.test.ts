@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -16,7 +16,7 @@ import {
 
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/userData' } }))
 
-const SCRIPT_PATH = '/home/test/.orca/agent-hooks/claude-hook.sh'
+const SCRIPT_PATH = '/home/test/.quirky/agent-hooks/claude-hook.sh'
 const CURRENT_CLAUDE = { claudeVersion: '2.1.261 (Claude Code)' }
 // Why: Claude prints the command verbatim after every /compact; the full wrapper is ~3KB.
 const MAX_ECHOED_COMMAND_LENGTH = 400
@@ -30,8 +30,8 @@ describe('PostCompact managed hook command', () => {
 
     expect(command.length).toBeLessThan(MAX_ECHOED_COMMAND_LENGTH)
     expect(command).toContain('if [ -n "${HOME-}" ] && ')
-    expect(command).toContain('/bin/sh "${HOME-}/.orca/agent-hooks/claude-hook.sh"')
-    expect(command).toContain('ORCA_HOOK_AGENT_PID="${PPID:-}"')
+    expect(command).toContain('/bin/sh "${HOME-}/.quirky/agent-hooks/claude-hook.sh"')
+    expect(command).toContain('QUIRKY_HOOK_AGENT_PID="${PPID:-}"')
     expect(command).not.toMatch(/powershell|OSTYPE|\/home\/test/i)
   })
 
@@ -44,13 +44,13 @@ describe('PostCompact managed hook command', () => {
 
   it('keeps the Windows launcher on win32, whose bare script path is already short', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    const windowsPath = 'C:\\Users\\alice\\.orca\\agent-hooks\\claude-hook.cmd'
+    const windowsPath = 'C:\\Users\\alice\\.quirky\\agent-hooks\\claude-hook.cmd'
     expect(getManagedEventHook('PostCompact', windowsPath)).toEqual(
       getManagedLifecycleHook(windowsPath, CLAUDE_HOOK_SETTINGS)
     )
   })
 
-  // Why every client platform: a remote host is POSIX even when Orca runs on Windows.
+  // Why every client platform: a remote host is POSIX even when Quirky runs on Windows.
   it.each(['darwin', 'linux', 'win32'] as const)(
     'uses the short POSIX form only for remote PostCompact from %s',
     (platform) => {
@@ -69,7 +69,7 @@ describe.skipIf(process.platform === 'win32')('PostCompact command execution', (
   let home: string
 
   beforeEach(() => {
-    home = mkdtempSync(join(tmpdir(), 'orca-post-compact-'))
+    home = mkdtempSync(join(tmpdir(), 'quirky-post-compact-'))
   })
 
   afterEach(() => rmSync(home, { recursive: true, force: true }))
@@ -85,10 +85,13 @@ describe.skipIf(process.platform === 'win32')('PostCompact command execution', (
   }
 
   it('runs the HOME script with the agent pid captured', async () => {
-    const dir = join(home, '.orca', 'agent-hooks')
+    const dir = join(home, '.quirky', 'agent-hooks')
     mkdirSync(dir, { recursive: true })
     const script = join(dir, 'claude-hook.sh')
-    writeFileSync(script, '#!/bin/sh\ncat >/dev/null\nprintf "%s" "$ORCA_HOOK_AGENT_PID"\nexit 7\n')
+    writeFileSync(
+      script,
+      '#!/bin/sh\ncat >/dev/null\nprintf "%s" "$QUIRKY_HOOK_AGENT_PID"\nexit 7\n'
+    )
     chmodSync(script, 0o755)
 
     const result = await run(getManagedEventHook('PostCompact', SCRIPT_PATH).command, {
@@ -131,7 +134,7 @@ describe.skipIf(process.platform === 'win32')('PostCompact command execution', (
 
 describe.skipIf(process.platform === 'win32')('ClaudeHookService PostCompact install', () => {
   it('writes the short form, reports installed, and replaces an old full-wrapper entry', () => {
-    const home = mkdtempSync(join(tmpdir(), 'orca-post-compact-install-'))
+    const home = mkdtempSync(join(tmpdir(), 'quirky-post-compact-install-'))
     vi.stubEnv('HOME', home)
     try {
       const settingsPath = join(home, '.claude', 'settings.json')
@@ -167,7 +170,7 @@ describe('ClaudeHookService remote PostCompact install', () => {
     await new ClaudeHookService().installRemote(sftp, '/home/dev', CURRENT_CLAUDE)
 
     const written = JSON.parse(fs.files.get('/home/dev/.claude/settings.json') ?? '{}')
-    const remoteScript = '/home/dev/.orca/agent-hooks/claude-hook.sh'
+    const remoteScript = '/home/dev/.quirky/agent-hooks/claude-hook.sh'
     expect(written.hooks.PostCompact[0].hooks[0].command).toBe(
       getRemoteManagedEventCommand('PostCompact', remoteScript)
     )

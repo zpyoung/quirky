@@ -1,7 +1,7 @@
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 
 type RegistrationRuntime = Pick<
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   | 'registerOwnedSubscriptionCleanup'
   | 'subscribeToPtyExit'
   | 'handleMobileSubscribe'

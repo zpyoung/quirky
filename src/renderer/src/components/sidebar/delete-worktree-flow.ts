@@ -54,7 +54,7 @@ export function runWorktreeDelete(worktreeId: string, options: WorktreeDeleteOpt
       hostId: target.hostId,
       settings: state.settings
     })
-    // Why: git refuses to delete the primary checkout; users can still remove the owning project from Orca (disk contents kept).
+    // Why: git refuses to delete the primary checkout; users can still remove the owning project from Quirky (disk contents kept).
     state.openModal('confirm-remove-folder', {
       repoId: target.repoId,
       displayName: repo?.displayName ?? target.displayName,

@@ -1,6 +1,6 @@
 // The remedy for the third of affected users whom a freshly forked daemon is still denied
-// (STA-7948) even though Orca itself is allowed: clear Orca's TCC row for that folder class so
-// macOS asks again, have the app touch the folder so the prompt names Orca, then re-probe.
+// (STA-7948) even though Quirky itself is allowed: clear Quirky's TCC row for that folder class so
+// macOS asks again, have the app touch the folder so the prompt names Quirky, then re-probe.
 
 import { app } from 'electron'
 import { dirname, resolve } from 'node:path'
@@ -34,7 +34,7 @@ const TCC_SERVICE_BY_CWD_CLASS: Record<MacTccFolderClass, string> = {
   downloads: 'SystemPolicyDownloadsFolder'
 }
 
-/** `Orca.app/Contents/MacOS/Orca` → `Orca.app`, the bundle whose id owns every TCC row. */
+/** `Quirky.app/Contents/MacOS/Quirky` → `Quirky.app`, the bundle whose id owns every TCC row. */
 function runningAppBundlePath(): string {
   return resolve(dirname(app.getPath('exe')), '..', '..')
 }

@@ -1,4 +1,4 @@
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 import type { Tab } from '../tab-types'
 import { normalizeTerminalLayoutPtyOwnership } from '../terminal-layout-pty-ownership'
 import { sanitizeTerminalLayoutPaneTitles } from '../terminal-pane-title-sanitization'
@@ -72,7 +72,7 @@ function loadPanes(
   const stored = session.terminalLayoutsByTabId?.[tab.entityId] ?? legacyLayout(session, row, args)
   // Switch point: main applies the window's load repairs: one pane per terminal, and no lone-pane
   // title that only repeats the tab's name.
-  const layout = ORCA_LAYOUT_OWNER_IS_MAIN
+  const layout = QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? sanitizeTerminalLayoutPaneTitles(normalizeTerminalLayoutPtyOwnership(stored).snapshot, {
         ...row,
         // The tab's labels as the window loads them: the tab-bar label is the live title, and

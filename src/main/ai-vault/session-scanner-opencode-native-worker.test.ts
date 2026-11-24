@@ -11,7 +11,7 @@ import { resolveOpenCodeSqliteWorkerEntryPath } from './session-scanner-opencode
 import type { AiVaultScanIssue } from '../../shared/ai-vault-types'
 import { AGENT_SESSION_HOST_STATUS_COPY } from '../../shared/agent-session-host-status-rows'
 
-const directory = mkdtempSync(join(tmpdir(), 'orca-opencode-native-worker-'))
+const directory = mkdtempSync(join(tmpdir(), 'quirky-opencode-native-worker-'))
 const entry = resolveOpenCodeSqliteWorkerEntryPath(directory)
 const v1Path = join(directory, 'v1', 'opencode.db')
 const v2Path = join(directory, 'v2.db')

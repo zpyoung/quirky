@@ -132,8 +132,8 @@ describe('launchAgentBackgroundSession', () => {
         cwd: '/repo/worktree',
         command: "claude '--dangerously-skip-permissions' 'run the automation'",
         env: expect.objectContaining({
-          ORCA_TAB_ID: tabId,
-          ORCA_WORKTREE_ID: 'wt-1'
+          QUIRKY_TAB_ID: tabId,
+          QUIRKY_WORKTREE_ID: 'wt-1'
         }),
         connectionId: null,
         worktreeId: 'wt-1',
@@ -162,7 +162,7 @@ describe('launchAgentBackgroundSession', () => {
       launchToken: expect.stringMatching(UUID_RE)
     })
     expect(mockSpawn.mock.calls[0]?.[0].launchToken).toBe(
-      mockSpawn.mock.calls[0]?.[0].env.ORCA_AGENT_LAUNCH_TOKEN
+      mockSpawn.mock.calls[0]?.[0].env.QUIRKY_AGENT_LAUNCH_TOKEN
     )
     expect(mockSetTabCustomTitle).toHaveBeenCalledWith(tabId, 'Nightly audit', {
       recordInteraction: false
@@ -293,7 +293,7 @@ describe('launchAgentBackgroundSession', () => {
     const effectiveLaunchConfig = {
       agentCommand: "claude '--dangerously-skip-permissions'",
       agentArgs: '--dangerously-skip-permissions',
-      agentEnv: { ORCA_AGENT_TEAMS_TEAM_ID: 'team-fresh' }
+      agentEnv: { QUIRKY_AGENT_TEAMS_TEAM_ID: 'team-fresh' }
     }
     mockSpawn.mockResolvedValue({ id: 'pty-1', launchConfig: effectiveLaunchConfig })
     const { launchAgentBackgroundSession } = await import('./launch-agent-background-session')
@@ -309,7 +309,7 @@ describe('launchAgentBackgroundSession', () => {
     const leafId = paneKey.slice(`${tabId}:`.length)
     expect(mockRegisterAgentLaunchConfig).toHaveBeenLastCalledWith(paneKey, effectiveLaunchConfig, {
       agentType: 'claude',
-      launchToken: mockSpawn.mock.calls[0]?.[0].env.ORCA_AGENT_LAUNCH_TOKEN,
+      launchToken: mockSpawn.mock.calls[0]?.[0].env.QUIRKY_AGENT_LAUNCH_TOKEN,
       tabId,
       leafId
     })
@@ -425,7 +425,7 @@ describe('launchAgentBackgroundSession', () => {
         state: 'working',
         prompt: 'check the status spinner',
         agentType: 'command-code',
-        // Why: Orca launched this hidden session, so the seed predates any provider signal (STA-4293).
+        // Why: Quirky launched this hidden session, so the seed predates any provider signal (STA-4293).
         observation: expect.objectContaining({ origin: 'launch', kind: 'transition' })
       },
       undefined,
@@ -596,8 +596,8 @@ describe('launchAgentBackgroundSession', () => {
 
     expect(mockSpawn).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: expect.stringContaining('ORCA_HERMES_STARTUP_QUERY'),
-        env: expect.objectContaining({ ORCA_HERMES_STARTUP_QUERY: 'run the automation' })
+        command: expect.stringContaining('QUIRKY_HERMES_STARTUP_QUERY'),
+        env: expect.objectContaining({ QUIRKY_HERMES_STARTUP_QUERY: 'run the automation' })
       })
     )
     expect(mockPasteDraftWhenAgentReady).not.toHaveBeenCalled()
@@ -617,12 +617,12 @@ describe('launchAgentBackgroundSession', () => {
     expect(mockSpawn).toHaveBeenCalledWith(
       expect.objectContaining({
         command: expect.stringContaining('powershell.exe -NoProfile -EncodedCommand'),
-        env: expect.objectContaining({ ORCA_HERMES_STARTUP_QUERY: 'run the automation' })
+        env: expect.objectContaining({ QUIRKY_HERMES_STARTUP_QUERY: 'run the automation' })
       })
     )
   })
 
-  it("keeps this client's Git Bash setting off a Windows Orca server's launch", async () => {
+  it("keeps this client's Git Bash setting off a Windows Quirky server's launch", async () => {
     mockGetAgentLaunchPlatformForRepo.mockReturnValue('win32')
     mockHostKind.mockReturnValueOnce('runtime')
     Object.assign(state.settings, { terminalWindowsShell: 'bash.exe' })

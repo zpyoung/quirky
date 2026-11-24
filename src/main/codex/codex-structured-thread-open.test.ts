@@ -59,7 +59,7 @@ describe('openCodexThread', () => {
     )
   })
 
-  // The regression this pins: an omitted policy falls back to the config.toml of the home Orca
+  // The regression this pins: an omitted policy falls back to the config.toml of the home Quirky
   // mirrors from the user's ~/.codex, and a resume inherits the policy it last ran with. With
   // `approval_policy = "never"` there, an Ask chat would never prompt.
   it('sends Ask as an explicit policy on resume, not as absent fields', async () => {
@@ -286,7 +286,7 @@ describe('openCodexThread', () => {
     })
 
     // Every other test here builds the error itself; this one sends Codex's raw JSON-RPC frame
-    // through the real connection, so a change to Orca's own error wording cannot hide the proof.
+    // through the real connection, so a change to Quirky's own error wording cannot hide the proof.
     it('recognizes the raw frame Codex sends, through the real connection', async () => {
       const fakeAppServer = String.raw`
         const readline = require('node:readline')

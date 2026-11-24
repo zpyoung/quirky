@@ -1,5 +1,5 @@
 // A send Claude queued behind the running turn is dropped by Stop, so it must settle as withdrawn.
-// Orca's SessionStart hook proves most starts before the turn's system/init, which is the only
+// Quirky's SessionStart hook proves most starts before the turn's system/init, which is the only
 // frame that says whether the CLI can cancel its queue.
 
 import { describe, expect, it, vi } from 'vitest'

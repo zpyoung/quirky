@@ -7,7 +7,7 @@ import { main } from './check-reliability-gates.mjs'
 const tempDirs = []
 
 function makeTempRoot(manifest) {
-  const root = mkdtempSync(path.join(tmpdir(), 'orca-reliability-gates-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'quirky-reliability-gates-'))
   tempDirs.push(root)
   const configDir = path.join(root, 'config')
   mkdirSync(configDir, { recursive: true })
@@ -468,7 +468,7 @@ describe('check-reliability-gates', () => {
 
   it('rejects missing manifests with a structured error', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const root = mkdtempSync(path.join(tmpdir(), 'orca-reliability-gates-'))
+    const root = mkdtempSync(path.join(tmpdir(), 'quirky-reliability-gates-'))
     tempDirs.push(root)
 
     await expect(main(root)).resolves.toBe(1)

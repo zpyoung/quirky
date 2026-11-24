@@ -1,5 +1,5 @@
 /**
- * The one answer to "has the agent Orca just launched opened its composer?", shared by every host
+ * The one answer to "has the agent Quirky just launched opened its composer?", shared by every host
  * path that writes a first input into a fresh agent: `agent.launch`'s terminal prompt and, through
  * `waitForWorkerStartComposer`, an orchestration worker's first dispatch.
  *
@@ -23,7 +23,7 @@ import { resolveDraftPasteReadyTimeoutMs } from '../../shared/draft-paste-ready-
 import { TUI_AGENT_CONFIG } from '../../shared/tui-agent-config'
 import { draftPasteReadySignalHasMarker } from '../../shared/draft-paste-ready-scanner'
 import { nameOnlyIdleNeedsCorroboration } from './tui-idle-evidence'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import { showsHoldAnchor } from './agent-state-rules/agent-state-text-anchors'
 import { detectTerminalWaitBlockedReason } from './terminal-wait-detection'
 
@@ -34,7 +34,7 @@ export function getLaunchedAgentReadinessLane(agent: TuiAgent): LaunchedAgentRea
 }
 
 export type LaunchedAgentReadinessRuntime = Pick<
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   'waitForTerminal' | 'waitForFreshWorkerComposer'
 >
 

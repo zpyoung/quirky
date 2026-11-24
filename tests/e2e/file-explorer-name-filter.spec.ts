@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { openFileExplorer } from './helpers/file-explorer'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
@@ -13,18 +13,18 @@ function rowByName(explorer: Locator, page: Page, name: string): Locator {
     .filter({ has: page.locator('[data-file-explorer-row-name]', { hasText: name }) })
 }
 
-test('name filter narrows to the matching file', async ({ orcaPage }) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await openFileExplorer(orcaPage)
+test('name filter narrows to the matching file', async ({ quirkyPage }) => {
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await openFileExplorer(quirkyPage)
 
-  const explorer = orcaPage.locator('[data-orca-explorer-shell]')
+  const explorer = quirkyPage.locator('[data-quirky-explorer-shell]')
   await expect(explorer).toBeVisible({ timeout: 10_000 })
-  const input = orcaPage.getByPlaceholder('Find files')
+  const input = quirkyPage.getByPlaceholder('Find files')
   await expect(input).toBeVisible({ timeout: 10_000 })
 
   await input.fill('package.')
-  await expect(rowByName(explorer, orcaPage, 'package.json').first()).toBeVisible({
+  await expect(rowByName(explorer, quirkyPage, 'package.json').first()).toBeVisible({
     timeout: 10_000
   })
   // Why no absent-file assertion here: the seeded repo's contents decide what a
@@ -33,21 +33,21 @@ test('name filter narrows to the matching file', async ({ orcaPage }) => {
   await expect(explorer.getByText('No files match this filter')).toHaveCount(0)
 })
 
-test('name filter shows the empty message only for a true no-match', async ({ orcaPage }) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await openFileExplorer(orcaPage)
+test('name filter shows the empty message only for a true no-match', async ({ quirkyPage }) => {
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await openFileExplorer(quirkyPage)
 
-  const explorer = orcaPage.locator('[data-orca-explorer-shell]')
+  const explorer = quirkyPage.locator('[data-quirky-explorer-shell]')
   await expect(explorer).toBeVisible({ timeout: 10_000 })
-  const input = orcaPage.getByPlaceholder('Find files')
+  const input = quirkyPage.getByPlaceholder('Find files')
   await expect(input).toBeVisible({ timeout: 10_000 })
 
   await input.fill('zz-no-such-file-12345')
   await expect(explorer.getByText('No files match this filter')).toBeVisible({ timeout: 10_000 })
 
   await input.fill('')
-  await expect(rowByName(explorer, orcaPage, 'README.md').first()).toBeVisible({
+  await expect(rowByName(explorer, quirkyPage, 'README.md').first()).toBeVisible({
     timeout: 10_000
   })
 })

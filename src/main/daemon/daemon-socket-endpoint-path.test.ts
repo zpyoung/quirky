@@ -25,15 +25,15 @@ import {
 } from './daemon-socket-endpoint-path'
 
 const SOCKET_NAME = 'daemon-v99.sock'
-const longRuntimeDir = (bytes: number): string => `/home/${'u'.repeat(bytes - 20)}/orca/daemon`
+const longRuntimeDir = (bytes: number): string => `/home/${'u'.repeat(bytes - 20)}/quirky/daemon`
 
 describe('resolveDaemonUnixSocketPath (#17840)', () => {
   it.each(['linux', 'darwin'] as const)(
     'keeps the userData endpoint for a short root on %s',
     (os) => {
       expect(
-        resolveDaemonUnixSocketPath('/home/me/.config/orca/daemon', SOCKET_NAME, os, 1000)
-      ).toBe(`/home/me/.config/orca/daemon/${SOCKET_NAME}`)
+        resolveDaemonUnixSocketPath('/home/me/.config/quirky/daemon', SOCKET_NAME, os, 1000)
+      ).toBe(`/home/me/.config/quirky/daemon/${SOCKET_NAME}`)
     }
   )
 
@@ -77,12 +77,12 @@ describe.skipIf(process.platform === 'win32')('relocated endpoint binds (#17840)
     try {
       rmdirSync(dirname(shortDaemonSocketDir(runtimeDir, uid)))
     } catch {
-      // Not empty: another Orca on this machine uses it.
+      // Not empty: another Quirky on this machine uses it.
     }
   })
 
   it('creates a private dir the over-long data root can bind its socket in', async () => {
-    base = mkdtempSync(join(tmpdir(), 'orca-long-'))
+    base = mkdtempSync(join(tmpdir(), 'quirky-long-'))
     runtimeDir = join(base, 'x'.repeat(130))
     mkdirSync(runtimeDir, { recursive: true })
     const socketPath = getDaemonSocketPath(runtimeDir, 99)
@@ -99,7 +99,7 @@ describe.skipIf(process.platform === 'win32')('relocated endpoint binds (#17840)
   })
 
   it('refuses a shared short dir rather than repairing it', () => {
-    base = mkdtempSync(join(tmpdir(), 'orca-long-'))
+    base = mkdtempSync(join(tmpdir(), 'quirky-long-'))
     runtimeDir = join(base, 'x'.repeat(130))
     const socketPath = getDaemonSocketPath(runtimeDir, 99)
     ensureDaemonSocketDir(socketPath)
@@ -107,7 +107,7 @@ describe.skipIf(process.platform === 'win32')('relocated endpoint binds (#17840)
     expect(() => ensureDaemonSocketDir(socketPath)).toThrow(/not a private directory/)
   })
   it('never connects to a listener planted in a shared relocated dir', async () => {
-    base = mkdtempSync(join(tmpdir(), 'orca-long-'))
+    base = mkdtempSync(join(tmpdir(), 'quirky-long-'))
     runtimeDir = join(base, 'x'.repeat(130))
     mkdirSync(runtimeDir, { recursive: true })
     const socketPath = getDaemonSocketPath(runtimeDir, 99)

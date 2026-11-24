@@ -29,7 +29,7 @@ let calls: number
 let dependencies: JudgmentServiceDependencies
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-judgment-budget-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-judgment-budget-'))
   database = new HeimdallDatabase(root)
   ledger = new HeimdallLedgerStore(database)
   calls = 0

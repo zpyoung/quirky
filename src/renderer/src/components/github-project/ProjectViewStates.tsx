@@ -9,7 +9,7 @@ import { isRenderableProjectViewLayout } from '../../../../shared/github/project
 import type { GitHubProjectViewSummary } from '../../../../shared/github/project-types'
 import type { GitHubProjectViewError } from '../../../../shared/github/project-result-types'
 
-const ORCA_FEATURE_REQUEST_URL = 'https://github.com/stablyai/orca/issues/new'
+const QUIRKY_FEATURE_REQUEST_URL = 'https://github.com/stablyai/orca/issues/new'
 
 export function ProjectViewTabStrip({
   views,
@@ -68,8 +68,8 @@ function ProjectViewTab({
           ? view.name
           : translate(
               'auto.components.github.project.ProjectViewWrapper.2edf5e7e77',
-              "{{value0}} — Orca doesn't support {{value1}} project views yet. File a feature request at {{value2}}.",
-              { value0: view.name, value1: layoutLabel, value2: ORCA_FEATURE_REQUEST_URL }
+              "{{value0}} — Quirky doesn't support {{value1}} project views yet. File a feature request at {{value2}}.",
+              { value0: view.name, value1: layoutLabel, value2: QUIRKY_FEATURE_REQUEST_URL }
             )
       }
       className={cn(
@@ -88,7 +88,7 @@ function ProjectViewTab({
   if (supported) {
     return tab
   }
-  const message = `Orca doesn't support ${layoutLabel} project views yet.`
+  const message = `Quirky doesn't support ${layoutLabel} project views yet.`
   return (
     <HoverCard openDelay={200} closeDelay={100}>
       <HoverCardTrigger asChild>
@@ -97,7 +97,7 @@ function ProjectViewTab({
           aria-label={translate(
             'auto.components.github.project.ProjectViewWrapper.55de4fb57a',
             '{{value0}}. {{value1}} File a feature request at {{value2}}.',
-            { value0: view.name, value1: message, value2: ORCA_FEATURE_REQUEST_URL }
+            { value0: view.name, value1: message, value2: QUIRKY_FEATURE_REQUEST_URL }
           )}
           className="inline-flex shrink-0 cursor-not-allowed rounded-t-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
@@ -110,14 +110,14 @@ function ProjectViewTab({
             {message}{' '}
             {translate(
               'projectViews.unsupported.switchLayout',
-              'Switch to a Table, Board, or Roadmap view to work with this project in Orca.'
+              'Switch to a Table, Board, or Roadmap view to work with this project in Quirky.'
             )}
           </p>
           <Button
             type="button"
             size="xs"
             variant="outline"
-            onClick={() => void window.api.shell.openUrl(ORCA_FEATURE_REQUEST_URL)}
+            onClick={() => void window.api.shell.openUrl(QUIRKY_FEATURE_REQUEST_URL)}
           >
             {translate(
               'auto.components.github.project.ProjectViewWrapper.4d2a77a119',
@@ -155,13 +155,13 @@ export function ProjectViewErrorState({
   }
   const copy =
     error.type === 'too_large'
-      ? `This view has ${totalCount ?? 'many'} items — too large to render in Orca. Narrow the view's filter on GitHub.`
+      ? `This view has ${totalCount ?? 'many'} items — too large to render in Quirky. Narrow the view's filter on GitHub.`
       : error.type === 'unsupported_layout'
         ? // Why: an older paired host still reports roadmaps as unsupported, so this
           // copy must not name the layout — the tab strip already does that.
           translate(
             'projectViews.unsupported.description',
-            'Orca renders table, board, and roadmap project views. This view uses a layout it cannot render yet.'
+            'Quirky renders table, board, and roadmap project views. This view uses a layout it cannot render yet.'
           )
         : error.type === 'not_found'
           ? 'Could not find this project or view.'

@@ -18,7 +18,7 @@ import { StructuredAgentSessionReadableRestorer } from './structured-agent-sessi
 import { recordingStructuredAgentSessionLogger } from './structured-agent-session-logger-test-support'
 
 // The restore pool is mocked; the host database only fills the deps' shape.
-const stateDirectory = mkdtempSync(join(tmpdir(), 'orca-readable-restorer-'))
+const stateDirectory = mkdtempSync(join(tmpdir(), 'quirky-readable-restorer-'))
 afterAll(() => {
   closeTestJournalHostDatabases()
   rmSync(stateDirectory, { recursive: true, force: true })

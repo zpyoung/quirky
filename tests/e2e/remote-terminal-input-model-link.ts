@@ -1,6 +1,6 @@
 import { RpcDispatcher } from '../../src/main/runtime/rpc/dispatcher'
 import { TERMINAL_MULTIPLEX_METHODS } from '../../src/main/runtime/rpc/methods/terminal/terminal-multiplex-method'
-import type { OrcaRuntimeService } from '../../src/main/runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../src/main/runtime/quirky-runtime'
 import {
   TerminalStreamOpcode,
   decodeTerminalStreamFrame,
@@ -133,7 +133,7 @@ export function createModelLink(writeInput: (text: string) => Promise<unknown>) 
     sendBinary: (bytes: Uint8Array) => void
   }> {
     if (link.unreachable) {
-      throw Object.assign(new Error('Could not connect to the remote Orca runtime.'), {
+      throw Object.assign(new Error('Could not connect to the remote Quirky runtime.'), {
         code: 'remote_runtime_unavailable'
       })
     }
@@ -153,7 +153,7 @@ export function createModelLink(writeInput: (text: string) => Promise<unknown>) 
     live = connection
     void new RpcDispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub implements every runtime method the terminal multiplex calls and records any it lacks.
-      runtime: host.runtime as OrcaRuntimeService,
+      runtime: host.runtime as QuirkyRuntimeService,
       methods: TERMINAL_MULTIPLEX_METHODS
     })
       .dispatchStreaming(

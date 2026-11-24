@@ -1,10 +1,10 @@
 import { mkdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { expect, test as base } from './helpers/orca-app'
+import { expect, test as base } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 const test = base.extend({
-  orcaAppExtraEnv: async ({ testRepoPath }, provideEnv) => {
+  quirkyAppExtraEnv: async ({ testRepoPath }, provideEnv) => {
     const target = path.join(testRepoPath, 'linked-watch-target')
     const replacement = path.join(testRepoPath, 'linked-watch-replacement')
     const alias = path.join(testRepoPath, 'linked-watch-alias')
@@ -26,21 +26,21 @@ const test = base.extend({
 })
 
 test('refreshes followed directory links after target changes and retargeting', async ({
-  orcaPage,
+  quirkyPage,
   testRepoPath
 }) => {
   const target = path.join(testRepoPath, 'linked-watch-target')
   const replacement = path.join(testRepoPath, 'linked-watch-replacement')
   const alias = path.join(testRepoPath, 'linked-watch-alias')
   const linkType = process.platform === 'win32' ? 'junction' : 'dir'
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await orcaPage.evaluate(async () => {
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await quirkyPage.evaluate(async () => {
     await window.__store.getState().updateSettings({ followSymlinkedDirectories: true })
   })
   const row = (name: string) =>
-    orcaPage.locator('[data-file-explorer-row]').filter({
-      has: orcaPage.getByText(name, { exact: true })
+    quirkyPage.locator('[data-file-explorer-row]').filter({
+      has: quirkyPage.getByText(name, { exact: true })
     })
   await expect(row('linked-watch-alias')).toBeVisible()
   await row('linked-watch-alias').click()
@@ -61,7 +61,7 @@ test('refreshes followed directory links after target changes and retargeting', 
 
   await row('nested').click()
   await writeFile(path.join(target, 'nested', 'collapsed-linked.txt'), 'while collapsed')
-  await orcaPage.waitForTimeout(500)
+  await quirkyPage.waitForTimeout(500)
   await row('nested').click()
   await expect(row('collapsed-linked.txt')).toBeVisible()
 

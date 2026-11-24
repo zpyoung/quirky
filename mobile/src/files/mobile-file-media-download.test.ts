@@ -57,7 +57,7 @@ describe('mobile media download', () => {
           _meta: { runtimeId: 'host' }
         }
       ])
-      await expect(r.run()).rejects.toThrow('Update Orca on your desktop')
+      await expect(r.run()).rejects.toThrow('Update Quirky on your desktop')
       expect(r.client.sendRequest).toHaveBeenCalledTimes(1)
       expect(r.sink.dispose).toHaveBeenCalledOnce()
     }

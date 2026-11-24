@@ -7,11 +7,11 @@ import {
 import { i18n, setRendererPluginLanguagePacks, setRendererUiLanguage, translate } from './i18n'
 import { createLocalizedCatalog } from './localized-catalog'
 
-const PACK_ID = 'plugin:orca-test.traditional-chinese/zh-TW' as const
+const PACK_ID = 'plugin:quirky-test.traditional-chinese/zh-TW' as const
 const PACK = {
   id: PACK_ID,
   resourceLanguage: pluginLanguageResourceId(PACK_ID),
-  pluginKey: 'orca-test.traditional-chinese',
+  pluginKey: 'quirky-test.traditional-chinese',
   locale: 'zh-TW',
   catalog: {}
 }

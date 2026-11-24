@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 async function storeWithTerminal(worktreeId: string): Promise<{ store: Store; directory: string }> {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-open-split-apply-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-open-split-apply-'))
   directories.push(directory)
   const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
   const window = new WindowSession(getDefaultWorkspaceSession())

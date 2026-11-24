@@ -3,13 +3,13 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { planE2e, verifyE2eSelection } from './ci-e2e-shard-plan.mjs'
 
 const require = createRequire(import.meta.url)
 
 it('native Playwright test-list preserves full discovery, serial suites, skips and headful filtering', async () => {
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'orca-playwright-shards-')))
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-playwright-shards-')))
   const testPackage = JSON.stringify(require.resolve('@stablyai/playwright-test'))
   const config = join(directory, 'playwright.config.cjs')
   writeFileSync(
@@ -44,7 +44,7 @@ it('native Playwright test-list preserves full discovery, serial suites, skips a
         '--reporter=json',
         ...extra
       ],
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 20000
     })
     expect(result.code, result.stderr).toBe(0)

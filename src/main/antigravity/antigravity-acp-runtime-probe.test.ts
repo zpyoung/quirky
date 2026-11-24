@@ -18,7 +18,7 @@ async function fakeServer(): Promise<string> {
     'utf8'
   )
   const initialize = JSON.parse(recording.split('\n')[0]).message.result
-  const folder = await mkdtemp(join(tmpdir(), 'orca-antigravity-probe-test-'))
+  const folder = await mkdtemp(join(tmpdir(), 'quirky-antigravity-probe-test-'))
   folders.push(folder)
   const server = join(folder, 'agy_acp_server.par')
   await writeFile(

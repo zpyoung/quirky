@@ -138,8 +138,8 @@ describe('iOS whole-message copy', () => {
   )
 
   it.each([
-    'Please repair this chart:\n::orca-visual{file="usage.html"}\nKeep this text.',
-    '::orca-visual{file="usage.html"}'
+    'Please repair this chart:\n::quirky-visual{file="usage.html"}\nKeep this text.',
+    '::quirky-visual{file="usage.html"}'
   ])('copies the entire visible own source %j', async (text) => {
     render({ ...message, role: 'user', blocks: [{ type: 'text', text }] })
     // Drawn as written: your own message never renders a visual.
@@ -154,11 +154,11 @@ describe('iOS whole-message copy', () => {
 
   it('omits assistant visual directives while retaining literal fenced code', async () => {
     const text =
-      'Chart:\n::orca-visual{file="usage.html"}\nDone.\n```text\n::orca-visual{file="example.html"}\n```'
+      'Chart:\n::quirky-visual{file="usage.html"}\nDone.\n```text\n::quirky-visual{file="example.html"}\n```'
     render({ ...message, blocks: [{ type: 'text', text }] })
     await act(async () => copyButton().props.onPress())
     expect(writeText.mock.calls).toEqual([
-      ['Chart:\nDone.\n```text\n::orca-visual{file="example.html"}\n```']
+      ['Chart:\nDone.\n```text\n::quirky-visual{file="example.html"}\n```']
     ])
     expect(nodes('Check')).toHaveLength(1)
   })

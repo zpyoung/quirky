@@ -11,7 +11,7 @@ export default defineConfig({
   root: resolve('src/renderer'),
   cacheDir: resolve('.cache/vite/web'),
   // Why: pairing URLs may live under a reverse-proxy path prefix like
-  // /orca/web-index.html, so built assets must resolve relative to the page.
+  // /quirky/web-index.html, so built assets must resolve relative to the page.
   base: './',
   plugins: [
     react(),
@@ -20,8 +20,8 @@ export default defineConfig({
     createViteCacheRetentionPlugin()
   ],
   define: {
-    ORCA_FEATURE_WALL_ENABLED: 'true',
-    ORCA_BUILD_COMMIT: JSON.stringify(resolveBuildSourceCommit())
+    QUIRKY_FEATURE_WALL_ENABLED: 'true',
+    QUIRKY_BUILD_COMMIT: JSON.stringify(resolveBuildSourceCommit())
   },
   resolve: {
     alias: {

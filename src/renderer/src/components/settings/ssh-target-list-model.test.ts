@@ -148,7 +148,7 @@ describe('planSshBulkRemove and its summary', () => {
     })
     expect(summary.tone).toBe('neutral')
     expect(summary.title).toBe('2 removed · 2 skipped')
-    expect(summary.description).toContain('prod-bastion has an Orca server.')
+    expect(summary.description).toContain('prod-bastion has an Quirky server.')
     expect(summary.description).toContain('dev has workspaces.')
   })
 

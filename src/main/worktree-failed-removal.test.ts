@@ -1,6 +1,6 @@
 // A delete that fails after Git dropped the checkout's registration: the leftover stays listed with
 // the error until the checkout disappears, Git registers a checkout there again, or its repo leaves
-// Orca; Delete refuses while the folder is on disk. Git is mocked
+// Quirky; Delete refuses while the folder is on disk. Git is mocked
 // here so this runs on every platform; the real-Git version is in
 // runtime/runtime-failed-local-worktree-removal.test.ts.
 import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises'
@@ -51,7 +51,7 @@ const mainWorktree: GitWorktreeInfo = {
 }
 
 beforeEach(async () => {
-  directory = await realpath(await mkdtemp(join(tmpdir(), 'orca-failed-removal-')))
+  directory = await realpath(await mkdtemp(join(tmpdir(), 'quirky-failed-removal-')))
   checkout = join(directory, 'feature')
   worktreeId = `repo-1::${checkout}`
   // What Git left: part of the checkout, `.git` already deleted.
@@ -276,7 +276,7 @@ describe('a delete that fails after Git dropped the registration', () => {
     expect(retryFailedWorktreeRemoval(worktreeId, 'ssh:box', vi.fn())).toBeUndefined()
   })
 
-  it('ends at the next listing once the checkout is deleted outside Orca', async () => {
+  it('ends at the next listing once the checkout is deleted outside Quirky', async () => {
     await failRemoval()
     await rm(checkout, { recursive: true })
 
@@ -286,7 +286,7 @@ describe('a delete that fails after Git dropped the registration', () => {
     )
   })
 
-  it('ends at startup once the checkout is deleted outside Orca', async () => {
+  it('ends at startup once the checkout is deleted outside Quirky', async () => {
     await failRemoval()
     _resetPendingWorktreeRemovalsForTests()
     await rm(checkout, { recursive: true })
@@ -296,7 +296,7 @@ describe('a delete that fails after Git dropped the registration', () => {
     expect(await readWorktreeRemovalRecords(join(directory, 'profile'))).toEqual([])
   })
 
-  it('ends at startup once its repo is removed from Orca, leaving the files', async () => {
+  it('ends at startup once its repo is removed from Quirky, leaving the files', async () => {
     await failRemoval()
     _resetPendingWorktreeRemovalsForTests()
 
@@ -311,7 +311,7 @@ describe('a delete that fails after Git dropped the registration', () => {
     expect(await readdir(checkout)).toEqual(['node_modules'])
   })
 
-  it('is kept at startup while the repo’s local copy is still in Orca', async () => {
+  it('is kept at startup while the repo’s local copy is still in Quirky', async () => {
     await failRemoval()
     _resetPendingWorktreeRemovalsForTests()
 

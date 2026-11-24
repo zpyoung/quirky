@@ -4,9 +4,9 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { LOCAL_BUILD_COMPATIBILITY_CONTRACT } from '../../shared/local-build-compatibility-contract'
 import { NODE_RUNTIME_DARWIN_MINIMUM_OS } from '../../shared/node-runtime-pin'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { rm } from '../asar-transparent-fs'
-import { compareDottedVersions } from '../orcad/native-host-abi'
+import { compareDottedVersions } from '../quirkyd/native-host-abi'
 import { DaemonClient } from './client'
 import { DaemonEndpointOwnershipError, holdDaemonAdoptionLease } from './daemon-endpoint-adoption'
 import { buildDaemonScriptArgs, type DaemonChildSpawnOptions } from './daemon-launched-child-spawn'
@@ -56,7 +56,7 @@ function buildMacDaemonLaunchJob(
   bundle: MacDaemonBundle,
   label: string
 ): Record<string, unknown> {
-  const env: NodeJS.ProcessEnv = { ...process.env, ORCA_USER_DATA_PATH: options.userDataPath }
+  const env: NodeJS.ProcessEnv = { ...process.env, QUIRKY_USER_DATA_PATH: options.userDataPath }
   // The helper's executable is plain Node; Electron's Node-mode switch and IPC fds mean nothing there.
   delete env.ELECTRON_RUN_AS_NODE
   delete env.NODE_CHANNEL_FD
@@ -74,7 +74,7 @@ function buildMacDaemonLaunchJob(
     RunAtLoad: true,
     KeepAlive: false,
     AbandonProcessGroup: true,
-    // A plist job outside SMAppService names its app here so Local Network access resolves to Orca.
+    // A plist job outside SMAppService names its app here so Local Network access resolves to Quirky.
     AssociatedBundleIdentifiers: [LOCAL_BUILD_COMPATIBILITY_CONTRACT.appId],
     ProcessType: 'Interactive',
     StandardOutPath: '/dev/null',
@@ -116,7 +116,7 @@ async function recoverBlockingMacDaemonJob(options: MacDaemonLaunchOptions): Pro
 }
 
 /**
- * Starts the daemon under launchd from the signed helper copy, so it keeps Orca's identity when an
+ * Starts the daemon under launchd from the signed helper copy, so it keeps Quirky's identity when an
  * update replaces the app. Null means no job can claim the endpoint and the caller should fork.
  */
 export async function launchMacDaemonFromStableBundle(

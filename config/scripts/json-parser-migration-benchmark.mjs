@@ -97,7 +97,7 @@ if (workerFixture) {
     })
   )
 } else {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-json-parser-benchmark-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-json-parser-benchmark-'))
   try {
     writeJsonParserFixtures(directory)
     global.gc()
@@ -133,7 +133,7 @@ if (workerFixture) {
             ['--expose-gc', import.meta.filename, bundleDirectory, file, arm],
             {
               encoding: 'utf8',
-              env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+              env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
               windowsHide: true
             }
           )

@@ -44,7 +44,7 @@ describe('a managed home on Windows', () => {
     const backslashTables = installed.match(/^\[hooks\.state\.'C:\\[^\n]*$/gm) ?? []
     expect(backslashTables.length).toBeGreaterThan(0)
 
-    // An older Orca's leftovers: forward-slash approvals only.
+    // An older Quirky's leftovers: forward-slash approvals only.
     writeFileSync(
       tomlPath,
       installed.replace(/^\[hooks\.state\.'C:\\[^\n]*\n(?:(?!\[)[^\n]*\n?)*/gm, '')

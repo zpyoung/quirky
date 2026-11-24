@@ -4,14 +4,14 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { smokeForeignSqliteReaderWorker } from './foreign-sqlite-reader-worker-smoke.mjs'
-import { ORCAD_CHILD_ENTRY_POINTS } from './orcad-entry-build.mjs'
+import { QUIRKYD_CHILD_ENTRY_POINTS } from './quirkyd-entry-build.mjs'
 
 const ENTRY = 'foreign-sqlite-reader-entry.js'
 const directories = []
 let builtDirectory
 
 function fixtureDirectory() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-foreign-sqlite-smoke-test-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-foreign-sqlite-smoke-test-'))
   directories.push(directory)
   return directory
 }
@@ -19,7 +19,7 @@ function fixtureDirectory() {
 beforeAll(async () => {
   builtDirectory = fixtureDirectory()
   await build({
-    entryPoints: [resolve(ORCAD_CHILD_ENTRY_POINTS.foreignSqliteReader)],
+    entryPoints: [resolve(QUIRKYD_CHILD_ENTRY_POINTS.foreignSqliteReader)],
     outfile: join(builtDirectory, ENTRY),
     bundle: true,
     platform: 'node',

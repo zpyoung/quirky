@@ -11,7 +11,7 @@ import type { ExecuteContext, LeaseGuard } from '../../shared/fork-heimdall/kind
 import type { WatcherEnrollment } from '../../shared/fork-heimdall/watcher-types'
 import { requireLocalRuntimeFileRoute } from '../runtime/files/file-target'
 import type { RuntimeGitTarget } from '../runtime/runtime-git-command-target'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { objectiveGitCommandForTarget, type ObjectiveWorkspaceTarget } from './content-identity'
 import { inspectObjectiveDispatchSession } from './dispatch-session'
 import { objectiveDirtyPathsByTerritory } from './landing-territory'
@@ -133,14 +133,14 @@ async function enrolledHead(target: ObjectiveWorkspaceTarget): Promise<string> {
 
 /** Resolves an isolated dispatch strictly on the enrolled workspace's execution host. */
 export async function resolveObjectiveDispatchTarget(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   binding: { enrollment: Pick<WatcherEnrollment, 'executionHostId' | 'repoId'> },
   record: ObjectiveDispatchRecord
 ): Promise<ObjectiveWorkspaceTarget> {
   if (isPendingWorkspace(record) || record.setupState === 'pending') {
     throw new Error(`Objective dispatch ${record.attemptFingerprint} worktree setup is incomplete`)
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolveRuntimeGitTarget is protected on OrcaRuntimeService; runtime satisfies this narrower resolver shape at runtime.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolveRuntimeGitTarget is protected on QuirkyRuntimeService; runtime satisfies this narrower resolver shape at runtime.
   const target = await (runtime as unknown as RuntimeTargetResolver).resolveRuntimeGitTarget(
     `id:${record.workspaceId}`
   )
@@ -164,7 +164,7 @@ export async function resolveObjectiveDispatchTarget(
 
 /** Reports whether a dispatch worktree is gone, or holds changes that removal would destroy. */
 export async function inspectObjectiveDispatchWorkspace(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   enrollment: Pick<WatcherEnrollment, 'executionHostId' | 'repoId'>,
   record: ObjectiveDispatchRecord
 ): Promise<ObjectiveDispatchWorkspaceState> {
@@ -188,7 +188,7 @@ export async function inspectObjectiveDispatchWorkspace(
 }
 
 export async function resolveObjectiveAttemptTarget(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   binding: ObjectiveSnapshotBinding
   objectiveStore: ObjectiveStore
   attempt: Pick<AttemptEntry, 'fingerprint'>
@@ -242,7 +242,7 @@ function precedingLaneRecord(args: {
 }
 
 async function resetOwnedLaneWorktree(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   binding: ObjectiveSnapshotBinding
   lease: LeaseGuard
   previous: ObjectiveDispatchRecord
@@ -297,7 +297,7 @@ function originalConflictRecord(args: {
  * row is durable before worktree creation, so restart reconciliation can recover the side effect.
  */
 export async function prepareObjectiveDispatchWorkspace(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   binding: ObjectiveSnapshotBinding
   context: ExecuteContext<ObjectiveWorld>
   objectiveStore: ObjectiveStore

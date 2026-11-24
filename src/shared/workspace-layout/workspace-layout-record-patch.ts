@@ -3,7 +3,7 @@
 // key order, carried leftovers); diffing the save before the command against the save after it
 // isolates the command, and only those records and fields are written.
 
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 import type { WorkspaceSessionState } from '../workspace-session-state-types'
 import { editorFileKey } from './workspace-layout-editor-tab-file'
 import { adoptTouchedFoldedRows } from './workspace-layout-folded-rows'
@@ -17,7 +17,7 @@ const LIST_FIELDS: Record<string, (record: Json) => unknown> = {
   tabGroups: (record) => record.id,
   // Why the switch: a local and a runtime-environment file can share a path in a layout-owner build.
   openFilesByWorktree: (record) =>
-    ORCA_LAYOUT_OWNER_IS_MAIN && typeof record.filePath === 'string'
+    QUIRKY_LAYOUT_OWNER_IS_MAIN && typeof record.filePath === 'string'
       ? editorFileKey({
           filePath: record.filePath,
           runtimeEnvironmentId:

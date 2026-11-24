@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { RpcResponse } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import {
@@ -25,7 +25,7 @@ let root: string
 let store: AgentSessionAttachmentStore
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-attachment-rpc-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-attachment-rpc-'))
   store = new AgentSessionAttachmentStore(join(root, 'agent-session-attachments'), {
     hasSession: (sessionId) => sessionId === 'session-alpha'
   })
@@ -50,7 +50,7 @@ async function call(
     runtime: {
       getRuntimeId: () => 'runtime-1',
       ensureStructuredAgentSessionHost: async () => {}
-    } as unknown as OrcaRuntimeService,
+    } as unknown as QuirkyRuntimeService,
     methods: STRUCTURED_AGENT_SESSION_ATTACHMENT_METHODS
   })
   const replies: RpcResponse[] = []
@@ -196,7 +196,7 @@ describe('agentSessionAttachment.*', () => {
       runtime: {
         getRuntimeId: () => 'runtime-1',
         ensureStructuredAgentSessionHost: async () => {}
-      } as unknown as OrcaRuntimeService,
+      } as unknown as QuirkyRuntimeService,
       methods: STRUCTURED_AGENT_SESSION_ATTACHMENT_METHODS
     })
     await dispatcher.dispatchStreaming(

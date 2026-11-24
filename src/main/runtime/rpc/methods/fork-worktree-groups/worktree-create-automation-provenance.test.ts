@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../../dispatcher'
 import type { RpcRequest } from '../../core'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { WORKTREE_METHODS } from '../worktree'
 import { createAutomationDispatchToken } from '../../../../automations/dispatch-tokens'
 
@@ -54,7 +54,7 @@ describe('worktree.create automation provenance', () => {
         }
       ]),
       createManagedWorktree: vi.fn().mockResolvedValue({ worktree: { id: 'wt-1' } })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -143,7 +143,7 @@ describe('worktree.create automation provenance', () => {
         }
       ]),
       createManagedWorktree: vi.fn().mockResolvedValue({ worktree: { id: 'wt-runtime' } })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -206,7 +206,7 @@ describe('worktree.create automation provenance', () => {
         }
       ]),
       createManagedWorktree: vi.fn().mockResolvedValue({ worktree: { id: 'wt-edited' } })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -263,7 +263,7 @@ describe('worktree.create automation provenance', () => {
         .fn()
         .mockRejectedValueOnce(new Error('Branch "automation-workspace" already exists.'))
         .mockResolvedValueOnce({ worktree: { id: 'wt-retry' } })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
     const automationProvenanceRequest = {
       automationId: 'automation-retry',
@@ -324,7 +324,7 @@ describe('worktree.create automation provenance', () => {
         }
       ]),
       createManagedWorktree: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 
     const response = await dispatcher.dispatch(

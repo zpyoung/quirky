@@ -4,10 +4,10 @@ import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { OrchestrationDb } from './orchestration/db'
 import { readRuntimeMetadata } from './runtime-metadata'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import { DeviceRegistry } from './device-registry'
 import { sendRequest, withCurrentOrchestrationContract } from './runtime-rpc-test-harness'
 import { STATUS_METHODS } from './rpc/methods/status'
@@ -42,15 +42,15 @@ vi.mock('../git/worktree', () => {
   }
 })
 
-describe('OrcaRuntimeRpcServer', () => {
+describe('QuirkyRuntimeRpcServer', () => {
   it('rejects WebSocket requests whose request token differs from the authenticated channel token', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
     const runtime = {
       configureNotificationDismissalStore: () => {},
       getRuntimeId: () => 'test-runtime',
       getStatus: vi.fn().mockResolvedValue({ graphStatus: 'ok' })
-    } as unknown as OrcaRuntimeService
-    const server = new OrcaRuntimeRpcServer({
+    } as unknown as QuirkyRuntimeService
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
       methods,
       userDataPath,
@@ -84,11 +84,11 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('isolates mutation replay by the authenticated paired device across reconnects', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
     const db = new OrchestrationDb(':memory:')
     runtime.setOrchestrationDb(db)
-    const server = new OrcaRuntimeRpcServer({
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
       methods,
       userDataPath,
@@ -157,11 +157,11 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('keeps authenticated paired callers attached to existing federated workers', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
     const db = new OrchestrationDb(':memory:')
     runtime.setOrchestrationDb(db)
-    const server = new OrcaRuntimeRpcServer({
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
       methods,
       userDataPath,
@@ -213,14 +213,14 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('rejects unpaired terminal creates before runtime dispatch', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
     const createMobileSessionTerminal = vi.fn()
     const runtime = {
       configureNotificationDismissalStore: () => {},
       getRuntimeId: () => 'test-runtime',
       createMobileSessionTerminal
-    } as unknown as OrcaRuntimeService
-    const server = new OrcaRuntimeRpcServer({
+    } as unknown as QuirkyRuntimeService
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
       methods,
       userDataPath,
@@ -260,14 +260,14 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('allows runtime-scoped WebSocket tokens to use the full RPC surface', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
     const pushRuntimeGit = vi.fn().mockResolvedValue({ ok: true })
     const runtime = {
       configureNotificationDismissalStore: () => {},
       getRuntimeId: () => 'test-runtime',
       pushRuntimeGit
-    } as unknown as OrcaRuntimeService
-    const server = new OrcaRuntimeRpcServer({
+    } as unknown as QuirkyRuntimeService
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
       methods,
       userDataPath,
@@ -293,9 +293,9 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('serves status.get for authenticated callers', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({ runtime, methods, userDataPath })
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
+    const server = new QuirkyRuntimeRpcServer({ runtime, methods, userDataPath })
 
     await server.start()
 
@@ -319,9 +319,9 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('stamps the authenticated device scope onto status.get for WebSocket clients', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
       methods,
       userDataPath,
@@ -364,9 +364,9 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('rejects requests with the wrong auth token', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({ runtime, methods, userDataPath })
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
+    const server = new QuirkyRuntimeRpcServer({ runtime, methods, userDataPath })
 
     await server.start()
 
@@ -389,9 +389,9 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('rejects malformed requests before dispatch', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({ runtime, methods, userDataPath })
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
+    const server = new QuirkyRuntimeRpcServer({ runtime, methods, userDataPath })
 
     await server.start()
 

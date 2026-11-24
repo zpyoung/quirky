@@ -22,7 +22,7 @@ it.each([
   'metadata-only replacement replay'
 ] as const)('delivers a larger rewrite while publishing a completed %s', async (mode) => {
   const before = getActiveNativeChatWatcherCount()
-  const root = await mkdtemp(join(tmpdir(), 'orca-transcript-drain-race-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-transcript-drain-race-'))
   const filePath = join(root, 'rollout.jsonl')
   const seen: string[] = []
   const appendDeliveries: string[] = []

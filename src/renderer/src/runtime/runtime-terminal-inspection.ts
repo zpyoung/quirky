@@ -21,7 +21,7 @@ import type { TerminalInputKind } from '../../../shared/terminal-input-kind'
 
 export type RuntimeTerminalProcessInspection = TerminalProcessInspection
 
-const DESKTOP_RUNTIME_CLIENT = { id: 'orca-desktop', type: 'desktop' } as const
+const DESKTOP_RUNTIME_CLIENT = { id: 'quirky-desktop', type: 'desktop' } as const
 function isRuntimePtyInputTooLarge(data: string): boolean | Promise<boolean> {
   return isTerminalInputTooLargeWithDeferredMeasurement(data)
 }

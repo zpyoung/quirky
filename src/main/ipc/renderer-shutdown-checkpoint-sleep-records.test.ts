@@ -16,7 +16,7 @@ const { handlers } = vi.hoisted(() => ({
   handlers: new Map<string, (event: { returnValue?: unknown }, args: unknown) => unknown>()
 }))
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false },
@@ -85,7 +85,7 @@ describe('the quit checkpoint in a layout-owner build', () => {
   const quitRecords: SleepingAgentSessionRecord[] = []
   const quitResumeRecordsFor = vi.fn(() => quitRecords)
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
     store = createStore()
     quitRecords.length = 0
     quitResumeRecordsFor.mockClear()

@@ -20,7 +20,7 @@ export function claudeChildClosePolicy(
     forcedExitMs: FORCED_EXIT_MS,
     signalSupervisorOnClose: true,
     // On Windows, as with the Codex close, Claude leaving on its own after its stdin ends is the
-    // close: Orca makes no claim about processes Claude started. An exit after any forced reap on
+    // close: Quirky makes no claim about processes Claude started. An exit after any forced reap on
     // this tree, in this close or an earlier one, keeps taskkill's verdict.
     selfExitIsClose: platform === 'win32'
   }

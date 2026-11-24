@@ -44,8 +44,8 @@ function fleetProjection(verdict: 'live' | 'unverifiable' | 'exited'): Orchestra
 describe('worker-start plain formatting', () => {
   it('renders partial effects, residual resources, and exact recovery commands for unknown starts', () => {
     const nextCommands = [
-      'orca orchestration worker-show --dispatch ctx_unknown --json',
-      'orca orchestration worker-abandon --dispatch ctx_unknown --json'
+      'quirky orchestration worker-show --dispatch ctx_unknown --json',
+      'quirky orchestration worker-abandon --dispatch ctx_unknown --json'
     ]
 
     expect(

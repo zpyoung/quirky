@@ -1,6 +1,6 @@
 import { optionalSettingsRead } from '../transport/settings-read-operations'
 import { useEffect, useState } from 'react'
-import type { PersistedTrustedOrcaHooks } from '../../../src/shared/orca-yaml-hook-types'
+import type { PersistedTrustedQuirkyHooks } from '../../../src/shared/quirky-yaml-hook-types'
 import type { RpcAcceptedResult } from '../transport/rpc-accepted-result'
 import type { RpcClient } from '../transport/rpc-client'
 import type { RpcResponse } from '../transport/types'
@@ -43,13 +43,13 @@ export function useNewWorkspaceRuntimeContext(
 ): {
   runtimeSettings: NewWorktreeRuntimeSettings | null
   setRuntimeSettings: (settings: NewWorktreeRuntimeSettings) => void
-  trustedOrcaHooks: PersistedTrustedOrcaHooks
-  setTrustedOrcaHooks: (trust: PersistedTrustedOrcaHooks) => void
+  trustedQuirkyHooks: PersistedTrustedQuirkyHooks
+  setTrustedQuirkyHooks: (trust: PersistedTrustedQuirkyHooks) => void
   availableProviders: TaskProvider[]
   jiraConnection: MobileJiraConnection
 } {
   const [runtimeSettings, setRuntimeSettings] = useState<NewWorktreeRuntimeSettings | null>(null)
-  const [trustedOrcaHooks, setTrustedOrcaHooks] = useState<PersistedTrustedOrcaHooks>({})
+  const [trustedQuirkyHooks, setTrustedQuirkyHooks] = useState<PersistedTrustedQuirkyHooks>({})
   const [availableProviders, setAvailableProviders] = useState<TaskProvider[]>([])
   // Tasks can offer Jira setup; the composer requires a connected site.
   const [jiraConnection, setJiraConnection] = useMobileJiraConnectionState(
@@ -90,7 +90,7 @@ export function useNewWorkspaceRuntimeContext(
       if (uiRes.status === 'fulfilled') {
         const ui = newWorkspaceUiStateRead.interpret(uiRes.value)
         if (ui.accepted) {
-          setTrustedOrcaHooks(ui.value?.trustedOrcaHooks ?? {})
+          setTrustedQuirkyHooks(ui.value?.trustedQuirkyHooks ?? {})
         }
       }
 
@@ -128,8 +128,8 @@ export function useNewWorkspaceRuntimeContext(
   return {
     runtimeSettings,
     setRuntimeSettings,
-    trustedOrcaHooks,
-    setTrustedOrcaHooks,
+    trustedQuirkyHooks,
+    setTrustedQuirkyHooks,
     availableProviders,
     jiraConnection
   }

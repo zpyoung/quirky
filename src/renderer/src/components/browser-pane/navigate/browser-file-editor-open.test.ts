@@ -16,7 +16,7 @@ import {
   openBrowserFileSource
 } from './browser-file-editor-open'
 
-const PATH = '/Users/me/orca/chat-scratch/0123456789abcdef0123456789abcdef/usage.html'
+const PATH = '/Users/me/quirky/chat-scratch/0123456789abcdef0123456789abcdef/usage.html'
 
 it("opens a local chat visual's page as an editable source tab, read and saved in place", () => {
   const openFile = vi.fn()

@@ -9,7 +9,7 @@ vi.mock('../native-chat/agent-session-wire/structured-agent-session-registry', (
 }))
 
 const { readStructuredWorkerTerminal } = await import('./structured-worker-terminal-read')
-const { OrcaRuntimeWithResolveTerminalPane } =
+const { QuirkyRuntimeWithResolveTerminalPane } =
   await import('./terminal/recovery/resolve-terminal-pane')
 const {
   mintStructuredWorkerHandle,
@@ -163,7 +163,7 @@ describe('reading a structured worker through the terminal-read path', () => {
         handle: string,
         opts?: { cursor?: number; limit?: number; screen?: boolean }
       ) => Promise<{ tail: string[] }>
-    } = Object.assign(Object.create(OrcaRuntimeWithResolveTerminalPane.prototype), {
+    } = Object.assign(Object.create(QuirkyRuntimeWithResolveTerminalPane.prototype), {
       getOrchestrationDbIfAvailable: () => null,
       getLivePtyForHandle: () => {
         throw new Error('the PTY lookup must never be reached for a structured worker')

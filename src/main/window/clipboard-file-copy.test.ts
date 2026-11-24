@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
+import type { ProcessResult, ProcessSpec } from '@quirky/process-host/process-spec'
 import { writeFileToClipboard, type ClipboardFileDeps } from './clipboard-file-copy'
 
 function exited(code: number | null): ProcessResult {
@@ -90,7 +90,7 @@ describe('writeFileToClipboard', () => {
 
   it('copies on Windows with Set-Clipboard, passing the path as data, never as script', async () => {
     vi.stubEnv('SystemRoot', 'D:\\Win')
-    vi.stubEnv('ORCA_TEST_INHERITED', 'kept')
+    vi.stubEnv('QUIRKY_TEST_INHERITED', 'kept')
     const runProcess = vi.fn(async (_spec: ProcessSpec) => exited(0))
     const result = await writeFileToClipboard(
       "/repo/o'brien $(calc).png",
@@ -104,11 +104,11 @@ describe('writeFileToClipboard', () => {
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      'Set-Clipboard -LiteralPath $env:ORCA_CLIPBOARD_FILE'
+      'Set-Clipboard -LiteralPath $env:QUIRKY_CLIPBOARD_FILE'
     ])
-    expect(spec.env?.ORCA_CLIPBOARD_FILE).toBe("/repo/o'brien $(calc).png")
+    expect(spec.env?.QUIRKY_CLIPBOARD_FILE).toBe("/repo/o'brien $(calc).png")
     // PowerShell cannot start without the inherited environment.
-    expect(spec.env?.ORCA_TEST_INHERITED).toBe('kept')
+    expect(spec.env?.QUIRKY_TEST_INHERITED).toBe('kept')
   })
 
   it.each([

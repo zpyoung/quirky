@@ -40,7 +40,7 @@ vi.mock('../project-runtime-git-options', () => ({
 }))
 
 /**
- * Widened past `Repo['executionHostId']` on purpose: the union names the stamps Orca writes, while a
+ * Widened past `Repo['executionHostId']` on purpose: the union names the stamps Quirky writes, while a
  * store carries whatever an older build, a hand-edited catalog or a partial migration left behind.
  * Those are exactly the stamps authorization has to place, so the matrix must be able to build them.
  */
@@ -323,9 +323,9 @@ describe('workspace-directory fallback', () => {
   })
 
   it.each([
-    ['bare name', 'orca-ws'],
+    ['bare name', 'quirky-ws'],
     ['parent traversal', '..'],
-    ['relative traversal', '../orca-ws']
+    ['relative traversal', '../quirky-ws']
   ])('grants nothing for a repo-relative %s with no repo to anchor it', (_case, dir) => {
     // `resolve` would anchor these to the main-process cwd, granting an unrelated tree.
     expect(getAllowedRoots(storeFor([], [], [], { workspaceDir: dir }))).toEqual([])
@@ -352,13 +352,13 @@ describe('workspace-directory fallback', () => {
   )
 
   it.each([
-    ['POSIX absolute on POSIX', posix, '/orca-ws', true],
-    ['relative on POSIX', posix, '../orca-ws', false],
-    ['Windows drive on POSIX', posix, 'C:\\orca-ws', false],
+    ['POSIX absolute on POSIX', posix, '/quirky-ws', true],
+    ['relative on POSIX', posix, '../quirky-ws', false],
+    ['Windows drive on POSIX', posix, 'C:\\quirky-ws', false],
     ['Windows UNC on POSIX', posix, '\\\\wsl$\\Ubuntu\\home\\me\\ws', false],
-    ['POSIX absolute on Windows', win32, '/orca-ws', true],
-    ['relative on Windows', win32, '..\\orca-ws', false],
-    ['Windows drive on Windows', win32, 'C:\\orca-ws', true],
+    ['POSIX absolute on Windows', win32, '/quirky-ws', true],
+    ['relative on Windows', win32, '..\\quirky-ws', false],
+    ['Windows drive on Windows', win32, 'C:\\quirky-ws', true],
     ['Windows UNC on Windows', win32, '\\\\wsl$\\Ubuntu\\home\\me\\ws', true]
   ])(
     'grants an unanchored %s workspace directory only when that host reads it as absolute',

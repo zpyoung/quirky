@@ -287,14 +287,14 @@ describe('Grok status: the structured session is the only producer', () => {
   it('strips every pane identity and hook endpoint an inherited environment carries', () => {
     const inherited = {
       PATH: '/usr/bin',
-      ORCA_PANE_KEY: 'tab-1:pane-1',
-      ORCA_AGENT_PANE: 'tab-1:pane-1',
-      ORCA_TAB_ID: 'tab-1',
-      ORCA_WORKTREE_ID: 'wt-1',
-      ORCA_AGENT_LAUNCH_TOKEN: 'launch-1',
-      ORCA_AGENT_HOOK_PORT: '4321',
-      ORCA_AGENT_HOOK_TOKEN: 'secret',
-      ORCA_AGENT_HOOK_ENDPOINT: '/tmp/endpoint'
+      QUIRKY_PANE_KEY: 'tab-1:pane-1',
+      QUIRKY_AGENT_PANE: 'tab-1:pane-1',
+      QUIRKY_TAB_ID: 'tab-1',
+      QUIRKY_WORKTREE_ID: 'wt-1',
+      QUIRKY_AGENT_LAUNCH_TOKEN: 'launch-1',
+      QUIRKY_AGENT_HOOK_PORT: '4321',
+      QUIRKY_AGENT_HOOK_TOKEN: 'secret',
+      QUIRKY_AGENT_HOOK_ENDPOINT: '/tmp/endpoint'
     }
     const spec = createProviderSpawnSpec(
       {
@@ -306,7 +306,7 @@ describe('Grok status: the structured session is the only producer', () => {
       inherited,
       'win32'
     )
-    expect(Object.keys(spec.env).filter((key) => key.startsWith('ORCA_'))).toEqual([])
+    expect(Object.keys(spec.env).filter((key) => key.startsWith('QUIRKY_'))).toEqual([])
     expect(spec.env).toMatchObject({ PATH: '/usr/bin', GROK_HOME: '/home/user/.grok' })
   })
 })
@@ -331,7 +331,7 @@ describe('ACP launch folder of a floating chat', () => {
   }
 
   it('launches in the folder the chat was pinned to after the floating setting moved', async () => {
-    const pinned = mkdtempSync(join(tmpdir(), 'orca-acp-floating-'))
+    const pinned = mkdtempSync(join(tmpdir(), 'quirky-acp-floating-'))
     try {
       const { resolve, resolveWorkspacePath } = resolveIn(floating(pinned), '/floating/moved')
       await expect(resolve({ identity })).resolves.toMatchObject({ cwd: pinned })
@@ -342,7 +342,7 @@ describe('ACP launch folder of a floating chat', () => {
   })
 
   it('refuses with the folder-missing reason when the pinned folder is gone', async () => {
-    const gone = join(tmpdir(), 'orca-acp-floating-gone-never-created')
+    const gone = join(tmpdir(), 'quirky-acp-floating-gone-never-created')
     const { resolve } = resolveIn(floating(gone), '/floating/moved')
     await expect(resolve({ identity })).rejects.toMatchObject({
       name: 'AgentSessionPreSpawnError',

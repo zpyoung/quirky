@@ -36,7 +36,7 @@ export class RuntimeRepositoryIssueCommand {
       localContent: null,
       sharedContent: null,
       effectiveContent: null,
-      localFilePath: joinWorktreeRelativePath(repo.path, '.orca/issue-command'),
+      localFilePath: joinWorktreeRelativePath(repo.path, '.quirky/issue-command'),
       source: 'none' as const
     }
   }

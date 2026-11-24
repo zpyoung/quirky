@@ -1,12 +1,12 @@
-// A build without ORCA_SIDEBAR_INPUTS=main (every shipped one) keeps none of main's sidebar inputs.
+// A build without QUIRKY_SIDEBAR_INPUTS=main (every shipped one) keeps none of main's sidebar inputs.
 import { describe, expect, it } from 'vitest'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import { ALL_RPC_METHODS } from '../rpc/methods'
 import { SIDEBAR_INPUT_METHODS } from '../rpc/methods/sidebar-inputs'
 
 describe('sidebar inputs with the switch off', () => {
   it('builds no producer and registers no sidebarInputs method', () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     expect(runtime.sidebarFacts).toBeNull()
     expect(runtime.repoIconDataUrls).toBeNull()
     expect(runtime.workspaceCreations).toBeNull()

@@ -8,16 +8,16 @@ const RESTRICTED_ENV_KEYS = new Set([
   'HOMEDRIVE',
   'HOMEPATH',
   'CODEX_HOME',
-  'ORCA_CODEX_HOME',
+  'QUIRKY_CODEX_HOME',
   'ZCODE_DATA_BASE_DIR',
   'ZCODE_PERSONAL_PROVIDER_CONFIG_FILE',
-  // Why: Orca's spawn hook writes Claude folder trust into the config this names.
+  // Why: Quirky's spawn hook writes Claude folder trust into the config this names.
   'CLAUDE_CONFIG_DIR',
-  'ORCA_E2E_USER_DATA_DIR',
-  'ORCA_E2E_HOME_DIR',
-  'ORCA_DISABLE_MACOS_LOGIN_SHELL',
+  'QUIRKY_E2E_USER_DATA_DIR',
+  'QUIRKY_E2E_HOME_DIR',
+  'QUIRKY_DISABLE_MACOS_LOGIN_SHELL',
   'ZDOTDIR',
-  'ORCA_ORIG_ZDOTDIR',
+  'QUIRKY_ORIG_ZDOTDIR',
   'BASH_ENV',
   'ENV'
 ])
@@ -71,13 +71,13 @@ export function createElectronHomeIsolation({
   realHome = os.homedir()
 }: ElectronHomeIsolationOptions): ElectronHomeIsolation {
   assertOverlayDoesNotReplaceIsolation(launchEnv, 'launchEnv')
-  assertOverlayDoesNotReplaceIsolation(extraEnv, 'orcaAppExtraEnv')
+  assertOverlayDoesNotReplaceIsolation(extraEnv, 'quirkyAppExtraEnv')
 
   const requestedIsolatedHome = path.join(userDataDir, 'home')
   mkdirSync(requestedIsolatedHome, { recursive: true, mode: 0o700 })
   // Why: tmpdir-rooted paths are aliases (macOS /var symlink, Windows 8.3
   // short names). Git canonicalizes worktree paths, so a non-canonical HOME
-  // makes freshly created worktrees invisible to Orca's listing comparisons.
+  // makes freshly created worktrees invisible to Quirky's listing comparisons.
   const isolatedHome = realpathSync.native(requestedIsolatedHome)
   // Why: Windows resolves roaming AppData under USERPROFILE, and Electron 43 crashes natively
   // (0xFFFF7003) when that lookup fails before userData is pinned.
@@ -100,10 +100,10 @@ export function createElectronHomeIsolation({
       ...extraEnv,
       HOME: isolatedHome,
       USERPROFILE: isolatedHome,
-      ORCA_E2E_USER_DATA_DIR: userDataDir,
-      ORCA_E2E_HOME_DIR: isolatedHome,
+      QUIRKY_E2E_USER_DATA_DIR: userDataDir,
+      QUIRKY_E2E_HOME_DIR: isolatedHome,
       // macOS login resets HOME to the native account before the shell starts.
-      ...(process.platform === 'darwin' ? { ORCA_DISABLE_MACOS_LOGIN_SHELL: '1' } : {})
+      ...(process.platform === 'darwin' ? { QUIRKY_DISABLE_MACOS_LOGIN_SHELL: '1' } : {})
     }
   }
 }

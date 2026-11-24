@@ -10,7 +10,7 @@ type HomePathApi = Pick<typeof posix, 'dirname' | 'isAbsolute' | 'relative' | 's
 
 /**
  * Kiro documents ignoring a `KIRO_HOME` at the filesystem root, the user home or
- * an ancestor of it; Orca applies that rule to every `homeEnv` on purpose, since
+ * an ancestor of it; Quirky applies that rule to every `homeEnv` on purpose, since
  * `<home>/skills` there would be an unrelated folder.
  */
 function isUsableProviderHome(candidate: string, userHome: string, pathApi: HomePathApi): boolean {
@@ -53,7 +53,7 @@ export function resolveEnvironmentSkillProviderRoots(
 }
 
 // Why: `HERMES_HOME` relocates a whole Hermes profile tree (`hermes -p coder`),
-// and the rest of Orca already treats it as authoritative. Hermes is not an
+// and the rest of Quirky already treats it as authoritative. Hermes is not an
 // install provider, so it stays out of `SkillProviderRootOverrides`.
 export function resolveEnvironmentHermesSkillsRoot(
   env: NodeJS.ProcessEnv = process.env

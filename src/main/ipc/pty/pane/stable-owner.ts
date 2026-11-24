@@ -5,7 +5,7 @@ import { toSshExecutionHostId } from '../../../../shared/execution-host'
 import { makePaneKey, parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { Store } from '../../../persistence'
 import { retireTerminalSurfaceFromPersistence } from '../../../runtime/mobile-session-terminal-persistence-retirement'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import type {
   IPtyProvider,
   PtySpawnOptions,
@@ -66,7 +66,7 @@ export function resolvePersistedStablePaneOwner(
 }
 
 export function resolveStablePaneOwner(
-  runtime: OrcaRuntimeService | undefined,
+  runtime: QuirkyRuntimeService | undefined,
   store: Store | undefined,
   paneKey: string | null | undefined,
   worktreeId: string | undefined,
@@ -75,8 +75,8 @@ export function resolveStablePaneOwner(
   if (!paneKey || !worktreeId) {
     return null
   }
-  let resolved: ReturnType<OrcaRuntimeService['resolveTerminalPane']> | null = null
-  let resolvedHandleCandidate: ReturnType<OrcaRuntimeService['resolveTerminalPane']> | null = null
+  let resolved: ReturnType<QuirkyRuntimeService['resolveTerminalPane']> | null = null
+  let resolvedHandleCandidate: ReturnType<QuirkyRuntimeService['resolveTerminalPane']> | null = null
   if (runtime && typeof runtime.resolveTerminalPane === 'function') {
     try {
       const candidate = runtime.resolveTerminalPane(paneKey, worktreeId)
@@ -165,7 +165,7 @@ export async function retirePersistedStablePaneOwner(
 }
 
 export type StablePaneSpawnContext = {
-  runtime: OrcaRuntimeService | undefined
+  runtime: QuirkyRuntimeService | undefined
   store?: Store
   provider: IPtyProvider
   spawnOptions: PtySpawnOptions

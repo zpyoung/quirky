@@ -19,7 +19,7 @@ import { startTerminalRenderFixture } from './mobile-web-app-terminal-render-fix
  */
 
 /** The name the fixture gives its scratch tree, which is the only thing in here it owns. */
-const SCRATCH_PREFIX = 'orca-c75-terminal-render-'
+const SCRATCH_PREFIX = 'quirky-c75-terminal-render-'
 const describeFixture = mobileWebAppDependenciesPresent() ? describe : describe.skip
 
 let temporaryRoot = null
@@ -31,7 +31,7 @@ beforeAll(async () => {
   // that one appearing and being swept up mid-case, which is not this case's business. Pointing
   // `TMPDIR` at a directory of this worker's own makes the reading exact: whatever is left in
   // here afterwards was left by the setup under test.
-  temporaryRoot = await mkdtemp(join(tmpdir(), 'orca-c75-fixture-rollback-'))
+  temporaryRoot = await mkdtemp(join(tmpdir(), 'quirky-c75-fixture-rollback-'))
   realTemporaryRoot = process.env.TMPDIR
   process.env.TMPDIR = temporaryRoot
 })
@@ -60,8 +60,8 @@ async function settledListeningSockets() {
 describeFixture('the terminal render fixture', () => {
   it('takes back the server and the scratch tree when the browser will not start', async () => {
     const socketsBefore = await settledListeningSockets()
-    const realBrowser = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
-    process.env.ORCA_MOBILE_WEB_RENDER_BROWSER = join(temporaryRoot, 'orca-c75-no-such-browser')
+    const realBrowser = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
+    process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER = join(temporaryRoot, 'quirky-c75-no-such-browser')
     try {
       // Named, not merely thrown, and this is also the precondition the two readings below need.
       // A bare `toThrow` passes for a build that broke for its own reason, which would leave
@@ -73,9 +73,9 @@ describeFixture('the terminal render fixture', () => {
       )
     } finally {
       if (realBrowser === undefined) {
-        delete process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+        delete process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
       } else {
-        process.env.ORCA_MOBILE_WEB_RENDER_BROWSER = realBrowser
+        process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER = realBrowser
       }
     }
 

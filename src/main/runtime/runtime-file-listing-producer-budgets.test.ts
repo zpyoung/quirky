@@ -3,7 +3,7 @@ import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 import {
   createRuntimeFileCommands,
   useRuntimeFileCommandsLifecycle
-} from './orca-runtime-files-test-harness'
+} from './quirky-runtime-files-test-harness'
 const { localList } = vi.hoisted(() => ({ localList: vi.fn() }))
 vi.mock('../ipc/filesystem-list-files', () => ({ listQuickOpenFiles: localList }))
 

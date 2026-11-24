@@ -1,4 +1,4 @@
-import type { GlobalSettings, OrcaWorkspaceLayout } from '../../../shared/global-settings-types'
+import type { GlobalSettings, QuirkyWorkspaceLayout } from '../../../shared/global-settings-types'
 import { normalizeRuntimePathForComparison } from '../../../shared/cross-platform-path'
 import {
   legacyTerminalScrollbackBytesToRows,
@@ -14,7 +14,7 @@ import {
 export function buildWorkspaceDirHistoryForUpdate(
   current: GlobalSettings,
   updates: Partial<GlobalSettings>
-): OrcaWorkspaceLayout[] | null {
+): QuirkyWorkspaceLayout[] | null {
   if (!('workspaceDir' in updates) && !('nestWorkspaces' in updates)) {
     return null
   }
@@ -153,7 +153,7 @@ export function migrateTerminalTuiScrollSensitivityDefault(settings: GlobalSetti
   }
 }
 
-export function getWorkspaceLayoutHistoryKey(layout: OrcaWorkspaceLayout): string {
+export function getWorkspaceLayoutHistoryKey(layout: QuirkyWorkspaceLayout): string {
   return `${normalizeRuntimePathForComparison(layout.path)}:${layout.nestWorkspaces}`
 }
 

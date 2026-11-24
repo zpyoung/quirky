@@ -1,8 +1,8 @@
 import { isAbsolute, resolve } from 'node:path'
 import { parse, stringify } from 'devalue'
 import type { PoolOptions, PoolWorker, WorkerRequest } from 'vitest/node'
-import { spawnProcess } from '@orca/process-host'
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
+import type { ChildProcessHandle } from '@quirky/process-host/process-spec'
 
 class NodeRuntimeWorker implements PoolWorker {
   readonly name = 'node-runtime'
@@ -16,7 +16,7 @@ class NodeRuntimeWorker implements PoolWorker {
       return
     }
     const executable =
-      this.options.env.ORCA_TEST_NODE_EXECUTABLE ?? this.options.env.npm_node_execpath
+      this.options.env.QUIRKY_TEST_NODE_EXECUTABLE ?? this.options.env.npm_node_execpath
     if (!executable || !isAbsolute(executable)) {
       throw new Error('Node runtime contracts require pnpm test or run-vitest.mjs')
     }

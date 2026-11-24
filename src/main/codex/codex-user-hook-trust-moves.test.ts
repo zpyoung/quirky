@@ -19,7 +19,7 @@ let hooksPath: string
 let configPath: string
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-user-hook-trust-moves-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-user-hook-trust-moves-'))
   hooksPath = join(root, 'hooks.json')
   configPath = join(root, 'config.toml')
 })
@@ -61,7 +61,7 @@ describe('real-home user hook trust rebasing', () => {
     const user = command('user-hook')
     mutate(
       { Stop: [{ hooks: [user] }] },
-      { Stop: [{ hooks: [user] }, { hooks: [command('orca')] }] }
+      { Stop: [{ hooks: [user] }, { hooks: [command('quirky')] }] }
     )
 
     expect(existsSync(hooksPath)).toBe(true)
@@ -69,12 +69,17 @@ describe('real-home user hook trust rebasing', () => {
   })
 
   it('finds multiple shifted user hooks, including a handler from a mixed group', async () => {
-    const orca = command('orca-hook')
+    const quirky = command('quirky-hook')
     const first = command('first-user')
     const second = command('second-user')
     const mixed = command('mixed-user')
     const before: Record<string, HookDefinition[]> = {
-      Stop: [{ hooks: [orca] }, { hooks: [first] }, { hooks: [second] }, { hooks: [orca, mixed] }]
+      Stop: [
+        { hooks: [quirky] },
+        { hooks: [first] },
+        { hooks: [second] },
+        { hooks: [quirky, mixed] }
+      ]
     }
     const after: Record<string, HookDefinition[]> = {
       Stop: [{ hooks: [first] }, { hooks: [second] }, { hooks: [mixed] }]
@@ -100,12 +105,12 @@ describe('real-home user hook trust rebasing', () => {
   })
 
   it("moves each shifted hook's trust block to its new key, bytes unchanged", () => {
-    const orca = command('orca-hook')
+    const quirky = command('quirky-hook')
     const trusted = command('trusted-user')
     const disabled = command('disabled-user')
     const untrusted = command('untrusted-user')
     upsertHookTrustEntries(configPath, [
-      { ...stopEntry(0, orca), trustedHash: 'sha256:orca' },
+      { ...stopEntry(0, quirky), trustedHash: 'sha256:quirky' },
       { ...stopEntry(1, trusted), trustedHash: 'sha256:from-an-older-codex' },
       { ...stopEntry(2, disabled), trustedHash: 'sha256:disabled', enabled: false }
     ])
@@ -114,7 +119,7 @@ describe('real-home user hook trust rebasing', () => {
     mutate(
       {
         Stop: [
-          { hooks: [orca] },
+          { hooks: [quirky] },
           { hooks: [trusted] },
           { hooks: [disabled] },
           { hooks: [untrusted] }
@@ -139,27 +144,27 @@ describe('real-home user hook trust rebasing', () => {
   })
 
   it('keeps the hooks write and reports when config.toml cannot be written', () => {
-    const orca = command('orca-hook')
+    const quirky = command('quirky-hook')
     const user = command('user-hook')
     upsertHookTrustEntries(configPath, [{ ...stopEntry(1, user), trustedHash: 'sha256:user' }])
     rmSync(configPath)
     mkdirSync(configPath)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    mutate({ Stop: [{ hooks: [orca] }, { hooks: [user] }] }, { Stop: [{ hooks: [user] }] })
+    mutate({ Stop: [{ hooks: [quirky] }, { hooks: [user] }] }, { Stop: [{ hooks: [user] }] })
 
     expect(JSON.parse(readFileSync(hooksPath, 'utf-8')).hooks.Stop).toEqual([{ hooks: [user] }])
     expect(warn).toHaveBeenCalled()
   })
 
   it('moves nothing when any stored key has an unknown shape, leaving review to Codex', () => {
-    const orca = command('orca-hook')
+    const quirky = command('quirky-hook')
     const user = command('user-hook')
     upsertHookTrustEntries(configPath, [{ ...stopEntry(1, user), trustedHash: 'sha256:user' }])
     const before = `${readFileSync(configPath, 'utf-8')}\n[hooks.state."a-key-in-a-new-format"]\ntrusted_hash = "sha256:other"\n`
     writeFileSync(configPath, before)
 
-    mutate({ Stop: [{ hooks: [orca] }, { hooks: [user] }] }, { Stop: [{ hooks: [user] }] })
+    mutate({ Stop: [{ hooks: [quirky] }, { hooks: [user] }] }, { Stop: [{ hooks: [user] }] })
 
     expect(JSON.parse(readFileSync(hooksPath, 'utf-8')).hooks.Stop).toEqual([{ hooks: [user] }])
     expect(readFileSync(configPath, 'utf-8')).toBe(before)
@@ -169,11 +174,11 @@ describe('real-home user hook trust rebasing', () => {
   it.skipIf(process.platform === 'win32')(
     'rewrites only the moved blocks, carrying each body verbatim and computing nothing',
     () => {
-      const orca = command('orca-hook')
+      const quirky = command('quirky-hook')
       const user = command('user-hook')
       const other = command('other-event-hook')
       const userBody =
-        'trusted_hash = "sha256:written-by-codex"\nnote = "a field Orca does not know"'
+        'trusted_hash = "sha256:written-by-codex"\nnote = "a field Quirky does not know"'
       const unrelated = [
         'model = "user-model" # the user\'s own comment',
         '',
@@ -190,7 +195,7 @@ describe('real-home user hook trust rebasing', () => {
       )
 
       mutate(
-        { Stop: [{ hooks: [orca] }, { hooks: [user] }], PostToolUse: [{ hooks: [other] }] },
+        { Stop: [{ hooks: [quirky] }, { hooks: [user] }], PostToolUse: [{ hooks: [other] }] },
         { Stop: [{ hooks: [user] }], PostToolUse: [{ hooks: [other] }] }
       )
 
@@ -206,7 +211,7 @@ describe('real-home user hook trust rebasing', () => {
   it.skipIf(process.platform === 'win32')(
     'moves a block in Codex quoted spelling verbatim, leaving no second table behind',
     () => {
-      const orca = command('orca-hook')
+      const quirky = command('quirky-hook')
       const user = command('user-hook')
       const userBody = 'enabled = false\ntrusted_hash = "sha256:written-by-codex"'
       const unrelated = ['model = "user-model"', '', '["hooks"."state"]', ''].join('\n')
@@ -215,7 +220,7 @@ describe('real-home user hook trust rebasing', () => {
         `${unrelated}\n["hooks"."state"."${hooksPath}:stop:1:0"]\n${userBody}\n`
       )
 
-      mutate({ Stop: [{ hooks: [orca] }, { hooks: [user] }] }, { Stop: [{ hooks: [user] }] })
+      mutate({ Stop: [{ hooks: [quirky] }, { hooks: [user] }] }, { Stop: [{ hooks: [user] }] })
 
       const after = readFileSync(configPath, 'utf-8')
       expect(after).toBe(`${unrelated}\n[hooks.state."${hooksPath}:stop:0:0"]\n${userBody}\n`)

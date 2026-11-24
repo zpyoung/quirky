@@ -14,75 +14,79 @@ describe('parseNativeChatVisualDirectiveLine', () => {
   it('parses file and title', () => {
     expect(
       parseNativeChatVisualDirectiveLine(
-        '::orca-visual{file="usage-3f2a.html" title="Usage by day"}'
+        '::quirky-visual{file="usage-3f2a.html" title="Usage by day"}'
       )
     ).toEqual({ file: 'usage-3f2a.html', title: 'Usage by day' })
   })
 
   it('treats title as optional and trims it', () => {
-    expect(parseNativeChatVisualDirectiveLine('::orca-visual{file="a.html"}')).toEqual({
+    expect(parseNativeChatVisualDirectiveLine('::quirky-visual{file="a.html"}')).toEqual({
       file: 'a.html',
       title: null
     })
-    expect(parseNativeChatVisualDirectiveLine('::orca-visual{file="a.html" title="  "}')).toEqual({
-      file: 'a.html',
-      title: null
-    })
+    expect(parseNativeChatVisualDirectiveLine('::quirky-visual{file="a.html" title="  "}')).toEqual(
+      {
+        file: 'a.html',
+        title: null
+      }
+    )
   })
 
   it('accepts attributes in any order, with spaces and tabs around them', () => {
     expect(
-      parseNativeChatVisualDirectiveLine('::orca-visual{ \ttitle="T"   file="a.html"\t }')
+      parseNativeChatVisualDirectiveLine('::quirky-visual{ \ttitle="T"   file="a.html"\t }')
     ).toEqual({ file: 'a.html', title: 'T' })
   })
 
   it('accepts up to 3 leading spaces, trailing whitespace, and CRLF or LF endings', () => {
-    expect(parseNativeChatVisualDirectiveLine('   ::orca-visual{file="a.html"}  \t\r\n')).toEqual({
-      file: 'a.html',
-      title: null
-    })
-    expect(parseNativeChatVisualDirectiveLine('::orca-visual{file="a.html"}\n')).not.toBeNull()
-    expect(parseNativeChatVisualDirectiveLine('    ::orca-visual{file="a.html"}')).toBeNull()
-    expect(parseNativeChatVisualDirectiveLine('\t::orca-visual{file="a.html"}')).toBeNull()
+    expect(parseNativeChatVisualDirectiveLine('   ::quirky-visual{file="a.html"}  \t\r\n')).toEqual(
+      {
+        file: 'a.html',
+        title: null
+      }
+    )
+    expect(parseNativeChatVisualDirectiveLine('::quirky-visual{file="a.html"}\n')).not.toBeNull()
+    expect(parseNativeChatVisualDirectiveLine('    ::quirky-visual{file="a.html"}')).toBeNull()
+    expect(parseNativeChatVisualDirectiveLine('\t::quirky-visual{file="a.html"}')).toBeNull()
   })
 
   it('ignores unknown attributes but refuses a repeated one', () => {
-    expect(parseNativeChatVisualDirectiveLine('::orca-visual{file="a.html" height="300"}')).toEqual(
-      { file: 'a.html', title: null }
-    )
     expect(
-      parseNativeChatVisualDirectiveLine('::orca-visual{file="a.html" file="b.html"}')
+      parseNativeChatVisualDirectiveLine('::quirky-visual{file="a.html" height="300"}')
+    ).toEqual({ file: 'a.html', title: null })
+    expect(
+      parseNativeChatVisualDirectiveLine('::quirky-visual{file="a.html" file="b.html"}')
     ).toBeNull()
     expect(
-      parseNativeChatVisualDirectiveLine('::orca-visual{file="a.html" title="x" title="y"}')
+      parseNativeChatVisualDirectiveLine('::quirky-visual{file="a.html" title="x" title="y"}')
     ).toBeNull()
   })
 
   it('keeps braces and markdown characters in a title verbatim', () => {
     expect(
       parseNativeChatVisualDirectiveLine(
-        '::orca-visual{file="a.html" title="Cost {USD} *by* <team>"}'
+        '::quirky-visual{file="a.html" title="Cost {USD} *by* <team>"}'
       )
     ).toEqual({ file: 'a.html', title: 'Cost {USD} *by* <team>' })
   })
 
   it.each([
-    ['missing file', '::orca-visual{title="T"}'],
-    ['empty braces', '::orca-visual{}'],
-    ['no braces', '::orca-visual'],
-    ['unclosed', '::orca-visual{file="a.html"'],
-    ['text after the line', '::orca-visual{file="a.html"} see above'],
-    ['text before the marker', 'Chart: ::orca-visual{file="a.html"}'],
-    ['wrong case', '::Orca-Visual{file="a.html"}'],
-    ['single quotes', "::orca-visual{file='a.html'}"],
-    ['unquoted value', '::orca-visual{file=a.html}'],
-    ['escaped quote', '::orca-visual{file="a.html" title="say \\"hi\\""}'],
-    ['backslash', '::orca-visual{file="a.html" title="a\\b"}'],
-    ['control character', '::orca-visual{file="a.html" title="a\u0007b"}'],
-    ['attributes glued together', '::orca-visual{file="a.html"title="T"}'],
-    ['uppercase key', '::orca-visual{FILE="a.html"}'],
-    ['embedded newline', '::orca-visual{file="a.html"\ntitle="T"}'],
-    ['three colons', ':::orca-visual{file="a.html"}']
+    ['missing file', '::quirky-visual{title="T"}'],
+    ['empty braces', '::quirky-visual{}'],
+    ['no braces', '::quirky-visual'],
+    ['unclosed', '::quirky-visual{file="a.html"'],
+    ['text after the line', '::quirky-visual{file="a.html"} see above'],
+    ['text before the marker', 'Chart: ::quirky-visual{file="a.html"}'],
+    ['wrong case', '::Quirky-Visual{file="a.html"}'],
+    ['single quotes', "::quirky-visual{file='a.html'}"],
+    ['unquoted value', '::quirky-visual{file=a.html}'],
+    ['escaped quote', '::quirky-visual{file="a.html" title="say \\"hi\\""}'],
+    ['backslash', '::quirky-visual{file="a.html" title="a\\b"}'],
+    ['control character', '::quirky-visual{file="a.html" title="a\u0007b"}'],
+    ['attributes glued together', '::quirky-visual{file="a.html"title="T"}'],
+    ['uppercase key', '::quirky-visual{FILE="a.html"}'],
+    ['embedded newline', '::quirky-visual{file="a.html"\ntitle="T"}'],
+    ['three colons', ':::quirky-visual{file="a.html"}']
   ])('refuses %s', (_name, line) => {
     expect(parseNativeChatVisualDirectiveLine(line)).toBeNull()
   })
@@ -90,13 +94,15 @@ describe('parseNativeChatVisualDirectiveLine', () => {
   it('refuses lines and titles past their length caps', () => {
     const title = 'x'.repeat(NATIVE_CHAT_VISUAL_TITLE_MAX_LENGTH)
     expect(
-      parseNativeChatVisualDirectiveLine(`::orca-visual{file="a.html" title="${title}"}`)
+      parseNativeChatVisualDirectiveLine(`::quirky-visual{file="a.html" title="${title}"}`)
     ).not.toBeNull()
     expect(
-      parseNativeChatVisualDirectiveLine(`::orca-visual{file="a.html" title="${title}x"}`)
+      parseNativeChatVisualDirectiveLine(`::quirky-visual{file="a.html" title="${title}x"}`)
     ).toBeNull()
     const padding = ' '.repeat(NATIVE_CHAT_VISUAL_DIRECTIVE_MAX_LINE_LENGTH)
-    expect(parseNativeChatVisualDirectiveLine(`::orca-visual{file="a.html"}${padding}`)).toBeNull()
+    expect(
+      parseNativeChatVisualDirectiveLine(`::quirky-visual{file="a.html"}${padding}`)
+    ).toBeNull()
   })
 })
 
@@ -143,10 +149,10 @@ describe('streaming tail', () => {
   it.each([
     ':',
     '::',
-    '::orca',
-    '::orca-visual{',
-    '::orca-visual{file="a.ht',
-    '  ::orca-visual{file="a.html"}'
+    '::quirky',
+    '::quirky-visual{',
+    '::quirky-visual{file="a.ht',
+    '  ::quirky-visual{file="a.html"}'
   ])('holds back %j', (line) => {
     expect(isPendingNativeChatVisualDirectiveTail(line)).toBe(true)
   })
@@ -156,28 +162,28 @@ describe('streaming tail', () => {
     '   ',
     'Here is a chart:',
     '::other',
-    '::orca-visualx',
-    '    ::orca-visual{',
-    '- ::orca'
+    '::quirky-visualx',
+    '    ::quirky-visual{',
+    '- ::quirky'
   ])('does not hold back %j', (line) => {
     expect(isPendingNativeChatVisualDirectiveTail(line)).toBe(false)
   })
 
   it('drops only the pending final line', () => {
-    expect(withoutPendingNativeChatVisualDirectiveTail('Intro\n::orca-visual{file="a')).toBe(
+    expect(withoutPendingNativeChatVisualDirectiveTail('Intro\n::quirky-visual{file="a')).toBe(
       'Intro\n'
     )
-    expect(withoutPendingNativeChatVisualDirectiveTail('::orca-vis')).toBe('')
+    expect(withoutPendingNativeChatVisualDirectiveTail('::quirky-vis')).toBe('')
     expect(withoutPendingNativeChatVisualDirectiveTail('Intro\nMore text')).toBe('Intro\nMore text')
     // A finished line (followed by a newline) is no longer the tail.
-    expect(withoutPendingNativeChatVisualDirectiveTail('::orca-visual{file="a.html"}\n')).toBe(
-      '::orca-visual{file="a.html"}\n'
+    expect(withoutPendingNativeChatVisualDirectiveTail('::quirky-visual{file="a.html"}\n')).toBe(
+      '::quirky-visual{file="a.html"}\n'
     )
   })
 })
 
 describe('withoutNativeChatVisualDirectiveLines', () => {
-  const LINE = '::orca-visual{file="usage.html" title="Usage"}'
+  const LINE = '::quirky-visual{file="usage.html" title="Usage"}'
 
   it('drops visual lines and the blank lines they leave behind', () => {
     expect(withoutNativeChatVisualDirectiveLines(`Here it is.\n\n${LINE}\n\nTuesday peaked.`)).toBe(

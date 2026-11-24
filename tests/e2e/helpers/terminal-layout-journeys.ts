@@ -4,7 +4,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { expect } from './orca-app'
+import { expect } from './quirky-app'
 import {
   countVisibleTerminalPanes,
   focusActiveTerminalInput,
@@ -43,7 +43,7 @@ export async function waitForBoundPanes(page: Page, count: number): Promise<void
 }
 
 export async function addFolderWorkspace(page: Page): Promise<FolderWorkspaceSetup> {
-  const folderPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-parity-folder-')))
+  const folderPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-parity-folder-')))
   const cleanup = (): void => rmSync(folderPath, { recursive: true, force: true })
   const repoId = await page.evaluate(async (folder) => {
     const result = await window.api.repos.add({ path: folder, kind: 'folder' })

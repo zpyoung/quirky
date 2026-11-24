@@ -19,7 +19,7 @@ export function createRemoteSessionBulkOpenFixture(): {
   command: (marker: string) => string
   dispose: () => void
 } {
-  const scratch = mkdtempSync(path.join(os.tmpdir(), 'orca-remote-bulk-open-'))
+  const scratch = mkdtempSync(path.join(os.tmpdir(), 'quirky-remote-bulk-open-'))
   const fixturePath = path.join(scratch, 'remote-bulk-open-flood.mjs')
   writeFileSync(
     fixturePath,

@@ -63,27 +63,27 @@ export function formatProfileStateStartupFailure(error: unknown): string | undef
         ? '  (none found)'
         : error.exportPaths.map((path) => `  ${path}`).join('\n')
     return [
-      'Orca cannot safely open the active profile because its SQLite state is unreadable.',
+      'Quirky cannot safely open the active profile because its SQLite state is unreadable.',
       `Legacy JSON path: ${error.dataFile}`,
       `SQLite path: ${error.databaseFile}`,
       'Retained SQLite backups:',
       retainedBackups,
       'Retained JSON exports:',
       retainedExports,
-      'Stop Orca, then run `orca profile state exports` and choose a known-good recovery artifact.',
-      'Restore SQLite with `orca profile state rollback --backup <id>`, or restore a JSON export with',
-      '`orca profile state rollback --revision <revision>`.'
+      'Stop Quirky, then run `quirky profile state exports` and choose a known-good recovery artifact.',
+      'Restore SQLite with `quirky profile state rollback --backup <id>`, or restore a JSON export with',
+      '`quirky profile state rollback --revision <revision>`.'
     ].join('\n')
   }
 
   if (isProfileStateAuthorityFailure(error)) {
     return [
-      `Orca cannot safely choose a profile-state authority: ${error.message}`,
+      `Quirky cannot safely choose a profile-state authority: ${error.message}`,
       'An older build may have changed the JSON file. Both copies are preserved; neither is selected automatically.',
-      'Stop Orca and copy the profile directory before choosing which state to keep.',
-      'To keep the current JSON, including edits from an older build, run `orca profile state rollback --current-json`. This archives both copies and does not merge their contents.',
-      'Run `orca profile state exports` to inspect retained recovery points.',
-      'Use `orca profile state rollback --backup <id>` or `orca profile state rollback --revision <revision>` only after selecting the state you want to restore.'
+      'Stop Quirky and copy the profile directory before choosing which state to keep.',
+      'To keep the current JSON, including edits from an older build, run `quirky profile state rollback --current-json`. This archives both copies and does not merge their contents.',
+      'Run `quirky profile state exports` to inspect retained recovery points.',
+      'Use `quirky profile state rollback --backup <id>` or `quirky profile state rollback --revision <revision>` only after selecting the state you want to restore.'
     ].join('\n')
   }
 
@@ -96,13 +96,13 @@ export function formatProfileStateStartupFailure(error: unknown): string | undef
     return error.message
   }
   if (failureClass === 'newer-schema') {
-    return 'This profile was saved by a newer version of Orca. Open it with that version or a newer release. Your profile has not been changed.'
+    return 'This profile was saved by a newer version of Quirky. Open it with that version or a newer release. Your profile has not been changed.'
   }
   if (failureClass === 'revision-conflict') {
-    return 'The active profile changed while Orca was starting. Close other Orca processes using this profile, then restart Orca.'
+    return 'The active profile changed while Quirky was starting. Close other Quirky processes using this profile, then restart Quirky.'
   }
   if (failureClass === 'writer-unavailable') {
-    return 'Orca could not start profile persistence. Restart Orca; if the problem continues, repair or reinstall this build.'
+    return 'Quirky could not start profile persistence. Restart Quirky; if the problem continues, repair or reinstall this build.'
   }
 
   return undefined

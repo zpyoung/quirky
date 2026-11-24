@@ -12,9 +12,9 @@ import {
 } from '../../../shared/launch-parity-window-request.test-fixture'
 
 const USER_AGENT: Record<LaunchClient, string> = {
-  darwin: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Orca',
-  linux: 'Mozilla/5.0 (X11; Linux x86_64) Orca',
-  win32: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Orca'
+  darwin: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Quirky',
+  linux: 'Mozilla/5.0 (X11; Linux x86_64) Quirky',
+  win32: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Quirky'
 }
 
 type StoreHelpers = typeof StoreHelpersNamespace

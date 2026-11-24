@@ -1,5 +1,5 @@
 /**
- * What a relay-era terminal prints for a served `orca orchestration` command, and the ack its
+ * What a relay-era terminal prints for a served `quirky orchestration` command, and the ack its
  * relay sends back once that output is on screen.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  */

@@ -9,7 +9,7 @@ import {
   listEnvironments,
   resolveEnvironmentPairingOffer
 } from './runtime-environment-store'
-import { addManagedOrcadEnvironment } from './runtime-environment-managed-orcad-store'
+import { addManagedQuirkydEnvironment } from './runtime-environment-managed-quirkyd-store'
 
 const serverKey = Buffer.alloc(32, 7).toString('base64')
 
@@ -23,7 +23,7 @@ describe('pairing a server that is already saved', () => {
   beforeEach(() => {
     // Why: this suite tests store contents, while secure-file tests cover Windows ACLs.
     Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-same-server-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-same-server-'))
   })
   afterEach(() => {
     if (originalPlatform) {
@@ -73,7 +73,7 @@ describe('pairing a server that is already saved', () => {
         pairingCode: pairingCode('ws://192.0.2.10:6768', 'second-token')
       })
     ).toThrow(
-      'This server is already paired as "Studio". To update its connection, add it again under Settings > Remote Orca Servers.'
+      'This server is already paired as "Studio". To update its connection, add it again under Settings > Remote Quirky Servers.'
     )
     expect(listEnvironments(userDataPath)).toEqual([first])
   })
@@ -157,12 +157,12 @@ describe('pairing a server that is already saved', () => {
     expect(outcome.environment.connectionDependency).toBeUndefined()
   })
 
-  it('refuses, naming the saved entry, when Orca manages that server over SSH', () => {
-    const managed = addManagedOrcadEnvironment(userDataPath, {
+  it('refuses, naming the saved entry, when Quirky manages that server over SSH', () => {
+    const managed = addManagedQuirkydEnvironment(userDataPath, {
       id: 'managed',
       name: 'Managed box',
       pairingCode: pairingCode('ws://127.0.0.1:41000/runtime'),
-      orcadDeployment: {
+      quirkydDeployment: {
         sshTargetId: 'target',
         sshTargetGeneration: 1,
         localPort: 41000,

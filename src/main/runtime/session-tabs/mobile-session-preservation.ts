@@ -1,5 +1,5 @@
-import type { OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab as StoredMobileSnapshotHasStalePreservedTabMethods } from './mobile-session-publication-preservation'
-import { OrcaRuntimeWithSyncMobileSessionTabs } from './mobile-session-reconciliation'
+import type { QuirkyRuntimeWithStoredMobileSnapshotHasStalePreservedTab as StoredMobileSnapshotHasStalePreservedTabMethods } from './mobile-session-publication-preservation'
+import { QuirkyRuntimeWithSyncMobileSessionTabs } from './mobile-session-reconciliation'
 import type {
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
@@ -13,7 +13,7 @@ import {
 import { terminalLayoutContainsLeaf } from '../../../shared/workspace-session-pane-ownership'
 import { getHeadlessMobileSessionGroupId } from '../mobile-session-layout-projection'
 
-export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs extends OrcaRuntimeWithSyncMobileSessionTabs {
+export abstract class QuirkyRuntimeWithMergePreservedHeadlessMobileSessionTabs extends QuirkyRuntimeWithSyncMobileSessionTabs {
   protected abstract collectPreservedHeadlessMobileSessionTabs(
     ...args: Parameters<
       StoredMobileSnapshotHasStalePreservedTabMethods['collectPreservedHeadlessMobileSessionTabs']

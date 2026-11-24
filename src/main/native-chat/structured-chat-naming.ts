@@ -140,7 +140,7 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
         failure = 'error' in result ? result : { error: 'The chat-name agent returned no name.' }
       } catch (error) {
         warn(record.sessionId, error)
-        failure = { error: 'Orca could not run the chat-name agent.' }
+        failure = { error: 'Quirky could not run the chat-name agent.' }
       }
       const delay = retryDelays[attempt]
       if (delay === undefined) {

@@ -1,5 +1,5 @@
 /** Starts the one stderr line a provider supervisor writes when it could not start its provider. */
-export const PROVIDER_SPAWN_FAILURE_MARKER = '[orca-provider-supervisor] spawn failed: '
+export const PROVIDER_SPAWN_FAILURE_MARKER = '[quirky-provider-supervisor] spawn failed: '
 
 type SpawnFailureReport = { thrown: boolean; code: string; message: string }
 

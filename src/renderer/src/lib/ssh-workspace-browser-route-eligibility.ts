@@ -1,7 +1,7 @@
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import { isRuntimeOwnedSshTargetId, parseExecutionHostId } from '../../../shared/execution-host'
 import {
-  getOrcadSshDeployment,
+  getQuirkydSshDeployment,
   type PublicKnownRuntimeEnvironment
 } from '../../../shared/runtime-environments'
 
@@ -19,7 +19,7 @@ export type SshWorkspaceBrowserRouteEligibility = {
 export function resolveSshWorkspaceBrowserRouteEligibility(
   executionHostId: string | null | undefined,
   settings: SshBrowserRoutingSettings | null | undefined,
-  environments?: readonly Pick<PublicKnownRuntimeEnvironment, 'id' | 'orcadDeployment'>[]
+  environments?: readonly Pick<PublicKnownRuntimeEnvironment, 'id' | 'quirkydDeployment'>[]
 ): SshWorkspaceBrowserRouteEligibility | null {
   const parsed = parseExecutionHostId(executionHostId)
   const environment =
@@ -28,7 +28,7 @@ export function resolveSshWorkspaceBrowserRouteEligibility(
       : undefined
   // Why a WSL deployment is not an SSH route: its pages egress through the paired runtime's
   // network tunnel over the wsl.exe bridge, never through WSL localhost forwarding.
-  const deployment = environment && getOrcadSshDeployment(environment)
+  const deployment = environment && getQuirkydSshDeployment(environment)
   const targetId = parsed?.kind === 'ssh' ? parsed.targetId : deployment?.sshTargetId
   // Why: runtime-owned ephemeral SSH targets belong to the paired runtime's browser route.
   if (!targetId || isRuntimeOwnedSshTargetId(targetId)) {

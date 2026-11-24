@@ -1,6 +1,6 @@
 import { resolveEnvironment } from '../../../shared/runtime-environment-store'
 import {
-  getOrcadSshDeployment,
+  getQuirkydSshDeployment,
   type KnownRuntimeEnvironment
 } from '../../../shared/runtime-environments'
 import { classifyRuntimeEnvironmentHost } from '../../../shared/runtime-environment-host-kind'
@@ -11,19 +11,19 @@ import type {
 } from '../../../shared/ssh-types'
 import { managedServerUpdateDeps } from '../../ssh/managed-server-update-deps'
 import {
-  ensureOrcadManagedTunnel,
-  rebuildOrcadManagedTunnel
-} from '../../managed-server/lifecycle/orcad-managed-tunnel'
-import { verifyOrcadManagedServing } from '../../managed-server/lifecycle/orcad-managed-serving-verify'
+  ensureQuirkydManagedTunnel,
+  rebuildQuirkydManagedTunnel
+} from '../../managed-server/lifecycle/quirkyd-managed-tunnel'
+import { verifyQuirkydManagedServing } from '../../managed-server/lifecycle/quirkyd-managed-serving-verify'
 import {
-  MANAGED_ORCAD_NOT_ACTIVATED_DETAIL,
-  setManagedOrcadStartListener,
-  type OrcadManagedServing
-} from '../../managed-server/lifecycle/orcad-managed-serving'
+  MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL,
+  setManagedQuirkydStartListener,
+  type QuirkydManagedServing
+} from '../../managed-server/lifecycle/quirkyd-managed-serving'
 import {
-  redeployStoppedManagedOrcad,
-  updateManagedOrcadOnRestore
-} from '../../managed-server/lifecycle/orcad-managed-update-on-restore'
+  redeployStoppedManagedQuirkyd,
+  updateManagedQuirkydOnRestore
+} from '../../managed-server/lifecycle/quirkyd-managed-update-on-restore'
 import { getSshHostServerStatus, setSshHostServerStatus } from '../../ssh/ssh-host-server-status'
 import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry'
 import { connectionManager, getCurrentMainWindow } from '../ssh/ssh-ipc-context'
@@ -45,31 +45,31 @@ async function prepareNetworkServerForCall(
   userDataPath: string,
   environment: KnownRuntimeEnvironment
 ): Promise<void> {
-  await ensureOrcadManagedTunnel(userDataPath, environment.id)
+  await ensureQuirkydManagedTunnel(userDataPath, environment.id)
   // Why: a server that stopped (idle, killed, host rebooted) starts before the call that needs it.
-  const serving = await verifyOrcadManagedServing(userDataPath, environment.id)
+  const serving = await verifyQuirkydManagedServing(userDataPath, environment.id)
   const createDeps = () => ({
     ...managedServerUpdateDeps(userDataPath),
     target: () => {
-      const targetId = getOrcadSshDeployment(environment)?.sshTargetId
+      const targetId = getQuirkydSshDeployment(environment)?.sshTargetId
       return targetId ? (getSshTargetRegistryStore()?.getTarget(targetId) ?? null) : null
     },
     publish: publishRestoreUpdate
   })
   if (isStoppedElsewhere(serving)) {
     // Why awaited: this call needs the server, and another desktop's stop can land mid-session.
-    if (await redeployStoppedManagedOrcad(environment.id, createDeps)) {
-      const targetId = getOrcadSshDeployment(environment)?.sshTargetId
+    if (await redeployStoppedManagedQuirkyd(environment.id, createDeps)) {
+      const targetId = getQuirkydSshDeployment(environment)?.sshTargetId
       if (targetId) {
         await forgetLaunchSessionVerdictLazily(targetId)
       }
       // Why rebuild: the redeployed server may bind another port than the reused forward targets.
-      await rebuildOrcadManagedTunnel(userDataPath, environment.id)
+      await rebuildQuirkydManagedTunnel(userDataPath, environment.id)
     }
   } else {
     // Why here: an auto-restored host may never see an SSH connect, so it would never update.
-    const update = updateManagedOrcadOnRestore(environment.id, createDeps)
-    const targetId = getOrcadSshDeployment(environment)?.sshTargetId
+    const update = updateManagedQuirkydOnRestore(environment.id, createDeps)
+    const targetId = getQuirkydSshDeployment(environment)?.sshTargetId
     if (targetId) {
       // Why after the update: its settled status would otherwise replace the warning.
       // Why lazy: the note publishes through this module.
@@ -90,8 +90,8 @@ async function forgetLaunchSessionVerdictLazily(targetId: string): Promise<void>
   forgetLaunchSessionVerdict(targetId)
 }
 
-function isStoppedElsewhere(serving: OrcadManagedServing): boolean {
-  return serving.state === 'unverifiable' && serving.detail === MANAGED_ORCAD_NOT_ACTIVATED_DETAIL
+function isStoppedElsewhere(serving: QuirkydManagedServing): boolean {
+  return serving.state === 'unverifiable' && serving.detail === MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL
 }
 
 function publishRestoreUpdate(
@@ -109,8 +109,8 @@ function publishRestoreUpdate(
 }
 
 /** Shows a managed server's start on the host's status line, wherever the start began. */
-export function installManagedOrcadStartStatus(): void {
-  setManagedOrcadStartListener({
+export function installManagedQuirkydStartStatus(): void {
+  setManagedQuirkydStartListener({
     starting: (target) =>
       publishHostServerStatus(target.id, { kind: 'setting-up', phase: 'starting' }),
     settled: (target, environmentId, serving) => {

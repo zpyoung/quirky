@@ -58,7 +58,7 @@ describe('hidden Chromium popup compatibility', () => {
         expect(
           await page.evaluate('window.popup.eval(\'window.open("about:blank")===null\')')
         ).toBe(true)
-        await page.evaluate('console.log("orca-popup-fixture:snapshot")')
+        await page.evaluate('console.log("quirky-popup-fixture:snapshot")')
         await expect.poll(() => status().routeContents.length).toBe(2)
         expect(status().routeContents).toEqual([
           { security: expectedSecurity, webRtcPolicy: 'disable_non_proxied_udp' },
@@ -192,7 +192,7 @@ describe('hidden Chromium popup compatibility', () => {
           .some((candidate) => candidate.url() === `${origin}/docs`)
       )
       .toBe(true)
-    await page.evaluate('console.log("orca-popup-fixture:snapshot")')
+    await page.evaluate('console.log("quirky-popup-fixture:snapshot")')
     expect(
       status().routeContents.every(({ webRtcPolicy }) => webRtcPolicy === 'disable_non_proxied_udp')
     ).toBe(true)
@@ -248,13 +248,13 @@ describe('hidden Chromium popup compatibility', () => {
     expect(status().blocked.length).toBeGreaterThanOrEqual(7)
     expect(status().windowsHidden).toBe(true)
     expect(await page.evaluate('Notification.requestPermission()')).toBe('denied')
-    await page.evaluate('console.log("orca-popup-fixture:fence")')
+    await page.evaluate('console.log("quirky-popup-fixture:fence")')
     await expect.poll(() => status().routeGranted).toBe(false)
     await expect.poll(() => page.evaluate('window.livePopup.closed')).toBe(true)
     await expect.poll(() => native.isClosed()).toBe(true)
     await page.locator('#blank').click()
     expect(await page.locator('body').getAttribute('data-handle')).toBe('false')
-    await page.evaluate('console.log("orca-popup-fixture:grant")')
+    await page.evaluate('console.log("quirky-popup-fixture:grant")')
     await expect.poll(() => status().routeGranted).toBe(true)
     await page.locator('#blank').click()
     expect(await page.locator('body').getAttribute('data-handle')).toBe('true')
@@ -281,7 +281,7 @@ describe('hidden Chromium popup compatibility', () => {
     if (!regrantedNative) {
       throw new Error('Missing regranted native child')
     }
-    await page.evaluate('console.log("orca-popup-fixture:close")')
+    await page.evaluate('console.log("quirky-popup-fixture:close")')
     await expect.poll(() => child.isClosed()).toBe(true)
     await expect.poll(() => regrantedNative.isClosed()).toBe(true)
   })

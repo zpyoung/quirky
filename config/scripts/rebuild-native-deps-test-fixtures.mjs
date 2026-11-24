@@ -87,7 +87,7 @@ function unpatchedWindowsProcessTreeCommandLineSource() {
  * rather than whatever the developer happens to have.
  */
 export function gitLineEndingEnv(autocrlf) {
-  const home = mkdtempSync(join(tmpdir(), `orca-git-home-${autocrlf}-`))
+  const home = mkdtempSync(join(tmpdir(), `quirky-git-home-${autocrlf}-`))
   writeFileSync(join(home, '.gitconfig'), `[core]\n\tautocrlf = ${autocrlf}\n`)
   return { HOME: home, USERPROFILE: home }
 }
@@ -108,7 +108,7 @@ export function writeWindowsProcessTreePatchFile(projectDir) {
 }
 
 export function mkTempProject() {
-  const projectDir = mkdtempSync(join(tmpdir(), 'orca-rebuild-native-deps-'))
+  const projectDir = mkdtempSync(join(tmpdir(), 'quirky-rebuild-native-deps-'))
   mkdirSync(join(projectDir, 'config', 'scripts'), { recursive: true })
   copyScriptWithLocalModules(sourceScriptPath, join(projectDir, 'config', 'scripts'))
   copyScriptWithLocalModules(sourceInstallScriptPath, join(projectDir, 'config', 'scripts'))
@@ -129,11 +129,11 @@ export function runRebuildScript(projectDir, extraEnv = {}, args = []) {
     ...process.env,
     npm_config_platform: 'linux',
     npm_config_arch: 'x64',
-    ORCA_ELECTRON_PACKAGE_EXTRACTOR: join(projectDir, 'fake-extractor.cjs')
+    QUIRKY_ELECTRON_PACKAGE_EXTRACTOR: join(projectDir, 'fake-extractor.cjs')
   }
   for (const key of Object.keys(env)) {
     if (
-      key.toLowerCase() === 'orca_strict_electron_install' ||
+      key.toLowerCase() === 'quirky_strict_electron_install' ||
       key.toLowerCase() === 'npm_lifecycle_event' ||
       key.toLowerCase() === 'trackfileaccess'
     ) {
@@ -423,7 +423,7 @@ exports.loadNativeModule = function loadNativeModule(nativeName) {
 }
 
 export function writeFakeWindowsRegistry(projectDir) {
-  const registryDir = join(projectDir, 'node_modules', '@orca', 'windows-registry')
+  const registryDir = join(projectDir, 'node_modules', '@quirky', 'windows-registry')
   mkdirSync(registryDir, { recursive: true })
   writeFileSync(
     join(registryDir, 'index.js'),
@@ -432,7 +432,7 @@ export function writeFakeWindowsRegistry(projectDir) {
 }
 
 export function writeFakeWindowsSecurity(projectDir) {
-  const securityDir = join(projectDir, 'node_modules', '@orca', 'windows-security')
+  const securityDir = join(projectDir, 'node_modules', '@quirky', 'windows-security')
   mkdirSync(securityDir, { recursive: true })
   writeFileSync(join(securityDir, 'index.js'), "exports.currentUserSid = () => 'S-1-5-18'\n")
 }

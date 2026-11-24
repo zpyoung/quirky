@@ -54,7 +54,7 @@ function reportProjectGroupDeleteFailures(result: {
     toast.error(
       translate(
         'auto.components.sidebar.WorktreeList.b667b59632',
-        'Some projects could not be removed from Orca'
+        'Some projects could not be removed from Quirky'
       ),
       {
         description: translate(
@@ -143,7 +143,7 @@ export function useProjectGroupDialogs(args: {
             description: translate(
               'auto.components.sidebar.WorktreeList.groupRenameFailedDesc',
               // Why: a falsy result also covers RPC timeout/disconnect, so the copy must not assert the host refused.
-              "Orca could not confirm the new name with the group's host. Recheck the group after reconnecting."
+              "Quirky could not confirm the new name with the group's host. Recheck the group after reconnecting."
             )
           }
         )

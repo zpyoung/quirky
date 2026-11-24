@@ -6,11 +6,11 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { startVitest } from 'vitest/node'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1.')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1.')
 }
 const root = fileURLToPath(new URL('../../../', import.meta.url))
-const sourcePath = 'src/main/runtime/orca-runtime-stop-explicitly-closed-tab-ptys.ts'
+const sourcePath = 'src/main/runtime/quirky-runtime-stop-explicitly-closed-tab-ptys.ts'
 const fixturePath = 'src/main/runtime/terminal-close-observed-exit-test-fixture.ts'
 const source = await readFile(join(root, sourcePath), 'utf8')
 const capture = '      const expectedIncarnationId = this.ptysById.get(ptyId)?.incarnationId\n'
@@ -26,7 +26,7 @@ const guard = `        // Preserve an observed exit when a broader inventory che
 `
 assert(source.includes(capture) && source.includes(guard), 'Review the baseline transform.')
 const baseline = source.replace(capture, '').replace(guard, '')
-const scratch = await mkdtemp(join(tmpdir(), 'orca-observed-exit-proof-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-observed-exit-proof-'))
 const phases = []
 try {
   for (const phase of ['before', 'after']) {

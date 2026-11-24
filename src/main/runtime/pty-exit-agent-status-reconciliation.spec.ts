@@ -5,7 +5,7 @@
  * resolve, so it reconciles them — but only on a real death certificate.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { makePaneKey } from '../../shared/stable-pane-id'
 
 export function registerPtyExitAgentStatusReconciliationTests(): void {
@@ -20,8 +20,8 @@ export function registerPtyExitAgentStatusReconciliationTests(): void {
   function runtimeWithBoundPane(
     reconcile: (paneKeys: Iterable<string>) => void,
     options: { connectionId?: string } = {}
-  ): OrcaRuntimeService {
-    const runtime = new OrcaRuntimeService(null, undefined, {
+  ): QuirkyRuntimeService {
+    const runtime = new QuirkyRuntimeService(null, undefined, {
       reconcileAgentStatusForEndedProcess: reconcile
     })
     const ptys = (runtime as unknown as RuntimeInternals).ptysById

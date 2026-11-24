@@ -6,12 +6,12 @@ import { COMMAND_SPECS } from '../specs'
 const COMMAND_PATHS = COMMAND_SPECS.flatMap((spec) => [spec.path, ...(spec.aliases ?? [])])
 
 /**
- * `orca ask` is a bare command AND a group prefix (`ask wait`, `ask cancel`) — the one
+ * `quirky ask` is a bare command AND a group prefix (`ask wait`, `ask cancel`) — the one
  * combination this codebase didn't already have a precedent for. These exercise the real
  * `parseArgs` -> `findCommandSpec` -> `dispatch` pipeline (not just ASK_HANDLERS directly) to
  * confirm the bare form still resolves once 'ask' registers its specs and supportsBrowserPageFlag.
  */
-describe('orca ask CLI registration (real parseArgs + dispatch)', () => {
+describe('quirky ask CLI registration (real parseArgs + dispatch)', () => {
   it('parses the bare form to commandPath ["ask"] with --spec/--timeout-ms/--chunk-ms as flags', () => {
     const parsed = normalizeCommandPositionals(
       COMMAND_SPECS,
@@ -24,8 +24,14 @@ describe('orca ask CLI registration (real parseArgs + dispatch)', () => {
 
   it('parses subcommands to their own commandPath, not swallowed by the bare group', () => {
     for (const [argv, expected] of [
-      [['ask', 'wait', '--id', 'ask_1'], ['ask', 'wait']],
-      [['ask', 'cancel', '--id', 'ask_1'], ['ask', 'cancel']]
+      [
+        ['ask', 'wait', '--id', 'ask_1'],
+        ['ask', 'wait']
+      ],
+      [
+        ['ask', 'cancel', '--id', 'ask_1'],
+        ['ask', 'cancel']
+      ]
     ] as const) {
       const parsed = normalizeCommandPositionals(COMMAND_SPECS, parseArgs([...argv], COMMAND_PATHS))
       expect(parsed.commandPath).toEqual(expected)
@@ -46,7 +52,9 @@ describe('orca ask CLI registration (real parseArgs + dispatch)', () => {
   })
 
   it('dispatches the bare form to ASK_HANDLERS.ask, not "Unknown command"', async () => {
-    const callMock = vi.fn().mockResolvedValue({ result: { status: 'unavailable', reason: 'no surface' } })
+    const callMock = vi
+      .fn()
+      .mockResolvedValue({ result: { status: 'unavailable', reason: 'no surface' } })
     vi.spyOn(console, 'log').mockImplementation(() => {})
     const ctx: HandlerContext = {
       flags: new Map([['spec', '{"questions":[{"id":"go","type":"confirm","question":"Go?"}]}']]),

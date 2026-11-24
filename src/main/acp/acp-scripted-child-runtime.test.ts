@@ -30,7 +30,7 @@ afterEach(async () => {
 
 describe.each(['grok', 'opencode'] as const)('%s runtime with a scripted ACP child', (agent) => {
   it('attaches and accepts a send while startup is held, then delivers once the protocol session opens', async () => {
-    stateDirectory = await mkdtemp(join(tmpdir(), 'orca-scripted-acp-'))
+    stateDirectory = await mkdtemp(join(tmpdir(), 'quirky-scripted-acp-'))
     const script = acpScriptedChild(agent)()
     const host = await ensureStructuredAgentSessionHost({
       logger: createStructuredAgentSessionLogger(),

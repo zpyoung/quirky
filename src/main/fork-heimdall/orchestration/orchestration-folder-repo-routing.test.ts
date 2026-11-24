@@ -24,11 +24,11 @@ vi.mock('../../runtime/repo-worktree-resolution-scan', () => ({
 }))
 
 import type { WatcherEnrollment } from '../../../shared/fork-heimdall/watcher-types'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { HeimdallKernelHost } from '../kernel-host'
 import { workspaceRuntimeId } from './orchestration-adapter'
 
-class FolderTestRuntime extends OrcaRuntimeService {
+class FolderTestRuntime extends QuirkyRuntimeService {
   public override resolveRuntimeFileTarget(selector: string) {
     return super.resolveRuntimeFileTarget(selector)
   }
@@ -118,7 +118,7 @@ describe('Heimdall folder repo orchestration routing', () => {
       terminalAtMs: null
     }
     const selector = `id:${workspaceRuntimeId(enrollment)}`
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of the large, private-field-bearing Store class; only the persistence methods OrcaRuntimeService reads for repo/worktree resolution are implemented.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of the large, private-field-bearing Store class; only the persistence methods QuirkyRuntimeService reads for repo/worktree resolution are implemented.
     const runtime = new FolderTestRuntime(store as never)
 
     await expect(runtime.showManagedTerminalWorkspace(selector)).resolves.toMatchObject({

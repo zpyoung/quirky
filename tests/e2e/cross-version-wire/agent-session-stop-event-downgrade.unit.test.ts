@@ -18,7 +18,7 @@ import {
   insertTestJournalRowJson,
   liveTestJournalRows,
   openTestJournalHostDatabase,
-  SAVED_BY_NEWER_ORCA
+  SAVED_BY_NEWER_QUIRKY
 } from '../../../src/main/native-chat/agent-session-journal/journal-host-database-test-support'
 import type { JournalRow } from '../../../src/main/native-chat/agent-session-journal/journal-row-schema'
 import { importReleaseCheckoutModule, materializeReleaseCheckout } from './release-checkout'
@@ -60,12 +60,12 @@ const OLDER_IDENTITY: OlderJournalIdentity = {
 test.each(['v1.4.219', 'v1.4.220', WRITABLE_BASELINE_REF])(
   '%s replays current raw rows with the unconfirmed failure intact',
   async (ref) => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-stop-note-raw-skew-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-stop-note-raw-skew-'))
     const journals = createTrackedJournalOpener()
     try {
       const journal = await journals.open({ identity: IDENTITY, stateDirectory: directory })
-      const turn = { provider: 'orca', clientMessageId: 'turn-raw-skew' } as const
-      const note = { provider: 'orca', clientMessageId: 'stop:turn-raw-skew' } as const
+      const turn = { provider: 'quirky', clientMessageId: 'turn-raw-skew' } as const
+      const note = { provider: 'quirky', clientMessageId: 'stop:turn-raw-skew' } as const
       const unconfirmed = {
         kind: 'status' as const,
         ...agentSessionFailureWords(agentSessionFailureFact('cancelUnconfirmed'), {
@@ -144,7 +144,7 @@ type OldReplay = {
 
 // Both downgrade probes load real old builds, including cold extraction and transforms.
 test("an older build keeps every row around a Stop's event, a Resume and a reopen mark, and folds the rows after them", async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-stop-event-downgrade-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-stop-event-downgrade-'))
   const journals = createTrackedJournalOpener()
   try {
     // This build: history, a person's Stop, a Resume, then more history.
@@ -264,7 +264,7 @@ function storedRows(directory: string): string[] {
 }
 
 test("an older build opens this build's journal writable and appends to it; the pause survives the round trip", async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-stop-event-writable-downgrade-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-stop-event-writable-downgrade-'))
   const journals = createTrackedJournalOpener()
   const itemIds = (journal: Pick<OlderJournal, 'snapshot'>) =>
     journal.snapshot().items.map((entry) => entry.itemId)
@@ -310,13 +310,13 @@ test("an older build opens this build's journal writable and appends to it; the 
 }, 120_000)
 
 // Why a Stop's event cannot have a row kind of its own yet: this build keeps a kind it does not know
-// and refuses the load as a newer Orca's chat, but a build from before that deletes the journal from
+// and refuses the load as a newer Quirky's chat, but a build from before that deletes the journal from
 // it. So a Stop kind ships
 // its reader first and is written once no supported build lacks that reader, or is written at a
 // bumped `v`. Move the baseline to the first release with this rule, and the older build keeps the
 // row too.
 test("this build keeps a newer build's row kind and refuses the load; a build before it deletes it", async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-newer-kind-downgrade-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-newer-kind-downgrade-'))
   const journals = createTrackedJournalOpener()
   const newerKinds = () => storedRows(directory).filter((row) => row.includes('"future-mark"'))
   try {
@@ -345,7 +345,7 @@ test("this build keeps a newer build's row kind and refuses the load; a build be
 
     await expect(
       journals.open({ identity: IDENTITY, stateDirectory: directory })
-    ).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
+    ).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
     await journals.closeAll()
     expect(storedRows(directory)).toEqual(rowsBefore)
     expect(newerKinds()).toEqual([newer])

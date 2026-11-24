@@ -5,7 +5,7 @@ import { expect, it } from 'vitest'
 import { modulesDeclaringTextInput } from './mobile-web-app-text-input-font-size-seam.mjs'
 
 it('discovers input modules and ignores tests and non-JSX mentions', () => {
-  const scratch = mkdtempSync(join(tmpdir(), 'orca-text-input-discovery-'))
+  const scratch = mkdtempSync(join(tmpdir(), 'quirky-text-input-discovery-'))
   try {
     mkdirSync(join(scratch, 'src/browser'), { recursive: true })
     for (const [name, source] of Object.entries({

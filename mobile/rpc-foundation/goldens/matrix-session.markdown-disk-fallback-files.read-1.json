@@ -308,7 +308,7 @@
           "editable": false,
           "isDirty": false,
           "localContent": "# disk",
-          "readOnlyReason": "Editing needs Orca desktop running.",
+          "readOnlyReason": "Editing needs Quirky desktop running.",
           "stale": false,
           "status": "ready"
         }

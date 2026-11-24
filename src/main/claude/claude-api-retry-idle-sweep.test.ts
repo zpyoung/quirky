@@ -51,7 +51,7 @@ function waitOutSeveralSweeps(): Promise<void> {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-retry-sweep-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-retry-sweep-'))
   resetHostTestOperationIds()
   sink = null
   clock = NOW

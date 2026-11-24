@@ -53,7 +53,7 @@ it('is tri-state at every level, each node over every chat under it', () => {
   const remote: ExecutionHostId = 'ssh:build-server'
   render({ candidates: seedTree({ parent: remote, child: remote }) })
   const machine = getHostContextLabel(remote)
-  expect([machine, 'orca', 'parent', 'child', 'other'].map((name) => countOf(name))).toEqual([
+  expect([machine, 'quirky', 'parent', 'child', 'other'].map((name) => countOf(name))).toEqual([
     '4 of 4',
     '4 of 4',
     '3 of 3',
@@ -62,9 +62,9 @@ it('is tri-state at every level, each node over every chat under it', () => {
   ])
 
   act(() => chatBox('in-child').click())
-  expect([machine, 'orca', 'parent', 'child', 'other'].map((name) => state(nodeBox(name)))).toEqual(
-    ['mixed', 'mixed', 'mixed', 'mixed', 'true']
-  )
+  expect(
+    [machine, 'quirky', 'parent', 'child', 'other'].map((name) => state(nodeBox(name)))
+  ).toEqual(['mixed', 'mixed', 'mixed', 'mixed', 'true'])
   expect(countOf(machine)).toBe('3 of 4')
   expect(countOf('child')).toBe('1 of 2')
 
@@ -77,7 +77,7 @@ it('is tri-state at every level, each node over every chat under it', () => {
   for (const id of ['in-parent', 'in-child', 'also-in-child', 'in-other']) {
     expect(state(chatBox(id))).toBe('false')
   }
-  expect(countOf('orca')).toBe('0 of 4')
+  expect(countOf('quirky')).toBe('0 of 4')
 })
 
 it('selects every eligible chat in a project, never an unretryable one or another project’s', () => {
@@ -86,7 +86,13 @@ it('selects every eligible chat in a project, never an unretryable one or anothe
   useAppStore.setState((current) => ({
     repos: [
       ...current.repos,
-      { id: 'repo-2', path: '/mobile', displayName: 'orca-mobile', badgeColor: '#999', addedAt: 1 }
+      {
+        id: 'repo-2',
+        path: '/mobile',
+        displayName: 'quirky-mobile',
+        badgeColor: '#999',
+        addedAt: 1
+      }
     ],
     worktreesByRepo: { ...current.worktreesByRepo, 'repo-2': [mobile] }
   }))
@@ -96,16 +102,16 @@ it('selects every eligible chat in a project, never an unretryable one or anothe
     initiallySelected: ['in-mobile'],
     failureFor: (sessionId) => (sessionId === 'in-other' ? stuck : undefined)
   })
-  expect(countOf('orca')).toBe('0 of 3')
+  expect(countOf('quirky')).toBe('0 of 3')
   expect(chatBox('in-other').hasAttribute('disabled')).toBe(true)
 
-  act(() => nodeBox('orca').click())
-  expect(countOf('orca')).toBe('3 of 3')
-  expect(state(nodeBox('orca'))).toBe('true')
+  act(() => nodeBox('quirky').click())
+  expect(countOf('quirky')).toBe('3 of 3')
+  expect(state(nodeBox('quirky'))).toBe('true')
   const touched = onToggleSpy.mock.calls.map(([sessionId]) => sessionId)
   expect(touched).not.toContain('in-other')
   expect(touched).not.toContain('in-mobile')
-  expect(countOf('orca-mobile')).toBe('1 of 1')
+  expect(countOf('quirky-mobile')).toBe('1 of 1')
 })
 
 it('disables a node with nothing it could select', () => {
@@ -155,7 +161,7 @@ it('starts expanded; collapsing hides a node’s rows and keeps their selection'
 
   act(() => parent.click())
   expect(treeOutline()).toEqual([
-    '1:project:orca',
+    '1:project:quirky',
     '2:workspace:parent',
     '2:workspace:other',
     '3:chat:in-other'

@@ -15,7 +15,7 @@ import { readString } from '../tool-input-preview'
 // Why: ZCode's own lifecycle events are camelCase, but its hook runner writes a
 // Claude-compatible stdin alias set (`hook_event_name`, `tool_name`, `tool_input`,
 // `transcript_path`, `last_assistant_message`) alongside them — see ZCode's
-// `packages/core/src/hooks/configured-runner-input.ts`. Orca reads the aliases, so the
+// `packages/core/src/hooks/configured-runner-input.ts`. Quirky reads the aliases, so the
 // Claude tool-field extractor applies verbatim; only the agent identity differs.
 const ZCODE_IDLE_SESSION_START_SOURCES: ReadonlySet<string> = new Set([
   'startup',
@@ -46,7 +46,7 @@ function readZCodeTurn(eventName: unknown, hookPayload: Record<string, unknown>)
       return { stateName: 'working' }
     case 'PreToolUse':
       // Why: ZCode's clarification tool is literally `AskUserQuestion` with Claude's
-      // questions/options input shape, so Orca's question card renders it unchanged.
+      // questions/options input shape, so Quirky's question card renders it unchanged.
       return {
         stateName: isAskUserQuestionTool(readString(hookPayload, 'tool_name'))
           ? 'waiting'

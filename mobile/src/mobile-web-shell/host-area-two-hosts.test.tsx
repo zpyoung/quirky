@@ -45,13 +45,16 @@ vi.mock('expo-router', async () => {
 vi.mock('expo-clipboard', mocks['expo-clipboard'])
 vi.mock('expo-haptics', mocks['expo-haptics'])
 vi.mock('expo-document-picker', mocks['expo-document-picker'])
-vi.mock('@orca/expo-two-way-audio', mocks['@orca/expo-two-way-audio'])
+vi.mock('@quirky/expo-two-way-audio', mocks['@quirky/expo-two-way-audio'])
 vi.mock('expo-keep-awake', mocks['expo-keep-awake'])
 vi.mock('expo-image-picker', mocks['expo-image-picker'])
 vi.mock('expo-file-system', mocks['expo-file-system'])
 vi.mock('lucide-react-native', mocks['lucide-react-native'])
 vi.mock('react-native-safe-area-context', mocks['react-native-safe-area-context'])
-vi.mock('../../modules/orca-mobile-web-shell/src', mocks['../../modules/orca-mobile-web-shell/src'])
+vi.mock(
+  '../../modules/quirky-mobile-web-shell/src',
+  mocks['../../modules/quirky-mobile-web-shell/src']
+)
 vi.mock('../app-update/use-wall-app-update', mocks['../app-update/use-wall-app-update'])
 vi.mock('../transport/host-client-hooks', mocks['../transport/host-client-hooks'])
 vi.mock('./use-page-host-snapshot', mocks['./use-page-host-snapshot'])

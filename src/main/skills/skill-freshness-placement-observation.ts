@@ -58,7 +58,7 @@ export async function observeSkillFreshnessInstallation(args: {
       status: matchesBundledSkillFiles(observed, args.current.files) ? 'current' : 'outdated'
     }
   } catch (error) {
-    // Why: a package Orca could not read is never offered for overwrite on a guess.
+    // Why: a package Quirky could not read is never offered for overwrite on a guess.
     return {
       ...base,
       status: 'inaccessible',

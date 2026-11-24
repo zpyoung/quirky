@@ -20,7 +20,7 @@
 
 import { rm } from 'node:fs/promises'
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   waitForSessionReady,
   waitForActiveWorktree,
@@ -84,13 +84,13 @@ async function getFocusedTerminalTabId(page: Page): Promise<string | null> {
 }
 
 test.describe('Tabs', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForStartupWorktreeRefresh(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
-    const initialTabId = (await getActiveTabId(orcaPage))!
-    await expect(tabLocator(orcaPage, initialTabId)).toBeVisible()
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForStartupWorktreeRefresh(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
+    const initialTabId = (await getActiveTabId(quirkyPage))!
+    await expect(tabLocator(quirkyPage, initialTabId)).toBeVisible()
   })
 
   /**
@@ -102,37 +102,37 @@ test.describe('Tabs', () => {
    * a tab-bar render regression. Clicking the real "+" button and then "New
    * Terminal" drives the same code path a user takes.
    */
-  test('clicking "+" then "New Terminal" creates a new terminal tab', async ({ orcaPage }) => {
-    const tabsBefore = await countRenderedTabs(orcaPage)
+  test('clicking "+" then "New Terminal" creates a new terminal tab', async ({ quirkyPage }) => {
+    const tabsBefore = await countRenderedTabs(quirkyPage)
 
     // Why: hidden-window Electron can keep the animated terminal surface
     // invalidating Playwright's "stable" actionability check even though the
     // tab-bar button is visible and enabled.
-    await orcaPage.getByRole('button', { name: 'New tab' }).click({ force: true })
+    await quirkyPage.getByRole('button', { name: 'New tab' }).click({ force: true })
     // Why: the "+" dropdown uses Radix <DropdownMenuItem>, which exposes the
     // label text as the accessible name once the menu is open.
-    const newTerminalMenuItem = orcaPage.getByRole('menuitem', { name: /New Terminal/i }).first()
+    const newTerminalMenuItem = quirkyPage.getByRole('menuitem', { name: /New Terminal/i }).first()
     await newTerminalMenuItem.click()
     await expect(newTerminalMenuItem).toBeHidden({ timeout: 3_000 })
 
     // Final assertion is on the rendered tab count — the tab bar itself must
     // gain an element, not just the store.
     await expect
-      .poll(() => countRenderedTabs(orcaPage), {
+      .poll(() => countRenderedTabs(quirkyPage), {
         timeout: 5_000,
         message: 'Clicking + → New Terminal did not render a new tab in the tab bar'
       })
       .toBeGreaterThan(tabsBefore)
 
-    const activeType = await getActiveTabType(orcaPage)
+    const activeType = await getActiveTabType(quirkyPage)
     expect(activeType).toBe('terminal')
 
-    const storeActiveId = await getActiveTabId(orcaPage)
+    const storeActiveId = await getActiveTabId(quirkyPage)
     expect(storeActiveId).not.toBeNull()
-    await expect(tabLocator(orcaPage, storeActiveId!)).toBeVisible()
-    await expect.poll(() => getDomActiveTabId(orcaPage), { timeout: 3_000 }).toBe(storeActiveId)
+    await expect(tabLocator(quirkyPage, storeActiveId!)).toBeVisible()
+    await expect.poll(() => getDomActiveTabId(quirkyPage), { timeout: 3_000 }).toBe(storeActiveId)
     await expect
-      .poll(() => getFocusedTerminalTabId(orcaPage), {
+      .poll(() => getFocusedTerminalTabId(quirkyPage), {
         timeout: 5_000,
         message: 'Menu-created terminal tab did not receive keyboard focus'
       })
@@ -140,7 +140,7 @@ test.describe('Tabs', () => {
   })
 
   test('clicking "+" then "New Markdown" focuses the editor', async ({
-    orcaPage,
+    quirkyPage,
     registerPostElectronShutdownCleanup
   }) => {
     let createdFilePath: string | null = null
@@ -150,18 +150,18 @@ test.describe('Tabs', () => {
       }
     })
 
-    const preExistingFileIds = await orcaPage.evaluate(
+    const preExistingFileIds = await quirkyPage.evaluate(
       () => window.__store?.getState().openFiles.map((file) => file.id) ?? []
     )
 
-    await orcaPage.getByRole('button', { name: 'New tab' }).click({ force: true })
-    const newMarkdownMenuItem = orcaPage.getByRole('menuitem', { name: /New Markdown/i }).first()
+    await quirkyPage.getByRole('button', { name: 'New tab' }).click({ force: true })
+    const newMarkdownMenuItem = quirkyPage.getByRole('menuitem', { name: /New Markdown/i }).first()
     await newMarkdownMenuItem.click()
 
     // Why: require an id that did not exist before the click, so an already-open
     // Markdown file can't satisfy the assertions (or be deleted by cleanup), and
     // record the path here so cleanup still has it if a later assertion fails.
-    const createdFileHandle = await orcaPage.waitForFunction(
+    const createdFileHandle = await quirkyPage.waitForFunction(
       (knownFileIds) => {
         const state = window.__store?.getState()
         const file = state?.openFiles.find((candidate) => candidate.id === state.activeFileId)
@@ -176,7 +176,7 @@ test.describe('Tabs', () => {
     const createdFile = (await createdFileHandle.jsonValue())!
     createdFilePath = createdFile.filePath
 
-    const editor = orcaPage.locator('.rich-markdown-editor')
+    const editor = quirkyPage.locator('.rich-markdown-editor')
     await expect(editor).toBeVisible({ timeout: 25_000 })
     await expect(newMarkdownMenuItem).toBeHidden({ timeout: 3_000 })
 
@@ -189,10 +189,10 @@ test.describe('Tabs', () => {
 
     const sentinel = `autofocus-${Date.now()}`
     // Why: typing through the page keyboard proves focus landed without an editor click.
-    await orcaPage.keyboard.type(sentinel)
+    await quirkyPage.keyboard.type(sentinel)
     await expect(editor).toContainText(sentinel)
 
-    await orcaPage.evaluate((fileId) => {
+    await quirkyPage.evaluate((fileId) => {
       window.__store?.getState().closeFile(fileId)
     }, createdFile.id)
     await expect(editor).toBeHidden()
@@ -202,20 +202,20 @@ test.describe('Tabs', () => {
    * User Prompt:
    * - New tab works
    */
-  test('Cmd/Ctrl+T creates a new terminal tab', async ({ orcaPage }) => {
+  test('Cmd/Ctrl+T creates a new terminal tab', async ({ quirkyPage }) => {
     const isMac = process.platform === 'darwin'
     const mod = isMac ? 'Meta' : 'Control'
-    const tabsBefore = await countRenderedTabs(orcaPage)
+    const tabsBefore = await countRenderedTabs(quirkyPage)
 
     // Why: focus body first so the window-level keydown handler on Terminal.tsx
     // actually sees the event. Without focus the key may be eaten by an
     // unrelated input (e.g. a stale search field from a previous test).
-    await orcaPage.evaluate(() => document.body.focus())
-    await orcaPage.keyboard.press(`${mod}+t`)
+    await quirkyPage.evaluate(() => document.body.focus())
+    await quirkyPage.keyboard.press(`${mod}+t`)
 
     // DOM-level count increased — confirms a new tab actually rendered.
     await expect
-      .poll(() => countRenderedTabs(orcaPage), {
+      .poll(() => countRenderedTabs(quirkyPage), {
         timeout: 5_000,
         message: `${mod}+T did not add a tab to the tab bar`
       })
@@ -225,23 +225,23 @@ test.describe('Tabs', () => {
     // the active surface behind the strip; we rely on the store flag here only
     // to disambiguate terminal vs. editor vs. browser — the fact that *some*
     // tab is active is already proved by the DOM assertion below).
-    const activeType = await getActiveTabType(orcaPage)
+    const activeType = await getActiveTabType(quirkyPage)
     expect(activeType).toBe('terminal')
 
     // The DOM must have exactly one active tab and it must match the store's
     // activeTabId — this is the load-bearing check that the render layer and
     // the state layer agree on what is selected.
-    const storeActiveId = await getActiveTabId(orcaPage)
+    const storeActiveId = await getActiveTabId(quirkyPage)
     expect(storeActiveId).not.toBeNull()
-    await expect.poll(() => getDomActiveTabId(orcaPage), { timeout: 3_000 }).toBe(storeActiveId)
+    await expect.poll(() => getDomActiveTabId(quirkyPage), { timeout: 3_000 }).toBe(storeActiveId)
   })
 
   test('clicking tabs still switches after dragging a terminal tab to reorder', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const worktreeId = (await getActiveWorktreeId(orcaPage))!
+    const worktreeId = (await getActiveWorktreeId(quirkyPage))!
 
-    await orcaPage.evaluate((targetWorktreeId) => {
+    await quirkyPage.evaluate((targetWorktreeId) => {
       const store = window.__store
       if (!store) {
         return
@@ -253,50 +253,50 @@ test.describe('Tabs', () => {
       }
     }, worktreeId)
     await expect
-      .poll(() => countRenderedTabs(orcaPage), { timeout: 5_000 })
+      .poll(() => countRenderedTabs(quirkyPage), { timeout: 5_000 })
       .toBeGreaterThanOrEqual(2)
 
-    const domOrderBefore = await orcaPage.$$eval(SORTABLE_TAB, (nodes) =>
+    const domOrderBefore = await quirkyPage.$$eval(SORTABLE_TAB, (nodes) =>
       nodes.map((n) => (n as HTMLElement).dataset.tabId ?? '')
     )
     const [firstTabId, secondTabId] = domOrderBefore
     expect(firstTabId).toBeTruthy()
     expect(secondTabId).toBeTruthy()
 
-    await tabLocator(orcaPage, firstTabId).click({ force: true })
-    await expect.poll(() => getDomActiveTabId(orcaPage), { timeout: 3_000 }).toBe(firstTabId)
+    await tabLocator(quirkyPage, firstTabId).click({ force: true })
+    await expect.poll(() => getDomActiveTabId(quirkyPage), { timeout: 3_000 }).toBe(firstTabId)
 
-    const firstTabBox = await tabLocator(orcaPage, firstTabId).boundingBox()
-    const secondTabBox = await tabLocator(orcaPage, secondTabId).boundingBox()
+    const firstTabBox = await tabLocator(quirkyPage, firstTabId).boundingBox()
+    const secondTabBox = await tabLocator(quirkyPage, secondTabId).boundingBox()
     expect(firstTabBox).not.toBeNull()
     expect(secondTabBox).not.toBeNull()
     const startX = firstTabBox!.x + firstTabBox!.width / 2
     const startY = firstTabBox!.y + firstTabBox!.height / 2
     const endX = secondTabBox!.x + secondTabBox!.width * 0.75
     const endY = secondTabBox!.y + secondTabBox!.height / 2
-    await orcaPage.mouse.move(startX, startY)
-    await orcaPage.mouse.down()
+    await quirkyPage.mouse.move(startX, startY)
+    await quirkyPage.mouse.down()
     // Why: this mirrors the release repro: drag a terminal tab across another
     // tab far enough for dnd-kit to commit a reorder, then release on the tab
     // strip before clicking tabs again.
-    await orcaPage.mouse.move(endX, endY, { steps: 8 })
-    await orcaPage.mouse.up()
+    await quirkyPage.mouse.move(endX, endY, { steps: 8 })
+    await quirkyPage.mouse.up()
 
     await expect
       .poll(
         async () =>
-          orcaPage.$$eval(SORTABLE_TAB, (nodes) =>
+          quirkyPage.$$eval(SORTABLE_TAB, (nodes) =>
             nodes.map((n) => (n as HTMLElement).dataset.tabId ?? '')
           ),
         { timeout: 5_000, message: 'Terminal tab drag did not reorder the tab strip' }
       )
       .toEqual([secondTabId, firstTabId, ...domOrderBefore.slice(2)])
 
-    await tabLocator(orcaPage, firstTabId).click({ force: true })
-    await expect.poll(() => getDomActiveTabId(orcaPage), { timeout: 3_000 }).toBe(firstTabId)
-    await tabLocator(orcaPage, secondTabId).click({ force: true })
+    await tabLocator(quirkyPage, firstTabId).click({ force: true })
+    await expect.poll(() => getDomActiveTabId(quirkyPage), { timeout: 3_000 }).toBe(firstTabId)
+    await tabLocator(quirkyPage, secondTabId).click({ force: true })
     await expect
-      .poll(() => getDomActiveTabId(orcaPage), {
+      .poll(() => getDomActiveTabId(quirkyPage), {
         timeout: 5_000,
         message: 'Tab click did not activate after a terminal tab reorder drag'
       })
@@ -313,15 +313,15 @@ test.describe('Tabs', () => {
    * the load-bearing check — it fails if the shortcut walks the right store
    * id but the tab bar stops painting the active indicator on that tab.
    */
-  test('Cmd/Ctrl+Shift+[ walks tabs in drag-reordered order', async ({ orcaPage }) => {
+  test('Cmd/Ctrl+Shift+[ walks tabs in drag-reordered order', async ({ quirkyPage }) => {
     const isMac = process.platform === 'darwin'
     const mod = isMac ? 'Meta' : 'Control'
-    const worktreeId = (await getActiveWorktreeId(orcaPage))!
+    const worktreeId = (await getActiveWorktreeId(quirkyPage))!
 
     // Ensure at least 3 terminal tabs so the order cycle is non-trivial.
     // Why store-driven: we only need >=3 tabs to exist; the "+" flow is
     // already exercised by other tests in this file.
-    await orcaPage.evaluate((targetWorktreeId) => {
+    await quirkyPage.evaluate((targetWorktreeId) => {
       const store = window.__store
       if (!store) {
         return
@@ -333,18 +333,18 @@ test.describe('Tabs', () => {
       }
     }, worktreeId)
     await expect
-      .poll(async () => (await getWorktreeTabs(orcaPage, worktreeId)).length, {
+      .poll(async () => (await getWorktreeTabs(quirkyPage, worktreeId)).length, {
         timeout: 5_000
       })
       .toBeGreaterThanOrEqual(3)
 
-    const initialOrder = await getTabBarOrder(orcaPage, worktreeId)
+    const initialOrder = await getTabBarOrder(quirkyPage, worktreeId)
     expect(initialOrder.length).toBeGreaterThanOrEqual(3)
     const [a, b, c] = initialOrder
 
     // Reorder via the same store call drag/drop uses: move the first tab to
     // the end so the visible order becomes [b, c, a].
-    await orcaPage.evaluate((targetWorktreeId) => {
+    await quirkyPage.evaluate((targetWorktreeId) => {
       const store = window.__store
       if (!store) {
         return
@@ -362,25 +362,25 @@ test.describe('Tabs', () => {
       state.reorderUnifiedTabs(activeGroup.id, [...rest, first])
     }, worktreeId)
     await expect
-      .poll(async () => getTabBarOrder(orcaPage, worktreeId), {
+      .poll(async () => getTabBarOrder(quirkyPage, worktreeId), {
         timeout: 3_000
       })
       .toEqual([b, c, a])
 
     // Activate the last tab in the new visible order, then walk left twice.
     // Expected cycle: a → c → b (i.e. walks the *new* order in reverse).
-    await orcaPage.evaluate((tabId) => {
+    await quirkyPage.evaluate((tabId) => {
       window.__store?.getState().setActiveTab(tabId)
     }, a)
-    await expect.poll(() => getDomActiveTabId(orcaPage), { timeout: 3_000 }).toBe(a)
+    await expect.poll(() => getDomActiveTabId(quirkyPage), { timeout: 3_000 }).toBe(a)
 
-    await orcaPage.keyboard.press(`${mod}+Shift+BracketLeft`)
-    await expect.poll(() => getDomActiveTabId(orcaPage), { timeout: 3_000 }).toBe(c)
-    await expect(tabLocator(orcaPage, c)).toHaveAttribute('data-active', 'true')
+    await quirkyPage.keyboard.press(`${mod}+Shift+BracketLeft`)
+    await expect.poll(() => getDomActiveTabId(quirkyPage), { timeout: 3_000 }).toBe(c)
+    await expect(tabLocator(quirkyPage, c)).toHaveAttribute('data-active', 'true')
 
-    await orcaPage.keyboard.press(`${mod}+Shift+BracketLeft`)
-    await expect.poll(() => getDomActiveTabId(orcaPage), { timeout: 3_000 }).toBe(b)
-    await expect(tabLocator(orcaPage, b)).toHaveAttribute('data-active', 'true')
+    await quirkyPage.keyboard.press(`${mod}+Shift+BracketLeft`)
+    await expect.poll(() => getDomActiveTabId(quirkyPage), { timeout: 3_000 }).toBe(b)
+    await expect(tabLocator(quirkyPage, b)).toHaveAttribute('data-active', 'true')
   })
 
   /**
@@ -393,11 +393,11 @@ test.describe('Tabs', () => {
    * so the test fails if the store cleared the tab but the DOM didn't
    * re-render.
    */
-  test('closing the active tab removes it and activates a neighbor', async ({ orcaPage }) => {
-    const worktreeId = (await getActiveWorktreeId(orcaPage))!
+  test('closing the active tab removes it and activates a neighbor', async ({ quirkyPage }) => {
+    const worktreeId = (await getActiveWorktreeId(quirkyPage))!
 
     // Need a second tab so we can close one without deactivating the worktree.
-    await orcaPage.evaluate((targetWorktreeId) => {
+    await quirkyPage.evaluate((targetWorktreeId) => {
       const store = window.__store
       if (!store) {
         return
@@ -408,21 +408,21 @@ test.describe('Tabs', () => {
       }
     }, worktreeId)
     await expect
-      .poll(() => countRenderedTabs(orcaPage), { timeout: 5_000 })
+      .poll(() => countRenderedTabs(quirkyPage), { timeout: 5_000 })
       .toBeGreaterThanOrEqual(2)
 
-    const tabsBefore = await countRenderedTabs(orcaPage)
-    const activeId = await getActiveTabId(orcaPage)
+    const tabsBefore = await countRenderedTabs(quirkyPage)
+    const activeId = await getActiveTabId(quirkyPage)
     expect(activeId).not.toBeNull()
-    await closeTabFromTabBar(orcaPage, activeId!)
+    await closeTabFromTabBar(quirkyPage, activeId!)
 
     await expect
-      .poll(() => countRenderedTabs(orcaPage), {
+      .poll(() => countRenderedTabs(quirkyPage), {
         timeout: 5_000,
         message: 'Clicking close did not remove the tab element from the DOM'
       })
       .toBe(tabsBefore - 1)
-    await expect.poll(() => getDomActiveTabId(orcaPage), { timeout: 5_000 }).not.toBe(activeId)
-    await expect.poll(() => getDomActiveTabId(orcaPage), { timeout: 5_000 }).not.toBeNull()
+    await expect.poll(() => getDomActiveTabId(quirkyPage), { timeout: 5_000 }).not.toBe(activeId)
+    await expect.poll(() => getDomActiveTabId(quirkyPage), { timeout: 5_000 }).not.toBeNull()
   })
 })

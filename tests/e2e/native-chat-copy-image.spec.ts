@@ -1,20 +1,20 @@
 import { randomUUID } from 'node:crypto'
 import { rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { waitForActivePaneHookDescriptor, waitForActiveTerminalManager } from './helpers/terminal'
 
 test('Copy image puts the full-size image on the clipboard and keeps the preview open', async ({
-  orcaPage,
+  quirkyPage,
   electronApp,
   testRepoPath
 }) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage)
-  const descriptor = await waitForActivePaneHookDescriptor(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage)
+  const descriptor = await waitForActivePaneHookDescriptor(quirkyPage)
   // Why two sizes: the chip previews the pasted image while the copy must read the saved file,
   // so an 800x600 copy proves the file was read, not the 64x64 preview.
   const [png, pastedPng] = await electronApp.evaluate(({ nativeImage }) =>
@@ -39,18 +39,18 @@ test('Copy image puts the full-size image on the clipboard and keeps the preview
         ipcMain.removeHandler('clipboard:writeImage')
         ipcMain.handle('clipboard:writeImage', (_event, dataUrl: string) => {
           const { width, height } = nativeImage.createFromDataURL(dataUrl).getSize()
-          process.env.ORCA_E2E_COPIED_IMAGE_SIZE = `${width}x${height}`
+          process.env.QUIRKY_E2E_COPIED_IMAGE_SIZE = `${width}x${height}`
         })
       },
       { imagePath }
     )
     const takeCopiedImageSize = (): Promise<string | null> =>
       electronApp.evaluate(() => {
-        const size = process.env.ORCA_E2E_COPIED_IMAGE_SIZE ?? null
-        delete process.env.ORCA_E2E_COPIED_IMAGE_SIZE
+        const size = process.env.QUIRKY_E2E_COPIED_IMAGE_SIZE ?? null
+        delete process.env.QUIRKY_E2E_COPIED_IMAGE_SIZE
         return size
       })
-    await orcaPage.evaluate(async ({ paneKey, worktreeId }) => {
+    await quirkyPage.evaluate(async ({ paneKey, worktreeId }) => {
       const settings = await window.api.settings.set({ experimentalNativeChat: true })
       const store = window.__store
       if (!store) {
@@ -74,7 +74,7 @@ test('Copy image puts the full-size image on the clipboard and keeps the preview
       }
       state.toggleTabViewMode(tab.id)
     }, descriptor)
-    const composer = orcaPage.getByRole('textbox', {
+    const composer = quirkyPage.getByRole('textbox', {
       name: 'Ask anything, @ to mention files, / for commands',
       exact: true
     })
@@ -87,16 +87,16 @@ test('Copy image puts the full-size image on the clipboard and keeps the preview
         new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data })
       )
     }, pastedPng)
-    const thumbnail = orcaPage.getByRole('button', { name: `View image: ${imageName}` })
+    const thumbnail = quirkyPage.getByRole('button', { name: `View image: ${imageName}` })
     await expect(thumbnail).toHaveAttribute('data-native-chat-copy-image-src', /^blob:/)
-    const copyImage = orcaPage.getByRole('menuitem', { name: 'Copy image' })
+    const copyImage = quirkyPage.getByRole('menuitem', { name: 'Copy image' })
 
     await thumbnail.click({ button: 'right' })
     await copyImage.click()
     await expect.poll(takeCopiedImageSize).toBe('800x600')
 
     await thumbnail.click()
-    const preview = orcaPage.getByRole('dialog')
+    const preview = quirkyPage.getByRole('dialog')
     await expect(preview.getByRole('img', { name: imageName })).toBeVisible()
     // Why: the image ignores the pointer so the pan-and-zoom canvas under it takes the click.
     const previewCanvas = preview.getByTestId('pan-zoom-image-canvas')
@@ -105,7 +105,7 @@ test('Copy image puts the full-size image on the clipboard and keeps the preview
     await expect.poll(takeCopiedImageSize).toBe('800x600')
     // Why: the preview's dismissal fires on that click, so once the menu has fully left the page
     // a dismissed preview would already read data-state="closed".
-    await expect(orcaPage.getByRole('menu')).toHaveCount(0)
+    await expect(quirkyPage.getByRole('menu')).toHaveCount(0)
     await expect(preview).toHaveAttribute('data-state', 'open')
 
     await previewCanvas.click({ button: 'right' })

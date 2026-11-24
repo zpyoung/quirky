@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 import { resolveConfig } from 'electron-vite'
 import { build } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { stagePackagedProcessHost } from './packaged-process-host-fixture.mjs'
 
 const projectDir = resolve(import.meta.dirname, '../..')
@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url)
 let outputDir: string
 
 beforeAll(async () => {
-  outputDir = mkdtempSync(join(tmpdir(), 'orca-account-runtime-'))
+  outputDir = mkdtempSync(join(tmpdir(), 'quirky-account-runtime-'))
   const resolved = await resolveConfig(
     { configFile: join(projectDir, 'electron.vite.config.ts') },
     'build',
@@ -60,7 +60,7 @@ describe('managed account credentials in the production main bundle', () => {
     async ({ name, program }) => {
       const environment: Record<string, string | undefined> = {
         ...process.env,
-        ORCA_BACKGROUND_LAUNCH: '1',
+        QUIRKY_BACKGROUND_LAUNCH: '1',
         NODE_PATH: '',
         NODE_OPTIONS: '',
         ELECTRON_RUN_AS_NODE: '1'

@@ -7,7 +7,7 @@ The original ownership symbols, last-waiter cancellation finalizer, one-raw-oper
 ## Reproduce
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=128 docs/audits/auth-filesystem-wait-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=128 docs/audits/auth-filesystem-wait-retention/reproduce.cjs
 ```
 
 For Electron, run the installed Electron executable with `ELECTRON_RUN_AS_NODE=1` and the same arguments/environment. This launches no window. The proof reconstructs the original sources by reversing `fix.patch`; expected baseline hashes in `source-versions.json` make source drift fail. Both versions run the actual production scheduler/waiter code, with only the raw filesystem operation replaced by one manually settled promise. A 15-second deadline fails stalled proof execution.

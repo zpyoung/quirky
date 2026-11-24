@@ -9,11 +9,11 @@ vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp'), isPackaged: false }
 }))
 
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 function makeRuntime() {
   const repo = { id: 'repo-1', path: '/home/me/app' }
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch reads only these protected members; each is assigned or stubbed before launchAgentTerminal runs.
   const internals = runtime as unknown as {
     store: Record<string, unknown>

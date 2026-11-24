@@ -264,7 +264,7 @@ describe('what holds a launched agent’s terminal', () => {
           },
           [
             { ...row(40100, 40090, 'Ss', '-tcsh'), pgid: 40100 },
-            row(40210, 40100, 'S+', '/bin/sh /tmp/orca-launch/run.sh'),
+            row(40210, 40100, 'S+', '/bin/sh /tmp/quirky-launch/run.sh'),
             row(40211, 40210, 'S+', agentCommand)
           ]
         )

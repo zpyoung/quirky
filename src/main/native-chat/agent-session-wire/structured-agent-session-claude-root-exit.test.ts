@@ -32,7 +32,7 @@ afterEach(async () => {
 
 describe('Claude root-exit stop', () => {
   it('releases a captured live claim after the provider root exits', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-claude-root-exit-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-claude-root-exit-'))
     roots.push(root)
     const stateDirectory = join(root, 'journal')
     const store = await openTestAgentSessionRecordStore(stateDirectory)

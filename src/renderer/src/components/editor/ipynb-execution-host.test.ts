@@ -25,8 +25,8 @@ describe('resolveNotebookExecutionHost', () => {
     [
       'a managed SSH workspace, which has no connection id',
       rows(
-        { executionHostId: 'runtime:env-orcad' },
-        { hostId: 'runtime:env-orcad', runtimeOwnerEnvironmentId: 'env-orcad' }
+        { executionHostId: 'runtime:env-quirkyd' },
+        { hostId: 'runtime:env-quirkyd', runtimeOwnerEnvironmentId: 'env-quirkyd' }
       ),
       'remote'
     ],

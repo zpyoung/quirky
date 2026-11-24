@@ -1,34 +1,34 @@
 /**
- * An agent session named as a recipient: `orca_session_id:<id>`, or a bare Orca session id. Any session on
+ * An agent session named as a recipient: `quirky_session_id:<id>`, or a bare Quirky session id. Any session on
  * this host can be addressed, not only one that coordinates a Run: an agent's id is its public
  * address, and a user telling one agent to message another's id is a supported workflow.
  *
- * Mail that no Run or Dispatch owns is stored at the conversation's `orca_session_id:<root id>` and pointed
+ * Mail that no Run or Dispatch owns is stored at the conversation's `quirky_session_id:<root id>` and pointed
  * at its live session as a turn, so any session of a `/clear` lineage is a valid spelling. A
  * released lease is not a refusal (the pointer's send starts its agent); a closed chat, another host,
  * and an unknown id are, before anything is stored.
  */
 
 import {
-  ORCA_SESSION_ADDRESS_PREFIX,
-  formatOrcaSessionAddress,
-  isOrcaSessionId,
-  parseOrcaSessionAddress,
-  type OrcaSessionAddress,
-  type OrcaSessionId
-} from '../../../../../../shared/orca-session-address'
+  QUIRKY_SESSION_ADDRESS_PREFIX,
+  formatQuirkySessionAddress,
+  isQuirkySessionId,
+  parseQuirkySessionAddress,
+  type QuirkySessionAddress,
+  type QuirkySessionId
+} from '../../../../../../shared/quirky-session-address'
 // The caller codes, reused: each names the same fact about a session, whichever side of the mail it is on.
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as CODES } from '../../../../../../shared/orchestration-session-caller-codes'
 import {
-  lookupOrcaAgentSession,
+  lookupQuirkyAgentSession,
   structuredSessionMailReach
 } from '../../../../orchestration/structured-session-mail-address'
 import type { AgentSessionRecordReader } from '../../../../orchestration/structured-session-lineage'
 import type { OrchestrationDb } from '../../../../orchestration/db'
-import { canonicalOrcaSessionId } from '../../../../orchestration/canonical-orca-session-id'
+import { canonicalQuirkySessionId } from '../../../../orchestration/canonical-quirky-session-id'
 
 /** `address` is the named session's own spelling; the mailbox mail lands in is its identity address. */
-export type SessionRecipient = { sessionId: OrcaSessionId; address: OrcaSessionAddress }
+export type SessionRecipient = { sessionId: QuirkySessionId; address: QuirkySessionAddress }
 
 export type SessionRecipientRefusal = {
   code: (typeof CODES)[keyof typeof CODES]
@@ -37,33 +37,33 @@ export type SessionRecipientRefusal = {
 
 /** Whether a recipient may name a session, so the caller can install the session host first. */
 export function mayNameSession(recipient: string): boolean {
-  return recipient.startsWith(ORCA_SESSION_ADDRESS_PREFIX) || isOrcaSessionId(recipient)
+  return recipient.startsWith(QUIRKY_SESSION_ADDRESS_PREFIX) || isQuirkySessionId(recipient)
 }
 
 /**
- * The session a recipient names. A bare string names a session only when it is an Orca session id
+ * The session a recipient names. A bare string names a session only when it is an Quirky session id
  * this host has a record for; anything else stays a terminal handle, exactly as before.
  */
 export function readSessionRecipient(
   recipient: string,
   store: AgentSessionRecordReader | null
 ): SessionRecipient | SessionRecipientRefusal | null {
-  if (recipient.startsWith(ORCA_SESSION_ADDRESS_PREFIX)) {
-    const sessionId = parseOrcaSessionAddress(recipient)
+  if (recipient.startsWith(QUIRKY_SESSION_ADDRESS_PREFIX)) {
+    const sessionId = parseQuirkySessionAddress(recipient)
     return sessionId
-      ? { sessionId, address: formatOrcaSessionAddress(sessionId) }
+      ? { sessionId, address: formatQuirkySessionAddress(sessionId) }
       : {
           code: CODES.unknown,
-          message: `${recipient} does not name an Orca session ID. No message was sent.`
+          message: `${recipient} does not name an Quirky session ID. No message was sent.`
         }
   }
-  const sessionId = isOrcaSessionId(recipient) ? recipient : null
-  const found = sessionId && store ? lookupOrcaAgentSession(store, sessionId) : null
+  const sessionId = isQuirkySessionId(recipient) ? recipient : null
+  const found = sessionId && store ? lookupQuirkyAgentSession(store, sessionId) : null
   if (found?.kind === 'provider-id') {
-    return providerIdRefusal(recipient, found.orcaSessionId, store)
+    return providerIdRefusal(recipient, found.quirkySessionId, store)
   }
   return sessionId && found?.kind === 'found'
-    ? { sessionId, address: formatOrcaSessionAddress(sessionId) }
+    ? { sessionId, address: formatQuirkySessionAddress(sessionId) }
     : null
 }
 
@@ -81,17 +81,17 @@ export function refuseUndeliverableSessionRecipient(
   if (!store) {
     return {
       code: CODES.unknown,
-      message: `Agent session ${sessionId} cannot be verified: this Orca is not running its agent-session host. ${noEffect}`
+      message: `Agent session ${sessionId} cannot be verified: this Quirky is not running its agent-session host. ${noEffect}`
     }
   }
-  const found = lookupOrcaAgentSession(store, sessionId)
+  const found = lookupQuirkyAgentSession(store, sessionId)
   if (found.kind === 'provider-id') {
-    return providerIdRefusal(sessionId, found.orcaSessionId, store, noEffect)
+    return providerIdRefusal(sessionId, found.quirkySessionId, store, noEffect)
   }
   if (found.kind === 'unknown') {
     return {
       code: CODES.unknown,
-      message: `No Orca agent session ${sessionId} exists on this host. ${noEffect}`
+      message: `No Quirky agent session ${sessionId} exists on this host. ${noEffect}`
     }
   }
   const reach = structuredSessionMailReach(store, found.record, db)
@@ -121,17 +121,17 @@ export function refuseUndeliverableSessionRecipient(
 
 function providerIdRefusal(
   id: string,
-  orcaSessionId: string,
+  quirkySessionId: string,
   store: AgentSessionRecordReader | null,
   noEffect = 'No message was sent.'
 ): SessionRecipientRefusal {
-  // The conversation's Orca session ID, which a `/clear`ed session keeps; not the live session's.
-  const root = isOrcaSessionId(orcaSessionId)
-    ? canonicalOrcaSessionId(orcaSessionId, store)
-    : orcaSessionId
-  const address = `${ORCA_SESSION_ADDRESS_PREFIX}${root}`
+  // The conversation's Quirky session ID, which a `/clear`ed session keeps; not the live session's.
+  const root = isQuirkySessionId(quirkySessionId)
+    ? canonicalQuirkySessionId(quirkySessionId, store)
+    : quirkySessionId
+  const address = `${QUIRKY_SESSION_ADDRESS_PREFIX}${root}`
   return {
     code: CODES.providerId,
-    message: `${id} is the provider's own session id, which changes on /clear. This session's Orca session ID is ${address}; address it by that instead. ${noEffect}`
+    message: `${id} is the provider's own session id, which changes on /clear. This session's Quirky session ID is ${address}; address it by that instead. ${noEffect}`
   }
 }

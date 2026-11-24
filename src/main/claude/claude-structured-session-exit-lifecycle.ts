@@ -90,7 +90,7 @@ export function settleClaudeUnexpectedExit(
       sessionId,
       reason: exit.error.message,
       // A start that never landed says why it failed. After it landed, only the child's own exit
-      // blames the provider; an Orca fault that closed it is Orca's.
+      // blames the provider; an Quirky fault that closed it is Quirky's.
       failure: providerExitObserved(exit.error)
         ? agentSessionFailureFact('providerExited', { detail: providerDiagnosticOf(exit.error) })
         : agentSessionFailureFact('hostFault'),

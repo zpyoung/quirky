@@ -7,12 +7,12 @@ import type { OrchestrationDb } from '../../../../orchestration/db'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { getOrchestrationPeerCapabilityCache } from '../../../../orchestration/orchestration-peer-capability-cache'
 import type { FederatedDispatchRow } from '../../../../orchestration/types'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { readLegacyFederatedTerminal } from '../worker/worker-legacy-federated-read'
 import type { resolvePinnedFederatedServer } from '../worker/worker-observation'
 
 export async function readFederatedWorkerOutput(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   db: OrchestrationDb
   server: ReturnType<typeof resolvePinnedFederatedServer>
   federated: FederatedDispatchRow

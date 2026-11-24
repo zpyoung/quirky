@@ -1,6 +1,6 @@
 const { connect } = require('node:net')
 const assert = require('node:assert/strict')
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 const socket = connect(process.argv[2])
 let buffer = ''
 socket.setEncoding('utf8')

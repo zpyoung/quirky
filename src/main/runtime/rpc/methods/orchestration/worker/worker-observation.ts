@@ -12,7 +12,7 @@ import type {
   FederatedDispatchRow,
   WorkerDispatchRow
 } from '../../../../orchestration/types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 
 /** Observe a worker terminal, re-minting a live handle from the recorded process incarnation when the durable handle went stale, so a still-running worker is never reported missing and leaked. */
 export async function inspectWorkerTerminal(
@@ -116,7 +116,7 @@ export async function inspectWorkerTerminal(
       }
     }
     // Switch point: main's rows carry the host's verdict; `connected` alone is the old word.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && terminal.verdict === 'unverifiable') {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN && terminal.verdict === 'unverifiable') {
       return {
         terminal,
         exact,
@@ -130,7 +130,7 @@ export async function inspectWorkerTerminal(
       terminal,
       exact,
       status:
-        ORCA_LAYOUT_OWNER_IS_MAIN && terminal.verdict
+        QUIRKY_LAYOUT_OWNER_IS_MAIN && terminal.verdict
           ? terminal.verdict
           : terminal.connected === false
             ? 'exited'
@@ -166,7 +166,7 @@ function exposeContextOnlyWorker(dispatch: DispatchContextRow) {
     dispatchId: dispatch.id,
     runtimeEpoch: null,
     state: 'unsupervised' as const,
-    // Why: with no worker row Orca supervises only the context; it keeps no record of an --inject paste.
+    // Why: with no worker row Quirky supervises only the context; it keeps no record of an --inject paste.
     stage: 'context_only',
     worktreeId: null,
     agentTerminalHandle: dispatch.assignee_handle,
@@ -309,7 +309,7 @@ export function resolvePinnedFederatedServer(
   if (server.peerFingerprint !== federated.peer_fingerprint) {
     throw new OrchestrationError(
       'peer_changed',
-      `Saved environment ${federated.environment_name} now identifies a different Orca server.`
+      `Saved environment ${federated.environment_name} now identifies a different Quirky server.`
     )
   }
   return server

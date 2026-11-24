@@ -73,9 +73,9 @@ describe('documentPathsFromArguments', () => {
 
   it('drops the executable and dev entries because none of them end in a markdown extension', () => {
     const nonDocumentEntries = [
-      '/Applications/Orca.app/Contents/MacOS/Orca',
-      '/Users/dev/orca/out/main/index.js',
-      '/Applications/Orca.app/Contents/Resources/app.asar'
+      '/Applications/Quirky.app/Contents/MacOS/Quirky',
+      '/Users/dev/quirky/out/main/index.js',
+      '/Applications/Quirky.app/Contents/Resources/app.asar'
     ]
     // The module documents that the extension check alone excludes these; hold it to that.
     for (const entry of nonDocumentEntries) {

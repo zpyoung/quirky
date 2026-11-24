@@ -3,9 +3,9 @@ import type { SleepingAgentLaunchConfig } from '../../../shared/agent-session-re
 import { measureClipboardTextByteLength } from '../../../shared/clipboard-text'
 import { normalizeExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 
-export const AI_VAULT_SESSION_DRAG_TYPE = 'application/x-orca-ai-vault-session'
-export const AI_VAULT_SESSION_DRAG_START_EVENT = 'orca-ai-vault-session-drag-start'
-export const AI_VAULT_SESSION_DRAG_END_EVENT = 'orca-ai-vault-session-drag-end'
+export const AI_VAULT_SESSION_DRAG_TYPE = 'application/x-quirky-ai-vault-session'
+export const AI_VAULT_SESSION_DRAG_START_EVENT = 'quirky-ai-vault-session-drag-start'
+export const AI_VAULT_SESSION_DRAG_END_EVENT = 'quirky-ai-vault-session-drag-end'
 export const AI_VAULT_SESSION_DRAG_PAYLOAD_MAX_BYTES = 16 * 1024
 
 export type AiVaultSessionDragPayload = {
@@ -144,7 +144,7 @@ export function writeAiVaultSessionDragData(
   activeAiVaultSessionDragPayload = { ...payload }
   dataTransfer.effectAllowed = 'copy'
   // Why: avoid text/plain so terminal/native drop targets cannot paste the
-  // resume command instead of letting Orca's pane drop layer handle it.
+  // resume command instead of letting Quirky's pane drop layer handle it.
   dataTransfer.setData(AI_VAULT_SESSION_DRAG_TYPE, serialized)
 }
 

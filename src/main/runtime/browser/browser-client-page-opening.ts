@@ -42,7 +42,7 @@ export type BrowserClientPageCaller = { pairedDeviceId?: string; clientKind?: 'm
 export const DEFAULT_BROWSER_PROFILE_ID = 'default'
 
 export const BROWSER_HOST_UNAVAILABLE_MESSAGE =
-  "No paired Orca desktop is hosting browser pages for this server. On a desktop paired with it, open a browser tab in one of this server's workspaces, then retry. The desktop needs an Orca version that hosts this server's pages."
+  "No paired Quirky desktop is hosting browser pages for this server. On a desktop paired with it, open a browser tab in one of this server's workspaces, then retry. The desktop needs an Quirky version that hosts this server's pages."
 
 /** Creates a page that renders on a paired desktop; this runtime owns its placement and rows. */
 export async function createBrowserClientPage(
@@ -120,7 +120,7 @@ export async function createBrowserClientPage(
   return { browserPageId }
 }
 
-/** `orca open-url`: opens the page on the one paired desktop hosting this runtime's pages. */
+/** `quirky open-url`: opens the page on the one paired desktop hosting this runtime's pages. */
 export function openBrowserUrlOnClient(
   host: BrowserClientPageOpeningHost,
   params: { url: string; worktree: string }
@@ -133,7 +133,7 @@ export function openBrowserUrlOnClient(
   )
 }
 
-/** `orca open-url` opens only web pages, wherever the page ends up rendering. */
+/** `quirky open-url` opens only web pages, wherever the page ends up rendering. */
 export function assertClientOpenableUrl(url: string): void {
   const protocol = new URL(url).protocol
   if (protocol !== 'http:' && protocol !== 'https:') {

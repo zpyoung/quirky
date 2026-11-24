@@ -161,7 +161,7 @@ function startAgent(): Promise<unknown> {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-wedged-profile-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-wedged-profile-'))
   resetHostTestOperationIds()
   acquire = vi.fn(async ({ fence }) => ({
     acquisitionGeneration: globalThis.crypto.randomUUID(),
@@ -355,7 +355,7 @@ describe('already-wedged profiles become usable on load', () => {
         ...verdict
       })
       expect(activeStructuredAgentSessionTurnId(restoredJournal().snapshot().items)).toBe(null)
-      // The row never carries the proof's detail, which is Orca's log text.
+      // The row never carries the proof's detail, which is Quirky's log text.
       const statusRows = restoredJournal()
         .snapshot()
         .items.flatMap((item) => (item.body.kind === 'status' ? [item.body.text] : []))

@@ -1,6 +1,6 @@
 // Why: subprocess-level test for the CLI keepalive behavior described in
 // design doc §3.4. Spawns the real compiled CLI with no TTY, points it at a
-// real in-process runtime via ORCA_USER_DATA_PATH, and asserts:
+// real in-process runtime via QUIRKY_USER_DATA_PATH, and asserts:
 //   - the first keepalive line appears on stderr well under Claude Code's
 //     ~2 min Bash-tool silence budget (we verify with a shortened interval;
 //     production uses 15 s via the same code path)
@@ -30,7 +30,7 @@ const describeIfBuilt = existsSync(CLI_PATH) ? describe : describe.skip
 
 function loadRuntimeModules() {
   return Promise.all([
-    import('./orca-runtime'),
+    import('./quirky-runtime'),
     import('./orchestration/db'),
     import('./runtime-rpc')
   ])
@@ -44,8 +44,8 @@ async function runBuiltCli(
   const child = spawn(process.execPath, [CLI_PATH, ...args], {
     env: {
       ...process.env,
-      ORCA_USER_DATA_PATH: userDataPath,
-      ORCA_TERMINAL_HANDLE: 'term_cli',
+      QUIRKY_USER_DATA_PATH: userDataPath,
+      QUIRKY_TERMINAL_HANDLE: 'term_cli',
       ...extraEnv
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -70,12 +70,12 @@ async function runBuiltCli(
   }
 }
 
-describeIfBuilt('orca orchestration check --wait subprocess (§3.4)', () => {
+describeIfBuilt('quirky orchestration check --wait subprocess (§3.4)', () => {
   it('emits newline-flushed JSON keepalives to stderr while waiting', async () => {
-    const [{ OrcaRuntimeService }, { OrchestrationDb }, { OrcaRuntimeRpcServer }] =
+    const [{ QuirkyRuntimeService }, { OrchestrationDb }, { QuirkyRuntimeRpcServer }] =
       await loadRuntimeModules()
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-cli-sub-'))
-    const runtime = new OrcaRuntimeService()
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-cli-sub-'))
+    const runtime = new QuirkyRuntimeService()
     const db = new OrchestrationDb(':memory:')
     runtime.setOrchestrationDb(db)
     // A consuming inbox check requires a live pane, even when no messages exist.
@@ -86,11 +86,11 @@ describeIfBuilt('orca orchestration check --wait subprocess (§3.4)', () => {
     vi.spyOn(runtime, 'getLiveTerminalPaneKey').mockImplementation((handle) =>
       runtime.getTerminalPaneKey(handle)
     )
-    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath })
+    const server = new QuirkyRuntimeRpcServer({ runtime, userDataPath })
     await server.start()
 
     try {
-      // Why: use the ORCA_KEEPALIVE_INTERVAL_MS escape hatch to shrink the
+      // Why: use the QUIRKY_KEEPALIVE_INTERVAL_MS escape hatch to shrink the
       // test to ~1 s wall time. Production callers never set this; the
       // production default (15 s) is exercised by §3.4's own unit tests
       // and by the fact that this same code path runs with the real
@@ -112,9 +112,9 @@ describeIfBuilt('orca orchestration check --wait subprocess (§3.4)', () => {
         {
           env: {
             ...process.env,
-            ORCA_USER_DATA_PATH: userDataPath,
-            ORCA_TERMINAL_HANDLE: 'term_nobody',
-            ORCA_KEEPALIVE_INTERVAL_MS: String(keepaliveMs)
+            QUIRKY_USER_DATA_PATH: userDataPath,
+            QUIRKY_TERMINAL_HANDLE: 'term_nobody',
+            QUIRKY_KEEPALIVE_INTERVAL_MS: String(keepaliveMs)
           },
           // Why: explicit pipe for all three fds so we can watch stderr
           // in real time; no TTY attached (Bash-tool parity).
@@ -208,12 +208,12 @@ describeIfBuilt('orca orchestration check --wait subprocess (§3.4)', () => {
   }, 30_000)
 })
 
-describeIfBuilt('orca orchestration reset subprocess', () => {
+describeIfBuilt('quirky orchestration reset subprocess', () => {
   it('validates reset scopes against an isolated runtime through the built CLI', async () => {
-    const [{ OrcaRuntimeService }, { OrchestrationDb }, { OrcaRuntimeRpcServer }] =
+    const [{ QuirkyRuntimeService }, { OrchestrationDb }, { QuirkyRuntimeRpcServer }] =
       await loadRuntimeModules()
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-cli-reset-'))
-    const runtime = new OrcaRuntimeService()
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-cli-reset-'))
+    const runtime = new QuirkyRuntimeService()
     const db = new OrchestrationDb(':memory:')
     runtime.setOrchestrationDb(db)
     const coordinatorPaneKey = 'tab_cli:11111111-1111-4111-8111-111111111111'
@@ -232,7 +232,7 @@ describeIfBuilt('orca orchestration reset subprocess', () => {
       coordinatorHandle: 'term_cli',
       coordinatorPaneKey
     })
-    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath })
+    const server = new QuirkyRuntimeRpcServer({ runtime, userDataPath })
     await server.start()
 
     try {
@@ -336,13 +336,13 @@ describeIfBuilt('orca orchestration reset subprocess', () => {
   }, 30_000)
 })
 
-describeIfBuilt('orca orchestration task readiness subprocess', () => {
+describeIfBuilt('quirky orchestration task readiness subprocess', () => {
   it('creates a late dependent as ready through the built CLI and runtime', async () => {
-    const [{ OrcaRuntimeService }, { OrchestrationDb }, { OrcaRuntimeRpcServer }] =
+    const [{ QuirkyRuntimeService }, { OrchestrationDb }, { QuirkyRuntimeRpcServer }] =
       await loadRuntimeModules()
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-cli-task-readiness-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-cli-task-readiness-'))
     const dbPath = join(userDataPath, 'orchestration.db')
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const db = new OrchestrationDb(dbPath)
     runtime.setOrchestrationDb(db)
     const coordinatorPaneKey = 'tab_cli:22222222-2222-4222-8222-222222222222'
@@ -354,7 +354,7 @@ describeIfBuilt('orca orchestration task readiness subprocess', () => {
       coordinatorHandle: 'term_cli',
       coordinatorPaneKey
     })
-    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath })
+    const server = new QuirkyRuntimeRpcServer({ runtime, userDataPath })
     await server.start()
 
     try {

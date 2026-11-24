@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
+import type { PipedProcessSpawner } from '@quirky/process-host/process-spec'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from './provider-process-supervisor'
 import { PROVIDER_SPAWN_FAILURE_MARKER } from './provider-spawn-failure-report'

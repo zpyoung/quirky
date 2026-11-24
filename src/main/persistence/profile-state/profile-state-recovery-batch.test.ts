@@ -17,7 +17,7 @@ import type * as FileSystem from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import * as processes from '@orca/process-host'
+import * as processes from '@quirky/process-host'
 import { copyProfileStateRecoveryFiles } from './profile-state-recovery-copy'
 import { quarantineProfileStateDatabase } from './profile-state-database-quarantine'
 
@@ -45,7 +45,7 @@ afterEach(() => {
 })
 
 function fixture(names = ['primary.db', 'backup.db'], large = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-recovery-batch-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-recovery-batch-'))
   directories.push(directory)
   const files = names.map((name, index) => {
     const sourceDirectory = join(directory, `source-${index}`)
@@ -74,7 +74,7 @@ function expectIndependent(files: ReturnType<typeof fixture>['files']): void {
 }
 
 function expectNoTemporary(directory: string): void {
-  expect(readdirSync(directory).some((name) => name.startsWith('.orca-recovery-clone-'))).toBe(
+  expect(readdirSync(directory).some((name) => name.startsWith('.quirky-recovery-clone-'))).toBe(
     false
   )
 }

@@ -1,5 +1,5 @@
 import type { BrowserWindow } from 'electron'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { HEIMDALL_FLEET_CHANGED_CHANNEL } from '../../shared/fork-heimdall/fleet-types'
 import type { HeimdallFleetTransport } from './fleet-transport'
 import { getDashboardPopoutWindow } from '../window/dashboard-popout-window'
@@ -21,7 +21,7 @@ export function forwardHeimdallFleetToRenderer(
 }
 
 export function wireHeimdallFleetWindows(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   getMainWindow: () => BrowserWindow | null
 ): () => void {
   return forwardHeimdallFleetToRenderer(

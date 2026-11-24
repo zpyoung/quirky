@@ -32,7 +32,7 @@ import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire
 import { importLegacyTranscriptIntoJournal } from '../native-chat/agent-session-journal/journal-legacy-import'
 import type { AgentSessionJournal } from '../native-chat/agent-session-journal/journal-store'
 import { createTrackedJournalOpener } from '../native-chat/agent-session-journal/journal-host-database-test-support'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import { readPersistedTestAgentSessionStoreText } from './agent-session-record-store-test-harness'
 import type { RpcRequest, RpcResponse } from './rpc/core'
 import { RpcDispatcher } from './rpc/dispatcher'
@@ -331,7 +331,7 @@ async function readKnownOptions(): Promise<RpcResponse> {
 
 beforeEach(async () => {
   operations = 0
-  root = await mkdtemp(join(tmpdir(), 'orca-structured-integration-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-structured-integration-'))
   codex = fakeCodex()
   bootEnvironmentReads = 0
   codexOverrideReads = 0
@@ -384,7 +384,7 @@ beforeEach(async () => {
     }))
   }
   dispatcher = new RpcDispatcher({
-    runtime: runtime as unknown as OrcaRuntimeService,
+    runtime: runtime as unknown as QuirkyRuntimeService,
     methods: STRUCTURED_AGENT_SESSION_METHODS
   })
 })

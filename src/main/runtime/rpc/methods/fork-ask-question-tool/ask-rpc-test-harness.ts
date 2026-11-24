@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import { OrchestrationDb } from '../../../orchestration/db'
-import { OrcaRuntimeService } from '../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { AskDb } from '../../../../fork-ask-question-tool/ask-db'
 import { AskRegistry } from '../../../../fork-ask-question-tool/ask-registry'
 import {
@@ -14,7 +14,7 @@ import { ASK_METHODS } from './ask'
 export const HANDOFF_PANE_KEY = 'tab_worker:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
 export type AskRpcHarness = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   orchestrationDb: OrchestrationDb
   askDb: AskDb
   registry: AskRegistry
@@ -24,7 +24,11 @@ export type AskRpcHarness = {
   setPaneOwner(paneKey: string, terminalHandle: string): void
   /** Makes a worktreeId/workspaceId resolve as known (F4) — everything else 404s via `showManagedWorktree`. */
   setKnownWorktree(worktreeId: string): void
-  call(name: string, params: Record<string, unknown>, ctxOverride?: Partial<RpcContext>): Promise<unknown>
+  call(
+    name: string,
+    params: Record<string, unknown>,
+    ctxOverride?: Partial<RpcContext>
+  ): Promise<unknown>
   /**
    * Starts a streaming method. Its handler resolves only once `stop()` triggers the registered
    * subscription cleanup, so this captures that cleanup call rather than the internal
@@ -49,13 +53,18 @@ export function createAskRpcHarness(): { setup(): AskRpcHarness; cleanup(): void
   let askDb: AskDb
   let opened = false
 
-  function buildInstance(paneOwnersSeed?: Map<string, string>, knownWorktreesSeed?: Set<string>): AskRpcHarness {
-    const runtime = new OrcaRuntimeService()
+  function buildInstance(
+    paneOwnersSeed?: Map<string, string>,
+    knownWorktreesSeed?: Set<string>
+  ): AskRpcHarness {
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(orchestrationDb)
 
     const registry = new AskRegistry(askDb)
     const hasLocalRendererWindow = { value: false }
-    const roster = createAskAttachedSurfaceRoster({ hasLocalRendererWindow: () => hasLocalRendererWindow.value })
+    const roster = createAskAttachedSurfaceRoster({
+      hasLocalRendererWindow: () => hasLocalRendererWindow.value
+    })
     vi.spyOn(runtime, 'getAskServices').mockReturnValue({
       db: askDb,
       registry,
@@ -83,7 +92,9 @@ export function createAskRpcHarness(): { setup(): AskRpcHarness; cleanup(): void
       if (!knownWorktrees.has(worktreeId)) {
         throw new Error('selector_not_found')
       }
-      return { id: worktreeId } as unknown as Awaited<ReturnType<typeof runtime.showManagedWorktree>>
+      return { id: worktreeId } as unknown as Awaited<
+        ReturnType<typeof runtime.showManagedWorktree>
+      >
     })
 
     const ctx: RpcContext = { runtime }
@@ -125,8 +136,10 @@ export function createAskRpcHarness(): { setup(): AskRpcHarness; cleanup(): void
         // call returns, registerSubscriptionCleanup has already fired with the real id — capture
         // it via a spy rather than reconstructing the internal id scheme.
         const registerSpy = vi.spyOn(runtime, 'registerSubscriptionCleanup')
-        const handlerPromise = method.handler(parsed as never, { ...ctx, ...ctxOverride }, (frame) =>
-          frames.push(frame)
+        const handlerPromise = method.handler(
+          parsed as never,
+          { ...ctx, ...ctxOverride },
+          (frame) => frames.push(frame)
         )
         const subscriptionId = registerSpy.mock.calls.at(-1)?.[0] as string | undefined
         registerSpy.mockRestore()

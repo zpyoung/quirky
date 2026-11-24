@@ -353,7 +353,7 @@ describe('phone chat CLI fork creation owner', () => {
   afterEach(() => renderer?.unmount())
 
   it('lands the CLI fork in terminal under a chat default, retaining later user choices', async () => {
-    const stored = new Map([['orca:defaultSessionView', 'chat']])
+    const stored = new Map([['quirky:defaultSessionView', 'chat']])
     vi.mocked(AsyncStorage.getItem).mockImplementation(async (key) => stored.get(key) ?? null)
     vi.mocked(AsyncStorage.setItem).mockImplementation(async (key, value) => {
       stored.set(key, value)

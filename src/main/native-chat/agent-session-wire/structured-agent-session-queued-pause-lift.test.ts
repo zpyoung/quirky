@@ -1,6 +1,6 @@
 // A Stop pauses the whole queue, derived from the journal: it lasts until any turn
 // sent after it starts — the provider accepts it, never merely the host — or the
-// person Resumes. Whoever sent that turn: a person, Orca's own mail, or the queue.
+// person Resumes. Whoever sent that turn: a person, Quirky's own mail, or the queue.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSessionJournal } from '../agent-session-journal/journal-store'
@@ -229,7 +229,7 @@ describe('the pause read', () => {
     const mail = rig.send('coordinator mail')
     await mail.result
     expect(structuredQueuePauses(journal)).toMatchObject([{ reason: 'stopped' }])
-    // Orca's own turn, accepted after the Stop, lifts it like a person's.
+    // Quirky's own turn, accepted after the Stop, lifts it like a person's.
     await rig.settleAccepted(mail.id, 'mail')
     expect(structuredQueuePauses(journal)).toEqual([])
     await eventually(async () => expect(await rig.handoff(draftId)).toBeDefined())
@@ -405,7 +405,7 @@ describe("a restart's pause", () => {
 describe('a card handed off after a restart', () => {
   installRigLifecycleHooks()
 
-  // Returned, not waiting, when Orca restarted: the reopen holds nothing; only the Stop does.
+  // Returned, not waiting, when Quirky restarted: the reopen holds nothing; only the Stop does.
   it('sent again and withdrawn by a Stop, it waits under that Stop alone, shown; Resume lifts it', async () => {
     const working = await rig.workingSend()
     const draftId = await queuedDraft('refused, then re-sent after a restart')

@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import {
   hostProjectGroupsRead,
   projectSectionsRead,
@@ -59,7 +59,7 @@ export function useHostProjectSections(args: {
           fetchedAt.current.set(client, Date.now())
           setServedProjectSections(sections.value)
           // Switch point: with no window catalog's groups, a feed-built list reads the host's own.
-          if (ORCA_SIDEBAR_INPUTS_IS_MAIN && !sections.value?.projectGroups) {
+          if (QUIRKY_SIDEBAR_INPUTS_IS_MAIN && !sections.value?.projectGroups) {
             const groupReply = await hostProjectGroupsRead.request(client).catch(() => null)
             const groups =
               groupReply && readHostMethodReply(groupReply, hostProjectGroupsRead.interpret)

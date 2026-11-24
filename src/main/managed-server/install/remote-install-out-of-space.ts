@@ -25,7 +25,7 @@ export class RemoteInstallOutOfSpaceError extends Error {
   ) {
     super(
       `The host is out of disk space: the filesystem holding ${remotePath} has ` +
-        `${formatKb(availableKb)} free, and Orca needs about ${formatKb(neededKb)} to install ` +
+        `${formatKb(availableKb)} free, and Quirky needs about ${formatKb(neededKb)} to install ` +
         'its server there. Free up space on the host (or raise your disk quota), then connect again.',
       { cause }
     )

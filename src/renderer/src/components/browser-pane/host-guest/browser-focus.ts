@@ -5,7 +5,7 @@ export type BrowserFocusRequestDetail = {
   target: BrowserFocusTarget
 }
 
-export const ORCA_BROWSER_FOCUS_REQUEST_EVENT = 'orca:browser-focus-request'
+export const QUIRKY_BROWSER_FOCUS_REQUEST_EVENT = 'quirky:browser-focus-request'
 
 const FOCUS_REQUEST_TTL_MS = 30_000
 
@@ -67,7 +67,7 @@ export function queueBrowserFocusRequest(detail: BrowserFocusRequestDetail): voi
 /** Queue + announce so a mounting browser pane and live listeners both see the request. */
 export function requestBrowserFocus(detail: BrowserFocusRequestDetail): void {
   queueBrowserFocusRequest(detail)
-  window.dispatchEvent(new CustomEvent(ORCA_BROWSER_FOCUS_REQUEST_EVENT, { detail }))
+  window.dispatchEvent(new CustomEvent(QUIRKY_BROWSER_FOCUS_REQUEST_EVENT, { detail }))
 }
 
 export function consumeBrowserFocusRequest(pageId: string): BrowserFocusTarget | null {

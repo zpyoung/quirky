@@ -112,7 +112,7 @@ function applyRecipeOptionOverride(args: {
   }
 }
 
-/** Lets recipe CLI arguments replace the effort flag Orca generated. Model flags are
+/** Lets recipe CLI arguments replace the effort flag Quirky generated. Model flags are
  *  handled by the spec-driven singleton pass; only effort needs per-agent alias shapes. */
 export function applyCommitMessageRecipeEffortOverrides(
   agentId: TuiAgent,

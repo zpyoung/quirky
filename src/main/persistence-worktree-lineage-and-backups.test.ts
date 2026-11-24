@@ -52,7 +52,7 @@ vi.mock('electron', () => ({
 
 describe('Store', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {
@@ -320,7 +320,7 @@ describe('Store', () => {
       const directory = join(testState.dir, 'profiles', 'recovery-test')
       mkdirSync(directory, { recursive: true })
       return {
-        dataFile: join(directory, 'orca-data.json'),
+        dataFile: join(directory, 'quirky-data.json'),
         databaseFile: join(directory, 'profile-state.db'),
         profileId: 'recovery-test'
       }

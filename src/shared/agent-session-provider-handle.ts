@@ -67,7 +67,7 @@ export type AgentSessionProviderHandle = {
    * mismatch with the running build makes the chat not resumable there, never the record unreadable.
    */
   transport: AgentSessionProviderTransport
-  /** Orca agent whose binary resumes the conversation; one transport serves many agents. */
+  /** Quirky agent whose binary resumes the conversation; one transport serves many agents. */
   agent: AgentType
   /** The provider's own conversation id: Claude's session id, Codex's thread id. */
   nativeId: string
@@ -248,7 +248,7 @@ function appendLink(
   }
   if (link.origin === 'resumed' && !sameRoot) {
     // Why: a resume that lands on another identity root forked; recording it as a resume would
-    // make Orca claim continuity the provider never gave.
+    // make Quirky claim continuity the provider never gave.
     throw new Error('agent_session_provider_handle_forked')
   }
   if (link.origin === 'forked') {

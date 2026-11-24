@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import { buildSidebarFeedRows } from '../../../src/shared/sidebar-list/sidebar-feed-rows'
 import { repoIconFeedKey } from '../../../src/shared/sidebar-list/repo-icon-data-urls-contract'
 import type { ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
@@ -173,6 +173,6 @@ function useFeedHostListSections({
 }
 
 /** Switch point: the list comes from the host's sidebar feed, or the phone builds it itself. */
-export const useHostListSections = ORCA_SIDEBAR_INPUTS_IS_MAIN
+export const useHostListSections = QUIRKY_SIDEBAR_INPUTS_IS_MAIN
   ? useFeedHostListSections
   : useLegacyHostListSections

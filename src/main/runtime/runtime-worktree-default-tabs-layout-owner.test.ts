@@ -5,7 +5,7 @@ import {
   type WorktreeTerminalProvisioningHost
 } from './runtime-worktree-terminal-provisioning'
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const DEFAULT_TABS = {
   runCommands: true,

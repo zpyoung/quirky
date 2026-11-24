@@ -7,7 +7,7 @@ import { afterAll, afterEach } from 'vitest'
 
 /**
  * Why: agent trust and hook writers resolve `~` at write time, so a unit test that reaches one
- * edits the developer's real Codex, Claude or Orca config. Any write there fails the test instead.
+ * edits the developer's real Codex, Claude or Quirky config. Any write there fails the test instead.
  * Child processes a test spawns are outside this guard.
  */
 
@@ -16,7 +16,7 @@ type GuardState = { roots: string[]; violations: string[] }
 const AGENT_HOME_ENTRIES = [
   '.codex',
   '.claude',
-  '.orca',
+  '.quirky',
   '.cursor',
   '.copilot',
   '.gemini',
@@ -24,22 +24,22 @@ const AGENT_HOME_ENTRIES = [
 ]
 // Why a bare prefix: Claude's config file and its atomic-write temp siblings sit beside `~/.claude`.
 const AGENT_HOME_FILE_PREFIXES = ['.claude.json']
-// Why: an Orca terminal exports these pointing at the live app and agent state; guarded, then unset.
+// Why: an Quirky terminal exports these pointing at the live app and agent state; guarded, then unset.
 const INHERITED_STATE_ENV = [
-  'ORCA_USER_DATA_PATH',
+  'QUIRKY_USER_DATA_PATH',
   'CODEX_HOME',
-  'ORCA_CODEX_HOME',
+  'QUIRKY_CODEX_HOME',
   'CLAUDE_CONFIG_DIR'
 ]
-// Why: an Orca terminal points this at the live app's CLI, which a test's child shell would run.
-const INHERITED_LIVE_CLI_ENV = ['ORCA_CODEX_LAUNCH_PREFLIGHT']
+// Why: an Quirky terminal points this at the live app's CLI, which a test's child shell would run.
+const INHERITED_LIVE_CLI_ENV = ['QUIRKY_CODEX_LAUNCH_PREFLIGHT']
 // Why: opted-in real-agent suites point a real CLI at its own home on purpose; each suite's own switch.
 const REAL_AGENT_SUITE_SWITCHES = [
-  'ORCA_REAL_CLAUDE_SUPERVISED_STOP',
-  'ORCA_CODEX_CONTRACT_BINARY',
-  'ORCA_CODEX_NO_DAEMON_CONTRACT_BINARY',
-  'ORCA_CODEX_TRUST_CONTRACT_BINARY',
-  'ORCA_REPRO_CODEX_BINARY'
+  'QUIRKY_REAL_CLAUDE_SUPERVISED_STOP',
+  'QUIRKY_CODEX_CONTRACT_BINARY',
+  'QUIRKY_CODEX_NO_DAEMON_CONTRACT_BINARY',
+  'QUIRKY_CODEX_TRUST_CONTRACT_BINARY',
+  'QUIRKY_REPRO_CODEX_BINARY'
 ]
 const realAgentSuiteOptedIn = () => REAL_AGENT_SUITE_SWITCHES.some((name) => process.env[name])
 const foldCase = process.platform === 'darwin' || process.platform === 'win32'
@@ -60,13 +60,13 @@ function realHomes(): string[] {
   return homes.filter((home): home is string => Boolean(home))
 }
 
-/** Folder roots end in a separator so `~/.orca` never covers `~/.orca-relay`; file prefixes do not. */
+/** Folder roots end in a separator so `~/.quirky` never covers `~/.quirky-relay`; file prefixes do not. */
 function protectedRoots(): string[] {
   const folders = realHomes().flatMap((home) => [
     ...AGENT_HOME_ENTRIES.map((entry) => join(home, entry)),
-    join(home, 'Library', 'Application Support', 'orca'),
-    join(home, '.config', 'orca'),
-    join(home, 'AppData', 'Roaming', 'orca')
+    join(home, 'Library', 'Application Support', 'quirky'),
+    join(home, '.config', 'quirky'),
+    join(home, 'AppData', 'Roaming', 'quirky')
   ])
   for (const name of INHERITED_STATE_ENV) {
     const value = process.env[name]
@@ -94,7 +94,7 @@ function targetPath(target: unknown): string | null {
 }
 
 function realClaudeTranscriptWriteOptedIn(path: string): boolean {
-  if (process.env.ORCA_REAL_CLAUDE_CLI_TEST !== '1') {
+  if (process.env.QUIRKY_REAL_CLAUDE_CLI_TEST !== '1') {
     return false
   }
   const homes = [
@@ -195,16 +195,16 @@ function install(): GuardState {
 
 declare global {
   // Why once per process: re-wrapping per test file would stack wrappers around wrappers.
-  var orcaRealAgentHomeWriteGuard: GuardState | undefined
+  var quirkyRealAgentHomeWriteGuard: GuardState | undefined
 }
-const state = (globalThis.orcaRealAgentHomeWriteGuard ??= install())
+const state = (globalThis.quirkyRealAgentHomeWriteGuard ??= install())
 // Why after install: the guard keeps the inherited paths as roots; tests that need one set their own.
 export function clearInheritedAgentStateEnv(): void {
   const inheritedEnvToUnset = realAgentSuiteOptedIn()
     ? []
     : [...INHERITED_STATE_ENV, ...INHERITED_LIVE_CLI_ENV]
   for (const name of inheritedEnvToUnset) {
-    if (name === 'CLAUDE_CONFIG_DIR' && process.env.ORCA_REAL_CLAUDE_CLI_TEST === '1') {
+    if (name === 'CLAUDE_CONFIG_DIR' && process.env.QUIRKY_REAL_CLAUDE_CLI_TEST === '1') {
       continue
     }
     delete process.env[name]

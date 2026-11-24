@@ -4,12 +4,12 @@ const callMock = vi.fn()
 // worker_done carries a CLI-minted request id so its runtime_unavailable retries replay one mutation.
 const WORKER_DONE_REQUEST = { orchestrationRequestId: expect.any(String) }
 const getTerminalHandleMock = vi.hoisted(() => vi.fn())
-const originalTerminalHandle = process.env.ORCA_TERMINAL_HANDLE
-const originalPaneKey = process.env.ORCA_PANE_KEY
+const originalTerminalHandle = process.env.QUIRKY_TERMINAL_HANDLE
+const originalPaneKey = process.env.QUIRKY_PANE_KEY
 // Why: a structured-session marker inherited from the runner diverts these cases to the
 // structured refusal, so which branch they exercise would depend on who ran them.
-const originalStructuredSession = process.env.ORCA_STRUCTURED_SESSION
-const originalCliCommand = process.env.ORCA_CLI_COMMAND
+const originalStructuredSession = process.env.QUIRKY_STRUCTURED_SESSION
+const originalCliCommand = process.env.QUIRKY_CLI_COMMAND
 const originalExitCode = process.exitCode
 function lifecycleGroupRecipientError(type: 'worker_done' | 'heartbeat'): string {
   return `${type} messages belong to one exact Dispatch and cannot target a group address.`
@@ -26,24 +26,24 @@ import { printResult } from '../format'
 afterEach(() => {
   getTerminalHandleMock.mockReset()
   if (originalTerminalHandle === undefined) {
-    delete process.env.ORCA_TERMINAL_HANDLE
+    delete process.env.QUIRKY_TERMINAL_HANDLE
   } else {
-    process.env.ORCA_TERMINAL_HANDLE = originalTerminalHandle
+    process.env.QUIRKY_TERMINAL_HANDLE = originalTerminalHandle
   }
   if (originalPaneKey === undefined) {
-    delete process.env.ORCA_PANE_KEY
+    delete process.env.QUIRKY_PANE_KEY
   } else {
-    process.env.ORCA_PANE_KEY = originalPaneKey
+    process.env.QUIRKY_PANE_KEY = originalPaneKey
   }
   if (originalStructuredSession === undefined) {
-    delete process.env.ORCA_STRUCTURED_SESSION
+    delete process.env.QUIRKY_STRUCTURED_SESSION
   } else {
-    process.env.ORCA_STRUCTURED_SESSION = originalStructuredSession
+    process.env.QUIRKY_STRUCTURED_SESSION = originalStructuredSession
   }
   if (originalCliCommand === undefined) {
-    delete process.env.ORCA_CLI_COMMAND
+    delete process.env.QUIRKY_CLI_COMMAND
   } else {
-    process.env.ORCA_CLI_COMMAND = originalCliCommand
+    process.env.QUIRKY_CLI_COMMAND = originalCliCommand
   }
   process.exitCode = originalExitCode
   vi.restoreAllMocks()
@@ -53,9 +53,9 @@ describe('orchestration send structured payload flags', () => {
   beforeEach(() => {
     callMock.mockReset().mockResolvedValue({ result: { lifecycle: { action: 'completed' } } })
     getTerminalHandleMock.mockReset()
-    delete process.env.ORCA_TERMINAL_HANDLE
-    delete process.env.ORCA_PANE_KEY
-    delete process.env.ORCA_STRUCTURED_SESSION
+    delete process.env.QUIRKY_TERMINAL_HANDLE
+    delete process.env.QUIRKY_PANE_KEY
+    delete process.env.QUIRKY_STRUCTURED_SESSION
   })
 
   const invokeSend = (flags: Map<string, string | boolean>) =>
@@ -228,8 +228,8 @@ describe('orchestration send structured payload flags', () => {
     )
   })
 
-  it('sends lifecycle messages from ORCA_TERMINAL_HANDLE without a liveness probe', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker_env'
+  it('sends lifecycle messages from QUIRKY_TERMINAL_HANDLE without a liveness probe', async () => {
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker_env'
 
     await invokeSend(
       new Map<string, string | boolean>([
@@ -262,8 +262,8 @@ describe('orchestration send structured payload flags', () => {
   it.each(['worker_done', 'heartbeat'] as const)(
     'never probes or remints a %s sender even when a pane key is set',
     async (type) => {
-      process.env.ORCA_TERMINAL_HANDLE = 'term_worker_env'
-      process.env.ORCA_PANE_KEY = 'tab_worker:leaf_worker'
+      process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker_env'
+      process.env.QUIRKY_PANE_KEY = 'tab_worker:leaf_worker'
 
       await invokeSend(
         new Map<string, string | boolean>([
@@ -287,9 +287,9 @@ describe('orchestration send structured payload flags', () => {
     }
   )
 
-  it('passes ORCA_PANE_KEY as the sender pane identity', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker_env'
-    process.env.ORCA_PANE_KEY = 'tab_worker:leaf_worker'
+  it('passes QUIRKY_PANE_KEY as the sender pane identity', async () => {
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker_env'
+    process.env.QUIRKY_PANE_KEY = 'tab_worker:leaf_worker'
 
     await invokeSend(
       new Map<string, string | boolean>([
@@ -329,7 +329,7 @@ describe('orchestration send structured payload flags', () => {
   })
 
   it('refuses a structured session without naming a handle it could pass', async () => {
-    process.env.ORCA_STRUCTURED_SESSION = '1'
+    process.env.QUIRKY_STRUCTURED_SESSION = '1'
     getTerminalHandleMock.mockResolvedValue('term_sibling_pane')
 
     // The refusal must not recommend --from: the explicit-flag branch returns before this guard,
@@ -387,9 +387,9 @@ describe('orchestration timeout flag validation', () => {
 
   beforeEach(() => {
     callMock.mockReset()
-    delete process.env.ORCA_TERMINAL_HANDLE
-    delete process.env.ORCA_PANE_KEY
-    delete process.env.ORCA_STRUCTURED_SESSION
+    delete process.env.QUIRKY_TERMINAL_HANDLE
+    delete process.env.QUIRKY_PANE_KEY
+    delete process.env.QUIRKY_STRUCTURED_SESSION
     process.exitCode = undefined
   })
 
@@ -429,7 +429,7 @@ describe('orchestration timeout flag validation', () => {
   })
 
   it('passes a parsed check timeout and peek mode into the RPC payload', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
     callMock.mockResolvedValue({ result: { messages: [], count: 0 } })
 
     await invokeCheck(
@@ -450,7 +450,7 @@ describe('orchestration timeout flag validation', () => {
       all: undefined,
       types: undefined,
       format: undefined,
-      compatibilityCliCommand: expect.stringMatching(/^orca(?:-ide)?$/),
+      compatibilityCliCommand: expect.stringMatching(/^quirky(?:-ide)?$/),
       run: undefined,
       ack: undefined,
       wait: true,
@@ -459,7 +459,7 @@ describe('orchestration timeout flag validation', () => {
   })
 
   it('filters already-read rows from a peek response for pre-peek runtimes', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
     callMock.mockResolvedValue({
       result: {
         messages: [
@@ -485,7 +485,7 @@ describe('orchestration timeout flag validation', () => {
   })
 
   it('rejects combined read modes before calling the runtime', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
     callMock.mockClear()
 
     await expect(
@@ -503,7 +503,7 @@ describe('orchestration timeout flag validation', () => {
   })
 
   it('warns when a pre-peek runtime returned a full 100-row page', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
     const rows = Array.from({ length: 100 }, (_, i) => ({
       id: `msg_${i}`,
       from_handle: 'a',
@@ -520,7 +520,7 @@ describe('orchestration timeout flag validation', () => {
   })
 
   it('fails --peek --wait against a runtime that returned only read rows', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
     callMock.mockResolvedValue({
       result: {
         messages: [{ id: 'msg_old', from_handle: 'a', subject: 'seen', read: 1 }],
@@ -553,7 +553,7 @@ describe('orchestration timeout flag validation', () => {
   it.each([String(Number.MAX_SAFE_INTEGER)])(
     'clamps a safe ask timeout %s before adding transport headroom',
     async (rawTimeout) => {
-      process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+      process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
       callMock.mockResolvedValue({
         result: { answer: 'yes', messageId: 'msg_1', threadId: 'thread_1', timedOut: false }
       })
@@ -576,7 +576,7 @@ describe('orchestration timeout flag validation', () => {
   )
 
   it('keeps an omitted ask timeout out of the payload while using default headroom', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
     callMock.mockResolvedValue({
       result: { answer: 'yes', messageId: 'msg_1', threadId: 'thread_1', timedOut: false }
     })
@@ -597,8 +597,8 @@ describe('orchestration timeout flag validation', () => {
   })
 
   it('prints the pending message ID and exact capability-bound resume command on timeout', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
-    process.env.ORCA_CLI_COMMAND = 'orca-dev'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_CLI_COMMAND = 'quirky-dev'
     callMock.mockResolvedValue({
       result: {
         answer: null,
@@ -621,14 +621,14 @@ describe('orchestration timeout flag validation', () => {
     expect(errorSpy).toHaveBeenCalledWith(
       'ask timeout after 30000ms; question is still pending (messageId: msg_question). ' +
         'Resume waiting; do not ask again:\n' +
-        'orca-dev orchestration ask --from term_worker --dispatch-capability dcap_secret ' +
+        'quirky-dev orchestration ask --from term_worker --dispatch-capability dcap_secret ' +
         '--resume msg_question --timeout-ms 30000'
     )
     expect(process.exitCode).toBe(1)
   })
 
   it('uses the parsed ask timeout for both runtime wait and client timeout', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
     callMock.mockResolvedValue({
       result: {
         answer: 'yes',
@@ -657,7 +657,7 @@ describe('orchestration timeout flag validation', () => {
         options: undefined,
         timeoutMs: 123,
         from: 'term_worker',
-        compatibilityCliCommand: expect.stringMatching(/^orca(?:-ide)?$/),
+        compatibilityCliCommand: expect.stringMatching(/^quirky(?:-ide)?$/),
         compatibilityWindowsCommand: undefined
       },
       { timeoutMs: 5_123, orchestrationCapability: undefined }
@@ -665,7 +665,7 @@ describe('orchestration timeout flag validation', () => {
   })
 
   it('envelopes ask --json through the shared result printer', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
     const response = {
       id: 'req_ask',
       ok: true,
@@ -688,7 +688,7 @@ describe('orchestration timeout flag validation', () => {
   })
 
   it('passes an ask resume without creating a new question payload', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
     callMock.mockResolvedValue({
       result: {
         answer: 'yes',
@@ -711,7 +711,7 @@ describe('orchestration timeout flag validation', () => {
         options: undefined,
         timeoutMs: undefined,
         from: 'term_worker',
-        compatibilityCliCommand: expect.stringMatching(/^orca(?:-ide)?$/),
+        compatibilityCliCommand: expect.stringMatching(/^quirky(?:-ide)?$/),
         compatibilityWindowsCommand: undefined
       },
       { timeoutMs: 605_000, orchestrationCapability: undefined }
@@ -719,7 +719,7 @@ describe('orchestration timeout flag validation', () => {
   })
 
   it('rejects ambiguous ask create/resume input before RPC', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_worker'
     await expect(
       invokeAsk(
         new Map<string, string | boolean>([

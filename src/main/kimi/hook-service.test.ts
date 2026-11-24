@@ -16,8 +16,8 @@ import { getManagedCommand, KimiHookService } from './hook-service'
 import { buildManagedKimiHooksBlock, KIMI_HOOK_EVENTS } from './kimi-hook-config-toml'
 
 // Why: getSharedManagedScriptPath() writes the managed script under
-// homedir()/.orca, and getKimiHome() honors KIMI_CODE_HOME. Point both at a
-// temp dir so the local install/remove cycle never touches the real ~/.orca or
+// homedir()/.quirky, and getKimiHome() honors KIMI_CODE_HOME. Point both at a
+// temp dir so the local install/remove cycle never touches the real ~/.quirky or
 // ~/.kimi-code. os.homedir() resolves HOME on POSIX and USERPROFILE on Windows.
 let home: string
 let originalHome: string | undefined
@@ -25,7 +25,7 @@ let originalKimiHome: string | undefined
 let originalUserProfile: string | undefined
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'orca-kimi-hook-'))
+  home = mkdtempSync(join(tmpdir(), 'quirky-kimi-hook-'))
   originalHome = process.env.HOME
   originalKimiHome = process.env.KIMI_CODE_HOME
   originalUserProfile = process.env.USERPROFILE
@@ -55,7 +55,7 @@ afterEach(() => {
 
 const configPath = (): string => join(home, '.kimi-code', 'config.toml')
 const scriptPath = (fileName = 'kimi-hook.sh'): string =>
-  join(home, '.orca', 'agent-hooks', fileName)
+  join(home, '.quirky', 'agent-hooks', fileName)
 const supportsPosixFileModes = process.platform !== 'win32'
 
 describe('KimiHookService', () => {
@@ -75,10 +75,10 @@ describe('KimiHookService', () => {
     })
 
     it('registers the .cmd by bare forward-slash path, else the encoded launcher', () => {
-      expect(getManagedCommand('C:\\Users\\alice\\.orca\\agent-hooks\\kimi-hook.cmd')).toBe(
-        'C:/Users/alice/.orca/agent-hooks/kimi-hook.cmd'
+      expect(getManagedCommand('C:\\Users\\alice\\.quirky\\agent-hooks\\kimi-hook.cmd')).toBe(
+        'C:/Users/alice/.quirky/agent-hooks/kimi-hook.cmd'
       )
-      const spacedPath = 'C:\\Users\\Bob Smith\\.orca\\agent-hooks\\kimi-hook.cmd'
+      const spacedPath = 'C:\\Users\\Bob Smith\\.quirky\\agent-hooks\\kimi-hook.cmd'
       expect(getManagedCommand(spacedPath)).toBe(wrapWindowsHookCommand(spacedPath))
     })
 
@@ -102,7 +102,7 @@ describe('KimiHookService', () => {
       writeFileSync(configPath(), `${userConfig}\n${buildManagedKimiHooksBlock(legacyCommand)}\n`)
 
       const service = new KimiHookService()
-      // The stale entry is still Orca's, so status must not claim nothing is installed.
+      // The stale entry is still Quirky's, so status must not claim nothing is installed.
       expect(service.getStatus().state).toBe('installed')
       expect(service.install().state).toBe('installed')
 
@@ -160,7 +160,7 @@ describe('KimiHookService', () => {
     // Reinstall must not duplicate the managed block.
     service.install()
     const reinstalled = readFileSync(configPath(), 'utf-8')
-    expect((reinstalled.match(/orca-managed-kimi-hooks \(/g) ?? []).length).toBe(1)
+    expect((reinstalled.match(/quirky-managed-kimi-hooks \(/g) ?? []).length).toBe(1)
 
     const removed = service.remove()
     expect(removed.state).toBe('not_installed')

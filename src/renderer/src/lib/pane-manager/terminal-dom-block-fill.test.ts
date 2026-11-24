@@ -9,43 +9,43 @@ import {
 describe('backgroundImageForUniformBlockRun', () => {
   it('fills the top half of the cell for a run of upper-half blocks', () => {
     expect(backgroundImageForUniformBlockRun('▀▀▀')).toBe(
-      'linear-gradient(to bottom, var(--orca-block-fg) 50%, transparent 50%)'
+      'linear-gradient(to bottom, var(--quirky-block-fg) 50%, transparent 50%)'
     )
   })
 
   it('fills the bottom half of the cell for lower-half blocks', () => {
     expect(backgroundImageForUniformBlockRun('▄▄')).toBe(
-      'linear-gradient(to bottom, transparent 50%, var(--orca-block-fg) 50%)'
+      'linear-gradient(to bottom, transparent 50%, var(--quirky-block-fg) 50%)'
     )
   })
 
   it('fills the whole cell for full blocks', () => {
     expect(backgroundImageForUniformBlockRun('█')).toBe(
-      'linear-gradient(to bottom, transparent 0%, var(--orca-block-fg) 0%)'
+      'linear-gradient(to bottom, transparent 0%, var(--quirky-block-fg) 0%)'
     )
   })
 
   it('fills the left half for left-half blocks', () => {
     expect(backgroundImageForUniformBlockRun('▌')).toBe(
-      'linear-gradient(to right, var(--orca-block-fg) 50%, transparent 50%)'
+      'linear-gradient(to right, var(--quirky-block-fg) 50%, transparent 50%)'
     )
   })
 
   it('fills the right half for right-half blocks', () => {
     expect(backgroundImageForUniformBlockRun('▐')).toBe(
-      'linear-gradient(to right, transparent 50%, var(--orca-block-fg) 50%)'
+      'linear-gradient(to right, transparent 50%, var(--quirky-block-fg) 50%)'
     )
   })
 
   it('fills the top eighth for upper one-eighth blocks', () => {
     expect(backgroundImageForUniformBlockRun('▔')).toBe(
-      'linear-gradient(to bottom, var(--orca-block-fg) 12.5%, transparent 12.5%)'
+      'linear-gradient(to bottom, var(--quirky-block-fg) 12.5%, transparent 12.5%)'
     )
   })
 
   it('fills the right eighth for right one-eighth blocks', () => {
     expect(backgroundImageForUniformBlockRun('▕')).toBe(
-      'linear-gradient(to right, transparent 87.5%, var(--orca-block-fg) 87.5%)'
+      'linear-gradient(to right, transparent 87.5%, var(--quirky-block-fg) 87.5%)'
     )
   })
 
@@ -85,7 +85,7 @@ describe('applyDomBlockFills', () => {
     expect(span.style.backgroundImage).toContain('linear-gradient(to bottom')
     expect(span.style.backgroundSize).toBe(`${100 / 12}% 100%`)
     expect(span.style.backgroundRepeat).toBe('repeat-x')
-    expect(span.style.getPropertyValue('--orca-block-fg')).toBe('rgb(30, 30, 30)')
+    expect(span.style.getPropertyValue('--quirky-block-fg')).toBe('rgb(30, 30, 30)')
   })
 
   it('repeats a per-cell horizontal fill across a multi-cell left-half run', () => {
@@ -104,7 +104,7 @@ describe('applyDomBlockFills', () => {
     applyDomBlockFills(document)
 
     expect(span.style.backgroundImage).toBe(
-      'linear-gradient(to right, transparent 50%, var(--orca-block-fg) 50%)'
+      'linear-gradient(to right, transparent 50%, var(--quirky-block-fg) 50%)'
     )
     expect(span.style.backgroundSize).toBe('50% 100%')
     expect(span.style.backgroundRepeat).toBe('repeat-x')
@@ -152,7 +152,7 @@ describe('applyDomBlockFills', () => {
     span.style.color = 'rgb(200, 0, 0)'
     applyDomBlockFills(document)
     expect(span.style.color).toBe('transparent')
-    expect(span.style.getPropertyValue('--orca-block-fg')).toBe('rgb(200, 0, 0)')
+    expect(span.style.getPropertyValue('--quirky-block-fg')).toBe('rgb(200, 0, 0)')
 
     span.textContent = 'tab agents'
     applyDomBlockFills(document)
@@ -173,7 +173,7 @@ describe('applyDomBlockFills', () => {
     const span = mountSpan('▀▀▀', '')
     span.parentElement!.style.color = 'rgb(5, 5, 5)'
     applyDomBlockFills(document)
-    expect(span.style.getPropertyValue('--orca-block-fg')).toBe('rgb(5, 5, 5)')
+    expect(span.style.getPropertyValue('--quirky-block-fg')).toBe('rgb(5, 5, 5)')
 
     span.textContent = 'tab agents'
     applyDomBlockFills(document)

@@ -1,4 +1,4 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 // Why: mirrors FLOATING_TERMINAL_WORKTREE_ID in src/shared/constants.ts.
@@ -6,16 +6,16 @@ import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 const FLOATING_WORKTREE_ID = 'global-floating-terminal'
 const OPEN_PANEL_SELECTOR = '[data-floating-terminal-panel][aria-hidden="false"]'
 
-// `orca terminal switch` to a floating terminal reaches the renderer as ui:focusTerminal. It used
+// `quirky terminal switch` to a floating terminal reaches the renderer as ui:focusTerminal. It used
 // to select the floating workspace in the main window, blanking it while the panel stayed closed.
 test('switching to a floating terminal opens the panel and keeps the main workspace', async ({
   electronApp,
-  orcaPage
+  quirkyPage
 }) => {
-  await waitForSessionReady(orcaPage)
-  const mainWorktreeId = await waitForActiveWorktree(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  const mainWorktreeId = await waitForActiveWorktree(quirkyPage)
 
-  const tabId = await orcaPage.evaluate(async (worktreeId) => {
+  const tabId = await quirkyPage.evaluate(async (worktreeId) => {
     const store = window.__store
     if (!store) {
       throw new Error('Store unavailable')
@@ -24,7 +24,7 @@ test('switching to a floating terminal opens the panel and keeps the main worksp
     store.setState({ floatingWorkspacePanelOpen: false })
     return store.getState().createTab(worktreeId, undefined, undefined, { activate: false }).id
   }, FLOATING_WORKTREE_ID)
-  await expect(orcaPage.locator(OPEN_PANEL_SELECTOR)).toHaveCount(0)
+  await expect(quirkyPage.locator(OPEN_PANEL_SELECTOR)).toHaveCount(0)
 
   await electronApp.evaluate(
     ({ BrowserWindow }, payload) => {
@@ -33,8 +33,8 @@ test('switching to a floating terminal opens the panel and keeps the main worksp
     { tabId, worktreeId: FLOATING_WORKTREE_ID }
   )
 
-  await expect(orcaPage.locator(OPEN_PANEL_SELECTOR)).toBeVisible()
-  const selection = await orcaPage.evaluate((worktreeId) => {
+  await expect(quirkyPage.locator(OPEN_PANEL_SELECTOR)).toBeVisible()
+  const selection = await quirkyPage.evaluate((worktreeId) => {
     const state = window.__store?.getState()
     return {
       active: state?.activeWorktreeId,

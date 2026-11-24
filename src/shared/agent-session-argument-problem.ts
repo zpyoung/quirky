@@ -1,4 +1,4 @@
-/** Orca's validated saved Arguments refusal. The option has no value or user-authored operand. */
+/** Quirky's validated saved Arguments refusal. The option has no value or user-authored operand. */
 export type AgentSessionArgumentProblem = {
   agent: 'Codex' | 'Claude'
   option: string

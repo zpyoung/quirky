@@ -4,7 +4,7 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import type { PublishedPane } from '../../shared/workspace-layout/workspace-layout-published'
 import type { WorkspaceLayoutEvent } from '../../shared/workspace-layout/workspace-layout-stream-frames'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { collectLayoutEvents } from './workspace-layout-stream-events.test-fixture'
 
 const WORKTREE_ID = 'repo::/worktree'
@@ -42,7 +42,7 @@ function session(): WorkspaceSessionState {
 
 function runtimeWithPane() {
   const sessions = new Map([[LOCAL_EXECUTION_HOST_ID, session()]])
-  const runtime = new OrcaRuntimeService(
+  const runtime = new QuirkyRuntimeService(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the layout stream and PTY title paths read only repos and the workspace session.
     {
       getRepos: () => [REPO],

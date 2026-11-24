@@ -1,6 +1,6 @@
 /**
- * `orca terminal switch --environment <server>` run on a desktop's machine must move that desktop
- * to the server's terminal (#24688). The server is a windowless `orca serve`, so before this its
+ * `quirky terminal switch --environment <server>` run on a desktop's machine must move that desktop
+ * to the server's terminal (#24688). The server is a windowless `quirky serve`, so before this its
  * answer was `navigated: false` and no window moved.
  *
  * Run:
@@ -10,10 +10,10 @@
 import type { Page } from '@stablyai/playwright-test'
 import type { RuntimeTerminalFocus } from '../../src/shared/runtime-types'
 import { toWebTerminalSurfaceTabId } from '../../src/shared/terminal-surface-id'
-import { orcaCliResult } from './helpers/compiled-orca-cli'
+import { quirkyCliResult } from './helpers/compiled-quirky-cli'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { launchPairedElectronClient } from './helpers/paired-electron-client'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 
 type HostTerminal = { handle: string; tabId: string; leafId: string }
 
@@ -119,7 +119,7 @@ test('terminal switch on a paired server reveals the terminal in the desktop on 
       .toBe(firstMirroredTabId)
     await client.page.screenshot({ path: testInfo.outputPath('before-terminal-switch.png') })
 
-    const switched = await orcaCliResult<{ focus: RuntimeTerminalFocus }>(client.userDataDir, [
+    const switched = await quirkyCliResult<{ focus: RuntimeTerminalFocus }>(client.userDataDir, [
       'terminal',
       'switch',
       '--environment',

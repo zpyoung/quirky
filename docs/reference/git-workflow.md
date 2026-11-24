@@ -2,7 +2,7 @@
 
 ## Git Binary Compatibility
 
-Orca runs the user's Git binary on native, WSL, and SSH hosts, which may all have different versions. Treat Git 2.25 as the core-workflow baseline.
+Quirky runs the user's Git binary on native, WSL, and SSH hosts, which may all have different versions. Treat Git 2.25 as the core-workflow baseline.
 
 ## Git Scan Safety
 

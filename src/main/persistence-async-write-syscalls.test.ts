@@ -231,7 +231,7 @@ describe('worker persistence avoids synchronous profile filesystem calls', () =>
     const started = maintenanceBarrier()
     const finish = maintenanceBarrier()
     fsCalls.waitAsync = (name, path) => {
-      if (name !== 'rename' || !path.includes('orca-github-cache.json.')) {
+      if (name !== 'rename' || !path.includes('quirky-github-cache.json.')) {
         return
       }
       started.resolve()

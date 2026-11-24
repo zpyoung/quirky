@@ -108,7 +108,7 @@ export function inspectDaemonHostImage(
       return result(root ? 'severed' : 'not-ephemeral')
     }
     // After a lazy unmount the kernel renders the path relative to the detached mount
-    // ("/orca-ide"), which resolves to nothing in the daemon's own root.
+    // ("/quirky-ide"), which resolves to nothing in the daemon's own root.
     const resolves = proc.exists(`/proc/${record.pid}/root${path}`)
     if (root) {
       return result(resolves ? 'intact' : 'severed')

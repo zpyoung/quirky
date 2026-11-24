@@ -47,7 +47,7 @@ afterEach(async () => {
 })
 
 async function makeTempDir(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-session-search-live-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-session-search-live-'))
   tempRoots.push(root)
   return root
 }

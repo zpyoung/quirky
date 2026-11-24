@@ -7,7 +7,7 @@ import { readSpoolFile } from './agent-hook-spool'
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-spool-read-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-spool-read-'))
 })
 
 afterEach(() => {

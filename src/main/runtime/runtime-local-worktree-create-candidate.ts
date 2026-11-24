@@ -190,7 +190,7 @@ export async function resolveRuntimeLocalWorktreeCreateCandidate(args: {
       computeWorktreePath(effectiveSanitizedName, args.repo.path, args.worktreePathSettings),
       args.workspaceRoot
     )
-    // Why the pending check: Orca still owns this path until its background removal settles.
+    // Why the pending check: Quirky still owns this path until its background removal settles.
     if (
       !findPendingWorktreeRemovalConflict(args.repo.path, { worktreePath }) &&
       !(await runtimePathExists(worktreePath))

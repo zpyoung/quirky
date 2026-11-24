@@ -46,7 +46,7 @@ async function createStore() {
   installFakeAppEnvironment({ getPath: () => testState.dir })
   const { Store, initDataPath } = await import('../persistence')
   initDataPath()
-  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
+  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'quirky-data.json') })
 }
 
 const makeRepo = (overrides: Partial<Repo> = {}): Repo => ({
@@ -65,7 +65,7 @@ function mutateDataFile(
     automationRuns: Record<string, unknown>[]
   }) => void
 ): void {
-  const file = join(testState.dir, 'orca-data.json')
+  const file = join(testState.dir, 'quirky-data.json')
   const state = JSON.parse(readPersistedStateJson(file))
   mutate(state)
   writePersistedStateJson(file, JSON.stringify(state))
@@ -75,7 +75,7 @@ describe('AutomationService prechecks', () => {
   beforeEach(() => {
     hasCreatedStoreInCase = false
     resetRetirementCollisionKeyCacheForTests()
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-automations-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-automations-test-'))
     runAutomationPrecheckMock.mockReset()
     vi.useFakeTimers()
   })

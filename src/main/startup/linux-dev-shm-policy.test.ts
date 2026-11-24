@@ -22,7 +22,7 @@ vi.mock('../crash-reporting/crash-breadcrumb-store', () => ({
 
 const MIB = 1024 * 1024
 const originalPlatform = process.platform
-const originalOverride = process.env.ORCA_DEV_SHM
+const originalOverride = process.env.QUIRKY_DEV_SHM
 
 function setPlatform(platform: NodeJS.Platform): void {
   Object.defineProperty(process, 'platform', { value: platform, configurable: true })
@@ -45,15 +45,15 @@ beforeEach(() => {
   appMock.commandLine.hasSwitch.mockReturnValue(false)
   statfsSyncMock.mockReset()
   breadcrumbMock.mockReset()
-  delete process.env.ORCA_DEV_SHM
+  delete process.env.QUIRKY_DEV_SHM
 })
 
 afterEach(() => {
   setPlatform(originalPlatform)
   if (originalOverride === undefined) {
-    delete process.env.ORCA_DEV_SHM
+    delete process.env.QUIRKY_DEV_SHM
   } else {
-    process.env.ORCA_DEV_SHM = originalOverride
+    process.env.QUIRKY_DEV_SHM = originalOverride
   }
 })
 
@@ -107,16 +107,16 @@ describe('configureLinuxDevShmUsage', () => {
     })
   })
 
-  it('honors ORCA_DEV_SHM=off on a small mount and =force on a large one', async () => {
+  it('honors QUIRKY_DEV_SHM=off on a small mount and =force on a large one', async () => {
     setPlatform('linux')
     mockDevShm(64, 60)
-    process.env.ORCA_DEV_SHM = 'off'
+    process.env.QUIRKY_DEV_SHM = 'off'
     const { configureLinuxDevShmUsage } = await import('./linux-dev-shm-policy')
     configureLinuxDevShmUsage()
     expect(appMock.commandLine.appendSwitch).not.toHaveBeenCalled()
 
     mockDevShm(8192, 8000)
-    process.env.ORCA_DEV_SHM = 'force'
+    process.env.QUIRKY_DEV_SHM = 'force'
     configureLinuxDevShmUsage()
     expect(appMock.commandLine.appendSwitch).toHaveBeenCalledWith('disable-dev-shm-usage')
   })

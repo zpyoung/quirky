@@ -5,7 +5,7 @@ import {
   type AskRegisteredEnvelope
 } from '../../../shared/fork-ask-question-tool/ask-answer-envelope'
 import type { AskSpec } from '../../../shared/fork-ask-question-tool/ask-question-schema'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import {
   cancelHandoff,
   resolveForcedHandoff,
@@ -18,7 +18,7 @@ import { getForcedHandoffPolicy } from '../forced-handoff-policy'
 export type TerminalAskEnvelope = Exclude<AskEnvelope, AskRegisteredEnvelope | AskPendingEnvelope>
 
 export type NativeSessionHandoff = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   origin: AskHandoffOrigin
   worktreeId: string
 }
@@ -102,7 +102,7 @@ export async function runNativeQuestion(args: {
  * Declines native hand-offs a previous process left pending: the provider callback that would
  * have consumed their answer died with it. The orchestration question itself stays open.
  */
-export function sweepOrphanedNativeAsks(runtime: OrcaRuntimeService): void {
+export function sweepOrphanedNativeAsks(runtime: QuirkyRuntimeService): void {
   try {
     const { db } = runtime.getAskServices()
     for (const row of db.listPending()) {

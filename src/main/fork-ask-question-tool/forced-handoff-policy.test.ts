@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import {
   clearForcedHandoffPolicy,
   getForcedHandoffPolicy,
@@ -7,7 +7,7 @@ import {
 } from './forced-handoff-policy'
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the policy only stores the runtime reference and never calls it.
-const runtime = {} as OrcaRuntimeService
+const runtime = {} as QuirkyRuntimeService
 
 describe('forced hand-off policy', () => {
   afterEach(() => clearForcedHandoffPolicy())

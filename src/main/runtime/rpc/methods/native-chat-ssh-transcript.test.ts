@@ -93,7 +93,7 @@ describe('native chat for an agent whose transcript lives on an SSH host (#26057
   let transcriptPath: string
 
   beforeEach(() => {
-    localDir = mkdtempSync(join(tmpdir(), 'orca-ssh-transcript-'))
+    localDir = mkdtempSync(join(tmpdir(), 'quirky-ssh-transcript-'))
     transcriptPath = join(localDir, 'projects', 'p', `${SESSION_ID}.jsonl`)
     mkdirSync(dirname(transcriptPath), { recursive: true })
     writeFileSync(transcriptPath, claudeLines('LOCAL MACHINE FILE'))

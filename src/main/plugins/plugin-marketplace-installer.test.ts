@@ -23,7 +23,7 @@ vi.mock('./plugin-git-repository', () => ({
 const roots: string[] = []
 
 async function tempRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-marketplace-installer-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-marketplace-installer-'))
   roots.push(root)
   return root
 }
@@ -49,14 +49,14 @@ function marketplace(): PluginMarketplace {
 async function writeCurrentPlugin(destination: string): Promise<void> {
   await mkdir(destination, { recursive: true })
   await writeFile(
-    join(destination, 'orca-plugin.json'),
+    join(destination, 'quirky-plugin.json'),
     JSON.stringify({
       manifestVersion: 1,
       id: git.id,
       publisher: git.publisher,
       name: 'Notes',
       version: git.version,
-      engines: { orca: '>=1.0.0' },
+      engines: { quirky: '>=1.0.0' },
       pluginApi: 1,
       capabilities: []
     })

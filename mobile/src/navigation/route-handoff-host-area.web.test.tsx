@@ -82,7 +82,7 @@ function mountPage(
     postMessage: (json: string) => void
     onmessage: ((event: { data: string }) => void) | null
   } = { postMessage: (json) => posted.push(json), onmessage: null }
-  Object.defineProperty(globalThis, 'orcaBridge', { value: channel, configurable: true })
+  Object.defineProperty(globalThis, 'quirkyBridge', { value: channel, configurable: true })
   const client = createShellPageClient()
   if (client === null) {
     throw new Error('no channel installed')

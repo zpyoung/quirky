@@ -3,7 +3,7 @@
 // in the headless autosave controller. Split from
 // editor-autosave-controller.test.ts to stay under max-lines.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, requestEditorFileSave } from './editor-autosave'
+import { QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, requestEditorFileSave } from './editor-autosave'
 import { attachEditorAutosaveController } from './editor-autosave-controller'
 import { __clearSelfWriteRegistryForTests, recordSelfWrite } from './editor-self-write-registry'
 import {
@@ -34,7 +34,7 @@ function openDirtyFile(store: ReturnType<typeof createEditorStore>, draft = 'uns
 
 function dispatchExternalChange(): void {
   window.dispatchEvent(
-    new CustomEvent(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
+    new CustomEvent(QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
       detail: { worktreeId: 'wt-1', worktreePath: '/repo', relativePath: 'file.ts' }
     })
   )
@@ -101,8 +101,8 @@ describe('editor autosave changed-on-disk conflict flow', () => {
     openDirtyFile(store, 'typed during save')
     // Why: the combined-Changes reload notification routes through the
     // controller for the saved path — a fresh self-write stamp means the
-    // event is Orca's own echo, not an external change.
-    recordSelfWrite('/repo/file.ts', 'orca save')
+    // event is Quirky's own echo, not an external change.
+    recordSelfWrite('/repo/file.ts', 'quirky save')
 
     const cleanup = attachEditorAutosaveController(withLoadedBaselines(store))
     try {

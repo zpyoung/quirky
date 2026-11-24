@@ -15,7 +15,7 @@ import { hasErrorCode } from './daemon-process-inspection'
 import { PRIVATE_DIR_MODE } from './daemon-private-file-modes'
 
 /** `/tmp` is the only POSIX directory whose length does not depend on the user. */
-export const SHORT_DAEMON_SOCKET_DIR_PREFIX = '/tmp/.orca-daemon-'
+export const SHORT_DAEMON_SOCKET_DIR_PREFIX = '/tmp/.quirky-daemon-'
 
 export function shortDaemonSocketDir(runtimeDir: string, uid: number): string {
   const runtimeHash = createHash('sha256').update(runtimeDir).digest('hex').slice(0, 12)

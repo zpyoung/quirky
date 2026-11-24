@@ -40,7 +40,7 @@ vi.mock('@/lib/runtime-workspace-file-route', () => ({
 
 vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState } }))
 
-import { ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './editor-autosave'
+import { QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './editor-autosave'
 import { useEditorPanelContentState } from './useEditorPanelContentState'
 import { createTestStore } from '@/store/slices/store-test-helpers'
 
@@ -116,7 +116,7 @@ function Probe({
 function dispatchExternalChange(file: OpenFile): void {
   act(() => {
     window.dispatchEvent(
-      new CustomEvent(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
+      new CustomEvent(QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
         detail: {
           worktreeId: file.worktreeId,
           worktreePath: '/repo',
@@ -130,7 +130,7 @@ function dispatchExternalChange(file: OpenFile): void {
 function ExternalChangeLayoutEmitter({ file }: { file: OpenFile }): null {
   useLayoutEffect(() => {
     window.dispatchEvent(
-      new CustomEvent(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
+      new CustomEvent(QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
         detail: {
           worktreeId: file.worktreeId,
           worktreePath: '/repo',

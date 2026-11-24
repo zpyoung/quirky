@@ -12,7 +12,7 @@ export class AcpRpcError extends Error {
   }
 }
 
-/** The agent's own error answer to a request: it read the request and refused it. Errors Orca
+/** The agent's own error answer to a request: it read the request and refused it. Errors Quirky
  *  raises about a request (a timeout, an unreadable answer, a closed connection) are not this. */
 export class AcpAgentError extends AcpRpcError {
   constructor(code: number, message: string, data?: unknown) {
@@ -32,10 +32,10 @@ export class AcpAuthRequiredError extends AcpAgentError {
   }
 }
 
-/** The agent printed its sign-in prompt instead of answering, so the message is Orca's, not its. */
+/** The agent printed its sign-in prompt instead of answering, so the message is Quirky's, not its. */
 export class AcpSignInPromptError extends AcpAuthRequiredError {}
 
-/** Types an agent's sign-in answer. A sign-in prompt close stays itself: a copy would pass Orca's
+/** Types an agent's sign-in answer. A sign-in prompt close stays itself: a copy would pass Quirky's
  *  log words off as the agent's. */
 export function acpAuthRequiredError(
   error: AcpAgentError,
@@ -46,7 +46,7 @@ export function acpAuthRequiredError(
     : new AcpAuthRequiredError(error.message, error.data, authMethods)
 }
 
-/** Orca could not read the agent's answer; `data` keeps the raw answer, `issues` why it failed. */
+/** Quirky could not read the agent's answer; `data` keeps the raw answer, `issues` why it failed. */
 export class AcpInvalidResponseError extends AcpRpcError {
   constructor(
     message: string,

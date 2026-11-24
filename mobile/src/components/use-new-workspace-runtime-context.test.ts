@@ -9,14 +9,14 @@ import { useNewWorkspaceRuntimeContext } from './use-new-workspace-runtime-conte
 type RuntimeContext = ReturnType<typeof useNewWorkspaceRuntimeContext>
 type PublishedState = Pick<
   RuntimeContext,
-  'runtimeSettings' | 'trustedOrcaHooks' | 'availableProviders'
+  'runtimeSettings' | 'trustedQuirkyHooks' | 'availableProviders'
 >
 
-// A real PersistedTrustedOrcaHooks record, keyed by repo id with a per-hook approval. The earlier
+// A real PersistedTrustedQuirkyHooks record, keyed by repo id with a per-hook approval. The earlier
 // fixture kept a content hash directly under the key, which is not a shape `ui.get` ever answers
 // and which the checked reader drops as an unreadable repo entry.
 const TRUSTED_HOOKS = { 'repo-1': { setup: { contentHash: 'sha-1', approvedAt: 1700000000000 } } }
-const UI_WITH_TRUST = { ui: { trustedOrcaHooks: TRUSTED_HOOKS } }
+const UI_WITH_TRUST = { ui: { trustedQuirkyHooks: TRUSTED_HOOKS } }
 const SETTINGS = { defaultTuiAgent: 'codex', visibleTaskProviders: ['github', 'linear'] }
 
 function reply(result: unknown): RpcResponse {
@@ -74,8 +74,8 @@ describe('useNewWorkspaceRuntimeContext', () => {
       }
     })
     await act(async () => {})
-    const { runtimeSettings, trustedOrcaHooks, availableProviders } = context!
-    return { runtimeSettings, trustedOrcaHooks, availableProviders }
+    const { runtimeSettings, trustedQuirkyHooks, availableProviders } = context!
+    return { runtimeSettings, trustedQuirkyHooks, availableProviders }
   }
 
   it('publishes other source providers while the optional Jira probe is pending', async () => {
@@ -118,7 +118,7 @@ describe('useNewWorkspaceRuntimeContext', () => {
     // availability gate here, so an absent settings result still offers it.
     expect(await answer(settingsResult, UI_WITH_TRUST)).toEqual({
       runtimeSettings: null,
-      trustedOrcaHooks: TRUSTED_HOOKS,
+      trustedQuirkyHooks: TRUSTED_HOOKS,
       availableProviders: ['github', 'jira']
     })
   })
@@ -132,17 +132,17 @@ describe('useNewWorkspaceRuntimeContext', () => {
   ])('degrades a %s ui result to untrusted hooks', async (_label, uiResult) => {
     expect(await answer({ settings: SETTINGS }, uiResult)).toEqual({
       runtimeSettings: SETTINGS,
-      trustedOrcaHooks: {},
+      trustedQuirkyHooks: {},
       availableProviders: ['github']
     })
   })
 
-  // The blank, not just the absence of a throw: trustedOrcaHooks gates the setup-hook approval
+  // The blank, not just the absence of a throw: trustedQuirkyHooks gates the setup-hook approval
   // prompt in use-new-workspace-create-submit.ts, so a stale value would skip it.
   it('blanks the trust an earlier host published when the next ui result is null', async () => {
-    expect((await answer({ settings: SETTINGS }, UI_WITH_TRUST)).trustedOrcaHooks).toEqual(
+    expect((await answer({ settings: SETTINGS }, UI_WITH_TRUST)).trustedQuirkyHooks).toEqual(
       TRUSTED_HOOKS
     )
-    expect((await answer({ settings: SETTINGS }, null)).trustedOrcaHooks).toEqual({})
+    expect((await answer({ settings: SETTINGS }, null)).trustedQuirkyHooks).toEqual({})
   })
 })

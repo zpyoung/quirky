@@ -1,0 +1,12 @@
+name: Prepare server native prebuilds
+description: Builds and smokes the current server slot.
+
+runs:
+  using: composite
+  steps:
+    - name: Build and smoke this runner's node-pty prebuild slot under the pinned Node
+      shell: bash
+      run: |
+        pnpm build:quirkyd-prebuilds
+        node config/scripts/build-quirkyd-prebuilds.mjs --require-slots "$(node config/scripts/build-quirkyd-prebuilds.mjs --print-slot)"
+        node config/scripts/build-quirkyd-prebuilds.mjs --smoke

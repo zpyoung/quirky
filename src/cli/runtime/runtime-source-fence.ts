@@ -11,7 +11,7 @@ type StatusProbe = (metadata: RuntimeMetadata) => Promise<RuntimeRpcResponse<Run
 
 /**
  * The stamp to enforce for a CLI dialing `userDataPath`. Explicitly choosing another profile (e.g.
- * `orca-dev` from a packaged Orca's terminal) is the user's target, not a fallback, so it is not fenced.
+ * `quirky-dev` from a packaged Quirky's terminal) is the user's target, not a fallback, so it is not fenced.
  */
 export function resolveFencedRuntimeSource(
   stamp: RuntimeSourceStamp | null,
@@ -61,20 +61,20 @@ export class RuntimeSourceFence {
     if (response.ok === false) {
       throw new RuntimeClientError(
         'runtime_source_unverifiable',
-        `Could not confirm that the running Orca is the one that launched this terminal: ${response.error.message}`
+        `Could not confirm that the running Quirky is the one that launched this terminal: ${response.error.message}`
       )
     }
     const sourceId = response.result.hostDescriptor?.installationId
     if (!sourceId) {
       throw new RuntimeClientError(
         'runtime_source_unverifiable',
-        'The running Orca does not report which profile it serves, so this terminal cannot confirm it is the Orca that launched it. Nothing was sent. Open a new terminal from the Orca you want to control.'
+        'The running Quirky does not report which profile it serves, so this terminal cannot confirm it is the Quirky that launched it. Nothing was sent. Open a new terminal from the Quirky you want to control.'
       )
     }
     if (sourceId !== this.expected.sourceId) {
       throw new RuntimeClientError(
         'runtime_source_mismatch',
-        'The running Orca is not the one that launched this terminal (another profile or instance took over its runtime record). Nothing was sent. Open a new terminal from the Orca you want to control.'
+        'The running Quirky is not the one that launched this terminal (another profile or instance took over its runtime record). Nothing was sent. Open a new terminal from the Quirky you want to control.'
       )
     }
     this.verifiedRuntimeIds.add(metadata.runtimeId)

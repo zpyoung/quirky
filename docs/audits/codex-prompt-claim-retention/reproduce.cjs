@@ -5,7 +5,7 @@ const { resolve, relative } = require('node:path')
 const esbuild = require('esbuild')
 const Module = require('node:module')
 
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function')
 const { root, before, after, hashes } = require('./sources.cjs')()
 const sourcePath = 'src/main/codex/codex-prompt-registry.ts'

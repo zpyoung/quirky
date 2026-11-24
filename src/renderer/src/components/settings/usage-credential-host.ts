@@ -41,7 +41,7 @@ export function usageCredentialAccessNotice(
   if (access === 'outdated') {
     return translate(
       'auto.components.settings.usageCredentialHost.outdated',
-      'Update Orca on {{host}} to save this key there.',
+      'Update Quirky on {{host}} to save this key there.',
       { host: host.label }
     )
   }
@@ -55,7 +55,7 @@ export function usageCredentialAccessNotice(
   return null
 }
 
-/** A remote host's saved key it cannot use: sealed by its other Orca app, or just unreadable. */
+/** A remote host's saved key it cannot use: sealed by its other Quirky app, or just unreadable. */
 export function usageCredentialUnreadableNotice(
   host: UsageCredentialHost,
   unreadable: 'sealed-elsewhere' | 'unreadable' | undefined
@@ -66,12 +66,12 @@ export function usageCredentialUnreadableNotice(
   return unreadable === 'sealed-elsewhere'
     ? translate(
         'auto.components.settings.usageCredentialHost.sealedElsewhereForgettable',
-        'Saved by another Orca app on {{host}}, which this one cannot read. Change it in that app, or forget it here.',
+        'Saved by another Quirky app on {{host}}, which this one cannot read. Change it in that app, or forget it here.',
         { host: host.label }
       )
     : translate(
         'auto.components.settings.usageCredentialHost.unreadableKey',
-        'Orca on {{host}} cannot read the saved key. Replace it or forget it.',
+        'Quirky on {{host}} cannot read the saved key. Replace it or forget it.',
         { host: host.label }
       )
 }

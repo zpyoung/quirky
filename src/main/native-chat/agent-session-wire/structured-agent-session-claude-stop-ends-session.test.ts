@@ -63,7 +63,7 @@ let server: AgentHookServer
 let statusSubject: AgentStatusStructuredSessionSubject | undefined
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-stop-ends-session-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-stop-ends-session-'))
   resetHostTestOperationIds()
   queued = []
   events = []
@@ -254,7 +254,7 @@ const INTERRUPTED_RESULT = {
   uuid: 'interrupted-result'
 }
 
-// As the real control surface runs it: no answer ever comes, only the deadline Orca sets.
+// As the real control surface runs it: no answer ever comes, only the deadline Quirky sets.
 const NEVER_ANSWERS = (options?: Record<string, unknown>) =>
   runClaudeControl(
     'interrupt',

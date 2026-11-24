@@ -8,7 +8,7 @@ import { commitTerminalSurfaceClose } from '@/store/terminals/terminal-surface-c
 import type { PaneCwdEntry } from './resolve-split-cwd'
 import { detachTerminalLayoutLeaf } from './terminal-layout-leaf-detach'
 import { moveLeafThroughLayoutOwner } from './terminal-pane-detach-layout-owner'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 export {
   isTerminalTabStripDropTarget,
   resolveTerminalTabStripDropTarget
@@ -148,7 +148,7 @@ async function moveLeafToNewTab(
   }
   // Switch point: main moves the pane and names the new tab.
   const answer = await (
-    ORCA_LAYOUT_OWNER_IS_MAIN
+    QUIRKY_LAYOUT_OWNER_IS_MAIN
       ? moveLeafThroughLayoutOwner(
           request,
           { groupId: args.targetGroupId, index: args.targetIndex },
@@ -161,7 +161,7 @@ async function moveLeafToNewTab(
   })
   if (answer?.status === 'moved') {
     const moved =
-      ORCA_LAYOUT_OWNER_IS_MAIN && answer.tabId
+      QUIRKY_LAYOUT_OWNER_IS_MAIN && answer.tabId
         ? { ...request, targetTabId: answer.tabId }
         : request
     return applyMove(args, moved, true, answer.ptyId)
@@ -217,7 +217,7 @@ function applyMove(
   )?.shellOverride
   // Switch point: the reply runs after the frame with main's new tab, which may have drawn it.
   const frameDrawn =
-    ORCA_LAYOUT_OWNER_IS_MAIN && mainMoved
+    QUIRKY_LAYOUT_OWNER_IS_MAIN && mainMoved
       ? latestStore.tabsByWorktree[worktreeId]?.find((candidate) => candidate.id === targetTabId)
       : undefined
   const tab =

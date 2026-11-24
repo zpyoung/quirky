@@ -16,7 +16,7 @@ type RemovedAliases =
   | { status: 'ready'; aliases: string[] }
   | { status: 'unavailable' }
 
-/** Confirms bringing back ~/.ssh/config hosts that were removed in Orca, naming them first. */
+/** Confirms bringing back ~/.ssh/config hosts that were removed in Quirky, naming them first. */
 export function SshRestoreRemovedHostsDialog({
   open,
   busy,
@@ -77,7 +77,7 @@ export function SshRestoreRemovedHostsDialog({
           <DialogDescription>
             {translate(
               'auto.components.settings.SshRestoreRemovedHosts.description',
-              'Hosts from ~/.ssh/config that you removed in Orca come back in Settings and in every host picker.'
+              'Hosts from ~/.ssh/config that you removed in Quirky come back in Settings and in every host picker.'
             )}
           </DialogDescription>
         </DialogHeader>

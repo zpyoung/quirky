@@ -29,7 +29,7 @@ import {
   removeRemoteTreeCommand
 } from './ssh-remote-commands'
 import {
-  ORCAD_INSTALL_MODEL,
+  QUIRKYD_INSTALL_MODEL,
   RELAY_INSTALL_MODEL
 } from '../managed-server/install/remote-install-model'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
@@ -46,7 +46,7 @@ const nativePosix = getRemoteHostPlatform(
 )
 const windows = getRemoteHostPlatform('win32-x64')
 const powerShellExecutable = [
-  process.env.ORCA_POWERSHELL_EXECUTABLE,
+  process.env.QUIRKY_POWERSHELL_EXECUTABLE,
   ...(process.platform === 'win32' ? ['pwsh.exe', 'powershell.exe'] : ['pwsh'])
 ].find((candidate) => {
   if (!candidate) {
@@ -68,10 +68,10 @@ const powerShell51Executable =
 const listRelayBaseDirsCommand = (host: typeof posix, baseDir: string): string =>
   listRemoteInstallBaseDirsCommand(host, baseDir, RELAY_INSTALL_MODEL)
 
-function probeOrcadInstalledCommand(host: typeof posix, dir: string): string {
+function probeQuirkydInstalledCommand(host: typeof posix, dir: string): string {
   return probeRemoteInstallCompleteCommand(host, dir, [
-    ...ORCAD_INSTALL_MODEL.requiredArtifacts(host),
-    ORCAD_INSTALL_MODEL.installCompleteFilename
+    ...QUIRKYD_INSTALL_MODEL.requiredArtifacts(host),
+    QUIRKYD_INSTALL_MODEL.installCompleteFilename
   ])
 }
 
@@ -134,47 +134,47 @@ function runPowerShellCommand(executable: string, script: string): Promise<strin
 describe('ssh remote command builders', () => {
   it('keeps POSIX deploy commands POSIX-native', () => {
     expect(readRemoteHomeCommand(posix)).toBe('echo $HOME')
-    expect(removeRemoteTreeCommand(posix, '/home/me/.orca-remote/x')).toContain('rm -rf')
-    const probe = probeOrcadInstalledCommand(posix, '/home/me/orcad')
-    expect(probe).toContain("cd '/home/me/orcad'")
-    expect(probe).toContain(ORCAD_INSTALL_MODEL.installCompleteFilename)
+    expect(removeRemoteTreeCommand(posix, '/home/me/.quirky-remote/x')).toContain('rm -rf')
+    const probe = probeQuirkydInstalledCommand(posix, '/home/me/quirkyd')
+    expect(probe).toContain("cd '/home/me/quirkyd'")
+    expect(probe).toContain(QUIRKYD_INSTALL_MODEL.installCompleteFilename)
   })
 
   it('requires every declared artifact before calling an install complete', () => {
-    const posixProbe = probeOrcadInstalledCommand(posix, '/home/me/orcad')
-    for (const filename of ORCAD_INSTALL_MODEL.requiredArtifacts(posix)) {
+    const posixProbe = probeQuirkydInstalledCommand(posix, '/home/me/quirkyd')
+    for (const filename of QUIRKYD_INSTALL_MODEL.requiredArtifacts(posix)) {
       expect(posixProbe, `POSIX probe ignores ${filename}`).toContain(filename)
     }
-    expect(posixProbe).toContain(ORCAD_INSTALL_MODEL.installCompleteFilename)
+    expect(posixProbe).toContain(QUIRKYD_INSTALL_MODEL.installCompleteFilename)
 
     const windowsProbe = decodePowerShellCommand(
-      probeOrcadInstalledCommand(windows, 'C:/Users/me/orcad')
+      probeQuirkydInstalledCommand(windows, 'C:/Users/me/quirkyd')
     )
-    for (const filename of ORCAD_INSTALL_MODEL.requiredArtifacts(windows)) {
+    for (const filename of QUIRKYD_INSTALL_MODEL.requiredArtifacts(windows)) {
       expect(windowsProbe, `Windows probe ignores ${filename}`).toContain(filename)
     }
-    expect(windowsProbe).toContain(ORCAD_INSTALL_MODEL.installCompleteFilename)
+    expect(windowsProbe).toContain(QUIRKYD_INSTALL_MODEL.installCompleteFilename)
   })
 
   // Stage a complete install, then remove one artifact: the probe must flip.
-  function stageOrcadInstall(host: typeof posix): { dir: string; artifact: string } {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-install-probe-'))
-    const artifacts = ORCAD_INSTALL_MODEL.requiredArtifacts(host)
+  function stageQuirkydInstall(host: typeof posix): { dir: string; artifact: string } {
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-install-probe-'))
+    const artifacts = QUIRKYD_INSTALL_MODEL.requiredArtifacts(host)
     for (const filename of artifacts) {
       mkdirSync(dirname(join(dir, filename)), { recursive: true })
       writeFileSync(join(dir, filename), '')
     }
-    writeFileSync(join(dir, ORCAD_INSTALL_MODEL.installCompleteFilename), '')
+    writeFileSync(join(dir, QUIRKYD_INSTALL_MODEL.installCompleteFilename), '')
     return { dir, artifact: artifacts.at(-1)! }
   }
 
   it.skipIf(process.platform === 'win32')(
     'answers a POSIX install complete only with every artifact present, in its own dir',
     async () => {
-      const { dir, artifact } = stageOrcadInstall(nativePosix)
+      const { dir, artifact } = stageQuirkydInstall(nativePosix)
       try {
         const run = async (installDir: string): Promise<string> =>
-          (await runShellCommand(probeOrcadInstalledCommand(nativePosix, installDir))).trim()
+          (await runShellCommand(probeQuirkydInstalledCommand(nativePosix, installDir))).trim()
         expect(await run(dir)).toBe('OK')
         // The relative test must not resolve against the caller's working directory.
         expect(await run(join(dir, 'missing slot'))).toBe('MISSING')
@@ -187,8 +187,8 @@ describe('ssh remote command builders', () => {
   )
 
   it.skipIf(!powerShellExecutable)('rejects a Windows install missing one artifact', async () => {
-    const { dir, artifact } = stageOrcadInstall(windows)
-    const probe = (): string => decodePowerShellCommand(probeOrcadInstalledCommand(windows, dir))
+    const { dir, artifact } = stageQuirkydInstall(windows)
+    const probe = (): string => decodePowerShellCommand(probeQuirkydInstalledCommand(windows, dir))
     try {
       expect((await runPowerShellCommand(powerShellExecutable!, probe())).trim()).toBe('OK')
 
@@ -201,48 +201,48 @@ describe('ssh remote command builders', () => {
 
   it('uses encoded PowerShell for Windows deploy commands', () => {
     expect(readRemoteHomeCommand(windows)).toContain('powershell.exe')
-    expect(removeRemoteTreeCommand(windows, 'C:/Users/me/.orca-remote/x')).toContain(
+    expect(removeRemoteTreeCommand(windows, 'C:/Users/me/.quirky-remote/x')).toContain(
       '-EncodedCommand'
     )
-    const probe = probeOrcadInstalledCommand(windows, 'C:/Users/me/orcad')
+    const probe = probeQuirkydInstalledCommand(windows, 'C:/Users/me/quirkyd')
     expect(probe).toContain('-EncodedCommand')
-    expect(decodePowerShellCommand(probe)).toContain(ORCAD_INSTALL_MODEL.installCompleteFilename)
+    expect(decodePowerShellCommand(probe)).toContain(QUIRKYD_INSTALL_MODEL.installCompleteFilename)
   })
 
   it('writes a holder token inside the lock in the same command that creates it', () => {
-    const owner = { fileName: '.orca-wake-owner', token: 'tok-1' }
+    const owner = { fileName: '.quirky-wake-owner', token: 'tok-1' }
     const posixLock = tryCreateInstallLockCommand(
       posix,
-      '/home/u/.orca-remote/t/.install-lock',
+      '/home/u/.quirky-remote/t/.install-lock',
       owner
     )
     expect(posixLock).toMatch(
-      /^if mkdir .*; then .*printf %s 'tok-1' > '\/home\/u\/\.orca-remote\/t\/\.install-lock\/\.orca-wake-owner'; echo OK;/u
+      /^if mkdir .*; then .*printf %s 'tok-1' > '\/home\/u\/\.quirky-remote\/t\/\.install-lock\/\.quirky-wake-owner'; echo OK;/u
     )
-    expect(tryCreateInstallLockCommand(posix, '/l')).not.toContain('orca-wake-owner')
+    expect(tryCreateInstallLockCommand(posix, '/l')).not.toContain('quirky-wake-owner')
     const windowsLock = decodePowerShellCommand(
-      tryCreateInstallLockCommand(windows, 'C:/Users/me/.orca-remote/t/.install-lock', owner)
+      tryCreateInstallLockCommand(windows, 'C:/Users/me/.quirky-remote/t/.install-lock', owner)
     )
     expect(windowsLock).toContain(
-      "[System.IO.File]::WriteAllText((Join-Path $lock '.orca-wake-owner'), 'tok-1'); 'OK'"
+      "[System.IO.File]::WriteAllText((Join-Path $lock '.quirky-wake-owner'), 'tok-1'); 'OK'"
     )
   })
 
   it('writes the new holder token when a stale lock is taken over', () => {
-    const owner = { fileName: '.orca-fence-owner', token: 'gen-2' }
+    const owner = { fileName: '.quirky-fence-owner', token: 'gen-2' }
     expect(tryStealInstallLockCommand(posix, '/home/u/t/.install-lock', 1200, owner)).toContain(
-      "printf %s 'gen-2' > '/home/u/t/.install-lock/.orca-fence-owner';"
+      "printf %s 'gen-2' > '/home/u/t/.install-lock/.quirky-fence-owner';"
     )
     expect(
       decodePowerShellCommand(
         tryStealInstallLockCommand(windows, 'C:/Users/me/t/.install-lock', 1200, owner)
       )
-    ).toContain("[System.IO.File]::WriteAllText((Join-Path $lock '.orca-fence-owner'), 'gen-2');")
+    ).toContain("[System.IO.File]::WriteAllText((Join-Path $lock '.quirky-fence-owner'), 'gen-2');")
   })
 
   it('uses a legacy-visible Windows lock directory with an exclusive owner file', () => {
     const lockScript = decodePowerShellCommand(
-      tryCreateInstallLockCommand(windows, 'C:/Users/me/.orca-remote/relay/.install-lock')
+      tryCreateInstallLockCommand(windows, 'C:/Users/me/.quirky-remote/relay/.install-lock')
     )
 
     expect(lockScript).toContain('[System.IO.FileMode]::CreateNew')
@@ -311,7 +311,7 @@ describe('ssh remote command builders', () => {
   it.runIf(process.platform !== 'win32')(
     'fails closed when real POSIX GC enumeration fails',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-relay-gc-failure-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-relay-gc-failure-'))
       try {
         const command = `find() { return 23; }\n${listRelayBaseDirsCommand(posix, root)}`
         await expect(runShellCommand(command)).rejects.toThrow('shell exited 1')
@@ -326,7 +326,7 @@ describe('ssh remote command builders', () => {
       commandWithNodePath(
         windows,
         'C:/Program Files/nodejs/node.exe',
-        'C:/Users/me/.orca-remote/relay-0.1.0',
+        'C:/Users/me/.quirky-remote/relay-0.1.0',
         "'READY'"
       )
     )
@@ -336,7 +336,7 @@ describe('ssh remote command builders', () => {
 
   it('keeps the Windows install-lock try/catch parseable', () => {
     const script = decodePowerShellCommand(
-      tryCreateInstallLockCommand(windows, 'C:/Users/me/.orca-remote/relay/.install-lock')
+      tryCreateInstallLockCommand(windows, 'C:/Users/me/.quirky-remote/relay/.install-lock')
     )
 
     expect(script).toContain('$stream = $null; try {')
@@ -345,9 +345,9 @@ describe('ssh remote command builders', () => {
   })
 
   it('computes install-lock age on the remote host clock', () => {
-    const posixCommand = lockAgeSecondsCommand(posix, '/home/me/.orca-remote/relay/.install-lock')
+    const posixCommand = lockAgeSecondsCommand(posix, '/home/me/.quirky-remote/relay/.install-lock')
     const windowsScript = decodePowerShellCommand(
-      lockAgeSecondsCommand(windows, 'C:/Users/me/.orca-remote/relay/.install-lock')
+      lockAgeSecondsCommand(windows, 'C:/Users/me/.quirky-remote/relay/.install-lock')
     )
 
     expect(posixCommand).toContain('date +%s')
@@ -359,11 +359,11 @@ describe('ssh remote command builders', () => {
   it('serializes stale recovery with unbounded numbered sibling claims', () => {
     const posixCommand = tryStealInstallLockCommand(
       posix,
-      '/home/me/.orca-remote/relay/.install-lock',
+      '/home/me/.quirky-remote/relay/.install-lock',
       20 * 60
     )
     const windowsScript = decodePowerShellCommand(
-      tryStealInstallLockCommand(windows, 'C:/Users/me/.orca-remote/relay/.install-lock', 20 * 60)
+      tryStealInstallLockCommand(windows, 'C:/Users/me/.quirky-remote/relay/.install-lock', 20 * 60)
     )
 
     expect(posixCommand).toContain('.install-lock')
@@ -390,7 +390,7 @@ describe('ssh remote command builders', () => {
       const script = decodePowerShellCommand(
         tryStealInstallLockCommand(
           windows,
-          'C:/Users/orca-missing/.orca-remote/relay/.install-lock',
+          'C:/Users/quirky-missing/.quirky-remote/relay/.install-lock',
           20 * 60
         )
       )
@@ -409,7 +409,7 @@ describe('ssh remote command builders', () => {
   it.runIf(powerShell51Executable)(
     'lets only one Windows PowerShell 5.1 caller acquire an install lock',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-install-lock-windows-race-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-install-lock-windows-race-'))
       try {
         const lockPath = join(root, '.install-lock')
         const script = decodePowerShellCommand(tryCreateInstallLockCommand(windows, lockPath))
@@ -431,7 +431,7 @@ describe('ssh remote command builders', () => {
   it.runIf(powerShell51Executable)(
     'atomically replaces a fresh Windows lock only after the remote boot changes',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-install-lock-windows-reboot-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-install-lock-windows-reboot-'))
       try {
         const lockPath = join(root, '.install-lock')
         const acquire = decodePowerShellCommand(tryCreateInstallLockCommand(windows, lockPath))
@@ -467,7 +467,7 @@ describe('ssh remote command builders', () => {
   it.runIf(powerShell51Executable)(
     'recovers a stale Windows lock past abandoned steal generations',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-install-lock-windows-stale-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-install-lock-windows-stale-'))
       try {
         const lockPath = join(root, '.install-lock')
         mkdirSync(lockPath)
@@ -499,7 +499,7 @@ describe('ssh remote command builders', () => {
   it.runIf(powerShell51Executable)(
     'lets only one Windows PowerShell 5.1 caller replace a stale lock',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-install-lock-windows-steal-race-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-install-lock-windows-steal-race-'))
       try {
         const lockPath = join(root, '.install-lock')
         mkdirSync(lockPath)
@@ -527,11 +527,11 @@ describe('ssh remote command builders', () => {
   it.runIf(powerShellExecutable)(
     'keeps a new Windows lock visible to the previous directory-only GC probe',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-install-lock-windows-compat-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-install-lock-windows-compat-'))
       try {
         const lockPath = join(root, '.install-lock')
         const acquire = decodePowerShellCommand(tryCreateInstallLockCommand(windows, lockPath))
-        // The directory-only lock probe older Orca builds still run against this host.
+        // The directory-only lock probe older Quirky builds still run against this host.
         const legacyProbe = `if (Test-Path -LiteralPath '${lockPath}' -PathType Container) { 'LOCKED' } else { 'OPEN' }`
 
         await expect(runPowerShellCommand(powerShellExecutable!, acquire)).resolves.toMatch(/OK/)
@@ -548,7 +548,7 @@ describe('ssh remote command builders', () => {
   it.runIf(process.platform !== 'win32')(
     'recovers and cleans more than eight orphaned numbered steal claims',
     () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-install-lock-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-install-lock-'))
       try {
         const lockDir = join(root, '.install-lock')
         mkdirSync(lockDir)
@@ -577,7 +577,7 @@ describe('ssh remote command builders', () => {
   it.runIf(process.platform !== 'win32')(
     'atomically replaces a fresh POSIX lock only after the execution host changes',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-install-lock-reboot-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-install-lock-reboot-'))
       try {
         const lockDir = join(root, '.install-lock')
         const acquire = tryCreateInstallLockCommand(nativePosix, lockDir)
@@ -607,7 +607,7 @@ describe('ssh remote command builders', () => {
   it.runIf(process.platform !== 'win32')(
     'keeps a fresh legacy POSIX lock when no boot identity is available',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-install-lock-legacy-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-install-lock-legacy-'))
       try {
         const lockDir = join(root, '.install-lock')
         mkdirSync(lockDir)
@@ -632,7 +632,7 @@ describe('ssh remote command builders', () => {
   it.runIf(process.platform !== 'win32')(
     'lets only one POSIX caller move and recreate a stale install lock',
     async () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-install-lock-race-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-install-lock-race-'))
       try {
         const lockDir = join(root, '.install-lock')
         mkdirSync(lockDir)
@@ -658,13 +658,13 @@ describe('ssh remote command builders', () => {
       commandWithNodePath(
         windows,
         'C:/Program Files/nodejs/node.exe',
-        'C:/Users/me/.orca-remote/relay-0.1.0',
+        'C:/Users/me/.quirky-remote/relay-0.1.0',
         "'READY'"
       )
     )
 
     expect(nodeScopedCommand).toContain(
-      "Set-Location -ErrorAction Stop -LiteralPath 'C:/Users/me/.orca-remote/relay-0.1.0'"
+      "Set-Location -ErrorAction Stop -LiteralPath 'C:/Users/me/.quirky-remote/relay-0.1.0'"
     )
   })
 })

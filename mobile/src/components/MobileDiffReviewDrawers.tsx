@@ -114,7 +114,7 @@ function useSendActions(
         icon: Plus,
         disabled: comments.length === 0 || controller.agentLaunchAvailability !== 'available',
         ...(controller.agentLaunchAvailability === 'update-required'
-          ? { hint: 'Update Orca on your computer' }
+          ? { hint: 'Update Quirky on your computer' }
           : controller.agentLaunchAvailability === 'unverified'
             ? { hint: AGENT_LAUNCH_STATUS_UNREADABLE_MESSAGE }
             : {}),

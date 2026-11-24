@@ -101,19 +101,19 @@ describe('classifySftpFailureForExecFallback', () => {
 describe('relay install transfer fallback selection', () => {
   it('streams over exec stdin when the subsystem is refused, and skips SFTP for the rest of the connect', async () => {
     const conn = connection(subsystemRefused)
-    await uploadRelayDirectory(conn, '/local/relay', '/h/.orca-remote/stage/payload', posix)
-    await writeRelayFile(conn, posix, '/h/.orca-remote/stage/payload/.version', '0.1.0+abc')
+    await uploadRelayDirectory(conn, '/local/relay', '/h/.quirky-remote/stage/payload', posix)
+    await writeRelayFile(conn, posix, '/h/.quirky-remote/stage/payload/.version', '0.1.0+abc')
 
     expect(uploadDirectoryViaExecStdin).toHaveBeenCalledWith(
       conn,
       '/local/relay',
-      '/h/.orca-remote/stage/payload',
+      '/h/.quirky-remote/stage/payload',
       posix,
       { signal: undefined }
     )
     expect(writeStringViaExecStdin).toHaveBeenCalledWith(
       conn,
-      '/h/.orca-remote/stage/payload/.version',
+      '/h/.quirky-remote/stage/payload/.version',
       '0.1.0+abc',
       { signal: undefined }
     )

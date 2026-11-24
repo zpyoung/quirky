@@ -11,7 +11,7 @@ import { TerminalSpawnGate, type TerminalSpawnAdmissionMode } from './terminal-s
 
 type SpawnSubprocess = TerminalHostOptions['spawnSubprocess']
 
-// Two daemons on one machine, e.g. the desktop app's and an `orca serve`'s, share one dir.
+// Two daemons on one machine, e.g. the desktop app's and an `quirky serve`'s, share one dir.
 describe('one automatic-restore budget per execution host', () => {
   let dir: string
   let nextPid: number
@@ -20,7 +20,7 @@ describe('one automatic-restore budget per execution host', () => {
 
   beforeEach(() => {
     vi.useFakeTimers({ now: 100_000 })
-    dir = mkdtempSync(join(tmpdir(), 'orca-shared-budget-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-shared-budget-'))
     nextPid = 5000
     exits.clear()
   })

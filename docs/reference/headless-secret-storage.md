@@ -1,16 +1,16 @@
 # How the headless server stores credentials
 
 The desktop app seals saved credentials (Linear, Jira, API keys) with Electron's
-`safeStorage`, which uses the OS keychain. The headless server (`orcad`, the managed SSH server)
+`safeStorage`, which uses the OS keychain. The headless server (`quirkyd`, the managed SSH server)
 has no Electron, so it seals them itself, on the machine it runs on
-(`src/main/orcad/orcad-secret-store.ts`).
+(`src/main/quirkyd/quirkyd-secret-store.ts`).
 
 ## Where the key lives
 
 Each credential is encrypted with AES-256-GCM. The master key is created on first start and kept
-in `~/.orca/orcad-secret-store-<machine>.json`, mode `0600` (an owner-only ACL on Windows), mixed
+in `~/.quirky/quirkyd-secret-store-<machine>.json`, mode `0600` (an owner-only ACL on Windows), mixed
 with the machine ID (`/etc/machine-id`, macOS hardware UUID, Windows `MachineGuid`). That is the
-directory the credentials live in, whatever `ORCA_USER_DATA` says, so the key lasts exactly as
+directory the credentials live in, whatever `QUIRKY_USER_DATA` says, so the key lasts exactly as
 long as the credentials it seals. There is one record per machine, so hosts that share a home
 each keep their own key.
 
@@ -19,9 +19,9 @@ Keychain or a Secret Service keyring. A Mac reached only over SSH keeps its logi
 after a reboot, which made credentials unreadable until someone signed in at the screen. A later
 design is expected to keep secrets on the client, as VS Code and Zed do.
 
-A server started with `ORCA_USER_DATA` under a temporary directory (tests, smoke launchers)
+A server started with `QUIRKY_USER_DATA` under a temporary directory (tests, smoke launchers)
 keeps the old behavior. It stores credentials unencrypted and never creates a key in the real
-`~/.orca`, or re-seals what is there.
+`~/.quirky`, or re-seals what is there.
 
 Windows does not use DPAPI. Reaching it from Node takes PowerShell or a native addon, and running
 PowerShell for each operation is an EDR signal.
@@ -49,14 +49,14 @@ UI, a locked Keychain fails right away (exit 36) instead of prompting.
 Either way the replacement holds a lock file beside the record (`<record>.lock`, so two starts
 agree on one key), uses the same atomic write as other key-record changes, happens once,
 and leaves the keyring item where it is. This migration is meant to be removed a few releases
-after it ships (`src/main/orcad/orcad-legacy-keyring-key.ts`).
+after it ships (`src/main/quirkyd/quirkyd-legacy-keyring-key.ts`).
 
 ## Limitations
 
 - **The key file is weaker than a keychain.** The key sits next to the credentials, and the
   machine ID it is mixed with is not secret. Profile-state records include it, for example. So the
   key file mainly stops a single credential file from opening on another machine. Anyone who can
-  read this account's files, or a backup of `~/.orca`, can unseal the credentials. Treat the key
+  read this account's files, or a backup of `~/.quirky`, can unseal the credentials. Treat the key
   file like the credentials themselves. The server logs this gap once with the `[secrets]` prefix.
 - **The key belongs to the host.** If the record is unreadable or bound to a different machine
   ID, the server does not fall back to plaintext. It leaves the saved credentials
@@ -64,16 +64,16 @@ after it ships (`src/main/orcad/orcad-legacy-keyring-key.ts`).
   record starts over, and every integration has to be connected again. A new machine ID counts as
   a new machine, so it gets a new key, and credentials sealed under the old one have to be
   connected again.
-- **Shared home directories.** Integration credentials live in `~/.orca` under the login home.
+- **Shared home directories.** Integration credentials live in `~/.quirky` under the login home.
   Hosts that share that home (over NFS, for example), or a desktop app on the same machine, each
   seal with their own key, so a credential one of them saves can't be read by the others. To keep
-  the old shared plaintext behavior on such hosts, set `ORCA_HEADLESS_SECRET_STORE=plaintext`.
+  the old shared plaintext behavior on such hosts, set `QUIRKY_HEADLESS_SECRET_STORE=plaintext`.
 - **Rolling back to an older server.** A server from before this change can't read credentials a
-  newer one sealed. An SSH or WSL rollback restores profile state, not `~/.orca`, so after a
+  newer one sealed. An SSH or WSL rollback restores profile state, not `~/.quirky`, so after a
   rollback the old server shows "Could not decrypt saved Linear credential… reconnect Linear".
   Connect each integration again on that server. Plaintext copies are deliberately not kept for
   rollback.
-- **GitHub and GitLab** tokens are not stored by Orca at all. `gh` and `glab` keep them, under
+- **GitHub and GitLab** tokens are not stored by Quirky at all. `gh` and `glab` keep them, under
   their own storage settings.
 
 ## Migration

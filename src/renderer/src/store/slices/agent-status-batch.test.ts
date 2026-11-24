@@ -11,7 +11,7 @@ import {
 } from './agent-status'
 import type { GeneratedTabTitleUpdate } from './terminal-tab-title-batch'
 import { createTestStore, makeTab, makeUnifiedTab } from './store-test-helpers'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { layoutApplyTestDouble } from '@/runtime/layout-apply-test-double'
 
 const BASE_TIME = 2_000_000
@@ -271,7 +271,7 @@ describe('setAgentStatuses', () => {
     const outcomes = store.getState().setAgentStatuses(updates)
 
     expect(outcomes).toEqual(Array(paneCount).fill(true))
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
       // Main takes the batch's titles in one rename; its frame (not modelled here) is their one
       // store write, so the window writes only the statuses.
       await vi.waitFor(() =>

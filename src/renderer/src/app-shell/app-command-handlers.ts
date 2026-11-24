@@ -132,7 +132,7 @@ export function createAppCommandHandlers(
     if (
       input &&
       keybindingContext === 'terminal' &&
-      (terminalShortcutPolicy ?? 'orca-first') === 'orca-first'
+      (terminalShortcutPolicy ?? 'quirky-first') === 'quirky-first'
     ) {
       showTerminalShortcutCaptureNotification({
         actionId,

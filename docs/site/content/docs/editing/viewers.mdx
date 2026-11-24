@@ -4,13 +4,13 @@ title: HTML, Mermaid, PDF & image viewers
 
 import { Callout } from '@/components/docs/prose'
 
-Orca includes built-in viewers for the formats that show up in most repos.
+Quirky includes built-in viewers for the formats that show up in most repos.
 
 ## HTML
 
-Open a local, SSH, or paired-runtime `.html` file with **Open in Orca Browser** or **Open Preview to the Side**. Orca renders the document locally in a sandboxed browser tab and reads the file and its relative assets through the workspace's file connection, so a remote design document stays crisp without exposing your desktop filesystem.
+Open a local, SSH, or paired-runtime `.html` file with **Open in Quirky Browser** or **Open Preview to the Side**. Quirky renders the document locally in a sandboxed browser tab and reads the file and its relative assets through the workspace's file connection, so a remote design document stays crisp without exposing your desktop filesystem.
 
-The preview asks before reading additional folders, and grants only the folders you approve for that tab. External HTTP(S) links require confirmation and open in a normal Orca browser tab; downloads are disabled inside document previews. Use **Preview options** to reload from disk, open the source file, or copy its full or workspace-relative path.
+The preview asks before reading additional folders, and grants only the folders you approve for that tab. External HTTP(S) links require confirmation and open in a normal Quirky browser tab; downloads are disabled inside document previews. Use **Preview options** to reload from disk, open the source file, or copy its full or workspace-relative path.
 
 On paired runtimes, the HTML file must be inside the worktree. Very old paired servers may render the document without binary assets; update the server if remote images do not load.
 
@@ -20,7 +20,7 @@ Mermaid diagrams render inline inside markdown preview. Standalone `.mmd` files 
 
 ## PDF
 
-Scroll, zoom, and text selection. Useful for design docs checked into the repo. Scroll position is restored when you switch away from a PDF tab and come back (including close-and-reopen in the same session) — page plus mid-page offset, so you land where you left off. Positions are session-only and clear when Orca restarts.
+Scroll, zoom, and text selection. Useful for design docs checked into the repo. Scroll position is restored when you switch away from a PDF tab and come back (including close-and-reopen in the same session) — page plus mid-page offset, so you land where you left off. Positions are session-only and clear when Quirky restarts.
 
 ## Images
 

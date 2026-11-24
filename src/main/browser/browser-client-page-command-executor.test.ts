@@ -43,19 +43,19 @@ describe('BrowserClientPageCommandExecutor', () => {
     )
     expect(dependencies.routeSessions.preparePage).toHaveBeenCalledWith({
       identity: {
-        orcaProfileId: 'orca-profile-a',
+        quirkyProfileId: 'quirky-profile-a',
         browserProfileId: 'profile-a',
         authorityConnectionIdentity: 'authority-record-a',
         executionHostIdentity: 'execution-host-record-a'
       },
       compatibleIdentity: {
-        orcaProfileId: 'orca-profile-a',
+        quirkyProfileId: 'quirky-profile-a',
         browserProfileId: 'profile-a',
         authorityConnectionIdentity: 'pairing-authority-record-a',
         executionHostIdentity: 'execution-host-record-a'
       },
       legacyIdentity: {
-        orcaProfileId: 'orca-profile-a',
+        quirkyProfileId: 'quirky-profile-a',
         browserProfileId: 'profile-a',
         authorityConnectionIdentity: 'legacy-authority-record-a',
         executionHostIdentity: 'legacy-execution-host-record-a'

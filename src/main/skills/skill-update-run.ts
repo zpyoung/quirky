@@ -38,7 +38,7 @@ export const CANCEL_RELEASE_TIMEOUT_MS = 12_000
 export type SkillUpdateRunnerDeps = {
   /** The commit the running build was made from; the install is pinned to it. */
   sourceCommit: string
-  /** Same targets `orca skills update` picks on this host. */
+  /** Same targets `quirky skills update` picks on this host. */
   detectAgentKeys?: () => string[]
   spawnProcess?: typeof spawn
   resolveCommand?: (commandName: string) => string
@@ -60,7 +60,7 @@ function clampOutput(value: string): string {
 }
 
 /**
- * Runs the pinned `npx --yes skills@<pinned> add <orca>/tree/<commit> --skill <name>... --global
+ * Runs the pinned `npx --yes skills@<pinned> add <quirky>/tree/<commit> --skill <name>... --global
  * --agent ... -y` headlessly. `add` always re-copies, so the result is this build's bytes
  * however the old copy was installed or edited.
  *

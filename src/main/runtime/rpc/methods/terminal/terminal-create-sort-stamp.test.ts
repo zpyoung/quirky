@@ -1,13 +1,13 @@
 import '../../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { DESKTOP_RPC_CALLER } from '../../rpc-caller-identity'
 import { RpcDispatcher } from '../../dispatcher'
 import type { RpcDispatchStreamingOptions } from '../../dispatcher-stream-options'
 import { TERMINAL_LIFECYCLE_METHODS } from './terminal-lifecycle-methods'
 
 vi.mock('../../../../../shared/sidebar-inputs-switch', () => ({
-  ORCA_SIDEBAR_INPUTS_IS_MAIN: true
+  QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true
 }))
 
 const WT = 'repo-1::/tmp/a'
@@ -25,7 +25,7 @@ function makeHost(created: { isReattach?: true } = {}) {
     sidebarFacts: { sortStamps: { noteTerminalStarted } }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: terminal.create reads only the members above.
-  const runtime = fake as unknown as OrcaRuntimeService
+  const runtime = fake as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_LIFECYCLE_METHODS })
   const create = (context: RpcDispatchStreamingOptions) =>
     dispatcher.dispatch(

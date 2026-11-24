@@ -77,7 +77,7 @@ describe('validated cookie replacement', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'orca-cookie-replacement-test-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'quirky-cookie-replacement-test-'))
     cookiesGetMock = vi.fn().mockResolvedValue([])
     cookiesRemoveMock = vi.fn().mockResolvedValue(undefined)
     cookiesSetMock = vi.fn().mockResolvedValue(undefined)
@@ -243,7 +243,7 @@ describe('native Chromium integrity-cookie accounting', () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'orca-cookie-accounting-test-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'quirky-cookie-accounting-test-'))
     appGetPathMock.mockReset().mockReturnValue(join(tmpDir, 'userData'))
     execFileSyncMock.mockReset().mockImplementation(() => {
       throw new Error('OS browser version lookup unavailable')

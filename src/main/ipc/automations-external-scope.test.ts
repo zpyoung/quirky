@@ -26,7 +26,7 @@ vi.mock('electron', () => ({
 const probeCommand = vi.hoisted(() => vi.fn())
 const fileExists = vi.hoisted(() => vi.fn(() => false))
 const readRegistrations = vi.fn(() => state.targets)
-vi.mock('@orca/process-host', () => ({ runProcess: probeCommand }))
+vi.mock('@quirky/process-host', () => ({ runProcess: probeCommand }))
 // Why: keep the local job read off the developer's real ~/.openclaw and ~/.openclaw.
 vi.mock('node:fs', async (importOriginal) => ({
   ...(await importOriginal<typeof Fs>()),
@@ -39,7 +39,7 @@ function sshTarget(overrides: Partial<SshTarget> = {}): SshTarget {
     id: 't1',
     label: 'build-box',
     host: 'build.example',
-    user: 'orca',
+    user: 'quirky',
     generation: 3,
     ...overrides
   } as SshTarget
@@ -247,9 +247,9 @@ describe('probe scope retention', () => {
   })
 })
 
-describe('Orca automation traffic priority', () => {
-  it('parks queued probes while Orca automation work holds the installed lease', async () => {
-    // Orca CRUD and dispatch arrive through the runtime methods, which take the
+describe('Quirky automation traffic priority', () => {
+  it('parks queued probes while Quirky automation work holds the installed lease', async () => {
+    // Quirky CRUD and dispatch arrive through the runtime methods, which take the
     // lease through the hook this registration installed on the service.
     const lease = state.service.externalProbePriority
     expect(lease).not.toBeNull()

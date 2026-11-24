@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MOBILE_WEB_SHELL_FAILURE_REASONS,
   parseMobileWebShellLoadState
-} from '../../modules/orca-mobile-web-shell/src/load-state'
+} from '../../modules/quirky-mobile-web-shell/src/load-state'
 
 describe('parseMobileWebShellLoadState', () => {
   it('accepts the two states that carry no reason', () => {

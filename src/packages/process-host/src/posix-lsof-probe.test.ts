@@ -53,7 +53,7 @@ async function runProbe(options: {
   lsof?: string
   sockPath?: string
 }) {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-lsof-lifecycle-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-lsof-lifecycle-'))
   const pidFile = join(dir, 'lsof.pid')
   const psPidFile = join(dir, 'ps.pid')
   try {
@@ -78,7 +78,7 @@ async function runProbe(options: {
       ],
       env: {
         ...process.env,
-        ORCA_BACKGROUND_LAUNCH: '1',
+        QUIRKY_BACKGROUND_LAUNCH: '1',
         PATH: `${dir}:${process.env.PATH}`,
         PROBE_PID: pidFile,
         PS_PID: psPidFile,
@@ -190,7 +190,7 @@ linuxOnly('lsof blindness to another uid', () => {
   })
 
   async function withBoundSocket<T>(run: (sockPath: string) => Promise<T>): Promise<T> {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-lsof-bound-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-lsof-bound-'))
     const sockPath = join(dir, 'held.sock')
     const server = createServer(() => {})
     await new Promise<void>((resolve) => {
@@ -212,7 +212,7 @@ linuxOnly('lsof blindness to another uid', () => {
   it('still reports lsof for an empty answer about a path nothing has bound', async () => {
     // The control that keeps this from becoming a universal accumulation bug: on a healthy
     // host a genuinely stale socket has no /proc/net/unix entry and must stay reapable.
-    const dir = mkdtempSync(join(tmpdir(), 'orca-lsof-stale-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-lsof-stale-'))
     try {
       const result = await runProbe({ lsof: BLIND_LSOF, sockPath: join(dir, 'never-bound.sock') })
       expect(result.stdout).toBe('lsof\n\n')

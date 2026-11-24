@@ -31,7 +31,7 @@ import {
 } from './native-chat-composer-draft-storage'
 
 const PERSIST_DEBOUNCE_MS = 250
-const CHANNEL_NAME = 'orca-native-chat-composer-drafts'
+const CHANNEL_NAME = 'quirky-native-chat-composer-drafts'
 
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 let flushOnHideInstalled = false
@@ -49,12 +49,12 @@ export function unavailableNativeChatComposerDraftImage(
     : image
 }
 
-/** A local paste in Orca's paste folder: it outlives the run, so a restore can show and send it. */
+/** A local paste in Quirky's paste folder: it outlives the run, so a restore can show and send it. */
 export function isKeptLocalPaste(image: NativeChatComposerDraftImage): boolean {
   return !image.connectionId && isNativeChatKeptPastePath(image.path)
 }
 
-/** What storage keeps: not an unsaved launch-seed copy, and a paste outside Orca's paste folder
+/** What storage keeps: not an unsaved launch-seed copy, and a paste outside Quirky's paste folder
  *  (over SSH, or from before it) only by name. A paste a paired server stored for the chat stays
  *  whole: the server keeps it, and its claim at send refuses one it no longer has. Null when
  *  nothing is left. */

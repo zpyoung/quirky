@@ -52,7 +52,7 @@ describe('agent session option catalog', () => {
       type: 'control_response',
       response: {
         subtype: 'success',
-        request_id: 'orca-model-discovery',
+        request_id: 'quirky-model-discovery',
         response: {
           models: [
             {

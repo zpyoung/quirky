@@ -1,7 +1,7 @@
 import type { RepoIcon } from './repo-icon'
 import type { GhAccountBinding } from './github/account-binding'
 import type { GitHubRepositoryIdentity } from './github/pull-request-types'
-import type { RepoHookSettings } from './orca-yaml-hook-types'
+import type { RepoHookSettings } from './quirky-yaml-hook-types'
 import type { ForkSyncMode } from './git-fork-sync'
 import type { GitRemoteIdentity } from './git-remote-identity'
 import type { RepoSourceControlAiOverrides } from './source-control-ai-types'
@@ -85,15 +85,15 @@ export type Repo = {
   defaultJiraProject?: JiraProjectReference | null
   /**
    * Per-project gh account binding (host + login only — never a token).
-   * At spawn, Orca resolves a short-lived token via `gh auth token --user`
+   * At spawn, Quirky resolves a short-lived token via `gh auth token --user`
    * and injects it into that child env only.
    */
   ghAccount?: GhAccountBinding
-  /** Controls Orca's fork-default-branch sync offer for repos with upstream metadata. */
+  /** Controls Quirky's fork-default-branch sync offer for repos with upstream metadata. */
   forkSyncMode?: ForkSyncMode
-  /** Canonical identity for the repo remote Orca should use for provider-level grouping. */
+  /** Canonical identity for the repo remote Quirky should use for provider-level grouping. */
   gitRemoteIdentity?: GitRemoteIdentity | null
-  /** Controls whether worktrees Orca did not create appear in the sidebar. */
+  /** Controls whether worktrees Quirky did not create appear in the sidebar. */
   externalWorktreeVisibility?: ExternalWorktreeVisibility
   /** True when the repo predates hidden-by-default external worktrees. */
   externalWorktreeVisibilityLegacy?: boolean

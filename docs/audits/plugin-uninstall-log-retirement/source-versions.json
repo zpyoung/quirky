@@ -417,7 +417,7 @@
       "fixed": "82b6f4ec0be07b6aa612038b21b9f67b0ef199f694d29dc9f7b54b55dba9776e",
       "main": "82b6f4ec0be07b6aa612038b21b9f67b0ef199f694d29dc9f7b54b55dba9776e"
     },
-    "src/main/orca-chromium-process-pids.ts": {
+    "src/main/quirky-chromium-process-pids.ts": {
       "before": "960a15f005ff997fa379972a8c2abe3410b78c6facee449e8a5350754cfce965",
       "fixed": "960a15f005ff997fa379972a8c2abe3410b78c6facee449e8a5350754cfce965",
       "main": "960a15f005ff997fa379972a8c2abe3410b78c6facee449e8a5350754cfce965"
@@ -997,12 +997,12 @@
       "fixed": "18ec54a56f444b6b79c3430cc3f73e9caaed2b9ddae5715ea16d36953d9cee59",
       "main": "18ec54a56f444b6b79c3430cc3f73e9caaed2b9ddae5715ea16d36953d9cee59"
     },
-    "src/shared/orca-yaml-file-limit.ts": {
+    "src/shared/quirky-yaml-file-limit.ts": {
       "before": "ed4f2df3e88b991061ba7f03c3c383e0b0a8ca7911d809ca40e13791eac06989",
       "fixed": "ed4f2df3e88b991061ba7f03c3c383e0b0a8ca7911d809ca40e13791eac06989",
       "main": "ed4f2df3e88b991061ba7f03c3c383e0b0a8ca7911d809ca40e13791eac06989"
     },
-    "src/shared/orca-yaml.ts": {
+    "src/shared/quirky-yaml.ts": {
       "before": "fe76fd7a5d36fdbbc0b3771f6c7066ba53acb89bef50ff39500886e84cef4413",
       "fixed": "fe76fd7a5d36fdbbc0b3771f6c7066ba53acb89bef50ff39500886e84cef4413",
       "main": "fe76fd7a5d36fdbbc0b3771f6c7066ba53acb89bef50ff39500886e84cef4413"

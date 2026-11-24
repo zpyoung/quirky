@@ -2,7 +2,7 @@ import { unlinkSync } from 'node:fs'
 import { writeEncryptedCredential } from '../integration-credential-file'
 import {
   LEGACY_WORKSPACE_ID,
-  ensureOrcaDir,
+  ensureQuirkyDir,
   ensureWorkspaceTokenDir,
   getWorkspaceTokenPath
 } from './linear-credential-paths'
@@ -27,7 +27,7 @@ import { readCredentialFileProtection } from '../credential-file-protection'
 import type { SecretAtRestProtection } from '../../shared/secret-at-rest-protection'
 
 export function saveWorkspaceToken(workspaceId: string, apiKey: string): void {
-  ensureOrcaDir()
+  ensureQuirkyDir()
   if (workspaceId !== LEGACY_WORKSPACE_ID) {
     ensureWorkspaceTokenDir()
   }

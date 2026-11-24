@@ -23,7 +23,7 @@ const PHONE: Partial<RpcContext> = {
     AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY
   ]
 }
-// The `orca` CLI carries no capability list.
+// The `quirky` CLI carries no capability list.
 const CLI: Partial<RpcContext> = {}
 const SESSION = 'codex_9b1deb4d_3b7d_4bad_9bdd_2b0d7b3dcb6d'
 

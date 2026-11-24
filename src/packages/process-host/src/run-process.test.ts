@@ -269,7 +269,7 @@ describe('a signal that is already aborted', () => {
     const startedAt = Date.now()
     const onChildTerminated = vi.fn()
     const result = await runProcess({
-      program: path.join(tmpdir(), 'orca-must-not-spawn'),
+      program: path.join(tmpdir(), 'quirky-must-not-spawn'),
       timeoutMs: 30_000,
       signal: controller.signal,
       onChildTerminated

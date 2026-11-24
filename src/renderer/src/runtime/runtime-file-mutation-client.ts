@@ -31,7 +31,7 @@ function assertRemoteWriteFitsOneRequest(content: string): void {
   const bytes = new TextEncoder().encode(JSON.stringify(content)).length
   if (bytes > REMOTE_RUNTIME_MAX_FILE_WRITE_CONTENT_BYTES) {
     throw new Error(
-      `File is too large to save to a remote Orca server (${Math.ceil(bytes / 1024)} KB; the limit is ${REMOTE_RUNTIME_MAX_FILE_WRITE_CONTENT_BYTES / 1024} KB).`
+      `File is too large to save to a remote Quirky server (${Math.ceil(bytes / 1024)} KB; the limit is ${REMOTE_RUNTIME_MAX_FILE_WRITE_CONTENT_BYTES / 1024} KB).`
     )
   }
 }

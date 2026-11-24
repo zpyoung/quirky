@@ -40,7 +40,7 @@ function writeStub(path: string, markerPath: string): void {
 }
 
 function buildFixture(options: { aliasCodex?: boolean } = {}): Fixture {
-  const root = mkdtempSync(join(tmpdir(), 'orca-codex-profile-path-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-codex-profile-path-'))
   roots.push(root)
   const resourcesPath = join(root, 'resources')
   const hijackDir = join(root, 'hijack')
@@ -54,14 +54,14 @@ function buildFixture(options: { aliasCodex?: boolean } = {}): Fixture {
   mkdirSync(codexDir, { recursive: true })
   mkdirSync(homePath, { recursive: true })
 
-  // The CLI Orca ships, at the absolute path Orca controls; only WSL panes run it.
+  // The CLI Quirky ships, at the absolute path Quirky controls; only WSL panes run it.
   const launcherPath = getBundledLauncherPath('win32', resourcesPath)
   if (!launcherPath) {
     throw new Error('Windows has a bundled launcher path')
   }
   writeStub(launcherPath, intendedMarker)
-  // The impostor a user's own bin directory could hold under every CLI name Orca uses.
-  for (const name of ['orca', 'orca-ide', 'orca-dev']) {
+  // The impostor a user's own bin directory could hold under every CLI name Quirky uses.
+  for (const name of ['quirky', 'quirky-ide', 'quirky-dev']) {
     writeStub(join(hijackDir, name), hijackMarker)
   }
   writeStub(join(codexDir, 'codex'), codexMarker)
@@ -89,11 +89,11 @@ function buildFixture(options: { aliasCodex?: boolean } = {}): Fixture {
 function launchCodexThroughRcfile(fixture: Fixture, preflightValue: string): void {
   const rcfilePath = join(fixture.root, 'rcfile')
   writeFileSync(rcfilePath, getDaemonBashShellReadyRcfileContent(), 'utf8')
-  // Why the second command: the rcfile defines __orca_osc133_preexec *below* the
+  // Why the second command: the rcfile defines __quirky_osc133_preexec *below* the
   // codex wrapper, so its presence proves bash parsed past the snippet.
   // Why the trailing `:` — the markers are this file's oracle, so a failed probe
   // must surface as a missing marker, not an opaque non-zero exit from bash.
-  const command = `codex --version; declare -F __orca_osc133_preexec >/dev/null && printf ran > ${JSON.stringify(fixture.postSnippetMarker)}; :`
+  const command = `codex --version; declare -F __quirky_osc133_preexec >/dev/null && printf ran > ${JSON.stringify(fixture.postSnippetMarker)}; :`
   execFileSync('/bin/bash', ['--rcfile', rcfilePath, '-i', '-c', command], {
     stdio: 'ignore',
     env: {
@@ -102,10 +102,10 @@ function launchCodexThroughRcfile(fixture: Fixture, preflightValue: string): voi
       PATH: ['/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(delimiter),
       TERM: 'dumb',
       SHELL: '/bin/bash',
-      // Why no ORCA_SHELL_FEATURES: absent means no features, so the rcfile
+      // Why no QUIRKY_SHELL_FEATURES: absent means no features, so the rcfile
       // emits neither the identity nor the readiness marker into stdout.
-      ORCA_CODEX_HOME: join(fixture.root, 'codex-home'),
-      ORCA_CODEX_LAUNCH_PREFLIGHT: preflightValue
+      QUIRKY_CODEX_HOME: join(fixture.root, 'codex-home'),
+      QUIRKY_CODEX_LAUNCH_PREFLIGHT: preflightValue
     }
   })
 }
@@ -121,7 +121,7 @@ describe.skipIf(!bashAvailable)('Codex preflight under a profile-rewritten PATH'
     const rcfile = getDaemonBashShellReadyRcfileContent()
 
     expect(rcfile.indexOf('source "$HOME/.bash_profile"')).toBeLessThan(
-      rcfile.indexOf('ORCA_CODEX_LAUNCH_PREFLIGHT')
+      rcfile.indexOf('QUIRKY_CODEX_LAUNCH_PREFLIGHT')
     )
   })
 
@@ -172,7 +172,7 @@ describe.skipIf(!bashAvailable)('Codex preflight under a profile-rewritten PATH'
   it('skips an unqualified preflight value while still launching codex', () => {
     const fixture = buildFixture()
 
-    launchCodexThroughRcfile(fixture, 'orca')
+    launchCodexThroughRcfile(fixture, 'quirky')
 
     expect(existsSync(fixture.hijackMarker)).toBe(false)
     expect(existsSync(fixture.intendedMarker)).toBe(false)

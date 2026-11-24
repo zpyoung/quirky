@@ -8,7 +8,7 @@ import { buildAiVaultResumeCommand } from '../../src/shared/ai-vault-resume-comm
 import { tokenizeStartupCommand } from '../../src/shared/tui-agent-startup-shell.ts'
 
 assert.ok(process.argv[2], 'Pass a read-only OMP checkout path')
-const scratch = await mkdtemp(join(tmpdir(), 'orca-omp-child-resume-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-omp-child-resume-'))
 process.env.HOME = join(scratch, 'home')
 process.env.USERPROFILE = process.env.HOME
 process.env.XDG_CONFIG_HOME = join(scratch, 'config')

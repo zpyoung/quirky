@@ -25,7 +25,7 @@ import {
   structuredAgentSessionTabId
 } from '../../shared/structured-agent-session-projection'
 import { isTerminalLeafId, makePaneKey, parsePaneKey } from '../../shared/stable-pane-id'
-import { isOrcaSessionId, type OrcaSessionId } from '../../shared/orca-session-address'
+import { isQuirkySessionId, type QuirkySessionId } from '../../shared/quirky-session-address'
 import type { TuiAgent } from '../../shared/tui-agent'
 import {
   STRUCTURED_WORKER_HANDLE_PREFIX,
@@ -127,12 +127,12 @@ export function sessionIdFromStructuredWorkerIncarnation(
   return sessionId.length > 0 ? sessionId : null
 }
 
-/** The Orca session id a `structured:<sessionId>` incarnation names; null for any other. */
-export function structuredWorkerOrcaSessionIdForIncarnation(
+/** The Quirky session id a `structured:<sessionId>` incarnation names; null for any other. */
+export function structuredWorkerQuirkySessionIdForIncarnation(
   processIncarnation: string | null | undefined
-): OrcaSessionId | null {
+): QuirkySessionId | null {
   const sessionId = sessionIdFromStructuredWorkerIncarnation(processIncarnation)
-  return sessionId !== null && isOrcaSessionId(sessionId) ? sessionId : null
+  return sessionId !== null && isQuirkySessionId(sessionId) ? sessionId : null
 }
 
 /** Structured sessions can only exist local and outside WSL; anything else is not our authority. */

@@ -29,7 +29,7 @@ function dedupeByHost(): (option: ReadyProjectHostSetupOption) => boolean {
   }
 }
 
-// Why: an SSH host and its managed Orca server are one machine, and both can report the same
+// Why: an SSH host and its managed Quirky server are one machine, and both can report the same
 // checkout (the old SSH repo locally, the server's own setup remotely), which rendered as two
 // identical rows. Keep the one on the row the picker shows, the route serving the host now. A
 // different path on the other id is a distinct checkout, so it keeps its own row.

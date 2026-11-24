@@ -7,7 +7,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { findRepoRowForHostScopedWrite } from '../persistence/tracking-repos/repo-update-operations'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
 import type { RepoHostTarget } from '../../shared/repo-host-identity'
@@ -49,7 +49,7 @@ export function registerRuntimeRemoveProjectHostScopeTests(): void {
       }
     })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the store stub covers every read and write repo.rm and repo.update drive.
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       getRepos: () => [...repos],
       getRepo: (id: string) => repos.find((repo) => repo.id === id) ?? null,
       getAllWorktreeMeta: () => ({}),

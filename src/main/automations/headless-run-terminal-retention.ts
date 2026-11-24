@@ -1,6 +1,6 @@
 /**
  * Closing run terminals on a headless host. The desktop closes a run's terminal when the run
- * completes; on orcad nobody does, so schedules leave a shell and a PTY per run until the host
+ * completes; on quirkyd nobody does, so schedules leave a shell and a PTY per run until the host
  * runs out. A run terminal stays open for a grace period and the newest few per automation stay
  * viewable; older ones are closed. A completed run in a workspace made for it sleeps instead, as
  * on the desktop, so its tab resumes the agent, or stays while it cannot; any other completed

@@ -12,8 +12,8 @@ and headless terminal.
 From the checkout, using its installed dependencies:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/daemon-late-exit/reproduce.mjs /tmp/daemon-late-exit-results.json
-ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/ipc/pty/daemon-late-exit.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/daemon-late-exit/reproduce.mjs /tmp/daemon-late-exit-results.json
+QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/ipc/pty/daemon-late-exit.test.ts
 ```
 
 The script uses the real daemon server, client, provider, socket pair, kill IPC

@@ -230,7 +230,7 @@ describe('OrchestrationDb dispatch assignee index migration', () => {
   })
 
   it('migrates a populated upstream v23 database idempotently', () => {
-    tempDir = mkdtempSync(join(tmpdir(), 'orca-dispatch-index-migration-'))
+    tempDir = mkdtempSync(join(tmpdir(), 'quirky-dispatch-index-migration-'))
     const dbPath = join(tempDir, 'orchestration.db')
     db = new OrchestrationDb(dbPath)
     const task = db.createTask({
@@ -298,7 +298,7 @@ describe('OrchestrationDb dispatch assignee index migration', () => {
   })
 
   it('adds the active-handle index to a populated v24 database idempotently', () => {
-    tempDir = mkdtempSync(join(tmpdir(), 'orca-active-dispatch-index-migration-'))
+    tempDir = mkdtempSync(join(tmpdir(), 'quirky-active-dispatch-index-migration-'))
     const dbPath = join(tempDir, 'orchestration.db')
     db = new OrchestrationDb(dbPath)
     const run = db.createRun({

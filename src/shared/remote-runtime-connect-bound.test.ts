@@ -111,7 +111,7 @@ describe('remote runtime connect bound', () => {
     expect(isRemoteRuntimeConnectTimeout(handshakeTimeoutError())).toBe(true)
     expect(isRemoteRuntimeConnectTimeout(new Error('connect ECONNREFUSED'))).toBe(false)
     expect(remoteRuntimeConnectFailureMessage(new Error('connect ECONNREFUSED'), 'ws://h')).toBe(
-      'Could not connect to the remote Orca runtime.'
+      'Could not connect to the remote Quirky runtime.'
     )
   })
 

@@ -59,15 +59,15 @@ describe('getAgentSkillNavInstallStatus', () => {
   it('keeps loading and missing states ahead of freshness', () => {
     expect(
       getAgentSkillNavInstallStatus({
-        name: 'orca-linear',
+        name: 'quirky-linear',
         installed: true,
         loading: true,
-        inventory: inventory([placement('orca-linear', 'current')])
+        inventory: inventory([placement('quirky-linear', 'current')])
       })
     ).toBe('checking')
     expect(
       getAgentSkillNavInstallStatus({
-        name: 'orca-linear',
+        name: 'quirky-linear',
         installed: false,
         loading: false,
         inventory: null
@@ -77,15 +77,15 @@ describe('getAgentSkillNavInstallStatus', () => {
 })
 
 describe('getLinearAgentSkillNavInstallStatus', () => {
-  it('reports canonical installs under orca-linear', () => {
-    const skills = [skill('orca-linear')]
+  it('reports canonical installs under quirky-linear', () => {
+    const skills = [skill('quirky-linear')]
 
     expect(
       getLinearAgentSkillNavInstallStatus({
         skills,
         installed: true,
         loading: false,
-        inventory: inventory([placement('orca-linear', 'current')])
+        inventory: inventory([placement('quirky-linear', 'current')])
       })
     ).toBe('up-to-date')
     expect(
@@ -93,7 +93,7 @@ describe('getLinearAgentSkillNavInstallStatus', () => {
         skills,
         installed: true,
         loading: false,
-        inventory: inventory([placement('orca-linear', 'outdated')], ['orca-linear'])
+        inventory: inventory([placement('quirky-linear', 'outdated')], ['quirky-linear'])
       })
     ).toBe('update-available')
   })
@@ -112,11 +112,11 @@ describe('getLinearAgentSkillNavInstallStatus', () => {
   it('prefers canonical freshness when both names are installed', () => {
     expect(
       getLinearAgentSkillNavInstallStatus({
-        skills: [skill('orca-linear'), skill('linear-tickets')],
+        skills: [skill('quirky-linear'), skill('linear-tickets')],
         installed: true,
         loading: false,
         inventory: inventory(
-          [placement('orca-linear', 'current'), placement('linear-tickets', 'outdated')],
+          [placement('quirky-linear', 'current'), placement('linear-tickets', 'outdated')],
           ['linear-tickets']
         )
       })
@@ -126,7 +126,7 @@ describe('getLinearAgentSkillNavInstallStatus', () => {
   it('falls back to presence-only status when freshness does not apply', () => {
     expect(
       getLinearAgentSkillNavInstallStatus({
-        skills: [skill('orca-linear')],
+        skills: [skill('quirky-linear')],
         installed: true,
         loading: false,
         inventory: null

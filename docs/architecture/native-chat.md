@@ -23,7 +23,7 @@ There are now **two runtimes** behind that one view:
   `experimentalStructuredNativeChat`). A host-owned Codex runtime that does not
   mirror a terminal. See §13.
 
-The mental model for the bridge path — and *only* that path:
+The mental model for the bridge path — and _only_ that path:
 
 > **The terminal is the source of truth. The chat view is a read/write skin over
 > it.** History comes from the transcript file; live progress comes from the
@@ -37,13 +37,13 @@ All native-chat settings are declared in `src/shared/global-settings-types.ts`
 and defaulted in `src/shared/default-global-settings.ts`. (`src/shared/types.ts`
 no longer exists — upstream split it into per-domain modules.)
 
-| Setting | Type | Default | Role |
-|---|---|---|---|
-| `experimentalNativeChat` | `boolean` | `false` | Master switch. |
-| `openAgentTabsInChatByDefault` | `boolean` | `false` | "Default view" — the only way a tab opens in chat. |
-| `experimentalStructuredNativeChat` | `boolean` | `false` | Route new chat tabs to the host-owned structured runtime (§13). |
-| `nativeChatWidth` | `NativeChatWidthTier` | `DEFAULT_NATIVE_CHAT_WIDTH_TIER` | Reading-column cap (§10). `fork-native-chat-width` |
-| `nativeChatSessionOptions` | `PersistedNativeChatSessionOptions` | `{}` | Per-model launch defaults (§9). `fork-native-chat-session-options` |
+| Setting                            | Type                                | Default                          | Role                                                               |
+| ---------------------------------- | ----------------------------------- | -------------------------------- | ------------------------------------------------------------------ |
+| `experimentalNativeChat`           | `boolean`                           | `false`                          | Master switch.                                                     |
+| `openAgentTabsInChatByDefault`     | `boolean`                           | `false`                          | "Default view" — the only way a tab opens in chat.                 |
+| `experimentalStructuredNativeChat` | `boolean`                           | `false`                          | Route new chat tabs to the host-owned structured runtime (§13).    |
+| `nativeChatWidth`                  | `NativeChatWidthTier`               | `DEFAULT_NATIVE_CHAT_WIDTH_TIER` | Reading-column cap (§10). `fork-native-chat-width`                 |
+| `nativeChatSessionOptions`         | `PersistedNativeChatSessionOptions` | `{}`                             | Per-model launch defaults (§9). `fork-native-chat-session-options` |
 
 The first three are surfaced in **Settings → Experimental → "Chat UI"**
 (`src/renderer/src/components/settings/NativeChatExperimentalSetting.tsx`). The
@@ -51,7 +51,7 @@ master switch reveals a **Default view** `Select` ("Terminal chat" vs "Chat UI")
 writing `openAgentTabsInChatByDefault`, and — only when that reads "Chat UI" — a
 nested **"Use updated structured native chat"** switch.
 
-Two further settings gate the *terminal dock*, a sibling surface that is mutually
+Two further settings gate the _terminal dock_, a sibling surface that is mutually
 exclusive with chat view on the same pane. They live in §12.
 
 ### Eligibility
@@ -66,7 +66,7 @@ single eligibility gate. It returns `true` only when **all** of:
    `detectedAgent ?? launchAgent ?? resolvedAgent`:
    - `detectedAgent` — live agent-status identity (authoritative; covers
      manually-started or resumed agents),
-   - `launchAgent` — what Orca launched in the terminal,
+   - `launchAgent` — what Quirky launched in the terminal,
    - `resolvedAgent` — terminal-title resolution, filling only the pre-hook gap.
 4. for an agent needing a **locally readable transcript**, that the transcript
    actually is one (below).
@@ -74,7 +74,7 @@ single eligibility gate. It returns `true` only when **all** of:
 A pane already in chat mode (`isChatViewMode === true`) short-circuits to `true`,
 so a pane that lost live hook identity across a dev/app restart can still leave.
 
-> The function's name is now a small lie: nothing in the product *toggles*. See
+> The function's name is now a small lie: nothing in the product _toggles_. See
 > §11 for how a pane actually enters chat view.
 
 ### Supported agents
@@ -87,7 +87,7 @@ an ordered array — the order the settings pane advertises them in — backing 
 ['claude', 'openclaude', 'codex', 'grok', 'omp']
 ```
 
-The *transcript format* is resolved separately by
+The _transcript format_ is resolved separately by
 `resolveNativeChatTranscriptAgent()` into one of four:
 
 - `claude` and `openclaude` → **`claude`** format (OpenClaude writes the Claude
@@ -103,7 +103,7 @@ Gemini and plain shells never qualify.
 
 `nativeChatRequiresLocalTranscript()` returns `true` for **`grok` and `omp`** —
 agents whose hook discloses no transcript path, so the file is only reachable by
-scanning a sessions root on a disk *this* process can read. On a plain `ssh:`
+scanning a sessions root on a disk _this_ process can read. On a plain `ssh:`
 connection that disk is the wrong host, so the chat view stays closed rather than
 loading forever. `isNativeChatTranscriptLocalReadable()`
 (`src/renderer/src/lib/native-chat-transcript-readability.ts`) answers that per
@@ -116,8 +116,8 @@ stay readable because their transcripts are read on the runtime host (§14).
 (`src/renderer/src/lib/structured-native-chat-availability.ts`) additionally
 requires `experimentalStructuredNativeChat`, a **local** execution host, and
 neither Windows, WSL, nor a repair-required runtime. Critically it also requires
-`openAgentTabsInChatByDefault`, because — in its own words — *"Structured chat has
-no entry path of its own — it reuses the Chat UI default view."*
+`openAgentTabsInChatByDefault`, because — in its own words — _"Structured chat has
+no entry path of its own — it reuses the Chat UI default view."_
 
 ## 3. The conversation model (the heart of the feature)
 
@@ -127,12 +127,12 @@ Everything renders from one IPC-serializable contract in
 
 ```ts
 type NativeChatMessage = {
-  id: string                 // stable across re-reads/appends → dedup + list key
+  id: string // stable across re-reads/appends → dedup + list key
   role: 'user' | 'assistant' | 'tool' | 'reasoning' | 'system'
-  blocks: NativeChatBlock[]  // text | tool-call | tool-result | image-ref
-  timestamp: number | null   // epoch ms, null sorts first (some scrape segments)
+  blocks: NativeChatBlock[] // text | tool-call | tool-result | image-ref
+  timestamp: number | null // epoch ms, null sorts first (some scrape segments)
   source: 'transcript' | 'hook' | 'scrape'
-  turnId?: string            // same turnId ⇒ same turn, regardless of id
+  turnId?: string // same turnId ⇒ same turn, regardless of id
 }
 ```
 
@@ -140,11 +140,11 @@ type NativeChatMessage = {
 
 `NATIVE_CHAT_SOURCE_PRIORITY` makes precedence a single lookup:
 
-| Source | Priority | Meaning |
-|---|---|---|
-| `transcript` | 3 | Authoritative on-disk JSONL history. Wins. |
-| `hook` | 2 | Synthetic live content such as the in-flight assistant preview. |
-| `scrape` | 1 | Approximate messages parsed from terminal scrollback. |
+| Source       | Priority | Meaning                                                         |
+| ------------ | -------- | --------------------------------------------------------------- |
+| `transcript` | 3        | Authoritative on-disk JSONL history. Wins.                      |
+| `hook`       | 2        | Synthetic live content such as the in-flight assistant preview. |
+| `scrape`     | 1        | Approximate messages parsed from terminal scrollback.           |
 
 The normal live-session path ingests **transcript** messages. Hook state supplies
 status and `lastAssistantMessage`; the view derives a synthetic streaming message
@@ -260,11 +260,11 @@ genuinely never-prompted session stops spinning without being called empty.
 The watcher pushes `nativeChat:appended` frames (`NativeChatAppendedPayload`),
 each echoing the renderer-minted `subscriptionId`:
 
-| Frame | When | Semantics |
-|---|---|---|
-| `snapshot` | initial drain | Authoritative base generation. May carry `error` or `pending`. |
-| `replacement` | inode/file rotation | New authoritative base; repaints history. |
-| `appended` | tail growth | Incremental messages to merge onto the base. |
+| Frame         | When                | Semantics                                                      |
+| ------------- | ------------------- | -------------------------------------------------------------- |
+| `snapshot`    | initial drain       | Authoritative base generation. May carry `error` or `pending`. |
+| `replacement` | inode/file rotation | New authoritative base; repaints history.                      |
+| `appended`    | tail growth         | Incremental messages to merge onto the base.                   |
 
 All three are intersected with `NativeChatCompanionFrameFields`
 (`fork-native-chat-session-options`), so every frame may also carry a `lifecycle`
@@ -277,7 +277,7 @@ Subscriptions are keyed by **`(webContents.id, subscriptionId)`** so one rendere
 can watch several panes. Teardown is strict:
 
 - a `pending` map guards async setup so `unsubscribe` / window-destroy /
-  same-id resubscribe can invalidate a watcher *before* it publishes,
+  same-id resubscribe can invalidate a watcher _before_ it publishes,
 - `sender.once('destroyed', …)` tears down **every** watcher a closed/reloaded
   window owns (fd-leak prevention).
 
@@ -292,7 +292,7 @@ at the top of the native-chat tree, but it now backs only the structured surface
 
 It runs two axes in parallel:
 
-- **Base read** — windowed `readSession`; result *replaces* the base list.
+- **Base read** — windowed `readSession`; result _replaces_ the base list.
 - **Live tail** — `subscribe`; `snapshot`/`replacement` reset the base,
   `appended` frames accumulate in a **separate** list so a re-read never drops
   in-flight appends.
@@ -347,7 +347,7 @@ Session-status precedence lives in `liveStatusOverride`
 - only hook `'working'` drives a live override (blocked/waiting/done leave the
   derived ready/empty status alone);
 - it stays authoritative **until** the hook leaves `working` **or** an explicit
-  terminal lifecycle marker (`completed`/`interrupted`) for *this* turn lands —
+  terminal lifecycle marker (`completed`/`interrupted`) for _this_ turn lands —
   lifecycle is a suppressor for dropped Stop hooks, not a full turn reconstructor;
 - an `interrupted` marker ends the whole turn (children included);
 - Claude's **background subagents** keep the aggregate turn `working` even after
@@ -365,20 +365,20 @@ PTY** (`native-chat-pty-send-queue.ts`). The pure byte-builders live in
 `fork-agent-composer/` — extracted so the chat pane and the terminal dock (§12)
 share one send pipeline:
 
-| Module | Owns |
-|---|---|
-| `native-chat-body-send.ts` | The clear → body → Enter sequence. |
-| `native-chat-runtime-clear.ts` | Clearing the TUI line and confirming it. |
-| `native-chat-runtime-send-acceptance.ts` | Awaiting transport acceptance per write. |
-| `native-chat-runtime-send-queued.ts` | Routing verified and ask-answer sends through the PTY queue. |
-| `native-chat-send-outcome.ts` | Post-send observation and the `SendOutcome` verdict. |
-| `native-chat-ask-answer-send.ts` | Paced per-option answer delivery. |
-| `native-chat-typed-command-send.ts` | Typed slash/skill command delivery. |
+| Module                                   | Owns                                                         |
+| ---------------------------------------- | ------------------------------------------------------------ |
+| `native-chat-body-send.ts`               | The clear → body → Enter sequence.                           |
+| `native-chat-runtime-clear.ts`           | Clearing the TUI line and confirming it.                     |
+| `native-chat-runtime-send-acceptance.ts` | Awaiting transport acceptance per write.                     |
+| `native-chat-runtime-send-queued.ts`     | Routing verified and ask-answer sends through the PTY queue. |
+| `native-chat-send-outcome.ts`            | Post-send observation and the `SendOutcome` verdict.         |
+| `native-chat-ask-answer-send.ts`         | Paced per-option answer delivery.                            |
+| `native-chat-typed-command-send.ts`      | Typed slash/skill command delivery.                          |
 
 ### Plain message — `sendNativeChatMessage`
 
 1. **Clear** the unsubmitted TUI line, so a prior cancelled paste can't glue onto
-   this prompt. This is *not* a bare Ctrl+U: `buildComposerSendOptions` passes
+   this prompt. This is _not_ a bare Ctrl+U: `buildComposerSendOptions` passes
    `buildAgentTuiClearInputForText(text)` (`src/shared/agent-tui-input-clear.ts`),
    which repeats Ctrl+U (`AGENT_TUI_CLEAR_INPUT_LINE`) and Ctrl+K
    (`AGENT_TUI_CLEAR_INPUT_FORWARD`) proportionally to the outgoing text's line
@@ -388,7 +388,7 @@ share one send pipeline:
    The clear **awaits transport acceptance**, and if a `confirmCleared` observer
    reports the line still dirty it escalates to `AGENT_TUI_CLEAR_INPUT_MAX`.
 2. **Paste** the framed body (`buildNativeChatPasteBytes`), also acceptance-gated.
-3. **Delayed Enter** as a *separate* write after `NATIVE_CHAT_SUBMIT_DELAY_MS`
+3. **Delayed Enter** as a _separate_ write after `NATIVE_CHAT_SUBMIT_DELAY_MS`
    (500ms) — a same-write CR can be swallowed by the paste — scheduled only once
    the body write is confirmed accepted, not unconditionally.
 4. **Observe** the result (`submitAndObserve`): up to
@@ -435,7 +435,7 @@ send path; verified delivery is specific to the session-option command flow.
 ### Interactive answers — `sendNativeChatAskAnswer`
 
 Some agents render a **digit-commit question selector** that ignores pasted label
-text (pasting "Blue"+Enter commits the highlighted *first* option): Claude's
+text (pasting "Blue"+Enter commits the highlighted _first_ option): Claude's
 AskUserQuestion and Codex's `request_user_input`. For these
 (`shouldStepNativeChatAskAnswer`), answers are delivered as **paced per-option
 keystroke groups**, one group per `NATIVE_CHAT_QUESTION_STEP_MS` — itself derived
@@ -459,12 +459,12 @@ Native Chat models effort as a **model-scoped session option**, keeps a best-kno
 local record, and changes the running agent through its PTY. The record tags each
 value by how it was learned:
 
-| Source | Meaning |
-|---|---|
-| `applied` | Orca emitted the value into the agent's launch command. |
+| Source       | Meaning                                                                                |
+| ------------ | -------------------------------------------------------------------------------------- |
+| `applied`    | Quirky emitted the value into the agent's launch command.                              |
 | `dispatched` | Chat sent a live command, but has not independently confirmed the resulting TUI state. |
-| `reported` | Chat read the value back from an authoritative agent surface. |
-| `unknown` | Chat cannot truthfully identify the current value. |
+| `reported`   | Chat read the value back from an authoritative agent surface.                          |
+| `unknown`    | Chat cannot truthfully identify the current value.                                     |
 
 The record is cached by live PTY id, with the terminal tab id as the launch-time
 fallback (`native-chat-session-option-cache.ts`). Options are model-scoped
@@ -504,7 +504,7 @@ At launch, `resolveNativeChatSessionOptionDefaults` reads the user's persisted
 model and model-specific values from `settings.nativeChatSessionOptions`, and
 `resolveAgentSessionOptionLaunch` translates supported values into CLI arguments,
 returning only what was actually applied — so explicit trailing agent arguments
-that override Orca's flags do not produce false UI state.
+that override Quirky's flags do not produce false UI state.
 
 ### Writing effort
 
@@ -543,19 +543,19 @@ Mounted by `NativeChatView` (default export). It branches on `mode` first:
 `NativeChatBridgeView` resolves the agent/session through `NativeChatSessionGate`
 and renders `NativeChatResolvedView`.
 
-| Component | Role |
-|---|---|
-| `NativeChatMessageList` | Scroll container; autoscroll, pagination trigger, "jump to latest". `MessageRow` renders each message. |
-| `NativeChatComposer` | Thin host wrapper over the shared composer core (`fork-agent-composer/AgentComposer`). |
-| `NativeChatSessionOptionPickers` | Model and effort pills (§9), mounted inside the composer's actions row. |
-| `NativeChatInteractiveCard` | Dispatches to the two cards below. A question replaces the composer because it supplies its own answer input; an approval renders alongside it. |
-| `NativeChatQuestionCard` / `NativeChatApprovalCard` | The question and approval renderers. |
-| `NativeChatToolRun` | Collapsible tool-call/result summary, with category glyphs and dots. |
-| `NativeChatDiffView` | Colored file-edit diffs (git-decoration tokens). |
-| `NativeChatCopyButton` | Hover copy control on message rows. |
-| `NativeChatEmptyState` | `loading` / `empty` / `error` / `not-agent` states. |
-| `NativeChatOrchestrationPausedNotice` | Banner above the conversation when orchestration dispatch is paused. |
-| `NativeChatAutocompleteMenus` | Slash-command & skill picker, mention hints. |
+| Component                                           | Role                                                                                                                                            |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NativeChatMessageList`                             | Scroll container; autoscroll, pagination trigger, "jump to latest". `MessageRow` renders each message.                                          |
+| `NativeChatComposer`                                | Thin host wrapper over the shared composer core (`fork-agent-composer/AgentComposer`).                                                          |
+| `NativeChatSessionOptionPickers`                    | Model and effort pills (§9), mounted inside the composer's actions row.                                                                         |
+| `NativeChatInteractiveCard`                         | Dispatches to the two cards below. A question replaces the composer because it supplies its own answer input; an approval renders alongside it. |
+| `NativeChatQuestionCard` / `NativeChatApprovalCard` | The question and approval renderers.                                                                                                            |
+| `NativeChatToolRun`                                 | Collapsible tool-call/result summary, with category glyphs and dots.                                                                            |
+| `NativeChatDiffView`                                | Colored file-edit diffs (git-decoration tokens).                                                                                                |
+| `NativeChatCopyButton`                              | Hover copy control on message rows.                                                                                                             |
+| `NativeChatEmptyState`                              | `loading` / `empty` / `error` / `not-agent` states.                                                                                             |
+| `NativeChatOrchestrationPausedNotice`               | Banner above the conversation when orchestration dispatch is paused.                                                                            |
+| `NativeChatAutocompleteMenus`                       | Slash-command & skill picker, mention hints.                                                                                                    |
 
 The composer's own field and action row live in `fork-agent-composer/` as
 `AgentComposerField.tsx` and `AgentComposerActions.tsx` — Tier-2 forked copies
@@ -576,12 +576,12 @@ content uses `mx-auto w-full` plus the configured width class.
 The cap is user-selectable. `nativeChatWidth` holds one of four named tiers, which
 `fork-native-chat-width/native-chat-width.ts` maps to a Tailwind token:
 
-| Tier | Class | Cap |
-|---|---|---|
-| `narrow` | `max-w-2xl` | `42rem` (`672px`) |
-| `comfortable` | `max-w-4xl` | `56rem` (`896px`) — default |
-| `wide` | `max-w-6xl` | `72rem` (`1152px`) |
-| `full` | `max-w-none` | uncapped; fills the pane minus padding |
+| Tier          | Class        | Cap                                    |
+| ------------- | ------------ | -------------------------------------- |
+| `narrow`      | `max-w-2xl`  | `42rem` (`672px`)                      |
+| `comfortable` | `max-w-4xl`  | `56rem` (`896px`) — default            |
+| `wide`        | `max-w-6xl`  | `72rem` (`1152px`)                     |
+| `full`        | `max-w-none` | uncapped; fills the pane minus padding |
 
 The resulting base width is:
 
@@ -702,8 +702,8 @@ recognizable as dead, not as a restoration plan:
   has that orphaned hook as its sole caller.
 - `TerminalPaneHeaderOverlay.tsx` still takes `isChatViewMode`, but only to gate
   `NativeChatWidthMenu` behind `isChatViewMode && isActivePane`. Its own comment
-  records the hazard: *"Fork: upstream dropped chat mode from this header, but the
-  width menu is gated on it."*
+  records the hazard: _"Fork: upstream dropped chat mode from this header, but the
+  width menu is gated on it."_
 
 **Consequence, stated plainly:** an existing terminal tab has no in-app way into
 chat view. Only newly created tabs, an RPC caller, or a restored workspace can
@@ -754,13 +754,14 @@ yet**; that is its own pass, not something to infer from the sections above.
 - **Transport and ownership.** Two cases:
   - **Runtime-owned (`runtime:`)** — the renderer's transport is the runtime RPC
     bridge (`nativeChat.readSession` / `.subscribe` / `.unsubscribe`, served by
-    upstream's orcad runtime); reads and tails happen on the remote runtime host.
+    upstream's quirkyd runtime); reads and tails happen on the remote runtime host.
     This is how a remote or SSH-hosted workspace gets native chat.
   - **Local** — the local IPC path reads local disk.
 
   The fork's own SSH relay (a desktop-driven `sshConnectionId` read through a
   remote handler) is retired. **Never assume local disk access when adding a
   transport or provider.**
+
 - **Grok and omp stay closed on plain `ssh:`.**
   `isNativeChatTranscriptLocalReadable` returns `false` for any plain `ssh:`
   connection id, because their transcripts can only be found by scanning a disk
@@ -807,41 +808,41 @@ yet**; that is its own pass, not something to infer from the sections above.
 
 Cited by file and symbol; grep the symbol rather than trusting a line number.
 
-| Concern | File | Start at |
-|---|---|---|
-| Message / session contract | `src/shared/native-chat-types.ts` | `NativeChatMessage`, `NATIVE_CHAT_SOURCE_PRIORITY` |
-| Id-dedup merge + windowing | `src/shared/native-chat-merge.ts` | `createNativeChatMerger`, `boundNativeChatWindow` |
-| Streaming-bubble derivation | `src/shared/native-chat-streaming.ts` | `deriveNativeChatStreamingText` |
-| Agent support / format mapping | `src/shared/native-chat-agent-support.ts` | `NATIVE_CHAT_SUPPORTED_AGENT_LIST`, `resolveNativeChatTranscriptAgent` |
-| IPC handlers + push payloads | `src/main/ipc/native-chat.ts` | `registerNativeChatHandlers`, `NativeChatAppendedPayload`, `DESKTOP_READ_WINDOW` |
-| Transcript resolve + subscribe | `src/main/native-chat/transcript-watch.ts` | `subscribeNativeChatTranscript` |
-| Watcher engine | `src/main/native-chat/transcript-watch-engine.ts` | `installTranscriptWatcher` |
-| Windowed tail read + decoder dispatch | `src/main/native-chat/transcript-tail-reader.ts` | `nativeChatLineDecoderForAgent` |
-| Per-agent decoders | `src/main/native-chat/transcript-line-decoders-{claude,codex,grok,omp}.ts` | — |
-| Live session hook (the live one) | `src/renderer/src/components/native-chat/fork-native-chat-relay/use-native-chat-live-session.ts` | `useNativeChatLiveSession` |
-| notFound retry policy | `.../fork-native-chat-relay/native-chat-read-retry.ts` | `NOTFOUND_RETRY_WINDOW_MS` |
-| Hook status → session status | `.../native-chat/native-chat-live-status.ts` | `liveStatusOverride` |
-| Availability gate | `.../native-chat/native-chat-availability.ts` | `canToggleNativeChat` |
-| Structured availability | `src/renderer/src/lib/structured-native-chat-availability.ts` | `canUseStructuredNativeChat` |
-| Send façade | `.../native-chat/native-chat-runtime-send.ts` | `sendNativeChatMessage` |
-| Send sequencing | `.../native-chat/fork-agent-composer/native-chat-body-send.ts` | `enqueueNativeChatBodySend` |
-| Clear behavior | `src/shared/agent-tui-input-clear.ts` | `buildAgentTuiClearInputForText` |
-| Send outcome | `.../fork-agent-composer/native-chat-send-outcome.ts` | `SendOutcome`, `submitAndObserve` |
-| Send tier | `.../fork-agent-composer/composer-send-tier.ts` | `resolveComposerSendTier` |
-| Transcript session options | `src/main/native-chat/fork-native-chat-session-options/transcript-session-options.ts` | `nativeChatSessionOptionDecoderForAgent` |
-| Companion wire shape | `src/shared/fork-native-chat-session-options/native-chat-transcript-companion.ts` | `NativeChatTranscriptCompanion` |
-| Session-option catalogs | `src/shared/agent-session-option-catalog{,-claude-codex,-grok}.ts` | — |
-| Live option read/surface | `.../native-chat/use-native-chat-session-options.ts` | `useNativeChatSessionOptions` |
-| Optimistic pending cache | `.../native-chat/native-chat-pending.ts` | `appendPendingSendCache` |
-| Top-level view | `.../native-chat/NativeChatView.tsx` | `NativeChatView` |
-| Composer core | `.../native-chat/fork-agent-composer/AgentComposer.tsx` | `useAgentComposerCoreState` |
-| Tool coloring | `.../native-chat/fork-native-chat-coloring/native-chat-tool-category-glyphs.tsx` | `NativeChatToolCategoryDots` |
-| Width tiers | `.../native-chat/fork-native-chat-width/native-chat-width.ts` | `nativeChatWidthClassName` |
-| Width hook | `.../fork-native-chat-width/use-native-chat-width.ts` | `useNativeChatWidthClassName` |
-| Settings card | `src/renderer/src/components/settings/NativeChatExperimentalSetting.tsx` | — |
-| Initial view-mode decision | `src/renderer/src/lib/native-chat-initial-view-mode.ts` | `decideInitialAgentTabViewMode` |
-| Pane mount | `src/renderer/src/components/terminal-pane/TerminalPane.tsx` | `effectiveChatViewMode` |
-| Terminal dock | `src/renderer/src/components/terminal-pane/fork-terminal-dock/TerminalDock.tsx` | `TerminalDock` |
+| Concern                               | File                                                                                             | Start at                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Message / session contract            | `src/shared/native-chat-types.ts`                                                                | `NativeChatMessage`, `NATIVE_CHAT_SOURCE_PRIORITY`                               |
+| Id-dedup merge + windowing            | `src/shared/native-chat-merge.ts`                                                                | `createNativeChatMerger`, `boundNativeChatWindow`                                |
+| Streaming-bubble derivation           | `src/shared/native-chat-streaming.ts`                                                            | `deriveNativeChatStreamingText`                                                  |
+| Agent support / format mapping        | `src/shared/native-chat-agent-support.ts`                                                        | `NATIVE_CHAT_SUPPORTED_AGENT_LIST`, `resolveNativeChatTranscriptAgent`           |
+| IPC handlers + push payloads          | `src/main/ipc/native-chat.ts`                                                                    | `registerNativeChatHandlers`, `NativeChatAppendedPayload`, `DESKTOP_READ_WINDOW` |
+| Transcript resolve + subscribe        | `src/main/native-chat/transcript-watch.ts`                                                       | `subscribeNativeChatTranscript`                                                  |
+| Watcher engine                        | `src/main/native-chat/transcript-watch-engine.ts`                                                | `installTranscriptWatcher`                                                       |
+| Windowed tail read + decoder dispatch | `src/main/native-chat/transcript-tail-reader.ts`                                                 | `nativeChatLineDecoderForAgent`                                                  |
+| Per-agent decoders                    | `src/main/native-chat/transcript-line-decoders-{claude,codex,grok,omp}.ts`                       | —                                                                                |
+| Live session hook (the live one)      | `src/renderer/src/components/native-chat/fork-native-chat-relay/use-native-chat-live-session.ts` | `useNativeChatLiveSession`                                                       |
+| notFound retry policy                 | `.../fork-native-chat-relay/native-chat-read-retry.ts`                                           | `NOTFOUND_RETRY_WINDOW_MS`                                                       |
+| Hook status → session status          | `.../native-chat/native-chat-live-status.ts`                                                     | `liveStatusOverride`                                                             |
+| Availability gate                     | `.../native-chat/native-chat-availability.ts`                                                    | `canToggleNativeChat`                                                            |
+| Structured availability               | `src/renderer/src/lib/structured-native-chat-availability.ts`                                    | `canUseStructuredNativeChat`                                                     |
+| Send façade                           | `.../native-chat/native-chat-runtime-send.ts`                                                    | `sendNativeChatMessage`                                                          |
+| Send sequencing                       | `.../native-chat/fork-agent-composer/native-chat-body-send.ts`                                   | `enqueueNativeChatBodySend`                                                      |
+| Clear behavior                        | `src/shared/agent-tui-input-clear.ts`                                                            | `buildAgentTuiClearInputForText`                                                 |
+| Send outcome                          | `.../fork-agent-composer/native-chat-send-outcome.ts`                                            | `SendOutcome`, `submitAndObserve`                                                |
+| Send tier                             | `.../fork-agent-composer/composer-send-tier.ts`                                                  | `resolveComposerSendTier`                                                        |
+| Transcript session options            | `src/main/native-chat/fork-native-chat-session-options/transcript-session-options.ts`            | `nativeChatSessionOptionDecoderForAgent`                                         |
+| Companion wire shape                  | `src/shared/fork-native-chat-session-options/native-chat-transcript-companion.ts`                | `NativeChatTranscriptCompanion`                                                  |
+| Session-option catalogs               | `src/shared/agent-session-option-catalog{,-claude-codex,-grok}.ts`                               | —                                                                                |
+| Live option read/surface              | `.../native-chat/use-native-chat-session-options.ts`                                             | `useNativeChatSessionOptions`                                                    |
+| Optimistic pending cache              | `.../native-chat/native-chat-pending.ts`                                                         | `appendPendingSendCache`                                                         |
+| Top-level view                        | `.../native-chat/NativeChatView.tsx`                                                             | `NativeChatView`                                                                 |
+| Composer core                         | `.../native-chat/fork-agent-composer/AgentComposer.tsx`                                          | `useAgentComposerCoreState`                                                      |
+| Tool coloring                         | `.../native-chat/fork-native-chat-coloring/native-chat-tool-category-glyphs.tsx`                 | `NativeChatToolCategoryDots`                                                     |
+| Width tiers                           | `.../native-chat/fork-native-chat-width/native-chat-width.ts`                                    | `nativeChatWidthClassName`                                                       |
+| Width hook                            | `.../fork-native-chat-width/use-native-chat-width.ts`                                            | `useNativeChatWidthClassName`                                                    |
+| Settings card                         | `src/renderer/src/components/settings/NativeChatExperimentalSetting.tsx`                         | —                                                                                |
+| Initial view-mode decision            | `src/renderer/src/lib/native-chat-initial-view-mode.ts`                                          | `decideInitialAgentTabViewMode`                                                  |
+| Pane mount                            | `src/renderer/src/components/terminal-pane/TerminalPane.tsx`                                     | `effectiveChatViewMode`                                                          |
+| Terminal dock                         | `src/renderer/src/components/terminal-pane/fork-terminal-dock/TerminalDock.tsx`                  | `TerminalDock`                                                                   |
 
 ## 17. Related docs
 

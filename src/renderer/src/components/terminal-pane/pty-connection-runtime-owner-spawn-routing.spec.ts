@@ -139,7 +139,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
           {
             id: 'repo1',
             connectionId: null,
-            displayName: 'orca',
+            displayName: 'quirky',
             executionHostId: 'runtime:owner-runtime'
           }
         ],
@@ -187,7 +187,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
           {
             id: 'repo1',
             connectionId: null,
-            displayName: 'orca',
+            displayName: 'quirky',
             executionHostId: 'local'
           }
         ],

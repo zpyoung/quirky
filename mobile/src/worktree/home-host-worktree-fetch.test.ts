@@ -55,7 +55,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 function catalogResponse(count: number, active: number): RpcResponse {
   const worktrees = Array.from({ length: count }, (_, index) => ({
     worktreeId: `wt-${index}`,
-    repo: 'orca',
+    repo: 'quirky',
     branch: `branch-${index}`,
     displayName: `Workspace ${index}`,
     liveTerminalCount: 0,

@@ -17,9 +17,9 @@
  *   --only=1,4,9            Run just these shard numbers
  *   --node=24               Node major version baked into the image (default: 24)
  *   --docker-host=URL       Docker endpoint, e.g. ssh://user@buildbox
- *                           (defaults to $ORCA_SANDBOX_DOCKER_HOST)
+ *                           (defaults to $QUIRKY_SANDBOX_DOCKER_HOST)
  *   --docker-socket         Mount the host Docker socket (git-compat and ssh e2e lanes)
- *   --logs=DIR              Where to write per-shard logs (default: .orca-sandbox-logs)
+ *   --logs=DIR              Where to write per-shard logs (default: .quirky-sandbox-logs)
  *   --env KEY=VALUE         Extra environment variable for every shard (repeatable)
  *   --rebuild               Rebuild the image even if the tag already exists
  *   --keep-failed           Leave failed containers behind for inspection
@@ -57,7 +57,7 @@ const IMAGE_CONTEXT_ROOTS = [
   'pnpm-workspace.yaml',
   // install-electron-package-binary.mjs re-exports its zip extractor from here.
   'src/shared/zip-extractor-command.ts',
-  // Workspace packages: pnpm install links them, and image-build scripts import @orca/process-host.
+  // Workspace packages: pnpm install links them, and image-build scripts import @quirky/process-host.
   'src/packages',
   'native/windows-registry/package.json',
   'native/windows-security/package.json'
@@ -89,7 +89,7 @@ const SHELL_CONTRACT_SPECS = [
 ]
 
 /** CI's unit shards set this so the vitest config applies UNIT_EXCLUDE (shell contracts, relay regions, cross-version). */
-const UNIT_SHARD_ENV = 'ORCA_BALANCE_UNIT_SHARDS=1'
+const UNIT_SHARD_ENV = 'QUIRKY_BALANCE_UNIT_SHARDS=1'
 
 const LANES = new Set(['unit', 'shell', 'e2e'])
 
@@ -108,7 +108,7 @@ function main() {
 
   requireDocker(dockerEnv)
 
-  const imageTag = `orca-test-sandbox:${computeImageDigest(options.nodeMajor)}`
+  const imageTag = `quirky-test-sandbox:${computeImageDigest(options.nodeMajor)}`
   if (options.rebuild || !imageExists(imageTag, dockerEnv)) {
     buildImage(imageTag, options, dockerEnv)
   } else {
@@ -151,7 +151,7 @@ function readOptions() {
       node: { type: 'string', default: '24' },
       'docker-host': { type: 'string' },
       'docker-socket': { type: 'boolean', default: false },
-      logs: { type: 'string', default: '.orca-sandbox-logs' },
+      logs: { type: 'string', default: '.quirky-sandbox-logs' },
       env: { type: 'string', multiple: true, default: [] },
       rebuild: { type: 'boolean', default: false },
       'keep-failed': { type: 'boolean', default: false },
@@ -268,7 +268,7 @@ export function readSelectionList(filesFromPath) {
  * would otherwise run every shard on the workstation the sandbox exists to keep free.
  */
 function resolveDockerHost(flagValue) {
-  const host = flagValue || process.env.ORCA_SANDBOX_DOCKER_HOST
+  const host = flagValue || process.env.QUIRKY_SANDBOX_DOCKER_HOST
   if (host) {
     return host
   }
@@ -276,7 +276,7 @@ function resolveDockerHost(flagValue) {
     return null
   }
   fail(
-    'no Docker host resolved. Set ORCA_SANDBOX_DOCKER_HOST, or pass --docker-host explicitly ' +
+    'no Docker host resolved. Set QUIRKY_SANDBOX_DOCKER_HOST, or pass --docker-host explicitly ' +
       '(config/docker/test-sandbox/README.md). Refusing to fall back to the local daemon.'
   )
 }
@@ -359,7 +359,7 @@ function imageExists(imageTag, dockerEnv) {
 
 function buildImage(imageTag, options, dockerEnv) {
   console.log(`Building ${imageTag} (node ${options.nodeMajor})`)
-  const contextTar = writeTar(listContextFiles(), 'orca-sandbox-context-')
+  const contextTar = writeTar(listContextFiles(), 'quirky-sandbox-context-')
   addRootDockerfile(contextTar)
   const stdin = openSync(contextTar, 'r')
   const build = spawnSync(
@@ -397,12 +397,12 @@ function addRootDockerfile(tarPath) {
 }
 
 function createSourceTar() {
-  return writeTar(trackedFiles(), 'orca-sandbox-source-')
+  return writeTar(trackedFiles(), 'quirky-sandbox-source-')
 }
 
 /** Tars a git tree-ish (e.g. the merge base) for the base-check leg, unrelated to the working tree. */
 function createSourceRefTar(sourceRef) {
-  const stagingDir = mkdtempSync(path.join(tmpdir(), 'orca-sandbox-ref-'))
+  const stagingDir = mkdtempSync(path.join(tmpdir(), 'quirky-sandbox-ref-'))
   const tarPath = path.join(stagingDir, 'context.tar')
   // A file, not a pipe, so this matches writeTar()'s stdin-fd pattern for runShard().
   const archive = spawnSync('git', ['archive', '--format=tar', '--output', tarPath, sourceRef], {
@@ -418,19 +418,19 @@ function createSourceRefTar(sourceRef) {
 
 /**
  * Copies a source tar and appends the selection list at the fixed container path
- * `.orca-sandbox/selection.txt`, so the path list travels inside stdin rather than argv
+ * `.quirky-sandbox/selection.txt`, so the path list travels inside stdin rather than argv
  * (argv hits ARG_MAX for a large selection).
  */
 export function buildSelectionTar(baseTarPath, paths) {
-  const stagingDir = mkdtempSync(path.join(tmpdir(), 'orca-sandbox-selection-'))
+  const stagingDir = mkdtempSync(path.join(tmpdir(), 'quirky-sandbox-selection-'))
   const tarPath = path.join(stagingDir, 'context.tar')
   copyFileSync(baseTarPath, tarPath)
-  const selectionDir = path.join(stagingDir, '.orca-sandbox')
+  const selectionDir = path.join(stagingDir, '.quirky-sandbox')
   mkdirSync(selectionDir, { recursive: true })
   writeFileSync(path.join(selectionDir, 'selection.txt'), `${paths.join('\n')}\n`)
   const append = spawnSync(
     'tar',
-    ['-r', '--format', 'ustar', '-f', tarPath, '-C', stagingDir, '.orca-sandbox/selection.txt'],
+    ['-r', '--format', 'ustar', '-f', tarPath, '-C', stagingDir, '.quirky-sandbox/selection.txt'],
     {
       encoding: 'utf8',
       env: { ...process.env, COPYFILE_DISABLE: '1' }
@@ -528,7 +528,7 @@ async function runShards({ workItems, options, imageTag, sourceTarPath, dockerEn
 }
 
 function runShard({ item, options, imageTag, sourceTarPath, dockerEnv }) {
-  const containerName = `orca-test-${options.lane}-${item.id}-${process.pid}`
+  const containerName = `quirky-test-${options.lane}-${item.id}-${process.pid}`
   const logFd = openSync(item.logPath, 'w')
   const startedAt = Date.now()
   const stdinTarPath = item.selectionPaths
@@ -542,7 +542,7 @@ function runShard({ item, options, imageTag, sourceTarPath, dockerEnv }) {
     '--init',
     // CI sets this for every test; without it browser and real-process suites try to show windows.
     '--env',
-    'ORCA_BACKGROUND_LAUNCH=1',
+    'QUIRKY_BACKGROUND_LAUNCH=1',
     ...(options.keepFailed ? ['--name', containerName] : ['--rm']),
     ...laneEnvArgs(options.lane),
     ...options.extraEnv.flatMap((pair) => ['--env', pair]),
@@ -576,10 +576,10 @@ export function laneEnvArgs(lane) {
   }
   if (lane === 'shell') {
     // Otherwise the fish tests skip themselves and the lane reports green having run nothing.
-    return ['--env', 'ORCA_REQUIRE_FISH=1']
+    return ['--env', 'QUIRKY_REQUIRE_FISH=1']
   }
   if (lane === 'e2e') {
-    return ['--env', 'ORCA_E2E_FORWARD_APP_LOGS=1', '--env', 'ORCA_E2E_WEB_CLIENT=1']
+    return ['--env', 'QUIRKY_E2E_FORWARD_APP_LOGS=1', '--env', 'QUIRKY_E2E_WEB_CLIENT=1']
   }
   return []
 }
@@ -632,7 +632,7 @@ export function laneCommand(options, shard) {
 
 /**
  * Builds the unit-lane related/files command as a shell script: the selected paths are
- * read from `.orca-sandbox/selection.txt` at runtime rather than passed as argv, so a
+ * read from `.quirky-sandbox/selection.txt` at runtime rather than passed as argv, so a
  * large selection cannot hit ARG_MAX on `docker run`.
  */
 function selectionLaneCommand(vitestSubcommand, tailArgs) {
@@ -652,7 +652,7 @@ function selectionLaneCommand(vitestSubcommand, tailArgs) {
     // POSIX-safe read of a possibly-unterminated last line, appending each path as a positional arg.
     'while IFS= read -r selected_path || [ -n "$selected_path" ]; do',
     '  [ -z "$selected_path" ] || set -- "$@" "$selected_path"',
-    'done < .orca-sandbox/selection.txt',
+    'done < .quirky-sandbox/selection.txt',
     `exec ${head} "$@"${tail ? ` ${tail}` : ''}`
   ].join('\n')
   return ['sh', '-c', script]

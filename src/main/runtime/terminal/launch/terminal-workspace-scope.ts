@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithTransitionGraphReloadToTerminalState } from '../../session-graph/session-graph-authority'
+import { QuirkyRuntimeWithTransitionGraphReloadToTerminalState } from '../../session-graph/session-graph-authority'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
   floatingWorkspaceToWorktree,
@@ -26,8 +26,8 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
 import { resolveTerminalStartupCwd } from '../../../../shared/terminal-startup-cwd'
-import type { ResolvedTerminalWorkspaceLaunchTarget } from '../../orca-runtime-core'
-import { AGENT_HOOK_RUNTIME_ENV_KEYS } from '../../orca-runtime-core'
+import type { ResolvedTerminalWorkspaceLaunchTarget } from '../../quirky-runtime-core'
+import { AGENT_HOOK_RUNTIME_ENV_KEYS } from '../../quirky-runtime-core'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { homedir } from 'node:os'
 import { getExplicitWorktreeIdSelector } from '../../runtime-worktree-selection'
@@ -58,7 +58,7 @@ function withoutWorktreeLineage(worktree: Worktree): ResolvedWorktree {
   }
 }
 
-export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree extends OrcaRuntimeWithTransitionGraphReloadToTerminalState {
+export abstract class QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree extends QuirkyRuntimeWithTransitionGraphReloadToTerminalState {
   protected resolveBrowserNetworkExecutionHostForWorktree(worktree?: {
     id: string
     repoId?: string
@@ -197,7 +197,7 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
     for (const key of AGENT_HOOK_RUNTIME_ENV_KEYS) {
       delete cleanBaseEnv[key]
     }
-    // Pane identity (ORCA_PANE_KEY/TAB_ID/WORKTREE_ID, jcode dir) is stamped by the spawn step from the spawn's ids.
+    // Pane identity (QUIRKY_PANE_KEY/TAB_ID/WORKTREE_ID, jcode dir) is stamped by the spawn step from the spawn's ids.
     const env = {
       ...cleanBaseEnv,
       ...agentTeamsEnv,
@@ -208,9 +208,9 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
     }
     return {
       ...env,
-      ORCA_WORKSPACE_ID: scope.id,
-      ORCA_PROJECT_GROUP_ID: scope.folderWorkspace.projectGroupId,
-      ORCA_WORKSPACE_ROOT: scope.folderWorkspace.folderPath
+      QUIRKY_WORKSPACE_ID: scope.id,
+      QUIRKY_PROJECT_GROUP_ID: scope.folderWorkspace.projectGroupId,
+      QUIRKY_WORKSPACE_ROOT: scope.folderWorkspace.folderPath
     }
   }
 

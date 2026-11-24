@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["QuirkyMobileWebShellModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.quirkymobilewebshell.QuirkyMobileWebShellModule"]
+  }
+}

@@ -20,7 +20,7 @@ afterEach(async () => {
 })
 
 it('refuses installation when the host omits the saved Arguments source', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-launch-args-wiring-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-launch-args-wiring-'))
   stateDirectory = root
 
   await expect(

@@ -16,7 +16,7 @@ describe('packaged ripgrep execution', () => {
   beforeEach(() => {
     resetBundledRipgrepPathCacheForTests()
     const source = bundledRipgrepCommand()
-    fixture = mkdtempSync(join(tmpdir(), 'orca bundled rg '))
+    fixture = mkdtempSync(join(tmpdir(), 'quirky bundled rg '))
     const resources = join(fixture, 'resources')
     const platform = `${process.platform}-${process.arch}`
     binary = join(resources, 'ripgrep', platform, bundledRipgrepBinaryName(platform))

@@ -16,42 +16,42 @@ const SESSION_ROUTE = '/h/host-1/session/wt-1'
 
 describe('the keys a page may read and write', () => {
   it('takes the ones the list keeps', () => {
-    expect(isPageStorageKey('orca:last-visited-worktree')).toBe(true)
-    expect(isPageStorageKey('orca:pins:host-1')).toBe(true)
-    expect(isPageStorageKey('orca:terminalTextScale')).toBe(true)
-    expect(isPageStorageKey('orca:nativeChatTabs:host-1:wt-1')).toBe(true)
+    expect(isPageStorageKey('quirky:last-visited-worktree')).toBe(true)
+    expect(isPageStorageKey('quirky:pins:host-1')).toBe(true)
+    expect(isPageStorageKey('quirky:terminalTextScale')).toBe(true)
+    expect(isPageStorageKey('quirky:nativeChatTabs:host-1:wt-1')).toBe(true)
   })
 
   it('refuses the rest of the namespace', () => {
-    // Everything the app stores lives under `orca:`, so a page that could write any of it could
+    // Everything the app stores lives under `quirky:`, so a page that could write any of it could
     // rewrite the app's pairings and push registrations.
     for (const key of [
-      'orca:remotePushHostRegistrations',
-      'orca:pushServiceNotificationsEnabled',
-      'orca:home-snapshot:v1',
-      'orca:hosts'
+      'quirky:remotePushHostRegistrations',
+      'quirky:pushServiceNotificationsEnabled',
+      'quirky:home-snapshot:v1',
+      'quirky:hosts'
     ]) {
       expect(isPageStorageKey(key), key).toBe(false)
     }
   })
 
   it('refuses the bare prefix, which names no host', () => {
-    expect(isPageStorageKey('orca:pins:')).toBe(false)
-    expect(isPageStorageKey('orca:nativeChatTabs:')).toBe(false)
+    expect(isPageStorageKey('quirky:pins:')).toBe(false)
+    expect(isPageStorageKey('quirky:nativeChatTabs:')).toBe(false)
   })
 
   it('refuses a key that only starts like an allowlisted one', () => {
-    expect(isPageStorageKey('orca:last-visited-worktree:other')).toBe(false)
-    expect(isPageStorageKey('not-orca:pins:host-1')).toBe(false)
+    expect(isPageStorageKey('quirky:last-visited-worktree:other')).toBe(false)
+    expect(isPageStorageKey('not-quirky:pins:host-1')).toBe(false)
   })
 
   it('refuses a key past the cap, whatever it starts with', () => {
-    expect(isPageStorageKey(`orca:pins:${'h'.repeat(PAGE_STORAGE_MAX_KEY_CHARS)}`)).toBe(false)
+    expect(isPageStorageKey(`quirky:pins:${'h'.repeat(PAGE_STORAGE_MAX_KEY_CHARS)}`)).toBe(false)
   })
 
   it('names what the shell reads out of the app store for a route with no workspace', () => {
     const keys = pageStorageKeysForRoute('host-1', HOST_ROUTE)
-    expect(keys).toEqual([...PAGE_STORAGE_EXACT_KEYS, 'orca:pins:host-1'])
+    expect(keys).toEqual([...PAGE_STORAGE_EXACT_KEYS, 'quirky:pins:host-1'])
     for (const key of keys) {
       expect(isPageStorageKey(key), key).toBe(true)
     }
@@ -62,9 +62,9 @@ describe('the keys a page may read and write', () => {
     expect(
       session.filter((key) => !pageStorageKeysForRoute('host-1', HOST_ROUTE).includes(key))
     ).toEqual([
-      'orca:nativeChatTabs:host-1:wt-1',
-      'orca:terminalLiveInputDisabled:host-1:wt-1',
-      'orca:terminalDrafts:host-1:wt-1'
+      'quirky:nativeChatTabs:host-1:wt-1',
+      'quirky:terminalLiveInputDisabled:host-1:wt-1',
+      'quirky:terminalDrafts:host-1:wt-1'
     ])
     // A route that carries a worktree segment and declares no key of its own gets none.
     expect(pageStorageKeysForRoute('host-1', '/h/host-1/files/wt-1')).toEqual(
@@ -131,42 +131,42 @@ describe('the allowlist narrowed to one session', () => {
   })
 
   it("refuses another host's pinned list, which the shape check alone admits", () => {
-    expect(isPageStorageKey('orca:pins:host-2')).toBe(true)
-    expect(isPageStorageKeyForRoute('orca:pins:host-2', 'host-1', SESSION_ROUTE)).toBe(false)
+    expect(isPageStorageKey('quirky:pins:host-2')).toBe(true)
+    expect(isPageStorageKeyForRoute('quirky:pins:host-2', 'host-1', SESSION_ROUTE)).toBe(false)
   })
 
   it("refuses another workspace's chat tabs, which the shape check alone admits", () => {
     // One level in from the host rule above, and the reason the route is threaded at all: a page
     // opened on one workspace must not rewrite the chat tabs of the one beside it.
-    expect(isPageStorageKey('orca:nativeChatTabs:host-1:wt-2')).toBe(true)
+    expect(isPageStorageKey('quirky:nativeChatTabs:host-1:wt-2')).toBe(true)
     expect(
-      isPageStorageKeyForRoute('orca:nativeChatTabs:host-1:wt-2', 'host-1', SESSION_ROUTE)
+      isPageStorageKeyForRoute('quirky:nativeChatTabs:host-1:wt-2', 'host-1', SESSION_ROUTE)
     ).toBe(false)
     expect(
-      isPageStorageKeyForRoute('orca:nativeChatTabs:host-1:wt-1', 'host-1', SESSION_ROUTE)
+      isPageStorageKeyForRoute('quirky:nativeChatTabs:host-1:wt-1', 'host-1', SESSION_ROUTE)
     ).toBe(true)
   })
 
   it('refuses a workspace key on a route that names no workspace', () => {
-    expect(isPageStorageKeyForRoute('orca:nativeChatTabs:host-1:wt-1', 'host-1', HOST_ROUTE)).toBe(
-      false
-    )
+    expect(
+      isPageStorageKeyForRoute('quirky:nativeChatTabs:host-1:wt-1', 'host-1', HOST_ROUTE)
+    ).toBe(false)
   })
 })
 
 describe('what init may carry', () => {
   it('keeps a value at the bound and drops the one above it, naming what it dropped', () => {
     const held = {
-      'orca:terminalTextScale': '1',
-      'orca:mobileStructuredSendOperations:v1': 'x'.repeat(PAGE_STORAGE_MAX_VALUE_CHARS + 1)
+      'quirky:terminalTextScale': '1',
+      'quirky:mobileStructuredSendOperations:v1': 'x'.repeat(PAGE_STORAGE_MAX_VALUE_CHARS + 1)
     }
     const { entries, dropped } = pageStorageEntriesForInit(held)
-    expect(Object.keys(entries)).toEqual(['orca:terminalTextScale'])
-    expect(dropped).toEqual(['orca:mobileStructuredSendOperations:v1'])
+    expect(Object.keys(entries)).toEqual(['quirky:terminalTextScale'])
+    expect(dropped).toEqual(['quirky:mobileStructuredSendOperations:v1'])
   })
 
   it('keeps a value of exactly the bound, so the drop above discriminates', () => {
-    const at = { 'orca:custom-accessory-keys': 'x'.repeat(PAGE_STORAGE_MAX_VALUE_CHARS) }
+    const at = { 'quirky:custom-accessory-keys': 'x'.repeat(PAGE_STORAGE_MAX_VALUE_CHARS) }
     expect(pageStorageEntriesForInit(at)).toEqual({ entries: at, dropped: [], oversize: [] })
   })
 

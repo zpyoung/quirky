@@ -4,12 +4,12 @@
  * store is rewritten and durable, so a crash redoes only the rest.
  */
 import type { WslMoveCutover } from '../../../shared/wsl-move/wsl-move-cutover'
-import type { OrcadMigrationPathRewriter } from '../../ssh/orcad-migration-path-rewrite'
+import type { QuirkydMigrationPathRewriter } from '../../ssh/quirkyd-migration-path-rewrite'
 
 export type WslMoveDesktopRewriteContext = {
   cutover: Readonly<WslMoveCutover>
   /** UNC paths of the moved distro become the Linux paths the host sees. */
-  rewritePath: OrcadMigrationPathRewriter
+  rewritePath: QuirkydMigrationPathRewriter
   /** The execution host the moved projects now belong to. */
   destinationHostId: `runtime:${string}`
 }

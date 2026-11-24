@@ -126,9 +126,9 @@ it('uses the known branch provider for sparse enterprise references', () => {
   const repo = {
     ...referenceRepo,
     gitRemoteIdentity: {
-      canonicalKey: 'enterprise.test/acme/orca',
+      canonicalKey: 'enterprise.test/acme/quirky',
       remoteName: 'origin',
-      remoteUrl: 'https://enterprise.test/acme/orca.git'
+      remoteUrl: 'https://enterprise.test/acme/quirky.git'
     }
   }
   const key = getHostedReviewCacheKey(repo.path, workspace.branch, null, repo.id, null, null, true)

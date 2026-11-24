@@ -49,7 +49,7 @@ async function captureHostRetirement(directory: string) {
 }
 
 it('a restarted host socket withdrawal removes the original native alert and preserves newer identities', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-phone-retirement-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-phone-retirement-'))
   try {
     const publicKeyB64 = Buffer.alloc(32, 1).toString('base64')
     native.catalog.mockResolvedValue([{ id: 'host-a', publicKeyB64 }])

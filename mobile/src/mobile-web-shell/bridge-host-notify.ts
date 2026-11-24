@@ -96,7 +96,7 @@ export function createBridgeNotifyForwarder(args: {
     }
     if (message.name === 'storage') {
       // Also local, and held to this host's own keys. The envelope allowlists the shape before
-      // this runs, which lets `orca:pins:<any host>` through: a page opened for one host must
+      // this runs, which lets `quirky:pins:<any host>` through: a page opened for one host must
       // not rewrite another's pinned list, and the keys it was handed are the ones it may write.
       // Three refusals in one, decided where the keys are (ruling 33.6): the oversize half has
       // to be enforced here because a page served from an older desktop bundle does not read

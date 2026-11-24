@@ -62,7 +62,7 @@ function mergeInBandStatusPayloads(
 }
 
 /**
- * Every in-band agent status a PTY stream carries, for main's side-effect scan: Orca's OSC 9999
+ * Every in-band agent status a PTY stream carries, for main's side-effect scan: Quirky's OSC 9999
  * payloads (stripped from `cleanData`) and the Program Status Protocol, OSC 7501 (left in place).
  */
 export function createTerminalAgentStatusProcessor(): (data: string) => ProcessedAgentStatusChunk {

@@ -142,11 +142,11 @@ export async function openHostRig(
     (await host.history({ sessionId: SESSION, direction: 'tail' })).page.items
       .filter((row) => row.body.kind === 'message')
       .map((row) => messageText(row.body))
-  /** Orca's send of `hello` as `m1`, and Grok's reply `text`, ended or left running. */
+  /** Quirky's send of `hello` as `m1`, and Grok's reply `text`, ended or left running. */
   const exchange = async (text: string, end: boolean) => {
     await ready()
     const journal = host.collaboratorsForTests().sessions.get(SESSION)!.journal
-    await journal.appendItem({ provider: 'orca', clientMessageId: 'm1' }, hello, {
+    await journal.appendItem({ provider: 'quirky', clientMessageId: 'm1' }, hello, {
       fence: fence(),
       turnScope: { kind: 'thread' }
     })
@@ -167,7 +167,7 @@ export async function openHostRig(
   return { rig, host, store, journalDatabase, fence, messages, exchange, ready }
 }
 
-/** Grok's capabilities: it loads and resumes sessions; Orca reopens with `session/load`. */
+/** Grok's capabilities: it loads and resumes sessions; Quirky reopens with `session/load`. */
 export const RESUMES = {
   agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } }
 }

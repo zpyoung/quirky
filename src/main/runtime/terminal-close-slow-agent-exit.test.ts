@@ -11,8 +11,8 @@ import type { PtyRuntimeControllerDeps } from '../ipc/pty/runtime/controller-dep
 import { stopAndWaitPtyFromRuntimeController } from '../ipc/pty/runtime/kill'
 import type { OrchestrationDb } from './orchestration/db'
 import type { WorkerTerminalResourceRow } from './orchestration/worker-terminal-ownership'
-import type { OrcaRuntimeService } from './orca-runtime'
-import { EXPLICIT_TERMINAL_CLOSE_STOP_TIMEOUT_MS } from './orca-runtime-core'
+import type { QuirkyRuntimeService } from './quirky-runtime'
+import { EXPLICIT_TERMINAL_CLOSE_STOP_TIMEOUT_MS } from './quirky-runtime-core'
 import { completeWorkerTerminalRelease } from './rpc/methods/orchestration/worker/worker-release-completion'
 
 // Longer than the old 2s close budget, like an agent running exit hooks after SIGTERM.
@@ -69,7 +69,7 @@ async function closeThroughDaemon(
     })),
     closeTerminal: (handle: string) => harness.runtime.closeTerminal(handle),
     notifyMessageArrived: vi.fn()
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: release calls only these db methods on the local terminal path.
   const db = {
     getWorkerDispatch: vi.fn(() => ({

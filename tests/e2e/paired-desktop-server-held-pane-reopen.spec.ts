@@ -1,9 +1,9 @@
 /**
- * A switch-on desktop paired to a switch-on `orca serve` shows the server's held pane (a newer
+ * A switch-on desktop paired to a switch-on `quirky serve` shows the server's held pane (a newer
  * build's terminal service may still run it) on the desktop's existing newer-build banner, and its
  * Reopen goes to the server's main: the server stops that service and starts the pane, which binds.
  *
- * Run (switch-on build: ORCA_LAYOUT_OWNER=main ... --mode e2e):
+ * Run (switch-on build: QUIRKY_LAYOUT_OWNER=main ... --mode e2e):
  *   pnpm exec playwright test tests/e2e/paired-desktop-server-held-pane-reopen.spec.ts \
  *     --config tests/playwright.config.ts --project electron-headless --workers=2
  */
@@ -21,7 +21,7 @@ import {
   toWebTerminalSurfaceTabId
 } from '../../src/shared/terminal-surface-id'
 import { LAYOUT_REOPEN_HELD_PANES_CAPABILITY } from '../../src/shared/workspace-layout/layout-intents-capability'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import {
   createHostCliTerminal,
@@ -40,10 +40,10 @@ import {
 } from './helpers/paired-desktop-server-terminal-tab'
 
 const LAYOUT_OWNER_BUILD = existsSync(
-  path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')
+  path.join(process.cwd(), 'out', 'main', 'QUIRKY_LAYOUT_OWNER_MAIN')
 )
 const NEWER_PROTOCOL = PROTOCOL_VERSION + 1
-const BANNER_TITLE = 'This terminal was opened in a newer version of Orca'
+const BANNER_TITLE = 'This terminal was opened in a newer version of Quirky'
 
 const scratch = createRetentionFixtureDirectory()
 const fixturePath = writeRetentionFixture(scratch)
@@ -126,7 +126,7 @@ async function paneBannerText(
 }
 
 test.describe("paired desktop reopens a switch-on server's held pane", () => {
-  test.skip(!LAYOUT_OWNER_BUILD, 'Needs a layout-owner build (ORCA_LAYOUT_OWNER=main)')
+  test.skip(!LAYOUT_OWNER_BUILD, 'Needs a layout-owner build (QUIRKY_LAYOUT_OWNER=main)')
   test.skip(process.platform === 'win32', 'The fake terminal service is a Unix socket')
 
   test('the server pane shows the banner, Reopen goes to the server, and the pane binds', async ({

@@ -7,13 +7,13 @@ import { classifyNativeCompatChanges } from './node-server-native-compat-scope.m
 
 const ROOT = resolve(import.meta.dirname, '../..')
 const BUILD_SCRIPTS = [
-  'config/scripts/build-orcad-node.mjs',
+  'config/scripts/build-quirkyd-node.mjs',
   'config/scripts/server-build-target.mjs',
   'config/scripts/pinned-node-downloads.mjs',
-  'config/scripts/build-orcad.mjs',
-  'config/scripts/build-orcad-prebuilds.mjs',
-  'config/scripts/orcad-windows-prebuild-cache.mjs',
-  'config/scripts/orcad-prebuild-smoke-child.cjs',
+  'config/scripts/build-quirkyd.mjs',
+  'config/scripts/build-quirkyd-prebuilds.mjs',
+  'config/scripts/quirkyd-windows-prebuild-cache.mjs',
+  'config/scripts/quirkyd-prebuild-smoke-child.cjs',
   'config/scripts/build-windows-process-tree-addon.mjs',
   'config/scripts/build-windows-cli-launcher.mjs',
   'config/scripts/build-windows-security-addon.mjs',
@@ -56,11 +56,11 @@ const ALWAYS_PREFIXES = [
   '.github/actions/restore-pnpm-verification/',
   '.github/actions/prepare-headless-compiler/',
   '.github/actions/prepare-native-runtime/',
-  '.github/actions/prepare-orcad-prebuilds/',
+  '.github/actions/prepare-quirkyd-prebuilds/',
   // These areas also contain worker paths and fixtures opened without an import.
   'src/main/persistence/',
   'src/main/sqlite/',
-  'src/main/orcad/',
+  'src/main/quirkyd/',
   'src/main/runtime/',
   'src/main/claude/',
   'src/main/daemon/pty-subprocess/',
@@ -87,14 +87,14 @@ export async function collectNodeServerInputs({ root = ROOT, entryPoints } = {})
     { build },
     {
       externalNativeAddons,
-      ORCAD_CHILD_ENTRY_POINTS,
-      ORCAD_ENTRY_POINT,
-      ORCAD_LAUNCHER_ENTRY_POINT
+      QUIRKYD_CHILD_ENTRY_POINTS,
+      QUIRKYD_ENTRY_POINT,
+      QUIRKYD_LAUNCHER_ENTRY_POINT
     },
     { createWorkspaceSourceResolver }
   ] = await Promise.all([
     import('esbuild'),
-    import('./orcad-entry-build.mjs'),
+    import('./quirkyd-entry-build.mjs'),
     import('./workspace-source-exports.mjs')
   ])
   const workspace = createWorkspaceSourceResolver(root)
@@ -113,9 +113,9 @@ export async function collectNodeServerInputs({ root = ROOT, entryPoints } = {})
     }
   }
   const entries = entryPoints ?? [
-    ORCAD_ENTRY_POINT,
-    ORCAD_LAUNCHER_ENTRY_POINT,
-    ...Object.values(ORCAD_CHILD_ENTRY_POINTS),
+    QUIRKYD_ENTRY_POINT,
+    QUIRKYD_LAUNCHER_ENTRY_POINT,
+    ...Object.values(QUIRKYD_CHILD_ENTRY_POINTS),
     ...BUILD_SCRIPTS,
     ...discoverNodeServerTests(root)
   ]
@@ -172,7 +172,7 @@ export async function classifyNodeServerChanges(
     (file) =>
       (ALWAYS_FILES.has(file) && !(modifiedOnly && NODE_SERVER_POLICY_TESTS.has(file))) ||
       (ALWAYS_PREFIXES.some((prefix) => file.startsWith(prefix)) && !isSourceUnitTest(file)) ||
-      /^config\/scripts\/[^/]*orcad[^/]*$/.test(file) ||
+      /^config\/scripts\/[^/]*quirkyd[^/]*$/.test(file) ||
       selectors.some((selector) => file.includes(selector))
   )
   if (forced) {

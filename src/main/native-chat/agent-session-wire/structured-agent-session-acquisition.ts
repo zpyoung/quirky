@@ -13,7 +13,7 @@ import { journalIdentityFor } from './structured-agent-session-attach'
 import type { AttachFlowInput } from './structured-agent-session-attach-flow'
 import { mintStructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt'
 
-/** The same process, whatever Orca runtime the store stamped on its record (`runtime`): that stamp
+/** The same process, whatever Quirky runtime the store stamped on its record (`runtime`): that stamp
  *  is about who holds the process, not which process it is. */
 function sameOwnerProcess(
   stored: AgentSessionProcessIdentity,

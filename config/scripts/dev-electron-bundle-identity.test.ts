@@ -7,10 +7,10 @@ import {
 } from './dev-electron-bundle-identity.mjs'
 
 const BRANCH_ENV_KEYS = [
-  'ORCA_DEV_DOCK_TITLE',
-  'ORCA_DEV_BRANCH',
-  'ORCA_DEV_INSTANCE_LABEL',
-  'ORCA_DEV_WORKTREE_NAME'
+  'QUIRKY_DEV_DOCK_TITLE',
+  'QUIRKY_DEV_BRANCH',
+  'QUIRKY_DEV_INSTANCE_LABEL',
+  'QUIRKY_DEV_WORKTREE_NAME'
 ] as const
 
 /** Collect the patch set as it would be computed on a given branch. */
@@ -20,10 +20,10 @@ function patchesUnder(dockTitle: string, branch: string) {
   // number). Vitest reuses a worker across files, so every later test would inherit the plain object.
   const saved = BRANCH_ENV_KEYS.map((key) => [key, process.env[key]] as const)
   Object.assign(process.env, {
-    ORCA_DEV_DOCK_TITLE: dockTitle,
-    ORCA_DEV_BRANCH: branch,
-    ORCA_DEV_INSTANCE_LABEL: branch,
-    ORCA_DEV_WORKTREE_NAME: branch
+    QUIRKY_DEV_DOCK_TITLE: dockTitle,
+    QUIRKY_DEV_BRANCH: branch,
+    QUIRKY_DEV_INSTANCE_LABEL: branch,
+    QUIRKY_DEV_WORKTREE_NAME: branch
   })
   try {
     return [...getDevBundlePlistPatches(), ...getDevHelperPlistPatches()]
@@ -42,7 +42,7 @@ describe('dev-electron-bundle-identity', () => {
   it('leaves process.env untouched, including its object identity', () => {
     const envBefore = process.env
     const snapshot = { ...process.env }
-    patchesUnder('Orca: some-branch', 'some-branch')
+    patchesUnder('Quirky: some-branch', 'some-branch')
     expect(process.env).toBe(envBefore)
     expect({ ...process.env }).toEqual(snapshot)
   })
@@ -57,7 +57,7 @@ describe('dev-electron-bundle-identity', () => {
   })
 
   it('keeps the bundle display name in step with the name safeStorage keys off', () => {
-    // Two independently hardcoded 'Orca Dev' strings: this one names the bundle (notifications,
+    // Two independently hardcoded 'Quirky' strings: this one names the bundle (notifications,
     // System Settings), and getDevInstanceIdentity().appName drives app.setName, which decides the
     // Keychain service name. Drift would split the two without anything else failing.
     expect(DEV_BUNDLE_DISPLAY_NAME).toBe(getDevInstanceIdentity(true, {}).appName)
@@ -72,18 +72,18 @@ describe('dev-electron-bundle-identity', () => {
     // suspicious substrings: a denylist only catches branches whose names happen to contain the
     // banned words, and would miss the likeliest regression of all — re-adding
     // `{ key: 'CFBundleName', value: title }` for an ordinary branch like "fix-login-crash".
-    expect(patchesUnder('Orca: fix-login-crash', 'fix-login-crash')).toEqual(
-      patchesUnder('Orca: perf-2', 'perf-2')
+    expect(patchesUnder('Quirky: fix-login-crash', 'fix-login-crash')).toEqual(
+      patchesUnder('Quirky: perf-2', 'perf-2')
     )
-    expect(patchesUnder('Orca: dev', 'main')).toEqual(
-      patchesUnder('Orca: some-worktree @ feature/x', 'feature/x')
+    expect(patchesUnder('Quirky: dev', 'main')).toEqual(
+      patchesUnder('Quirky: some-worktree @ feature/x', 'feature/x')
     )
   })
 
   it('leaks no branch, worktree, or title text into any patched value', () => {
     const branch = 'fix-login-crash'
-    const worktree = 'Orca-safe-storage-lock'
-    for (const patch of patchesUnder(`Orca: ${branch}`, branch)) {
+    const worktree = 'Quirky-safe-storage-lock'
+    for (const patch of patchesUnder(`Quirky: ${branch}`, branch)) {
       expect(patch.value).not.toContain(branch)
       expect(patch.value).not.toContain(worktree)
       expect(typeof patch.value).toBe('string')

@@ -186,7 +186,9 @@ describe('MobileBrowserPane against a shell with no binary screencast lane', () 
       const { renderer, subscriptions } = await renderPane()
 
       expect(subscriptions).toEqual([])
-      expect(errorMessages(renderer)).toContain('Update the Orca app to stream browser tabs here.')
+      expect(errorMessages(renderer)).toContain(
+        'Update the Quirky app to stream browser tabs here.'
+      )
     } finally {
       vi.mocked(useBrowserBinaryScreencastGrant).mockReturnValue(true)
     }
@@ -197,7 +199,7 @@ describe('MobileBrowserPane against a shell with no binary screencast lane', () 
 
     expect(subscriptions).toHaveLength(1)
     expect(errorMessages(renderer)).not.toContain(
-      'Update the Orca app to stream browser tabs here.'
+      'Update the Quirky app to stream browser tabs here.'
     )
   })
 })

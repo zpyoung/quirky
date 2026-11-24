@@ -24,7 +24,7 @@ describe('getMarkdownRichModeUnsupportedMessage', () => {
     expect(getMarkdownRichModeUnsupportedMessage('Before <span>hi</span> after\n')).toBeNull()
   })
 
-  it.each(['', ' open', ' open="open"', " data-orca-toggle='heading-2' open"])(
+  it.each(['', ' open', ' open="open"', " data-quirky-toggle='heading-2' open"])(
     'allows editable details blocks with attributes %s',
     (attributes) => {
       const content = `<details${attributes}>\n<summary>Toggle</summary>\n\nBody\n\n</details>\n`
@@ -44,18 +44,18 @@ describe('getMarkdownRichModeUnsupportedMessage', () => {
     const content = [
       '<details>\n<summary>Editable</summary>\n\nBody\n\n</details>',
       '<details>\n<summary><span>Passthrough</span></summary>\n\nBody\n\n</details>',
-      '<details class="orca-details" open>\n<summary>Authored</summary>\n\nBody\n\n</details>'
+      '<details class="quirky-details" open>\n<summary>Authored</summary>\n\nBody\n\n</details>'
     ].join('\n\n')
 
     expect(getMarkdownRichModeUnsupportedMessage(content)).toBeNull()
   })
 
-  it.each([' id="keep"', ' class="custom"', ' data-orca-toggle="heading-6"', ' open'])(
+  it.each([' id="keep"', ' class="custom"', ' data-quirky-toggle="heading-6"', ' open'])(
     'rejects a details round trip that loses attributes %s',
     (attributes) => {
       const content = `<details${attributes}>\n<summary>Toggle</summary>\n\nBody\n\n</details>`
       vi.spyOn(roundTrip, 'getRichMarkdownRoundTripOutput').mockReturnValue(
-        '<details class="orca-details">\n<summary>Toggle</summary>\n\nBody\n\n</details>'
+        '<details class="quirky-details">\n<summary>Toggle</summary>\n\nBody\n\n</details>'
       )
 
       expect(getMarkdownRichModeUnsupportedMessage(content)).not.toBeNull()
@@ -65,7 +65,7 @@ describe('getMarkdownRichModeUnsupportedMessage', () => {
   it('still rejects unrelated HTML lost alongside a normalized details tag', () => {
     const content = '<details>\n<summary>Toggle</summary>\n\nBody\n\n</details>\n<span>Tail</span>'
     vi.spyOn(roundTrip, 'getRichMarkdownRoundTripOutput').mockReturnValue(
-      '<details class="orca-details">\n<summary>Toggle</summary>\n\nBody\n\n</details>\nTail'
+      '<details class="quirky-details">\n<summary>Toggle</summary>\n\nBody\n\n</details>\nTail'
     )
 
     expect(getMarkdownRichModeUnsupportedMessage(content)).not.toBeNull()

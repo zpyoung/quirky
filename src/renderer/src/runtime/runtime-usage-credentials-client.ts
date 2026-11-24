@@ -10,7 +10,7 @@ const HOST_CREDENTIAL_TIMEOUT_MS = 20_000
 /** The selected host predates saving usage keys over RPC; nothing was stored anywhere. */
 export class UsageCredentialsHostOutdatedError extends Error {
   constructor() {
-    super('This host needs a newer Orca to save usage keys.')
+    super('This host needs a newer Quirky to save usage keys.')
     this.name = 'UsageCredentialsHostOutdatedError'
   }
 }

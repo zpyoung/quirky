@@ -5,8 +5,8 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1' || typeof global.gc !== 'function') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1 node --expose-gc')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1' || typeof global.gc !== 'function') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc')
 }
 const script = import.meta.filename
 const root = fileURLToPath(new URL('../../../', import.meta.url))

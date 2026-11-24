@@ -11,7 +11,7 @@ const backupFilename = 'profile-state-backup-worker-entry.js'
 let builtDirectory
 
 function fixtureDirectory() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-profile-worker-build-test-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-worker-build-test-'))
   directories.push(directory)
   return directory
 }

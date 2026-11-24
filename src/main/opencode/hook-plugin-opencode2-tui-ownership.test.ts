@@ -38,11 +38,11 @@ const PANE_B = 'tabB:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const SES_A = 'ses_f161fd85fffeieT0zYt80ZKorS'
 const SES_B = 'ses_f161fcd7affeffV0OOrMCrTxtQ'
 const ENV_KEYS = [
-  'ORCA_PANE_KEY',
-  'ORCA_OPENCODE_AGENT',
-  'ORCA_AGENT_HOOK_ENDPOINT',
-  'ORCA_AGENT_HOOK_PORT',
-  'ORCA_AGENT_HOOK_TOKEN'
+  'QUIRKY_PANE_KEY',
+  'QUIRKY_OPENCODE_AGENT',
+  'QUIRKY_AGENT_HOOK_ENDPOINT',
+  'QUIRKY_AGENT_HOOK_PORT',
+  'QUIRKY_AGENT_HOOK_TOKEN'
 ] as const
 
 // Event shapes as OpenCode 2.0.14 delivers them to both server and TUI plugins.
@@ -91,17 +91,17 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
   const delayedPosts = new Set<() => void>()
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'orca-opencode-tui-adapter-'))
+    tempDir = mkdtempSync(join(tmpdir(), 'quirky-opencode-tui-adapter-'))
     savedFetch = globalThis.fetch
     savedArgv = process.argv
     savedEnv = {}
     for (const key of ENV_KEYS) {
       savedEnv[key] = process.env[key]
     }
-    process.env.ORCA_OPENCODE_AGENT = 'opencode'
-    delete process.env.ORCA_AGENT_HOOK_ENDPOINT
-    process.env.ORCA_AGENT_HOOK_PORT = '59999'
-    process.env.ORCA_AGENT_HOOK_TOKEN = 'test-token'
+    process.env.QUIRKY_OPENCODE_AGENT = 'opencode'
+    delete process.env.QUIRKY_AGENT_HOOK_ENDPOINT
+    process.env.QUIRKY_AGENT_HOOK_PORT = '59999'
+    process.env.QUIRKY_AGENT_HOOK_TOKEN = 'test-token'
     posts = []
     allPosts = []
     failPosts = false
@@ -179,7 +179,10 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
 
   async function loadPlugin(dir = tempDir): Promise<PluginModule> {
     // Why: a unique basename per load defeats the ESM module cache, like a separate process.
-    const pluginPath = join(dir, `orca-opencode-status-${Math.random().toString(36).slice(2)}.mjs`)
+    const pluginPath = join(
+      dir,
+      `quirky-opencode-status-${Math.random().toString(36).slice(2)}.mjs`
+    )
     writeFileSync(pluginPath, _internals.getOpenCodePluginSource())
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the generated module's default export is exercised below and fails the test if absent.
     const plugin = (await import(pathToFileURL(pluginPath).href)) as PluginModule
@@ -221,7 +224,7 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
     ownSession: string,
     script: (tui: ReturnType<typeof fakeTui>) => Promise<void>
   ): Promise<Post[]> {
-    process.env.ORCA_PANE_KEY = paneKey
+    process.env.QUIRKY_PANE_KEY = paneKey
     const start = posts.length
     const tui = fakeTui()
     const cleanup = await (await loadPlugin()).default?.setup?.(tui.ctx)
@@ -362,7 +365,7 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
   })
 
   it('reports nothing for sessions the pane never showed', async () => {
-    process.env.ORCA_PANE_KEY = PANE_A
+    process.env.QUIRKY_PANE_KEY = PANE_A
     const tui = fakeTui()
     const cleanup = await (await loadPlugin()).default?.setup?.(tui.ctx)
     const b = turn(SES_B, 'another pane')
@@ -374,7 +377,7 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
 
   // Why: a turn the TUI did not see end must not hold the pane Working (e.g. across a reconnect).
   it('settles an owned turn once the session data says it ended without an end event', async () => {
-    process.env.ORCA_PANE_KEY = PANE_A
+    process.env.QUIRKY_PANE_KEY = PANE_A
     const tui = fakeTui()
     const cleanup = await (await loadPlugin()).default?.setup?.(tui.ctx)
     tui.navigate(SES_A)
@@ -389,7 +392,7 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
 
   // Why: a turn that fails fast arrives as one burst; each level must post once, not flicker.
   it('does not settle a turn early while its events are still queued', async () => {
-    process.env.ORCA_PANE_KEY = PANE_A
+    process.env.QUIRKY_PANE_KEY = PANE_A
     const tui = fakeTui()
     const cleanup = await (await loadPlugin()).default?.setup?.(tui.ctx)
     tui.navigate(SES_A)
@@ -410,7 +413,7 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
   })
 
   it('re-derives Working for an owned session whose start it missed', async () => {
-    process.env.ORCA_PANE_KEY = PANE_A
+    process.env.QUIRKY_PANE_KEY = PANE_A
     const tui = fakeTui()
     const cleanup = await (await loadPlugin()).default?.setup?.(tui.ctx)
     tui.navigate(SES_A)
@@ -439,7 +442,7 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
     const start = async (
       tui: ReturnType<typeof fakeTui>
     ): Promise<(() => Promise<void>) | undefined> => {
-      process.env.ORCA_PANE_KEY = PANE_A
+      process.env.QUIRKY_PANE_KEY = PANE_A
       return (await loadPlugin()).default?.setup?.(tui.ctx)
     }
     const childStart = (parentID: string): BusEvent[] => [
@@ -599,7 +602,7 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
       expect(summary(allPosts)[0]).toBe('SessionStart:undefined')
     })
 
-    // Why: Orca may still show this pane a status another process left, e.g. an older shared-service
+    // Why: Quirky may still show this pane a status another process left, e.g. an older shared-service
     // plugin that posted another pane's turn here before an upgrade.
     it('lands one start boundary in a freshly started TUI, and none on a reload after Done', async () => {
       const tui = fakeTui()
@@ -724,7 +727,7 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
       ])
     })
 
-    // Why: Orca reads every MessagePart as Working, so reply text must not bury an open request.
+    // Why: Quirky reads every MessagePart as Working, so reply text must not bury an open request.
     it('keeps Needs input while the root streams text beside a waiting background child', async () => {
       const tui = fakeTui()
       const cleanup = await start(tui)
@@ -770,7 +773,7 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
       await cleanup?.()
     })
 
-    // Why: an Orca restart moves the hook endpoint while the pane's level stays the same.
+    // Why: an Quirky restart moves the hook endpoint while the pane's level stays the same.
     it('re-posts the current level once the hook endpoint moves', async () => {
       const tui = fakeTui()
       const cleanup = await start(tui)
@@ -778,7 +781,7 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
       await pump(tui, turn(SES_A, 'A').start)
       await tick(200)
       await waitFor(() => expect(statuses(posts)).toEqual([`SessionBusy:${SES_A}`]))
-      process.env.ORCA_AGENT_HOOK_PORT = '59998'
+      process.env.QUIRKY_AGENT_HOOK_PORT = '59998'
       await tick(4699)
       expect(statuses(posts)).toEqual([`SessionBusy:${SES_A}`])
       await tick(1)
@@ -808,14 +811,14 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
   it.each([
     ['an OpenCode 1 TUI', () => fakeTui('1.18.33')],
     ['the other pane variant', () => fakeTui()],
-    ['a TUI outside an Orca pane', () => fakeTui()]
+    ['a TUI outside an Quirky pane', () => fakeTui()]
   ])('stays silent in %s', async (label, make) => {
     if (label === 'the other pane variant') {
-      process.env.ORCA_OPENCODE_AGENT = 'opencode2'
+      process.env.QUIRKY_OPENCODE_AGENT = 'opencode2'
     }
-    process.env.ORCA_PANE_KEY = PANE_A
-    if (label === 'a TUI outside an Orca pane') {
-      delete process.env.ORCA_PANE_KEY
+    process.env.QUIRKY_PANE_KEY = PANE_A
+    if (label === 'a TUI outside an Quirky pane') {
+      delete process.env.QUIRKY_PANE_KEY
     }
     const tui = make()
     const cleanup = await (await loadPlugin()).default?.setup?.(tui.ctx)
@@ -837,8 +840,8 @@ describe('OpenCode 2 TUI reporter: each pane reports its own sessions', () => {
       }
     }
     const installTuiCopy = (): void => {
-      mkdirSync(join(tempDir, 'orca-opencode-status-tui'))
-      writeFileSync(join(tempDir, 'orca-opencode-status-tui', 'tui.js'), '')
+      mkdirSync(join(tempDir, 'quirky-opencode-status-tui'))
+      writeFileSync(join(tempDir, 'quirky-opencode-status-tui', 'tui.js'), '')
     }
 
     it('reports nothing from a serve process when the TUI copy is installed beside it', async () => {

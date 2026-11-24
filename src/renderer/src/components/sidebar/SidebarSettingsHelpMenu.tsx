@@ -70,7 +70,7 @@ export function SidebarSettingsHelpMenu(): React.JSX.Element {
 
   const settingsShortcut = useShortcutKeyDetails('app.settings')
   const [menuOpen, setMenuOpen] = useState(false)
-  const [isRestartingOrca, setIsRestartingOrca] = useState(false)
+  const [isRestartingQuirky, setIsRestartingQuirky] = useState(false)
   const lastShowOnboardingAtRef = React.useRef(0)
   const updateCheckModifiersRef = React.useRef(NO_UPDATE_CHECK_MODIFIERS)
   const mountedRef = useMountedRef()
@@ -93,21 +93,21 @@ export function SidebarSettingsHelpMenu(): React.JSX.Element {
     void showOnboardingFromRenderer()
   }
 
-  const handleRestartOrca = (): void => {
-    if (isRestartingOrca) {
+  const handleRestartQuirky = (): void => {
+    if (isRestartingQuirky) {
       return
     }
-    setIsRestartingOrca(true)
+    setIsRestartingQuirky(true)
     toast.info(
-      translate('auto.components.sidebar.SidebarSettingsHelpMenu.5161eef55d', 'Restarting Orca…')
+      translate('auto.components.sidebar.SidebarSettingsHelpMenu.5161eef55d', 'Restarting Quirky…')
     )
     void window.api.app.restart().catch((error) => {
       if (mountedRef.current) {
-        setIsRestartingOrca(false)
+        setIsRestartingQuirky(false)
         toast.error(
           translate(
             'auto.components.sidebar.SidebarSettingsHelpMenu.4e8f5710d3',
-            "Couldn't restart Orca."
+            "Couldn't restart Quirky."
           ),
           {
             description: error instanceof Error ? error.message : undefined
@@ -258,11 +258,11 @@ export function SidebarSettingsHelpMenu(): React.JSX.Element {
             )}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={handleRestartOrca} disabled={isRestartingOrca}>
+          <DropdownMenuItem onSelect={handleRestartQuirky} disabled={isRestartingQuirky}>
             <RotateCw className="size-3.5" />
             {translate(
               'auto.components.sidebar.SidebarSettingsHelpMenu.ad3d3ed7f1',
-              'Restart Orca'
+              'Restart Quirky'
             )}
           </DropdownMenuItem>
         </DropdownMenuContent>

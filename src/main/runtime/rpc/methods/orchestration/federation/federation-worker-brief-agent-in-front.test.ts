@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationDb } from '../../../../orchestration/db'
 import type { LaunchedAgentForeground } from '../../../../launched-agent-foreground'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
@@ -22,7 +22,7 @@ describe('a paired-server worker start writes its brief only into the agent it l
   function workerHost(foreground: LaunchedAgentForeground, provesAgent = true) {
     const db = new OrchestrationDb(':memory:')
     databases.push(db)
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     configureFederationWorkerRuntime(runtime)
     const writes: string[] = []
@@ -37,7 +37,7 @@ describe('a paired-server worker start writes its brief only into the agent it l
     return { runtime, writes }
   }
 
-  async function attach(runtime: OrcaRuntimeService): Promise<unknown> {
+  async function attach(runtime: QuirkyRuntimeService): Promise<unknown> {
     const method = ORCHESTRATION_METHODS.find(
       (candidate) => candidate.name === 'orchestration.federationAttachStart'
     )

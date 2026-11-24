@@ -1,23 +1,26 @@
 /**
- * The desktop app takes orcad's instance lock on its userData profile, so `orca serve` on
- * orcad and the desktop refuse each other instead of both writing one profile.
+ * The desktop app takes quirkyd's instance lock on its userData profile, so `quirky serve` on
+ * quirkyd and the desktop refuse each other instead of both writing one profile.
  *
- * Electron's single-instance lock only fences other Electron launches; orcad is a plain Node
- * process that cannot see it. Sharing orcad's lock file gives both hosts one owner record.
+ * Electron's single-instance lock only fences other Electron launches; quirkyd is a plain Node
+ * process that cannot see it. Sharing quirkyd's lock file gives both hosts one owner record.
  */
-import { acquireOrcadInstanceLock, type OrcadInstanceLock } from '../orcad/orcad-instance-lock'
-import { OrcadInstanceLockError } from '../orcad/orcad-data-root-privacy'
+import {
+  acquireQuirkydInstanceLock,
+  type QuirkydInstanceLock
+} from '../quirkyd/quirkyd-instance-lock'
+import { QuirkydInstanceLockError } from '../quirkyd/quirkyd-data-root-privacy'
 import { writeStartupDiagnosticLine, type StartupDiagnosticSink } from './startup-diagnostics'
 
 export type DesktopProfileLockResult =
-  | { state: 'acquired'; lock: OrcadInstanceLock }
+  | { state: 'acquired'; lock: QuirkydInstanceLock }
   | { state: 'held'; message: string }
   /** The lock could not be taken for another reason; the desktop starts as it did before it. */
   | { state: 'unavailable' }
 
 export function acquireDesktopProfileInstanceLock(
   userDataPath: string,
-  acquire: typeof acquireOrcadInstanceLock = acquireOrcadInstanceLock,
+  acquire: typeof acquireQuirkydInstanceLock = acquireQuirkydInstanceLock,
   write?: StartupDiagnosticSink
 ): DesktopProfileLockResult {
   try {
@@ -26,7 +29,7 @@ export function acquireDesktopProfileInstanceLock(
     process.once('exit', () => lock.release())
     return { state: 'acquired', lock }
   } catch (error) {
-    if (error instanceof OrcadInstanceLockError && error.code === 'orcad_instance_lock_held') {
+    if (error instanceof QuirkydInstanceLockError && error.code === 'quirkyd_instance_lock_held') {
       writeStartupDiagnosticLine(`[single-instance] ${error.message}`, write)
       return { state: 'held', message: error.message }
     }

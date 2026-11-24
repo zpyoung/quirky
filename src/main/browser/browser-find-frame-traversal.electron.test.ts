@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -8,7 +8,7 @@ import { build } from 'vite'
 import { resolveElectronProbeLaunch } from './electron-probe-display-launch'
 
 it('finishes and wraps guest searches in both directions beside host iframes', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-find-traversal-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-find-traversal-'))
   try {
     await build({
       configFile: false,
@@ -40,7 +40,7 @@ it('finishes and wraps guest searches in both directions beside host iframes', a
     const result = await runProcess({
       program: executable,
       args,
-      env: { ...env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 20_000,
       detached: process.platform !== 'win32',
       maxOutputBytes: 64 * 1024

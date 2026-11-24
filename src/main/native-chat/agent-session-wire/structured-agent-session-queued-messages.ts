@@ -118,7 +118,7 @@ export function nextStructuredQueuedMessage(
  * `blocked`, or an actionable draft already exists (FIFO backlog — an
  * ADMISSION rule only, never a drain gate). A lone returned card, or a paused
  * queue, does not trap a new send: the user acting now wins, and that send's
- * turn starting is what lifts the pause — Orca's own queue policy, a stated
+ * turn starting is what lifts the pause — Quirky's own queue policy, a stated
  * deviation from held-head backlog counting.
  */
 export function shouldQueueStructuredAgentSessionSend(

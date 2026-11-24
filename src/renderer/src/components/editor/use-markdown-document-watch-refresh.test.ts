@@ -3,7 +3,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FsChangeEvent } from '../../../../shared/filesystem-entry-types'
-import { ORCA_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
+import { QUIRKY_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
 import { useMarkdownDocumentWatchRefresh } from './use-markdown-document-watch-refresh'
 
 let root: Root
@@ -25,7 +25,7 @@ function Harness({
 
 function change(events: FsChangeEvent[]): void {
   window.dispatchEvent(
-    new CustomEvent(ORCA_WORKTREE_FILE_CHANGE_EVENT, {
+    new CustomEvent(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, {
       detail: { runtimeEnvironmentId: null, payload: { worktreePath: '/repo', events } }
     })
   )

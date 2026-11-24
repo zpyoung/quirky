@@ -11,7 +11,7 @@ import {
 } from './mobile-task-runtime-operations'
 import {
   MOBILE_TASKS_CAPABILITY,
-  type PersistedTrustedOrcaHooks,
+  type PersistedTrustedQuirkyHooks,
   filterAvailableTaskProviders,
   normalizeVisibleTaskProviders,
   resolveVisibleTaskProvider,
@@ -54,12 +54,12 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setLinearWorkspaces,
     setMergeMethodProjectRow,
     setMergeMethodTaskItem,
-    setOrcaYamlTrustPrompt,
+    setQuirkyYamlTrustPrompt,
     setPendingGitHubProjectViewSelection,
     setPendingHostedMerge,
     setPendingHostedStateChange,
     setPendingProjectGitHubMerge,
-    setProjectRepoNotInOrca,
+    setProjectRepoNotInQuirky,
     setProjectRowDetail,
     setProjectRowItem,
     setProvider,
@@ -93,7 +93,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setShowSortPicker,
     setTaskStateHydrated,
     setTasksSupportState,
-    setTrustedOrcaHooks,
+    setTrustedQuirkyHooks,
     setVisibleProviders,
     taskResumeRef,
     visibleProviders
@@ -102,8 +102,8 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     if (!client || connState !== 'connected') {
       taskResumeRef.current = {}
       setRuntimeTaskSettings({})
-      setTrustedOrcaHooks({})
-      setOrcaYamlTrustPrompt(null)
+      setTrustedQuirkyHooks({})
+      setQuirkyYamlTrustPrompt(null)
       setGithubProjectHiddenFieldIdsByView({})
       setTaskStateHydrated(false)
       setTasksSupportState({ kind: 'unknown', client: null })
@@ -131,7 +131,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
       setPendingGitHubProjectViewSelection(null)
       setActionItem(null)
       setProjectRowItem(null)
-      setProjectRepoNotInOrca(null)
+      setProjectRepoNotInQuirky(null)
       setDetailPayload(null)
       setProjectRowDetail(null)
       setShowCreateTask(false)
@@ -173,7 +173,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setPendingGitHubProjectViewSelection(null)
     setActionItem(null)
     setProjectRowItem(null)
-    setProjectRepoNotInOrca(null)
+    setProjectRepoNotInQuirky(null)
     setDetailPayload(null)
     setProjectRowDetail(null)
     setShowCreateTask(false)
@@ -225,7 +225,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
         setPendingGitHubProjectViewSelection(null)
         setActionItem(null)
         setProjectRowItem(null)
-        setProjectRepoNotInOrca(null)
+        setProjectRepoNotInQuirky(null)
         setDetailPayload(null)
         setProjectRowDetail(null)
         setShowCreateTask(false)
@@ -237,7 +237,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
         setMergeMethodTaskItem(null)
         setMergeMethodProjectRow(null)
         resetWorkspaceCreateState()
-        setError('Update Orca desktop to use Tasks on mobile.')
+        setError('Update Quirky desktop to use Tasks on mobile.')
         setTaskStateHydrated(false)
         return
       }
@@ -278,11 +278,11 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
           (uiRead.value as
             | {
                 taskResumeState?: TaskResumeState
-                trustedOrcaHooks?: PersistedTrustedOrcaHooks
+                trustedQuirkyHooks?: PersistedTrustedQuirkyHooks
               }
             | undefined)
         : null
-      setTrustedOrcaHooks(uiState?.trustedOrcaHooks ?? {})
+      setTrustedQuirkyHooks(uiState?.trustedQuirkyHooks ?? {})
       const resume = uiState?.taskResumeState ?? {}
       taskResumeRef.current = resume
       setGithubProjectHiddenFieldIdsByView(resume.githubProjectHiddenFieldIdsByView ?? {})

@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithRefuseUnattributedMobileSessionTabClose } from './refuse-unattributed-mobile-session-tab-close'
+import { QuirkyRuntimeWithRefuseUnattributedMobileSessionTabClose } from './refuse-unattributed-mobile-session-tab-close'
 import type {
   RuntimeMobileSessionTerminalTab,
   RuntimeSessionTabCloseReason
@@ -22,7 +22,7 @@ import { rendererPublicationThrottle } from '../../../window/renderer-publicatio
 import { structuredAgentSessionTabCloseCause } from '../../structured-agent-session-tab-close-cause'
 import { retireHeadlessMobileSessionEditorTab } from '../../mobile-session-editor-projection'
 
-export abstract class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseUnattributedMobileSessionTabClose {
+export abstract class QuirkyRuntimeWithCloseMobileSessionTab extends QuirkyRuntimeWithRefuseUnattributedMobileSessionTabClose {
   declare browserTabClose: RuntimeEdgeCommandSurface['browserTabClose']
 
   async closeMobileSessionTab(

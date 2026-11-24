@@ -2,7 +2,7 @@ import './unused-default-rpc-methods.test-fixture'
 import { z } from 'zod'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../shared/protocol-version'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import { OrchestrationDb } from '../orchestration/db'
 import { defineMethod, type RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
@@ -19,7 +19,7 @@ describe('orchestration contract fence', () => {
   function createHarness(method = 'orchestration.send') {
     const database = new OrchestrationDb(':memory:')
     databases.push(database)
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(database)
     const effect = vi.fn(() => ({ accepted: true }))
     const dispatcher = new RpcDispatcher({

@@ -7,7 +7,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ChildProcess } from 'node:child_process'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 import {
   execInTerminal,
@@ -18,7 +18,7 @@ import {
   waitForTerminalOutput
 } from './helpers/terminal'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import { PROTOCOL_VERSION } from '../../src/main/daemon/types'
 
 const PROVIDER_SESSION_ID = 'e2e-live-force-exit-session'
@@ -129,7 +129,7 @@ function stripPersistedPtyOwnership(userDataDir: string): void {
     session.activeWorktreeIdsOnShutdown = []
     for (const record of Object.values(session.sleepingAgentSessionsByPaneKey ?? {})) {
       if (record.providerSession?.id === PROVIDER_SESSION_ID) {
-        // Why: the e2e proof should verify Orca launches the resumed command,
+        // Why: the e2e proof should verify Quirky launches the resumed command,
         // not depend on a developer machine having a real Codex CLI installed.
         record.launchConfig = { agentCommand: 'echo', agentArgs: '', agentEnv: {} }
       }
@@ -201,10 +201,10 @@ for (const agent of ['codex', 'cursor'] as const) {
     }
 
     const session = createRestartSession(testInfo, {
-      ORCA_BACKGROUND_LAUNCH: '1',
-      ORCA_DISABLE_CODEX_TRUST_RPC: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1',
+      QUIRKY_DISABLE_CODEX_TRUST_RPC: '1'
     })
-    const seedPath = path.join(session.userDataDir, 'orca-data.json')
+    const seedPath = path.join(session.userDataDir, 'quirky-data.json')
     const seed = JSON.parse(readFileSync(seedPath, 'utf8'))
     seed.settings.agentStatusHooksEnabled = false
     writeFileSync(seedPath, JSON.stringify(seed))
@@ -223,7 +223,7 @@ for (const agent of ['codex', 'cursor'] as const) {
       expect(
         await page.evaluate(() => window.__store?.getState().settings?.agentStatusHooksEnabled)
       ).toBe(false)
-      expect(await firstApp.evaluate(() => process.env.ORCA_DISABLE_CODEX_TRUST_RPC)).toBe('1')
+      expect(await firstApp.evaluate(() => process.env.QUIRKY_DISABLE_CODEX_TRUST_RPC)).toBe('1')
       const worktreeId = await attachRepoAndOpenTerminal(page, repoPath)
       await waitForSessionReady(page)
       // Why: the session writer persists only once hydrationSucceeded flips (not

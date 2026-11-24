@@ -1,6 +1,6 @@
 {
   "reviewedHead": "a8c4bed3fa4191d731bb28826d00318f18a5db0a",
-  "backgroundLaunch": "ORCA_BACKGROUND_LAUNCH=1 on every check",
+  "backgroundLaunch": "QUIRKY_BACKGROUND_LAUNCH=1 on every check",
   "productHashes": {
     "src/main/native-chat/agent-session-wire/agent-session-delta-coalescer.ts": "7caf0f24250b42e0ac4fe99e93bcbe0a4acb7cb3465fdde6b248d8bf6ba0d2d0",
     "src/main/native-chat/agent-session-wire/agent-session-empty-delta-retention.test.ts": "2e4ed51b8c205e650cd0d3d4fcb968fdf8f509be4c4013ca1dc6e70b59703a55"

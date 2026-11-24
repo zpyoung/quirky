@@ -1,6 +1,6 @@
 import './unused-default-rpc-methods.test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import { RpcDispatcher } from './dispatcher'
 import type { RpcRequest } from './core'
 import { TERMINAL_METHODS } from './methods/terminal'
@@ -15,7 +15,7 @@ describe('OpenCode guarded terminal send', () => {
   it('refuses a marker title left on a shell without writing notes', async () => {
     vi.useFakeTimers()
     const write = vi.fn(() => true)
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setPtyController({
       write,
       kill: () => true,

@@ -24,21 +24,21 @@ export function unservedServerStatus(
 }
 
 const HELD_MOVE_MESSAGE =
-  'Orca paused moving this host’s projects to its Orca server because it couldn’t confirm the server’s copy. Nothing is lost: the host keeps its projects and stays locked until the move finishes. Connect again to resume. If the server can’t come back, stop or forget it in Settings > Orca on your SSH hosts.'
+  'Quirky paused moving this host’s projects to its Quirky server because it couldn’t confirm the server’s copy. Nothing is lost: the host keeps its projects and stays locked until the move finishes. Connect again to resume. If the server can’t come back, stop or forget it in Settings > Quirky on your SSH hosts.'
 
 const NOEXEC_MESSAGE =
-  'This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.'
+  'This host doesn’t allow running programs from ~/.quirky-remote, so Quirky can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.'
 
 const CONTACT_LOST_MESSAGE =
-  'Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue.'
+  'Quirky lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue.'
 
 const NODE_DOWNLOAD_BLOCKED_MESSAGES: Record<NodeDistMirrorAttempt, string> = {
   unset:
-    'Neither this computer nor this host could download Node.js, which Orca’s server needs. Set a Node.js download mirror in Settings > Advanced > Network, or check the network on both machines, then connect again.',
+    'Neither this computer nor this host could download Node.js, which Quirky’s server needs. Set a Node.js download mirror in Settings > Advanced > Network, or check the network on both machines, then connect again.',
   tried:
     'Neither this computer nor this host could download Node.js, including from the Node.js download mirror. Check the mirror in Settings > Advanced > Network, then connect again.',
   unsupported:
-    'Neither this computer nor this host could download Node.js, which Orca’s server needs. Check the network or proxy on both machines, then connect again.'
+    'Neither this computer nor this host could download Node.js, which Quirky’s server needs. Check the network or proxy on both machines, then connect again.'
 }
 
 /** Untranslated twin of the renderer's status line, for logs and callers without the catalog. */
@@ -47,17 +47,17 @@ export function unservedHostServerMessage(decision: UnservedDecision): string {
     return HELD_MOVE_MESSAGE
   }
   switch (decision.reason) {
-    case 'orcad_unavailable':
+    case 'quirkyd_unavailable':
       return decision.detail === 'runtime_noexec'
         ? NOEXEC_MESSAGE
-        : 'This SSH host isn’t supported by this version of Orca. To keep using it, install an older version of Orca.'
+        : 'This SSH host isn’t supported by this version of Quirky. To keep using it, install an older version of Quirky.'
     case 'relay_terminals_live':
     case 'relay_terminals_unverifiable':
-      return 'Terminals started by an older version of Orca are still running on this host, and they don’t stop on their own. Close them in that version of Orca or end them on the host, then reconnect.'
+      return 'Terminals started by an older version of Quirky are still running on this host, and they don’t stop on their own. Close them in that version of Quirky or end them on the host, then reconnect.'
     case 'refused':
-      return decision.detail ?? 'Orca couldn’t set up its server on this host.'
+      return decision.detail ?? 'Quirky couldn’t set up its server on this host.'
     case 'source_changed':
-      return 'An older version of Orca changed this host’s projects. Move those changes to this host’s Orca server in SSH Hosts settings to continue.'
+      return 'An older version of Quirky changed this host’s projects. Move those changes to this host’s Quirky server in SSH Hosts settings to continue.'
     case 'deferred':
     case 'failed':
       if (decision.contactLost) {
@@ -65,6 +65,6 @@ export function unservedHostServerMessage(decision: UnservedDecision): string {
       }
       return decision.nodeDownloadBlocked
         ? NODE_DOWNLOAD_BLOCKED_MESSAGES[decision.nodeDownloadBlocked.mirror]
-        : 'Orca couldn’t start its server on this host. Try connecting again.'
+        : 'Quirky couldn’t start its server on this host. Try connecting again.'
   }
 }

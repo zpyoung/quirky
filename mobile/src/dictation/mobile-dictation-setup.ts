@@ -20,7 +20,7 @@ export type MobileSpeechModel = MobileSpeechModelReply
 // instead of dead-ending on a toast.
 const SETUP_REQUIRED_CODES = new Set(['voice_dictation_disabled', 'voice_model_not_selected'])
 const LEGACY_DESKTOP_SPEECH_SETUP_MESSAGE =
-  'Update the paired desktop Orca app to use mobile voice settings.'
+  'Update the paired desktop Quirky app to use mobile voice settings.'
 
 // Why: mobile can pair with older desktop runtimes that predate speech.models.list;
 // show upgrade guidance instead of leaking the raw denial or not-found error.
@@ -39,7 +39,7 @@ function isLegacyDesktopSpeechSetupReply(reply: RpcResponse): boolean {
 }
 
 // Why: headless servers from 1.4.229 until #31174 had no speech at all; name the fix, not the code.
-export const SPEECHLESS_SERVER_MESSAGE = 'Update Orca on this server to use voice dictation.'
+export const SPEECHLESS_SERVER_MESSAGE = 'Update Quirky on this server to use voice dictation.'
 
 export function isSpeechlessServerError(message: string): boolean {
   return message.startsWith('speech_unavailable')

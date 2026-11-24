@@ -11,7 +11,7 @@ import type * as OsModule from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { runProcess, runProcessSync, spawnProcess } from '@orca/process-host'
+import { runProcess, runProcessSync, spawnProcess } from '@quirky/process-host'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 import { getCursorHookResponse } from './hook-events'
 import { CursorHookService } from './hook-service'
@@ -38,7 +38,8 @@ const shells =
 const configSchema = z.object({
   hooks: z.record(z.string(), z.array(z.object({ command: z.string() })))
 })
-const hostileLiteral = 'space \' " $ORCA_TEST_EXPAND $(touch injected) `touch backtick-injected` \\'
+const hostileLiteral =
+  'space \' " $QUIRKY_TEST_EXPAND $(touch injected) `touch backtick-injected` \\'
 const payload = JSON.stringify({ text: `漢字😀${'x'.repeat(256 * 1024)}` })
 
 describe.skipIf(process.platform === 'win32')('local Cursor hooks through login shells', () => {
@@ -47,7 +48,7 @@ describe.skipIf(process.platform === 'win32')('local Cursor hooks through login 
   let command: string
 
   beforeEach(() => {
-    fixture = mkdtempSync(join(tmpdir(), 'orca-cursor-login-shell-'))
+    fixture = mkdtempSync(join(tmpdir(), 'quirky-cursor-login-shell-'))
     const home = join(fixture, hostileLiteral)
     mkdirSync(home)
     homeMock.mockReturnValue(home)
@@ -60,7 +61,7 @@ describe.skipIf(process.platform === 'win32')('local Cursor hooks through login 
       throw new Error('Cursor preToolUse hook was not installed')
     }
     command = registered
-    scriptPath = join(home, '.orca', 'agent-hooks', 'cursor-hook.sh')
+    scriptPath = join(home, '.quirky', 'agent-hooks', 'cursor-hook.sh')
   })
 
   afterEach(() => {
@@ -71,12 +72,12 @@ describe.skipIf(process.platform === 'win32')('local Cursor hooks through login 
   function environment(): NodeJS.ProcessEnv {
     return {
       ...process.env,
-      ORCA_AGENT_HOOK_ENDPOINT: '',
-      ORCA_AGENT_HOOK_PORT: '',
-      ORCA_AGENT_HOOK_TOKEN: '',
-      ORCA_PANE_KEY: '',
-      ORCA_TEST_EXPAND: 'expanded',
-      ORCA_TEST_LITERAL: hostileLiteral,
+      QUIRKY_AGENT_HOOK_ENDPOINT: '',
+      QUIRKY_AGENT_HOOK_PORT: '',
+      QUIRKY_AGENT_HOOK_TOKEN: '',
+      QUIRKY_PANE_KEY: '',
+      QUIRKY_TEST_EXPAND: 'expanded',
+      QUIRKY_TEST_LITERAL: hostileLiteral,
       HOME: fixture,
       XDG_CONFIG_HOME: join(fixture, 'config'),
       XDG_DATA_HOME: join(fixture, 'data')
@@ -87,7 +88,7 @@ describe.skipIf(process.platform === 'win32')('local Cursor hooks through login 
     it('preserves the assigned response, inherited environment and UTF-8 stdin at a literal path', async () => {
       writeFileSync(
         scriptPath,
-        '#!/bin/sh\nprintf "%s\\n" "$ORCA_CURSOR_HOOK_RESPONSE" "$ORCA_TEST_LITERAL"\ncommand -p cat\n'
+        '#!/bin/sh\nprintf "%s\\n" "$QUIRKY_CURSOR_HOOK_RESPONSE" "$QUIRKY_TEST_LITERAL"\ncommand -p cat\n'
       )
       const result = await runProcess({
         program: shell.path,

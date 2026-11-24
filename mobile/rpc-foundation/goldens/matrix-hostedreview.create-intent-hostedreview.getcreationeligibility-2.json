@@ -482,7 +482,7 @@
     "5a0d2dca259b": {
       "outcome": {
         "committed": true,
-        "error": "Orca could not confirm whether this branch already has a pull request. Try again in a moment.",
+        "error": "Quirky could not confirm whether this branch already has a pull request. Try again in a moment.",
         "ok": false,
         "status": {
           "branch": "feature",
@@ -1126,7 +1126,7 @@
       "settledAt": 0,
       "value": {
         "committed": true,
-        "error": "Orca could not confirm whether this branch already has a pull request. Try again in a moment.",
+        "error": "Quirky could not confirm whether this branch already has a pull request. Try again in a moment.",
         "ok": false,
         "status": {
           "branch": "feature",

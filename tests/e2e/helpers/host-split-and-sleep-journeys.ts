@@ -8,7 +8,7 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { expect } from './orca-app'
+import { expect } from './quirky-app'
 import { RuntimeClient } from '../../../src/cli/runtime/client'
 import type { RuntimeTerminalListResult } from '../../../src/shared/runtime-types'
 import type { RuntimeWorktreeCreateResult } from '../../../src/shared/runtime-worktree-contracts'
@@ -24,7 +24,7 @@ export async function addHostCreatedSplitWorktree(
   userDataDir: string
 ): Promise<FolderWorkspaceSetup> {
   const { worktreeId } = await bootstrapFirstLaunch(page, seededRepoPathOrSkip())
-  const repoPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-parity-setup-')))
+  const repoPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-parity-setup-')))
   const git = (...args: string[]): void => {
     execFileSync('git', args, { cwd: repoPath, stdio: 'pipe' })
   }

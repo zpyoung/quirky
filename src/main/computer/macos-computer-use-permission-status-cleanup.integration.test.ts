@@ -2,8 +2,8 @@ import { once } from 'node:events'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawnProcess } from '@orca/process-host'
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
+import type { ChildProcessHandle } from '@quirky/process-host/process-spec'
 import { afterEach, describe, expect, it } from 'vitest'
 import { stopMacOSPermissionStatusHelper } from './macos-computer-use-permission-status-cleanup'
 
@@ -45,15 +45,15 @@ describe.skipIf(process.platform !== 'darwin')('real permission status helper cl
   }
 
   it('removes completed probes without stopping another probe, setup, or agent', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'orca-permission-[cleanup]+-'))
+    const directory = await mkdtemp(join(tmpdir(), 'quirky-permission-[cleanup]+-'))
     directories.push(directory)
     const statusPath = join(directory, 'status.json')
     const executablePath = join(
       directory,
-      'Orca Computer Use.app',
+      'Quirky Computer Use.app',
       'Contents',
       'MacOS',
-      'orca-computer-use-macos'
+      'quirky-computer-use-macos'
     )
     const peers = await Promise.all([
       startFixture(executablePath, ['--permission-status-file', `${statusPath}.peer`]),

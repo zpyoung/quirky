@@ -1,6 +1,6 @@
 import { getPtyIpc } from '../../pty-host-bindings'
 import type { Store } from '../../../persistence'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import { rekeyMovedPaneOwners } from '../../../runtime/moved-pane-owner-rekey'
 import {
   isTerminalLeafMoveRequest,
@@ -10,7 +10,7 @@ import {
 
 /** Durable move first; agent-status and orchestration keys follow only a committed move. */
 export async function commitLeafMoveAndRekey(
-  deps: { store?: Store; runtime?: OrcaRuntimeService },
+  deps: { store?: Store; runtime?: QuirkyRuntimeService },
   request: TerminalLeafMoveRequest
 ): Promise<TerminalLeafMoveResult> {
   if (!deps.store) {
@@ -26,7 +26,7 @@ export async function commitLeafMoveAndRekey(
 
 export function installPtyLeafMoveIpcHandler(deps: {
   store?: Store
-  runtime?: OrcaRuntimeService
+  runtime?: QuirkyRuntimeService
 }): void {
   getPtyIpc().handle('pty:moveLeafToNewTab', async (_event, args: unknown) => {
     if (!isTerminalLeafMoveRequest(args)) {

@@ -88,7 +88,7 @@ export function ClaudeDiffPanelNoticeBanner({
     <PaneTopWarningBanner
       title={translate(
         'terminal.claudeDiffPanelNotice.title',
-        "Claude Code can open its own diff panel beside the chat in wide terminals. That panel is Claude's, not Orca's."
+        "Claude Code can open its own diff panel beside the chat in wide terminals. That panel is Claude's, not Quirky's."
       )}
       body={translate(
         'terminal.claudeDiffPanelNotice.body',

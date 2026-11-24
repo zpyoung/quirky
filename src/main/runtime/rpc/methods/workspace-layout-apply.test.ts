@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { RUNTIME_CAPABILITIES } from '../../../../shared/protocol-version'
 import { MOBILE_RPC_METHOD_ALLOWLIST } from '../../runtime-rpc/runtime-rpc-mobile-method-allowlist'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { eraseRpcMethods, isStreamingMethod, type RpcContext } from '../core'
 import { LAYOUT_APPLY_METHODS } from './workspace-layout'
 
@@ -27,7 +27,7 @@ const SPLIT = {
 async function registeredMethods(layoutOwnerIsMain: boolean) {
   vi.resetModules()
   vi.doMock('../../../../shared/layout-owner-switch', () => ({
-    ORCA_LAYOUT_OWNER_IS_MAIN: layoutOwnerIsMain
+    QUIRKY_LAYOUT_OWNER_IS_MAIN: layoutOwnerIsMain
   }))
   const { ALL_RPC_METHODS } = await import('./index')
   return eraseRpcMethods(ALL_RPC_METHODS)
@@ -68,7 +68,7 @@ function runtimeHolding(hostId: string) {
     applyTabRenames
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply path reads only these store methods.
-  return { runtime: new OrcaRuntimeService(store as never), applyLayoutCommand, applyTabRenames }
+  return { runtime: new QuirkyRuntimeService(store as never), applyLayoutCommand, applyTabRenames }
 }
 
 afterEach(() => {
@@ -93,7 +93,7 @@ describe('layout.apply', () => {
     }
     const applyLayoutCommand = vi.fn(async () => ({ ok: true, result: {} }))
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler calls only applyLayoutCommand.
-    const runtime = { applyLayoutCommand } as unknown as OrcaRuntimeService
+    const runtime = { applyLayoutCommand } as unknown as QuirkyRuntimeService
     const newLeafId = '33333333-3333-4333-8333-333333333333'
 
     const params = apply.params?.parse({ command: { ...SPLIT, newLeafId, groupId: 'window-g' } })
@@ -677,7 +677,7 @@ describe('layout.apply', () => {
       applyTabRenames
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply path reads only these store methods.
-    const runtime = new OrcaRuntimeService(store as never)
+    const runtime = new QuirkyRuntimeService(store as never)
     const titled = (tabId: string) => ({ workspace: WORKTREE, tabId, title: `Title ${tabId}` })
 
     const reply = await runtime.applyLayoutCommand({
@@ -769,7 +769,7 @@ describe('layout.apply', () => {
       })
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply and stream paths read only these store methods.
-    const runtime = new OrcaRuntimeService(store as never)
+    const runtime = new QuirkyRuntimeService(store as never)
     const sent: number[] = []
     const { seq } = runtime.subscribeWorkspaceLayouts((event) => {
       order.push('frame')

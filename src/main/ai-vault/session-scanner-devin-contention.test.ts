@@ -21,7 +21,7 @@ afterEach(async () => {
 })
 
 it('attempts a contended index once per scan and enriches all transcripts after recovery', async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-devin-contention-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-devin-contention-'))
   const roots = isolatedScanRoots(root)
   await mkdir(roots.devinTranscriptsDir, { recursive: true })
   const db = new SyncDatabase(join(root, 'sessions.db'))

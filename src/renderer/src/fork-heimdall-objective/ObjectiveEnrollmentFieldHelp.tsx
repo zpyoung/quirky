@@ -171,7 +171,7 @@ export function objectiveTerritoryHelp(): ObjectiveEnrollmentHelpCopy {
     ),
     summary: translate(
       'fork.heimdallObjective.enrollment.territoryTooltipSummary',
-      'Limits writes; protected .git and .orca paths are always excluded.'
+      'Limits writes; protected .git and .quirky paths are always excluded.'
     ),
     values: [
       {

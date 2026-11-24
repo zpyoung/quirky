@@ -5,7 +5,7 @@ import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
 import type { Repo } from '../../../shared/repo-types'
-import type { OrcaHooks, RepoHookSettings } from '../../../shared/orca-yaml-hook-types'
+import type { QuirkyHooks, RepoHookSettings } from '../../../shared/quirky-yaml-hook-types'
 import type { SetupDecision } from '../../../shared/worktree/create-types'
 import type { GitHubPrStartPoint } from '../../../shared/worktree/types'
 
@@ -35,11 +35,11 @@ export async function resolveDirectSetupDecision(
   repo: { hookSettings?: RepoHookSettings },
   ownerHostId: ExecutionHostId
 ): Promise<{ kind: 'decided'; decision: SetupDecision } | { kind: 'needs-modal' }> {
-  let yamlHooks: OrcaHooks | null = null
+  let yamlHooks: QuirkyHooks | null = null
   try {
     // Why: the same owner host as the PR start point and createWorktree, never focus.
     const result = await checkRuntimeHooks(ownerHostId, repoId)
-    yamlHooks = (result.hooks as OrcaHooks | null) ?? null
+    yamlHooks = (result.hooks as QuirkyHooks | null) ?? null
   } catch {
     yamlHooks = null
   }

@@ -1,18 +1,18 @@
 /**
  * Where a mailbox owned by a structured session is delivered: a chat that coordinates a Run
- * (`run:<id>` with no coordinator handle), a session addressed directly at `orca_session_id:<id>`, and the
+ * (`run:<id>` with no coordinator handle), a session addressed directly at `quirky_session_id:<id>`, and the
  * live session behind a structured worker's handle. The session is resolved here, never a pane, and
  * takes the pointer as a session turn.
  */
 
 import {
-  ORCA_SESSION_ADDRESS_PREFIX,
-  isOrcaSessionId,
-  parseOrcaSessionAddress,
-  type OrcaSessionId
-} from '../../../shared/orca-session-address'
+  QUIRKY_SESSION_ADDRESS_PREFIX,
+  isQuirkySessionId,
+  parseQuirkySessionAddress,
+  type QuirkySessionId
+} from '../../../shared/quirky-session-address'
 import type { OrchestrationDb } from './db'
-import { currentRunCoordinatorOrcaSessionId } from './db/runs/run-coordinator-orca-session'
+import { currentRunCoordinatorQuirkySessionId } from './db/runs/run-coordinator-quirky-session'
 import type { StructuredPointerTarget } from './structured-mailbox-pointer-delivery'
 import {
   addressableSessionParty,
@@ -28,22 +28,22 @@ import { chatAssigneeSessionId } from './chat-assignee'
 /**
  * The session a Run's coordinator binding names when that binding has no handle. A structured
  * worker coordinates by its own handle and resolves through it, so only a handle-less binding names
- * a session here, and only by an Orca session id that still counts (see
- * `currentRunCoordinatorOrcaSessionId`).
+ * a session here, and only by an Quirky session id that still counts (see
+ * `currentRunCoordinatorQuirkySessionId`).
  */
 export function handleLessCoordinatorSessionId(
   run: Pick<
     RunRow,
     | 'coordinator_handle'
-    | 'coordinator_orca_session_id'
-    | 'coordinator_orca_session_id_generation'
+    | 'coordinator_quirky_session_id'
+    | 'coordinator_quirky_session_id_generation'
     | 'consumer_generation'
   >
-): OrcaSessionId | null {
+): QuirkySessionId | null {
   if (run.coordinator_handle !== null) {
     return null
   }
-  return currentRunCoordinatorOrcaSessionId(run)
+  return currentRunCoordinatorQuirkySessionId(run)
 }
 
 /**
@@ -79,17 +79,17 @@ export function chatDispatchMailTarget(
 }
 
 /**
- * The target of an `orca_session_id:<id>` mailbox; `undefined` when the handle is not a session address at
+ * The target of an `quirky_session_id:<id>` mailbox; `undefined` when the handle is not a session address at
  * all, so other address forms keep their own resolution.
  */
 export function structuredSessionAddressTarget(
   mailboxHandle: string,
   db: OrchestrationDb | null | undefined
 ): StructuredPointerTarget | null | undefined {
-  if (!mailboxHandle.startsWith(ORCA_SESSION_ADDRESS_PREFIX)) {
+  if (!mailboxHandle.startsWith(QUIRKY_SESSION_ADDRESS_PREFIX)) {
     return undefined
   }
-  const sessionId = parseOrcaSessionAddress(mailboxHandle)
+  const sessionId = parseQuirkySessionAddress(mailboxHandle)
   return sessionId ? structuredSessionMailTarget(sessionId, db) : null
 }
 
@@ -100,7 +100,7 @@ export function structuredSessionAddressTarget(
  * it (mid-turn, closed) is found again.
  */
 export function structuredSessionOwnedMailboxes(sessionId: string, db: OrchestrationDb): string[] {
-  const party = isOrcaSessionId(sessionId) ? addressableSessionParty(sessionId, db) : null
+  const party = isQuirkySessionId(sessionId) ? addressableSessionParty(sessionId, db) : null
   if (!party) {
     return []
   }

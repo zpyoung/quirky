@@ -4,7 +4,7 @@ import {
   requestMicrophonePermissionsAsync,
   tearDown,
   toggleRecording
-} from '@orca/expo-two-way-audio'
+} from '@quirky/expo-two-way-audio'
 import { bridgeAudioInterruptionEndsCapture } from '../mobile-web-shell/bridge/bridge-audio-verbs'
 import { nativeMicrophoneScreenLock } from './native-audio-device'
 import type { DictationCapture } from './dictation-capture-contract'
@@ -14,7 +14,7 @@ import type { DictationCapture } from './dictation-capture-contract'
  *
  * Every call is the one the hook used to make, in the order it made it, because this half is the
  * seam's shape rather than a translation of it: a permission and an open, a start and a stop, and
- * the two event lanes `@orca/expo-two-way-audio` emits. What moved is where they are written, so
+ * the two event lanes `@quirky/expo-two-way-audio` emits. What moved is where they are written, so
  * the page can answer the same shape without the flow above knowing which it holds.
  */
 

@@ -48,7 +48,7 @@ function fakeSession(): FakeSession {
         listeners.splice(index, 1)
       }
     }),
-    getUserAgent: () => 'Mozilla/5.0 Orca',
+    getUserAgent: () => 'Mozilla/5.0 Quirky',
     setUserAgent: vi.fn(),
     setPermissionRequestHandler: vi.fn(),
     setPermissionCheckHandler: vi.fn(),
@@ -92,7 +92,7 @@ vi.mock('./browser-session-ua', () => ({
   installBrowserSessionUserAgentPolicy: vi.fn(() => vi.fn())
 }))
 vi.mock('./browser-process-user-agent', () => ({
-  getBrowserProcessUserAgentIdentity: () => ({ mode: 'clean', userAgent: 'Mozilla/5.0 Orca' })
+  getBrowserProcessUserAgentIdentity: () => ({ mode: 'clean', userAgent: 'Mozilla/5.0 Quirky' })
 }))
 vi.mock('./browser-webauthn-access', () => ({
   allowsBrowserWebAuthnPermission: () => false,
@@ -155,9 +155,9 @@ describe('partition download policy', () => {
 
   it('cancels a download on a partition that asked for the deny, routing nothing', async () => {
     const install = await loadInstaller()
-    install(profileFor('orca-doc-preview'), { downloads: 'deny' })
+    install(profileFor('quirky-doc-preview'), { downloads: 'deny' })
 
-    expect(fireWillDownload('orca-doc-preview').cancelled).toBe(true)
+    expect(fireWillDownload('quirky-doc-preview').cancelled).toBe(true)
     expect(mocks.handleGuestWillDownload).not.toHaveBeenCalled()
   })
 
@@ -166,13 +166,13 @@ describe('partition download policy', () => {
   // is about to arrive normally.
   it('tells the reader about the refusal, and only on the partition that refused', async () => {
     const install = await loadInstaller()
-    install(profileFor('orca-doc-preview'), { downloads: 'deny' })
+    install(profileFor('quirky-doc-preview'), { downloads: 'deny' })
     install(profileFor('persist:browsing-1'))
 
     fireWillDownload('persist:browsing-1')
     expect(mocks.noticeDocPreviewDownloadBlocked).not.toHaveBeenCalled()
 
-    fireWillDownload('orca-doc-preview')
+    fireWillDownload('quirky-doc-preview')
     expect(mocks.noticeDocPreviewDownloadBlocked).toHaveBeenCalledWith(
       expect.objectContaining({ id: 42 })
     )
@@ -182,10 +182,10 @@ describe('partition download policy', () => {
   // installed for one partition must not follow the next partition that installs after it.
   it('keeps each partition on its own decision', async () => {
     const install = await loadInstaller()
-    install(profileFor('orca-doc-preview'), { downloads: 'deny' })
+    install(profileFor('quirky-doc-preview'), { downloads: 'deny' })
     install(profileFor('persist:browsing-1'))
 
-    expect(fireWillDownload('orca-doc-preview').cancelled).toBe(true)
+    expect(fireWillDownload('quirky-doc-preview').cancelled).toBe(true)
     expect(fireWillDownload('persist:browsing-1').cancelled).toBe(false)
     expect(mocks.handleGuestWillDownload).toHaveBeenCalledTimes(1)
   })
@@ -262,13 +262,13 @@ describe('partition permission policy', () => {
     expect(requestingUrl()).toBe('https://login.acme.okta.com/frame')
     expect(mocks.notifyPermissionDenied).not.toHaveBeenCalled()
 
-    // A link Orca refuses to ask about keeps the denial notice.
+    // A link Quirky refuses to ask about keeps the denial notice.
     mocks.requestExternalAppLaunch.mockReturnValueOnce(false)
     requestHandler(guest, 'openExternal', (allowed) => decisions.push(allowed), details)
     expect(mocks.notifyPermissionDenied).toHaveBeenCalledWith(
       expect.objectContaining({ guestWebContentsId: 9, permission: 'openExternal' })
     )
-    // Chromium's own launch stays denied either way; Orca opens the app after the user says yes.
+    // Chromium's own launch stays denied either way; Quirky opens the app after the user says yes.
     expect(decisions).toEqual([false, false])
   })
 
@@ -283,8 +283,8 @@ describe('partition permission policy', () => {
 
   it('denies every request and check on a strict partition without WebAuthn handlers', async () => {
     const install = await loadInstaller()
-    install(profileFor('orca-doc-preview'), { permissions: 'deny' })
-    const sess = sessionsByPartition.get('orca-doc-preview')
+    install(profileFor('quirky-doc-preview'), { permissions: 'deny' })
+    const sess = sessionsByPartition.get('quirky-doc-preview')
     if (!sess) {
       throw new Error('Expected the preview session')
     }

@@ -19,7 +19,7 @@ The safely expired owner is the claim for the terminal turn whose cleanup has be
 From the worktree root, using installed dependencies:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/codex-prompt-claim-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/codex-prompt-claim-retention/reproduce.cjs
 ```
 
 For Electron, use its installed executable with `ELECTRON_RUN_AS_NODE=1`, the same flags and script. The final optional argument selects the report path; the default is `node-results.json` beside the script. No Electron window is created.

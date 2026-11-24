@@ -14,7 +14,7 @@ import { AddRemoteHostSshConfigPicker } from './AddRemoteHostSshConfigPicker'
 import { AddRemoteHostSshFormPanel } from './AddRemoteHostSshFormPanel'
 import { AddRemoteHostServerFormPanel } from './AddRemoteHostServerFormPanel'
 import {
-  addAllSshConfigHostsToOrca,
+  addAllSshConfigHostsToQuirky,
   loadSshConfigHostsForPicker,
   prefillFormFromSshConfigHost,
   saveNewSshHostFromForm
@@ -213,10 +213,10 @@ export function AddRemoteHostDialog({
     )
   }
 
-  const addAllConfigHostsToOrca = async () => {
+  const addAllConfigHostsToQuirky = async () => {
     setIsBulkImporting(true)
     try {
-      const result = await addAllSshConfigHostsToOrca({
+      const result = await addAllSshConfigHostsToQuirky({
         ssh: window.api.ssh,
         recordSshRepoReadoptions,
         setSshTargetsMetadata,
@@ -345,7 +345,7 @@ export function AddRemoteHostDialog({
               onQueryChange={(query) => void loadSshConfigHosts(query)}
               onRetry={() => void loadSshConfigHosts(configSearchQuery.current, { refresh: true })}
               onBack={leaveSshConfigPicker}
-              onAddAllToOrca={() => void addAllConfigHostsToOrca()}
+              onAddAllToQuirky={() => void addAllConfigHostsToQuirky()}
             />
           </div>
         ) : renderMode === 'ssh' ? (

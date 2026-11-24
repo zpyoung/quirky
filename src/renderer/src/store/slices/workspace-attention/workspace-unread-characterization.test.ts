@@ -23,7 +23,7 @@ import {
 
 // Pins the unread transitions (workspace flag, tab/pane/completion markers, persistence,
 // activity bumps, Dock count, floating dot). The production on-screen scan runs against each store
-// with Orca's window visible and focused unless a test says otherwise.
+// with Quirky's window visible and focused unless a test says otherwise.
 
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }

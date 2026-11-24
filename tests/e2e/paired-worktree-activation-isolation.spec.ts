@@ -1,4 +1,4 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   createRuntimeDesktopPairingOffer,
   launchPairedElectronClient
@@ -7,13 +7,13 @@ import { worktreeRowSurface } from './worktree-row-locators'
 import { callEnvironment } from './helpers/paired-host-terminal'
 
 test('remote CLI creation updates the catalog while a paired desktop stays in its local workspace', async ({
-  orcaPage,
+  quirkyPage,
   testRepoPath
 }, testInfo) => {
   test.setTimeout(180_000)
-  const hostRepoId = await orcaPage.evaluate(() => window.__store!.getState().repos[0].id)
+  const hostRepoId = await quirkyPage.evaluate(() => window.__store!.getState().repos[0].id)
   const client = await launchPairedElectronClient(
-    await createRuntimeDesktopPairingOffer(orcaPage),
+    await createRuntimeDesktopPairingOffer(quirkyPage),
     testInfo,
     'Navigation host'
   )

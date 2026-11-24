@@ -4,7 +4,7 @@ import { createFloatingWorkspaceTerminalTab } from '@/lib/floating-workspace-tab
 import { revealFloatingWorkspacePanel } from '@/lib/floating-workspace-panel-reveal'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 
-/** Opens a new terminal where this tab lives; a new terminal's shell has Orca's agent functions. */
+/** Opens a new terminal where this tab lives; a new terminal's shell has Quirky's agent functions. */
 export function openTerminalBesideTab(terminalTabId: string): boolean {
   const state = useAppStore.getState()
   const tab = Object.values(state.unifiedTabsByWorktree)

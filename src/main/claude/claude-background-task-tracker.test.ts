@@ -703,7 +703,7 @@ describe('ClaudeBackgroundTaskTracker', () => {
     // On this same frame the roster's `settleTurn` moves a still-working
     // FOREGROUND child to `unverifiable` and leaves a backgrounded one alone.
     // The strip has no `unverifiable` row, so keeping one would assert `live`
-    // for work Orca has already stopped vouching for.
+    // for work Quirky has already stopped vouching for.
     const tracker = new ClaudeBackgroundTaskTracker()
     tracker.observe({ type: 'user' }, true)
     tracker.observe(started('fore', false))

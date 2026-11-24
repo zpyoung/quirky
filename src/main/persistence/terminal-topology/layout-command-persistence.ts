@@ -16,7 +16,7 @@ import type { ExecutionHostId } from '../../../shared/execution-host'
 import { applyLayout, keepFrozen, topologyCommitContext } from './terminal-topology-commit'
 import { applyLayoutRenames } from './terminal-layout-renames-commit'
 import { isTerminalClose, keptOnWriteFailure } from './terminal-close-write-failure'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { moveTabAcrossPartitions } from './cross-partition-tab-move'
 import { writeRestorable } from './restorable-write'
 import { raisingBindingGenerations } from './layout-command-binding-generations'
@@ -77,7 +77,7 @@ export class LayoutCommandPersistence {
       applyLayout(resolved, command, topologyCommitContext(context))
     )
     // Switch point: a terminal close stands once applied, as the switch-off window shows it.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && context.writeLater && isTerminalClose(command)) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN && context.writeLater && isTerminalClose(command)) {
       return keptOnWriteFailure(
         (mutate) => context.runtime.runDurableMutation(mutate),
         writingOnly(resolved, commit),

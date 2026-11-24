@@ -415,9 +415,9 @@ function finishInstructions(reportPath: string): string {
     `Write the JSON report atomically to this exact absolute path: ${JSON.stringify(reportPath)}`,
     `The complete report file is limited to ${MAX_OBJECTIVE_REPORT_BYTES} UTF-8 bytes, independently of the JavaScript UTF-16 code-unit limits on its string fields.`,
     `This worker-start task prompt is independently limited to ${ORCHESTRATION_WORKER_START_TASK_SPEC_MAX_BYTES} UTF-8 bytes before dispatch.`,
-    'Then finish using the worker identifiers Orca supplied in your preamble:',
-    `orca orchestration send --from <workerHandle> --type worker_done --outcome succeeded --task-id <taskId> --dispatch-id <dispatchId> --report-path ${JSON.stringify(reportPath)} [--files-modified a,b,c] --subject "<one line>" --body "<brief completion notification; do not copy the full report summary>"`,
-    'Orca validates the report before accepting worker_done.',
+    'Then finish using the worker identifiers Quirky supplied in your preamble:',
+    `quirky orchestration send --from <workerHandle> --type worker_done --outcome succeeded --task-id <taskId> --dispatch-id <dispatchId> --report-path ${JSON.stringify(reportPath)} [--files-modified a,b,c] --subject "<one line>" --body "<brief completion notification; do not copy the full report summary>"`,
+    'Quirky validates the report before accepting worker_done.',
     'Correct this same report file and resend the same worker_done command only when lifecycle.action is "rejected" and either lifecycle.authority is "run_home", or lifecycle.code is "heimdall_report_invalid" and its local/direct preflight reason explicitly says this Dispatch is still active.',
     'A terminal or legacy receipt such as {action:"completed",authority:"worker_server_legacy"}, or any rejection without one of those active confirmations, is not corrective authorization. Do not resend or self-redispatch; await owner review and an owner-authorized fresh Dispatch after live work is ruled out.',
     'If the work itself failed, still write the most complete valid report possible and send worker_done with --outcome failed.'

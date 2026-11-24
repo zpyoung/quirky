@@ -44,7 +44,7 @@ export type StructuredMobileSession = ReturnType<typeof useMobileStructuredAgent
     commandRefusalCauses: MobileNativeChatCommandRefusalCauses
     /** Running child work for the strip above the composer, as desktop shows it. */
     backgroundTasks: MobileStructuredBackgroundTasks
-    /** Where this chat's `::orca-visual` lines read their HTML from; null without a client. */
+    /** Where this chat's `::quirky-visual` lines read their HTML from; null without a client. */
     visualSource: MobileNativeChatVisualSource | null
     /** This phone's photos, by the row id their send is drawn under. */
     imagePreviewsByMessageId: Record<string, string[]>

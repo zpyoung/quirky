@@ -1,5 +1,5 @@
 import { parsePaneKey } from '../../../../../shared/stable-pane-id'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 
 export type AskAttributionParams = {
   paneKey?: string
@@ -17,7 +17,7 @@ export type AskAttribution = {
   anyIdentityClaimed: boolean
 }
 
-function resolveLivePaneKey(paneKey: string, runtime: OrcaRuntimeService): string | undefined {
+function resolveLivePaneKey(paneKey: string, runtime: QuirkyRuntimeService): string | undefined {
   return parsePaneKey(paneKey) !== null
     ? (runtime.getAgentStatusTerminalHandleForPaneKey(paneKey) ?? undefined)
     : undefined
@@ -25,7 +25,10 @@ function resolveLivePaneKey(paneKey: string, runtime: OrcaRuntimeService): strin
 
 // Why: folder workspaces have worktreeId-shaped ids (tech.md C3), so resolving either claim
 // through the same worktree selector covers both without a separate workspace lookup.
-async function isKnownWorktreeId(worktreeId: string, runtime: OrcaRuntimeService): Promise<boolean> {
+async function isKnownWorktreeId(
+  worktreeId: string,
+  runtime: QuirkyRuntimeService
+): Promise<boolean> {
   try {
     await runtime.showManagedWorktree(`id:${worktreeId}`)
     return true
@@ -41,7 +44,7 @@ async function isKnownWorktreeId(worktreeId: string, runtime: OrcaRuntimeService
  */
 export async function resolveAskAttribution(
   params: AskAttributionParams,
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
 ): Promise<AskAttribution> {
   const anyIdentityClaimed = Boolean(
     params.paneKey || params.terminalHandle || params.worktreeId || params.workspaceId
@@ -57,7 +60,9 @@ export async function resolveAskAttribution(
     }
   }
 
-  const resolvedPaneKey = params.terminalHandle ? runtime.getTerminalPaneKey(params.terminalHandle) : null
+  const resolvedPaneKey = params.terminalHandle
+    ? runtime.getTerminalPaneKey(params.terminalHandle)
+    : null
   if (resolvedPaneKey) {
     return {
       paneKey: resolvedPaneKey,
@@ -69,7 +74,9 @@ export async function resolveAskAttribution(
 
   const claimedWorktreeId = params.worktreeId ?? params.workspaceId ?? null
   const worktreeId =
-    claimedWorktreeId && (await isKnownWorktreeId(claimedWorktreeId, runtime)) ? claimedWorktreeId : null
+    claimedWorktreeId && (await isKnownWorktreeId(claimedWorktreeId, runtime))
+      ? claimedWorktreeId
+      : null
 
   return {
     paneKey: null,

@@ -35,8 +35,8 @@ export type WindowCloseRunningWork =
  * - **Quit only considers SSH relay ptys.** Quitting is an unambiguous instruction to end this
  *   machine's processes (#524), but it is not an instruction to end execution on someone else's:
  *   an SSH relay (`ssh:` ids) keeps its terminals only for its grace period after the client
- *   detaches, then kills them. A paired runtime (`remote:` ids: `orca serve`, managed SSH/WSL
- *   orcad) owns its terminals outright and keeps them after the client quits, so quitting
+ *   detaches, then kills them. A paired runtime (`remote:` ids: `quirky serve`, managed SSH/WSL
+ *   quirkyd) owns its terminals outright and keeps them after the client quits, so quitting
  *   endangers nothing there, reachable or not (#29916).
  * - **Only a remote `unverifiable` warns.** A local probe has no transport to lose, so its failure
  *   means the pty is gone. A remote one that cannot be reached is the case

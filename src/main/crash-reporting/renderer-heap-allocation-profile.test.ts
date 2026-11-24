@@ -8,8 +8,8 @@ import {
 } from './renderer-heap-allocation-profile'
 import { clearCrashBreadcrumbsForTest, getCrashBreadcrumbSnapshot } from './crash-breadcrumb-store'
 
-const PAGE = 'file:///Users/someone/Orca.app/Contents/Resources/app.asar/out/renderer/index.html'
-const BUNDLE = 'file:///Users/someone/Orca.app/Contents/Resources/app.asar/out/renderer/assets/'
+const PAGE = 'file:///Users/someone/Quirky.app/Contents/Resources/app.asar/out/renderer/index.html'
+const BUNDLE = 'file:///Users/someone/Quirky.app/Contents/Resources/app.asar/out/renderer/assets/'
 
 const profile = {
   head: {

@@ -1,6 +1,6 @@
-import { OrcaRuntimeWithOnPtyExit } from '../lifecycle/pty-exit-lifecycle'
+import { QuirkyRuntimeWithOnPtyExit } from '../lifecycle/pty-exit-lifecycle'
 import type { PtyLivenessVerdict } from '../../../../shared/pty-liveness-verdict'
-import type { DriverState } from '../../orca-runtime-core'
+import type { DriverState } from '../../quirky-runtime-core'
 import type { TerminalInputKind } from '../../../../shared/terminal-input-kind'
 import { isUntypedTerminalInput } from '../../../../shared/terminal-untyped-input'
 import { clampTerminalViewport } from '../../../../shared/terminal-viewport'
@@ -9,7 +9,7 @@ import { getPtyTerminalState, getTerminalState } from '../../terminal-wait-resul
 // Orphaned verdicts are bounded; active PTYs retain theirs until new evidence resolves them.
 const MAX_TRACKED_PTY_LIVENESS_VERDICTS = 256
 
-export abstract class OrcaRuntimeWithMarkPtyLivenessUnverifiable extends OrcaRuntimeWithOnPtyExit {
+export abstract class QuirkyRuntimeWithMarkPtyLivenessUnverifiable extends QuirkyRuntimeWithOnPtyExit {
   protected abstract leafExistsForPty(ptyId: string): boolean
   abstract recordRendererGeometry(ptyId: string, cols: number, rows: number): void
   abstract isResizeSuppressed(): boolean
@@ -41,7 +41,7 @@ export abstract class OrcaRuntimeWithMarkPtyLivenessUnverifiable extends OrcaRun
   }
 
   /**
-   * Records that Orca asked this PTY to stop — a close, a stop, a teardown.
+   * Records that Quirky asked this PTY to stop — a close, a stop, a teardown.
    *
    * Why before the kill and not at the exit: a requested stop can still be
    * delivered by the provider's own exit event, which carries a process status

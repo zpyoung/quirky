@@ -1,5 +1,5 @@
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
-import type * as ProcessHostModule from '@orca/process-host'
+import type * as ProcessHostModule from '@quirky/process-host'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   completeFakeSpawn,
@@ -17,7 +17,7 @@ const { spawnMock, resolverMock } = vi.hoisted(() => ({
 }))
 vi.mock('node:child_process', async (original) => ({ ...(await original()), spawn: spawnMock }))
 vi.mock('../../github-api-repository', () => ({ resolveGitHubRepoExecution: resolverMock }))
-vi.mock('@orca/process-host', async (original) => {
+vi.mock('@quirky/process-host', async (original) => {
   const actual = await original<typeof ProcessHostModule>()
   return {
     ...actual,

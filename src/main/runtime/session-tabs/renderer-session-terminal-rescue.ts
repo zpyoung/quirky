@@ -1,11 +1,11 @@
-import type { OrcaRuntimeWithWaitForLeafPtyId as WaitForLeafPtyIdMethods } from '../terminal/view/renderer-terminal-snapshot'
-import { OrcaRuntimeWithWaitForMobileTerminalSurface } from '../terminal/view/mobile-terminal-surface'
+import type { QuirkyRuntimeWithWaitForLeafPtyId as WaitForLeafPtyIdMethods } from '../terminal/view/renderer-terminal-snapshot'
+import { QuirkyRuntimeWithWaitForMobileTerminalSurface } from '../terminal/view/mobile-terminal-surface'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records'
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../shared/runtime-types'
 import { worktreeIdsEqual } from '../../../shared/worktree/id'
 
-export abstract class OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals extends OrcaRuntimeWithWaitForMobileTerminalSurface {
+export abstract class QuirkyRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals extends QuirkyRuntimeWithWaitForMobileTerminalSurface {
   protected abstract resolveHandleForTab(
     ...args: Parameters<WaitForLeafPtyIdMethods['resolveHandleForTab']>
   ): ReturnType<WaitForLeafPtyIdMethods['resolveHandleForTab']>

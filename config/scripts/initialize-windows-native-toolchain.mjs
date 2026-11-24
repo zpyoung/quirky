@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 
-const ENVIRONMENT_MARKER = 'ORCA_WINDOWS_NATIVE_ENVIRONMENT'
+const ENVIRONMENT_MARKER = 'QUIRKY_WINDOWS_NATIVE_ENVIRONMENT'
 const compilerEnvironmentKey =
   /^(PATH|INCLUDE|LIB|LIBPATH|VCINSTALLDIR|VSINSTALLDIR|VisualStudioVersion|VSCMD_.+|VCTools.+|WindowsSDK.+|UniversalCRT.+|UCRTVersion)$/i
 
@@ -114,8 +114,8 @@ export function initializeWindowsNativeToolchain() {
       args: [],
       env: {
         ...process.env,
-        ORCA_WINDOWS_VSDEVCMD: devcmd,
-        ORCA_WINDOWS_NATIVE_ARCH: process.arch
+        QUIRKY_WINDOWS_VSDEVCMD: devcmd,
+        QUIRKY_WINDOWS_NATIVE_ARCH: process.arch
       },
       stdio: 'pipe',
       timeoutMs: 60_000

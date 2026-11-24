@@ -1,8 +1,8 @@
 /**
- * Orca's managed block inside `$DSH_HOME/cordis.patch.yml`.
+ * Quirky's managed block inside `$DSH_HOME/cordis.patch.yml`.
  *
  * That file is a hand-editable top-level YAML sequence of loader patch entries, and no
- * YAML library is vendored in the main process, so Orca manages only its own
+ * YAML library is vendored in the main process, so Quirky manages only its own
  * marker-delimited region: install rewrites the region, remove strips it, and everything
  * outside the markers is copied through byte for byte. Appending sequence entries to a
  * block sequence is always valid YAML, so the region can live at the end of any file.
@@ -14,11 +14,11 @@
  * document.
  */
 
-const START_MARKER = '# >>> orca-managed-dsh-hooks (managed by Orca; do not edit) >>>'
-const END_MARKER = '# <<< orca-managed-dsh-hooks <<<'
+const START_MARKER = '# >>> quirky-managed-dsh-hooks (managed by Quirky; do not edit) >>>'
+const END_MARKER = '# <<< quirky-managed-dsh-hooks <<<'
 
-/** The loader row id Orca owns. A patch row is addressed by id, so this must be stable. */
-const MANAGED_ROW_ID = 'orca-agent-hooks'
+/** The loader row id Quirky owns. A patch row is addressed by id, so this must be stable. */
+const MANAGED_ROW_ID = 'quirky-agent-hooks'
 
 const EMPTY_FLOW_SEQUENCE = '[]'
 
@@ -76,7 +76,7 @@ function unquoteYamlScalar(value: string): string {
   return trimmed
 }
 
-/** The `configPath` Orca's managed region currently points at, if any. */
+/** The `configPath` Quirky's managed region currently points at, if any. */
 export function readManagedDshHooksConfigPath(text: string): string | undefined {
   const region = findManagedDshPatchRegion(text)
   if (!region) {
@@ -120,12 +120,12 @@ function isEmptyFlowDocument(lines: readonly string[]): boolean {
 }
 
 /**
- * True when Orca cannot append its block to this file: the body is a NON-EMPTY flow
+ * True when Quirky cannot append its block to this file: the body is a NON-EMPTY flow
  * sequence (`[a, b]`, or one spread over lines).
  *
- * Why it matters: YAML forbids a block entry after a flow sequence, so appending Orca's
+ * Why it matters: YAML forbids a block entry after a flow sequence, so appending Quirky's
  * `- insert:` would produce a file DSH cannot parse — losing the user's own patch layer as
- * well as Orca's hooks. There is no safe in-place edit, so install refuses instead.
+ * well as Quirky's hooks. There is no safe in-place edit, so install refuses instead.
  *
  * Exported because status has to report the same refusal on every read, not just on the
  * install that first hit it.
@@ -147,7 +147,7 @@ function joinPreservingTrailingNewline(lines: readonly string[]): string {
 }
 
 /**
- * Install (or refresh) Orca's managed region so the DSH hook bridge reads
+ * Install (or refresh) Quirky's managed region so the DSH hook bridge reads
  * `managedHooksPath`. Everything outside the markers is preserved.
  *
  * Returns null when the file cannot be edited safely — see isNonEmptyFlowDocument. The
@@ -179,7 +179,7 @@ export function applyManagedDshPatch(text: string, managedHooksPath: string): st
   return joinPreservingTrailingNewline([...withoutTrailingBlanks(kept), ...block])
 }
 
-/** Strip Orca's managed region, restoring `[]` when nothing else is left. */
+/** Strip Quirky's managed region, restoring `[]` when nothing else is left. */
 export function removeManagedDshPatch(text: string): { text: string; changed: boolean } {
   const region = findManagedDshPatchRegion(text)
   if (!region) {
@@ -187,7 +187,7 @@ export function removeManagedDshPatch(text: string): { text: string; changed: bo
   }
   const kept = withoutTrailingBlanks(stripRegion(splitLines(text), region))
   // Why restore `[]`: a document of comments alone is not a valid entry list, so removing
-  // Orca's block must not leave DSH a file it cannot parse.
+  // Quirky's block must not leave DSH a file it cannot parse.
   const body = kept.every((line) => isBlank(line) || isComment(line))
     ? [...kept, EMPTY_FLOW_SEQUENCE]
     : kept

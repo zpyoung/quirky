@@ -150,7 +150,7 @@
       }
     },
     "2481ef2215b8": {
-      "name": "projectRepoNotInOrca",
+      "name": "projectRepoNotInQuirky",
       "ordinal": 69,
       "value": {
         "$rpc": "null"
@@ -195,7 +195,7 @@
       }
     },
     "2db932a72b8a": {
-      "name": "trustedOrcaHooks",
+      "name": "trustedQuirkyHooks",
       "ordinal": 54,
       "value": {}
     },
@@ -774,7 +774,7 @@
       }
     },
     "7d8029e889cf": {
-      "name": "projectRepoNotInOrca",
+      "name": "projectRepoNotInQuirky",
       "ordinal": 27,
       "value": {
         "$rpc": "null"
@@ -1319,7 +1319,7 @@
     "e74a1813f5ba": {
       "name": "error",
       "ordinal": 81,
-      "value": "Update Orca desktop to use Tasks on mobile."
+      "value": "Update Quirky desktop to use Tasks on mobile."
     },
     "eb79a9b3682a": {
       "status": "fulfilled",

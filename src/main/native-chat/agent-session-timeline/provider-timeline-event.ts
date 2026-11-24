@@ -70,7 +70,7 @@ type Produced = {
 type Joined = { join?: ProviderTimelineJoin }
 
 export type ProviderTimelineEvent =
-  /** Orca's send reached the provider. It names the open turn when nothing opened that one, else
+  /** Quirky's send reached the provider. It names the open turn when nothing opened that one, else
    *  the next; `join.turn` names the turn it opens. The send's own row is the bubble. */
   | {
       type: 'input.accepted'

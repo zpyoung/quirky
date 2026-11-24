@@ -9,7 +9,7 @@ import { holdPaneResumeInPlace } from './pane-spawn-deferral-registry'
 const mocks = vi.hoisted(() => ({ layoutOwnerIsMain: false, launch: vi.fn(() => true) }))
 
 vi.mock('../../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return mocks.layoutOwnerIsMain
   }
 }))

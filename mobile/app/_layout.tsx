@@ -10,7 +10,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import * as Notifications from 'expo-notifications'
 import * as Linking from 'expo-linking'
 import { colors } from '../src/theme/mobile-theme'
-import { OrcaLogo } from '../src/components/OrcaLogo'
+import { QuirkyLogo } from '../src/components/QuirkyLogo'
 import { RpcClientProvider } from '../src/transport/client-context'
 import { getNotificationNavigationTarget } from '../src/notifications/notification-routing'
 import { useOpenNotificationRoute } from '../src/notifications/use-open-notification-route'
@@ -33,7 +33,7 @@ import { SideSafeArea } from '../src/layout/side-safe-area'
 SplashScreen.preventAutoHideAsync()
 
 // Why at boot and not only on subscribe: the gateway's FCM payload targets the
-// 'orca-desktop' channel, and a background push can land before any socket has
+// 'quirky-desktop' channel, and a background push can land before any socket has
 // connected. Android drops a notification whose channel does not exist yet.
 void ensureDesktopNotificationChannel().catch(() => {})
 void registerPushDismissalTask().catch(() => {})
@@ -75,7 +75,7 @@ export default function RootLayout() {
   useEffect(() => appUpdateChecker.start(), [])
   useEffect(() => startAndroidForegroundPushPresentation(), [])
 
-  // Why: route `orca://pair?...` deep links to the confirm screen so
+  // Why: route `quirky://pair?...` deep links to the confirm screen so
   // the same pairing flow runs whether the link arrived via QR scan,
   // paste, AirDrop, Messages, or `xcrun simctl openurl`. getInitialURL
   // covers cold-start (link tapped while app was closed); the listener
@@ -85,7 +85,7 @@ export default function RootLayout() {
       const code = extractPairingCodeFromUrl(url)
       if (code) {
         // Why: Android camera launches can leave Expo Router's unmatched
-        // `orca://pair` route underneath this screen; replacing keeps cancel
+        // `quirky://pair` route underneath this screen; replacing keeps cancel
         // and edge-back from revealing the router error page.
         router.replace({ pathname: '/pair-confirm', params: { code } })
       }
@@ -220,7 +220,7 @@ export default function RootLayout() {
               name="index"
               options={{
                 headerShown: false,
-                headerTitle: () => <OrcaLogo size={22} />
+                headerTitle: () => <QuirkyLogo size={22} />
               }}
             />
             <Stack.Screen name="pair-scan" options={{ headerShown: false }} />

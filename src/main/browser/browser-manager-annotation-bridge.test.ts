@@ -113,7 +113,7 @@ describe('browserManager.setAnnotationViewportBridge', () => {
       expect.any(Number),
       [
         expect.objectContaining({
-          code: expect.stringContaining('__orcaBrowserAnnotationViewportBridge')
+          code: expect.stringContaining('__quirkyBrowserAnnotationViewportBridge')
         })
       ],
       false

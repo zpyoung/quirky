@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RpcContext } from '../../../core'
 import { createOrchestrationRpcHarness } from '../rpc-test-harness'
 import type { OrchestrationDb } from '../../../../orchestration/db'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { buildInjectRejectionMessage } from '../../../../../../shared/orchestration-dispatch-refusal-contract'
 import { createRootDispatch } from '../../../../orchestration/db/root-dispatch-test-fixture'
 import { dispatchPreambleSendOptions } from '../../../../orchestration/preamble'
@@ -11,7 +11,7 @@ describe('orchestration RPC methods', () => {
   const h = createOrchestrationRpcHarness()
   const { coordinatorPaneKey, findMethod } = h
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let ctx: RpcContext
 
   function setup(withBoundRun = true): void {
@@ -348,7 +348,7 @@ describe('orchestration RPC methods', () => {
 
       expect(send).toHaveBeenCalledWith(
         'term_a',
-        expect.stringContaining('orca-dev orchestration send'),
+        expect.stringContaining('quirky-dev orchestration send'),
         expect.objectContaining(dispatchPreambleSendOptions(expect.any(String)))
       )
     })
@@ -356,7 +356,7 @@ describe('orchestration RPC methods', () => {
     it('uses the target pane CLI command for the returned preamble', async () => {
       setup()
       const task = db.createTask({ spec: 'work' })
-      vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('orca-ide')
+      vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('quirky-ide')
 
       const result = (await call('orchestration.dispatch', {
         task: task.id,
@@ -365,8 +365,8 @@ describe('orchestration RPC methods', () => {
       })) as { preamble: string }
 
       expect(runtime.getTerminalOrchestrationCliCommand).toHaveBeenCalledWith('term_wsl')
-      expect(result.preamble).toContain('orca-ide orchestration send')
-      expect(result.preamble).not.toMatch(/(^|\s)orca orchestration/m)
+      expect(result.preamble).toContain('quirky-ide orchestration send')
+      expect(result.preamble).not.toMatch(/(^|\s)quirky orchestration/m)
     })
 
     it('injects preamble through the agent prompt path instead of raw terminal send', async () => {

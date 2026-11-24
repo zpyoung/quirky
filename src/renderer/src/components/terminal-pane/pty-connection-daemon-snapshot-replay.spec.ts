@@ -65,7 +65,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     it('clears the captured pen for a normal-buffer fallback reattach', async () => {
       const { connectPanePty } = await import('./pty-connection')
       const transport = createMockTransport('tab-pty')
-      const snapshot = 'ORCA-SGR-REPRO \x1b[1mBOLD-RUN-LEFT-OPEN\x1b[1;34H'
+      const snapshot = 'QUIRKY-SGR-REPRO \x1b[1mBOLD-RUN-LEFT-OPEN\x1b[1;34H'
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
           return { id: sessionId, snapshot }

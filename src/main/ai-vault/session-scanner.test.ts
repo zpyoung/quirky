@@ -48,7 +48,7 @@ afterEach(async () => {
 
 describe('scanAiVaultSessions', () => {
   it('indexes Claude and Codex transcripts with resume commands', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     const claudeRoot = roots.claudeProjectsDir
@@ -219,8 +219,8 @@ describe('scanAiVaultSessions', () => {
     expect(codex?.firstUserPrompt).toBeUndefined()
   })
 
-  it('indexes Codex sessions from Orca runtime homes with resumable commands', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-codex-runtime-'))
+  it('indexes Codex sessions from Quirky runtime homes with resumable commands', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-codex-runtime-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     const runtimeHome = join(root, 'codex-runtime-home', 'home')
@@ -241,7 +241,7 @@ describe('scanAiVaultSessions', () => {
           type: 'session_meta',
           payload: {
             id: '019e9693-64fc-7370-9c18-7e625c595d0f',
-            cwd: '/Users/nwparker/orca/workspaces/orca/mem4'
+            cwd: '/Users/nwparker/quirky/workspaces/quirky/mem4'
           }
         },
         {
@@ -267,20 +267,20 @@ describe('scanAiVaultSessions', () => {
     expect(result.sessions[0]).toMatchObject({
       agent: 'codex',
       sessionId: '019e9693-64fc-7370-9c18-7e625c595d0f',
-      cwd: '/Users/nwparker/orca/workspaces/orca/mem4',
+      cwd: '/Users/nwparker/quirky/workspaces/quirky/mem4',
       codexHome: runtimeHome,
-      resumeCommand: `cd '/Users/nwparker/orca/workspaces/orca/mem4' && CODEX_HOME='${runtimeHome}' codex resume '019e9693-64fc-7370-9c18-7e625c595d0f'`
+      resumeCommand: `cd '/Users/nwparker/quirky/workspaces/quirky/mem4' && CODEX_HOME='${runtimeHome}' codex resume '019e9693-64fc-7370-9c18-7e625c595d0f'`
     })
   })
 
   it('indexes WSL home session roots', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-wsl-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-wsl-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     const wslHome = join(root, 'wsl', 'Ubuntu', 'home', 'ada')
     await mkdir(join(wslHome, '.claude', 'projects', 'repo'), { recursive: true })
     await mkdir(
-      join(wslHome, '.local', 'share', 'orca', 'codex-runtime-home', 'home', 'sessions'),
+      join(wslHome, '.local', 'share', 'quirky', 'codex-runtime-home', 'home', 'sessions'),
       {
         recursive: true
       }
@@ -303,7 +303,7 @@ describe('scanAiVaultSessions', () => {
         wslHome,
         '.local',
         'share',
-        'orca',
+        'quirky',
         'codex-runtime-home',
         'home',
         'sessions',
@@ -339,12 +339,12 @@ describe('scanAiVaultSessions', () => {
       'Codex WSL title'
     ])
     expect(result.sessions.find((session) => session.agent === 'codex')?.codexHome).toBe(
-      join(wslHome, '.local', 'share', 'orca', 'codex-runtime-home', 'home')
+      join(wslHome, '.local', 'share', 'quirky', 'codex-runtime-home', 'home')
     )
   })
 
   it('skips hidden Codex context blocks when choosing session titles', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-codex-hidden-context-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-codex-hidden-context-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     await mkdir(join(roots.codexSessionsDir, '2026', '06', '11'), { recursive: true })
@@ -397,7 +397,7 @@ describe('scanAiVaultSessions', () => {
   })
 
   it('indexes every supported agent transcript format with native resume commands', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-all-agents-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-all-agents-'))
     tempRoots.push(root)
     const { roots, antigravitySessionId, ompSessionFile, primeAgentSessionFile } =
       await writeEveryAgentVault(root)
@@ -483,7 +483,7 @@ describe('scanAiVaultSessions', () => {
     // OMP writes the model on `model_change.model` (not Pi's `modelId`). With no
     // assistant message yet, the model must still come through — proving the
     // model_change fallback rather than assistant-message capture.
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-omp-mc-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-omp-mc-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     await mkdir(roots.ompSessionsDir, { recursive: true })
@@ -512,7 +512,7 @@ describe('scanAiVaultSessions', () => {
 
   it('strips newline-heavy Grok user_query envelopes without regex matching', async () => {
     const matchSpy = vi.spyOn(String.prototype, 'match')
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-grok-large-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-grok-large-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     const sessionDir = join(roots.grokSessionsDir, encodeURIComponent('/tmp/grok'), 'large-session')

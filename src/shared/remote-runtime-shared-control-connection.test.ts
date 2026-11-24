@@ -684,7 +684,7 @@ describe('RemoteRuntimeSharedControlConnection', () => {
     const connection = new RemoteRuntimeSharedControlConnection(server.pairing)
 
     await expect(connection.request('worktree.ps', undefined, 1000)).rejects.toThrow(
-      'Remote Orca runtime closed the connection'
+      'Remote Quirky runtime closed the connection'
     )
     expect(connection.getDiagnostics()).toMatchObject({
       state: 'reconnecting',
@@ -712,7 +712,7 @@ it('cancels a pending subscription setup without canceling a sibling on the shar
     )
     const abandoned = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
     const sibling = connection.subscribe('files.watch', { worktree: 'two' }, 10_000, callbacks)
-    const siblingClosed = expect(sibling).rejects.toThrow('Remote Orca runtime')
+    const siblingClosed = expect(sibling).rejects.toThrow('Remote Quirky runtime')
     await vi.waitFor(() => expect(server.connectionCount()).toBe(1))
     controller.abort()
     await abandoned

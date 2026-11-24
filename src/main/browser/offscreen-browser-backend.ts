@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { BrowserWindow } from 'electron'
-import { ORCA_BROWSER_PARTITION } from '../../shared/constants'
-import { ORCA_BROWSER_GUEST_WEB_PREFERENCES } from '../../shared/browser-guest-web-preferences'
+import { QUIRKY_BROWSER_PARTITION } from '../../shared/constants'
+import { QUIRKY_BROWSER_GUEST_WEB_PREFERENCES } from '../../shared/browser-guest-web-preferences'
 import { mapSettledWithConcurrency } from '../../shared/map-with-concurrency'
 import type { BrowserBackend, BrowserBackendCreateTab } from './browser-backend'
 import type { BrowserManager } from './browser-manager'
@@ -9,7 +9,7 @@ import type { AgentBrowserBridge } from './agent-browser-bridge'
 import { browserSessionRegistry } from './browser-session-registry'
 import type { ServeBrowserPageState } from '../runtime/serve-browser-tab-layout'
 
-// Why: headless orca serve has no renderer window to host a <webview>, so each
+// Why: headless quirky serve has no renderer window to host a <webview>, so each
 // browser page is backed by a main-process offscreen BrowserWindow. The window
 // is never shown — it exists only so its WebContents can be driven over CDP and
 // streamed via the existing screencast path. Verified on macOS and on headless
@@ -50,7 +50,7 @@ export class OffscreenBrowserBackend implements BrowserBackend {
     const profile = params.profileId
       ? browserSessionRegistry.getProfile(params.profileId)
       : browserSessionRegistry.getDefaultProfile()
-    const partition = profile?.partition ?? ORCA_BROWSER_PARTITION
+    const partition = profile?.partition ?? QUIRKY_BROWSER_PARTITION
 
     const win = new BrowserWindow({
       show: false,
@@ -59,7 +59,7 @@ export class OffscreenBrowserBackend implements BrowserBackend {
       webPreferences: {
         // Why: offscreen pages are the SSH/headless browser backend; keep their
         // HTML fullscreen behavior aligned with desktop <webview> guests.
-        ...ORCA_BROWSER_GUEST_WEB_PREFERENCES,
+        ...QUIRKY_BROWSER_GUEST_WEB_PREFERENCES,
         partition,
         sandbox: true,
         contextIsolation: true,

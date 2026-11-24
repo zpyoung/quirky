@@ -61,7 +61,7 @@ export async function requestAutomationDispatch(
   const readRun = (): AutomationRun => {
     if (!ctx.isActive()) {
       throw new AutomationDispatchCancelledError(
-        'Orca stopped before this automation could launch.'
+        'Quirky stopped before this automation could launch.'
       )
     }
     const current = ctx.store.listAutomationRuns(automation.id).find((entry) => entry.id === run.id)

@@ -99,10 +99,10 @@ function countHookTrustTables(toml: string, key: string): number {
 }
 
 beforeEach(() => {
-  fakeHomeDir = mkdtempSync(join(tmpdir(), 'orca-codex-trust-carry-home-'))
-  userDataDir = mkdtempSync(join(tmpdir(), 'orca-codex-trust-carry-user-data-'))
-  previousUserDataPath = process.env.ORCA_USER_DATA_PATH
-  process.env.ORCA_USER_DATA_PATH = userDataDir
+  fakeHomeDir = mkdtempSync(join(tmpdir(), 'quirky-codex-trust-carry-home-'))
+  userDataDir = mkdtempSync(join(tmpdir(), 'quirky-codex-trust-carry-user-data-'))
+  previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
+  process.env.QUIRKY_USER_DATA_PATH = userDataDir
   homedirMock.mockReturnValue(fakeHomeDir)
   getPathMock.mockImplementation((name: string) => {
     if (name === 'userData') {
@@ -117,9 +117,9 @@ afterEach(() => {
   rmSync(fakeHomeDir, { recursive: true, force: true })
   rmSync(userDataDir, { recursive: true, force: true })
   if (previousUserDataPath === undefined) {
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_USER_DATA_PATH
   } else {
-    process.env.ORCA_USER_DATA_PATH = previousUserDataPath
+    process.env.QUIRKY_USER_DATA_PATH = previousUserDataPath
   }
   vi.clearAllMocks()
 })
@@ -143,7 +143,7 @@ describe('carrying plain-Codex hook trust into the managed Codex home', () => {
     }
   )
 
-  // Why: Codex >=0.145 adds session_end and >=0.150 interrupt, which Orca's own parser rejects.
+  // Why: Codex >=0.145 adds session_end and >=0.150 interrupt, which Quirky's own parser rejects.
   it.each(
     ['session_end', 'interrupt'].flatMap((event) =>
       [
@@ -233,7 +233,7 @@ describe('carrying plain-Codex hook trust into the managed Codex home', () => {
   ])(
     'keeps the runtime %s copy over a system %s copy of the same key',
     (_runtimeSpelling, _systemSpelling, runtimeSpell, systemSpell) => {
-      const runtimeBlock = trustBlock(runtimeSpell(PROJECT_KEY), 'sha256:approved-in-orca')
+      const runtimeBlock = trustBlock(runtimeSpell(PROJECT_KEY), 'sha256:approved-in-quirky')
       writeRuntimeConfig([runtimeBlock])
       writeSystemConfig([trustBlock(systemSpell(PROJECT_KEY), 'sha256:plain-codex')])
 

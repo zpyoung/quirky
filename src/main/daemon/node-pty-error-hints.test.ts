@@ -14,7 +14,7 @@ describe('node-pty diagnostic error hints', () => {
 
     expect(parseNodePtyDiagnostic(message)).toEqual({ step: 'posix_spawn', errno: 2 })
     expect(addNodePtyRecoveryHint(message)).toBe(
-      `Daemon's node-pty install is gone (worktree deleted?). Restart Orca. ${message}`
+      `Daemon's node-pty install is gone (worktree deleted?). Restart Quirky. ${message}`
     )
   })
 
@@ -40,7 +40,7 @@ describe('node-pty diagnostic error hints', () => {
 
   it('hints local wrapped spawn errors from pty allocation failures', () => {
     const message =
-      'Failed to spawn shell "/bin/zsh": node-pty: open_slave failed: EMFILE (errno 24, Too many open files) - slave=\'/dev/ttys003\' (shell: /bin/zsh, cwd: /tmp, arch: arm64, platform: darwin 25.0.0, orca: 1.4.178). If this persists, please file an issue.'
+      'Failed to spawn shell "/bin/zsh": node-pty: open_slave failed: EMFILE (errno 24, Too many open files) - slave=\'/dev/ttys003\' (shell: /bin/zsh, cwd: /tmp, arch: arm64, platform: darwin 25.0.0, quirky: 1.4.178). If this persists, please file an issue.'
 
     expect(addNodePtyRecoveryHint(message)).toBe(`${PTY_ALLOCATION_HINT}\n${message}`)
   })

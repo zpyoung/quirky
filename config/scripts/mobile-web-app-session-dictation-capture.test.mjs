@@ -12,11 +12,11 @@
  *
  * The closure also says what the seam took out of the page. Without its web half the bundler
  * resolves the native one, and with it the device module that owns the microphone: the vendored
- * `@orca/expo-two-way-audio` web stub lands in the closure along with `expo-keep-awake` — which is
+ * `@quirky/expo-two-way-audio` web stub lands in the closure along with `expo-keep-awake` — which is
  * what dictation on the page used to be: a module answering denied microphone permission, and a
  * wake lock that did nothing.
  *
- * Eight vendored modules re-enter that way, five from `@orca/expo-two-way-audio` and three from
+ * Eight vendored modules re-enter that way, five from `@quirky/expo-two-way-audio` and three from
  * `expo-keep-awake`. That eight is the number below; absolute module counts are not asserted,
  * because every merge of main moves them and a census that pinned them would fail for reasons that
  * are nobody's.
@@ -50,7 +50,7 @@ const DICTATION_GRANTS = ['native.audio.start', 'native.audio.read', 'native.aud
 
 /** Native modules the seam exists to keep out: importing either reaches a JSI binding, and their
  *  web builds are a denied microphone and a no-op screen lock. */
-const NATIVE_AUDIO_MODULES = ['@orca/expo-two-way-audio', 'expo-keep-awake']
+const NATIVE_AUDIO_MODULES = ['@quirky/expo-two-way-audio', 'expo-keep-awake']
 
 const SESSION_PATHNAME = '/h/[hostId]/session/[worktreeId]'
 const SESSION = 'app/h/[hostId]/session/[worktreeId].tsx'

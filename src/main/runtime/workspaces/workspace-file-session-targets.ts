@@ -1,6 +1,6 @@
-import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged } from '../session-tabs/session-tabs-change-publication'
-import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
-import type { OrcaRuntimeWithTransitionGraphReloadToTerminalState } from '../session-graph/session-graph-authority'
+import type { QuirkyRuntimeWithScheduleMobileSessionTabsChanged } from '../session-tabs/session-tabs-change-publication'
+import type { QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
+import type { QuirkyRuntimeWithTransitionGraphReloadToTerminalState } from '../session-graph/session-graph-authority'
 import { RuntimeHeadlessTabGroups } from '../session-tabs/headless-tab-group-moves'
 import type {
   BrowserTabInfo,
@@ -28,33 +28,35 @@ import {
 import { createMarkdownTabDiskHost } from '../markdown-tab-disk-host'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 
-export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends RuntimeHeadlessTabGroups {
+export abstract class QuirkyRuntimeWithPersistHeadlessTerminalTitle extends RuntimeHeadlessTabGroups {
   protected abstract getListedBrowserTabsByPageId(worktreeId: string): Map<string, BrowserTabInfo>
   protected abstract resolveMobileMarkdownWorktreeId(
     ...args: Parameters<
-      OrcaRuntimeWithScheduleMobileSessionTabsChanged['resolveMobileMarkdownWorktreeId']
-    >
-  ): ReturnType<OrcaRuntimeWithScheduleMobileSessionTabsChanged['resolveMobileMarkdownWorktreeId']>
-  protected abstract floatingWorkspaceToResolvedWorktree(
-    ...args: Parameters<
-      OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['floatingWorkspaceToResolvedWorktree']
+      QuirkyRuntimeWithScheduleMobileSessionTabsChanged['resolveMobileMarkdownWorktreeId']
     >
   ): ReturnType<
-    OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['floatingWorkspaceToResolvedWorktree']
+    QuirkyRuntimeWithScheduleMobileSessionTabsChanged['resolveMobileMarkdownWorktreeId']
+  >
+  protected abstract floatingWorkspaceToResolvedWorktree(
+    ...args: Parameters<
+      QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['floatingWorkspaceToResolvedWorktree']
+    >
+  ): ReturnType<
+    QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['floatingWorkspaceToResolvedWorktree']
   >
   protected abstract resolveFloatingWorkspacePath(
     ...args: Parameters<
-      OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveFloatingWorkspacePath']
+      QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveFloatingWorkspacePath']
     >
   ): ReturnType<
-    OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveFloatingWorkspacePath']
+    QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveFloatingWorkspacePath']
   >
   protected abstract resolveFolderWorkspaceLaunchScope(
     ...args: Parameters<
-      OrcaRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceLaunchScope']
+      QuirkyRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceLaunchScope']
     >
   ): ReturnType<
-    OrcaRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceLaunchScope']
+    QuirkyRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceLaunchScope']
   >
 
   // Persist a manual terminal rename so a headless rebuild keeps the title

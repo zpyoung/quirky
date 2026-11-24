@@ -9,9 +9,9 @@ const {
   getMismatchMock,
   refreshProbeMock
 } = vi.hoisted(() => ({
-  getPathMock: vi.fn(() => '/Applications/Orca.app/Contents/MacOS/Orca'),
+  getPathMock: vi.fn(() => '/Applications/Quirky.app/Contents/MacOS/Quirky'),
   opendirMock: vi.fn(),
-  readMacosBundleIdMock: vi.fn<() => Promise<string | null>>(async () => 'com.stablyai.orca'),
+  readMacosBundleIdMock: vi.fn<() => Promise<string | null>>(async () => 'com.zpyoung.quirky'),
   resetMacosTccPermissionMock: vi.fn<() => Promise<{ ok: boolean; detail?: string }>>(async () => ({
     ok: true
   })),
@@ -51,9 +51,9 @@ function fakeDir(): { read: ReturnType<typeof vi.fn>; close: ReturnType<typeof v
 
 beforeEach(() => {
   setPlatform('darwin')
-  getPathMock.mockReset().mockReturnValue('/Applications/Orca.app/Contents/MacOS/Orca')
+  getPathMock.mockReset().mockReturnValue('/Applications/Quirky.app/Contents/MacOS/Quirky')
   opendirMock.mockReset().mockResolvedValue(fakeDir())
-  readMacosBundleIdMock.mockReset().mockResolvedValue('com.stablyai.orca')
+  readMacosBundleIdMock.mockReset().mockResolvedValue('com.zpyoung.quirky')
   resetMacosTccPermissionMock.mockReset().mockResolvedValue({ ok: true })
   getTargetMock
     .mockReset()
@@ -118,8 +118,8 @@ describe('resetFolderAccessForDaemon runs the remedy', () => {
 
     await resetFolderAccessForDaemon(DAEMON)
 
-    expect(readMacosBundleIdMock).toHaveBeenCalledWith('/Applications/Orca.app')
-    expect(resetMacosTccPermissionMock).toHaveBeenCalledWith(service, 'com.stablyai.orca')
+    expect(readMacosBundleIdMock).toHaveBeenCalledWith('/Applications/Quirky.app')
+    expect(resetMacosTccPermissionMock).toHaveBeenCalledWith(service, 'com.zpyoung.quirky')
   })
 
   // The prompt is attributed to whoever makes the syscall, so the app has to be what reads it.

@@ -1,5 +1,5 @@
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
-import type { OrcaSessionId } from '../../../../../../shared/orca-session-address'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
+import type { QuirkySessionId } from '../../../../../../shared/quirky-session-address'
 import {
   chatAssigneeSessionId,
   observeChatAssignee,
@@ -26,7 +26,7 @@ export type SessionWorkerObservation = {
  * records instead of a terminal; null for a PTY worker.
  */
 export async function inspectSessionWorker(
-  runtime: Pick<OrcaRuntimeService, 'ensureStructuredAgentSessionHost'>,
+  runtime: Pick<QuirkyRuntimeService, 'ensureStructuredAgentSessionHost'>,
   db: OrchestrationDb,
   dispatchId: string,
   terminalHandle: string
@@ -52,7 +52,7 @@ export async function inspectSessionWorker(
   // Exactness is the recorded pane and lineage, which the runtime getters answer from the
   // structured registry; there is no terminal to show.
   //
-  // `agentWait` is deliberately ABSENT rather than null. Null is the contract's "Orca looked and
+  // `agentWait` is deliberately ABSENT rather than null. Null is the contract's "Quirky looked and
   // found no wait", and nothing here looks: a structured worker parks on a journal question item,
   // which no terminal prompt scan can see. Reporting null would tell a coordinator the worker is
   // not waiting, which is the one thing the field's own documentation forbids inferring.
@@ -80,10 +80,10 @@ export async function inspectSessionWorker(
 
 /** A fleet page's chat verdicts, read off the session records a restart leaves uninstalled. */
 export async function chatAssigneeObserver(
-  runtime: Pick<OrcaRuntimeService, 'ensureStructuredAgentSessionHost'>,
+  runtime: Pick<QuirkyRuntimeService, 'ensureStructuredAgentSessionHost'>,
   db: OrchestrationDb,
   rows: readonly { agentTerminalHandle: string | null }[]
-): Promise<(sessionId: OrcaSessionId) => ChatAssigneeObservation> {
+): Promise<(sessionId: QuirkySessionId) => ChatAssigneeObservation> {
   if (rows.some((row) => chatAssigneeSessionId(row.agentTerminalHandle))) {
     await runtime.ensureStructuredAgentSessionHost().catch(() => undefined)
   }

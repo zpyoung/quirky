@@ -1,6 +1,6 @@
 import type Database from '../../../../sqlite/sync-database'
 import type { OrchestrationDb } from '../orchestration-db'
-import { currentRunCoordinatorSessionAddressSql } from './run-coordinator-orca-session'
+import { currentRunCoordinatorSessionAddressSql } from './run-coordinator-quirky-session'
 
 /** Mail to an active Dispatch assignee's address in the same Run is that worker's, not coordinator mail. */
 export function activeDispatchOwnsAddressSql(runIdSql: string, addressSql: string): string {
@@ -51,8 +51,8 @@ export function createRunCoordinatorAddressTriggers(db: Database.Database): void
         WHERE ${NEW_COORDINATOR_SESSION_ADDRESS_SQL} IS NOT NULL;
       END;
       CREATE TRIGGER trg_runs_remember_coordinator_update
-      AFTER UPDATE OF coordinator_handle, coordinator_orca_session_id,
-        coordinator_orca_session_id_generation ON runs
+      AFTER UPDATE OF coordinator_handle, coordinator_quirky_session_id,
+        coordinator_quirky_session_id_generation ON runs
       WHEN NEW.legacy = 0
       BEGIN
         INSERT OR IGNORE INTO run_coordinator_handles (run_id, terminal_handle)

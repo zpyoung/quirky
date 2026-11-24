@@ -116,7 +116,9 @@ describe('BrowserAddressBar autocomplete preview', () => {
       )
     })
 
-    const input = container.querySelector<HTMLInputElement>('input[data-orca-browser-address-bar]')
+    const input = container.querySelector<HTMLInputElement>(
+      'input[data-quirky-browser-address-bar]'
+    )
     expect(input).not.toBeNull()
 
     await act(async () => {
@@ -152,7 +154,9 @@ describe('BrowserAddressBar autocomplete preview', () => {
       )
     })
 
-    const input = container.querySelector<HTMLInputElement>('input[data-orca-browser-address-bar]')
+    const input = container.querySelector<HTMLInputElement>(
+      'input[data-quirky-browser-address-bar]'
+    )
     expect(input).not.toBeNull()
 
     await act(async () => {
@@ -187,7 +191,9 @@ describe('BrowserAddressBar autocomplete preview', () => {
       )
     })
 
-    const input = container.querySelector<HTMLInputElement>('input[data-orca-browser-address-bar]')
+    const input = container.querySelector<HTMLInputElement>(
+      'input[data-quirky-browser-address-bar]'
+    )
     expect(input).not.toBeNull()
 
     await act(async () => {
@@ -224,7 +230,9 @@ describe('BrowserAddressBar autocomplete preview', () => {
       )
     })
 
-    const input = container.querySelector<HTMLInputElement>('input[data-orca-browser-address-bar]')
+    const input = container.querySelector<HTMLInputElement>(
+      'input[data-quirky-browser-address-bar]'
+    )
     expect(input).not.toBeNull()
 
     await act(async () => {
@@ -254,7 +262,9 @@ describe('BrowserAddressBar autocomplete preview', () => {
     await act(async () => {
       root.render(<AddressBarHarness initialValue={url} onNavigate={vi.fn()} onSubmit={vi.fn()} />)
     })
-    const input = container.querySelector<HTMLInputElement>('input[data-orca-browser-address-bar]')!
+    const input = container.querySelector<HTMLInputElement>(
+      'input[data-quirky-browser-address-bar]'
+    )!
 
     act(() => {
       input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail: 1 }))
@@ -275,7 +285,9 @@ describe('BrowserAddressBar autocomplete preview', () => {
     await act(async () => {
       root.render(<AddressBarHarness initialValue={url} onNavigate={vi.fn()} onSubmit={vi.fn()} />)
     })
-    const input = container.querySelector<HTMLInputElement>('input[data-orca-browser-address-bar]')!
+    const input = container.querySelector<HTMLInputElement>(
+      'input[data-quirky-browser-address-bar]'
+    )!
     input.setSelectionRange(0, url.length)
 
     act(() => {

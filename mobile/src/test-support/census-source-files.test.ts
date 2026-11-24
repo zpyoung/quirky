@@ -10,7 +10,7 @@ const mobileRoot = fileURLToPath(new URL('../..', import.meta.url))
 let scratch = ''
 
 beforeEach(() => {
-  scratch = mkdtempSync(join(tmpdir(), 'orca-census-source-files-'))
+  scratch = mkdtempSync(join(tmpdir(), 'quirky-census-source-files-'))
 })
 
 afterEach(() => {

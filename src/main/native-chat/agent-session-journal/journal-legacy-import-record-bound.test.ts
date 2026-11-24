@@ -20,7 +20,7 @@ afterEach(async () => {
 
 describe('legacy import record byte bound', () => {
   it('refuses a single line past the limit and closes the stream', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-legacy-import-bound-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-legacy-import-bound-'))
     roots.push(root)
     const filePath = join(root, 'oversized-line.jsonl')
     await writeFile(filePath, ' '.repeat(RECORD_LIMIT_BYTES + 1))

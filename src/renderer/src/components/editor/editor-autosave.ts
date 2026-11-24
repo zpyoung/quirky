@@ -9,21 +9,23 @@ import {
 } from '../../../../shared/constants'
 import { clampNumber } from '@/lib/terminal-theme'
 
-export const ORCA_EDITOR_QUIESCE_FILE_SAVES_EVENT = 'orca:editor-quiesce-file-saves'
-export const ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT = 'orca:editor-external-file-change'
-export const ORCA_EDITOR_SAVE_FILE_EVENT = 'orca:editor-save-file'
-export const ORCA_EDITOR_SAVE_AND_CLOSE_EVENT = 'orca:save-and-close'
-export const ORCA_EDITOR_FILE_SAVED_EVENT = 'orca:editor-file-saved'
+export const QUIRKY_EDITOR_QUIESCE_FILE_SAVES_EVENT = 'quirky:editor-quiesce-file-saves'
+export const QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT = 'quirky:editor-external-file-change'
+export const QUIRKY_EDITOR_SAVE_FILE_EVENT = 'quirky:editor-save-file'
+export const QUIRKY_EDITOR_SAVE_AND_CLOSE_EVENT = 'quirky:save-and-close'
+export const QUIRKY_EDITOR_FILE_SAVED_EVENT = 'quirky:editor-file-saved'
 // Why: a sibling's baseline moved without its cached text, so the panel drops that cache.
-export const ORCA_EDITOR_FILE_CACHE_STALE_EVENT = 'orca:editor-file-cache-stale'
+export const QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT = 'quirky:editor-file-cache-stale'
 
 export function notifyEditorFileCacheStale(fileId: string): void {
   window.dispatchEvent(
-    new CustomEvent<{ fileId: string }>(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, { detail: { fileId } })
+    new CustomEvent<{ fileId: string }>(QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT, {
+      detail: { fileId }
+    })
   )
 }
-export const ORCA_EDITOR_REQUEST_CMD_SAVE_EVENT = 'orca:editor-request-cmd-save'
-export const ORCA_EDITOR_REQUEST_FILE_CLOSE_EVENT = 'orca:editor-request-file-close'
+export const QUIRKY_EDITOR_REQUEST_CMD_SAVE_EVENT = 'quirky:editor-request-cmd-save'
+export const QUIRKY_EDITOR_REQUEST_FILE_CLOSE_EVENT = 'quirky:editor-request-file-close'
 
 export type EditorPathMutationTarget = {
   worktreeId: string
@@ -181,7 +183,7 @@ export async function requestEditorSaveQuiesce(
   await new Promise<void>((resolve, reject) => {
     let claimed = false
     window.dispatchEvent(
-      new CustomEvent<EditorSaveQuiesceDetail>(ORCA_EDITOR_QUIESCE_FILE_SAVES_EVENT, {
+      new CustomEvent<EditorSaveQuiesceDetail>(QUIRKY_EDITOR_QUIESCE_FILE_SAVES_EVENT, {
         detail: {
           ...target,
           claim: () => {
@@ -209,7 +211,7 @@ export async function requestEditorFileSave(target: EditorSaveFileTarget): Promi
   await new Promise<void>((resolve, reject) => {
     let claimed = false
     window.dispatchEvent(
-      new CustomEvent<EditorSaveFileDetail>(ORCA_EDITOR_SAVE_FILE_EVENT, {
+      new CustomEvent<EditorSaveFileDetail>(QUIRKY_EDITOR_SAVE_FILE_EVENT, {
         detail: {
           ...target,
           claim: () => {
@@ -235,7 +237,7 @@ export function requestEditorFileClose(
   options?: Pick<EditorRequestFileCloseDetail, 'onClosed'>
 ): void {
   window.dispatchEvent(
-    new CustomEvent<EditorRequestFileCloseDetail>(ORCA_EDITOR_REQUEST_FILE_CLOSE_EVENT, {
+    new CustomEvent<EditorRequestFileCloseDetail>(QUIRKY_EDITOR_REQUEST_FILE_CLOSE_EVENT, {
       detail: { fileId, ...options }
     })
   )
@@ -246,7 +248,7 @@ export function requestEditorFileClose(
 // content destroys its unsaved draft (the data-loss half of issue #7265).
 export function notifyEditorExternalFileChange(target: EditorPathMutationTarget): void {
   window.dispatchEvent(
-    new CustomEvent<EditorPathMutationTarget>(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
+    new CustomEvent<EditorPathMutationTarget>(QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
       detail: target
     })
   )

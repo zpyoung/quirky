@@ -1,6 +1,6 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 
 function git(root, args) {
   const result = runProcessSync({ program: 'git', args, cwd: root })
@@ -34,7 +34,7 @@ export function announceMissingBaseline({ root, output, comparison, ref, file })
 }
 
 /**
- * Clears `out/` before a timed smoke run, keeping the mobile web bundle: orcad refuses to build
+ * Clears `out/` before a timed smoke run, keeping the mobile web bundle: quirkyd refuses to build
  * without it, and building it is not part of what the smoke comparison measures.
  */
 export function clearBuildOutputKeepingMobileWeb(root) {

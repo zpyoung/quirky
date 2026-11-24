@@ -7,7 +7,7 @@ import {
 import { OrchestrationError } from '../orchestration-error'
 import { isEquivalentPaneKey } from './pane-key-match'
 import type { OrchestrationDb } from './orchestration-db'
-import type { OrcaSessionId } from '../../../../shared/orca-session-address'
+import type { QuirkySessionId } from '../../../../shared/quirky-session-address'
 import type { DispatchContextRow, RemoteDispatchAttachmentRow } from '../types'
 import { potentiallyLiveRemoteAttachmentSql } from './federation/remote-attachment-liveness'
 import {
@@ -18,7 +18,7 @@ import {
 /**
  * Who is creating a dispatch row, for nesting-depth purposes.
  *
- * `system` is Orca's own in-process coordinator loop, which is host-local code
+ * `system` is Quirky's own in-process coordinator loop, which is host-local code
  * rather than a CLI caller and is a root by construction. It is an internal
  * discriminated branch on purpose — never a caller-supplied value, or a worker
  * could claim to be the loop.
@@ -31,32 +31,32 @@ export type DispatchCreator =
       paneKey?: string
       /** Remote attachment matching requires the exact incarnation; local rows do not. */
       processIncarnation?: string
-      /** A structured worker's bare Orca session id, recorded beside its handle. */
-      orcaSessionId?: OrcaSessionId | null
+      /** A structured worker's bare Quirky session id, recorded beside its handle. */
+      quirkySessionId?: QuirkySessionId | null
     }
-  /** A structured session with no terminal handle, identified by its Orca session id alone. */
-  | { kind: 'session'; orcaSessionId: OrcaSessionId }
+  /** A structured session with no terminal handle, identified by its Quirky session id alone. */
+  | { kind: 'session'; quirkySessionId: QuirkySessionId }
 
 /** Creator identity to persist on a new row, so depth can later tell delegation from bookkeeping. */
 export function recordedCreatorIdentity(creator: DispatchCreator): {
   creatorHandle: string | null
   creatorPaneKey: string | null
-  creatorOrcaSessionId: OrcaSessionId | null
+  creatorQuirkySessionId: QuirkySessionId | null
 } {
   if (creator.kind === 'system') {
-    return { creatorHandle: null, creatorPaneKey: null, creatorOrcaSessionId: null }
+    return { creatorHandle: null, creatorPaneKey: null, creatorQuirkySessionId: null }
   }
   if (creator.kind === 'session') {
     return {
       creatorHandle: null,
       creatorPaneKey: null,
-      creatorOrcaSessionId: creator.orcaSessionId
+      creatorQuirkySessionId: creator.quirkySessionId
     }
   }
   return {
     creatorHandle: creator.handle,
     creatorPaneKey: creator.paneKey ?? null,
-    creatorOrcaSessionId: creator.orcaSessionId ?? null
+    creatorQuirkySessionId: creator.quirkySessionId ?? null
   }
 }
 
@@ -152,10 +152,10 @@ function findActiveDispatchForCreator(
   const row = this.db
     .prepare(
       `SELECT ${DISPATCH_CONTEXT_COLUMN_LIST} FROM dispatch_contexts
-       WHERE assignee_orca_session_id = ? AND status IN ('pending', 'dispatched')
+       WHERE assignee_quirky_session_id = ? AND status IN ('pending', 'dispatched')
        ORDER BY rowid DESC LIMIT 1`
     )
-    .get(creator.orcaSessionId)
+    .get(creator.quirkySessionId)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The schema-pinned complete Dispatch projection returns one Dispatch row or undefined; the adapter exposes unknown.
   return row as DispatchContextRow | undefined
 }

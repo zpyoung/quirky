@@ -28,7 +28,7 @@ function stateWith(
 describe('getWorkspaceEditorSshHost', () => {
   it('names the SSH host a managed server runs on for a workspace on that machine', () => {
     expect(
-      getWorkspaceEditorSshHost(stateWith({ orcadDeployment: link }), {
+      getWorkspaceEditorSshHost(stateWith({ quirkydDeployment: link }), {
         workspaceId: WORKTREE_ID,
         hostId: 'runtime:env-1'
       })
@@ -44,7 +44,7 @@ describe('getWorkspaceEditorSshHost', () => {
 
   it('refuses a workspace the server reaches through its own SSH host', () => {
     expect(
-      getWorkspaceEditorSshHost(stateWith({ orcadDeployment: link }, 'ssh:box'), {
+      getWorkspaceEditorSshHost(stateWith({ quirkydDeployment: link }, 'ssh:box'), {
         workspaceId: WORKTREE_ID,
         hostId: 'ssh:box'
       })
@@ -55,7 +55,7 @@ describe('getWorkspaceEditorSshHost', () => {
     const folderState = (
       connectionId: string | null
     ): Parameters<typeof getWorkspaceEditorSshHost>[0] => ({
-      runtimeEnvironments: [{ id: 'env-1', orcadDeployment: link }],
+      runtimeEnvironments: [{ id: 'env-1', quirkydDeployment: link }],
       runtimeEnvironmentCatalogHydrated: true,
       folderWorkspaces: [
         { id: 'fw-1', projectGroupId: 'g-1', connectionId, executionHostId: 'runtime:env-1' }
@@ -72,7 +72,7 @@ describe('getWorkspaceEditorSshHost', () => {
 
   it.each([
     ['a network-paired server', {}],
-    ['an ephemeral VM', { orcadDeployment: { ...link, sshTargetId: 'runtime-ssh-vm-1' } }]
+    ['an ephemeral VM', { quirkydDeployment: { ...link, sshTargetId: 'runtime-ssh-vm-1' } }]
   ])('refuses %s', (_label, environment) => {
     expect(
       getWorkspaceEditorSshHost(stateWith(environment), { workspaceId: WORKTREE_ID })
@@ -81,6 +81,6 @@ describe('getWorkspaceEditorSshHost', () => {
 
   it('refuses a local or missing workspace', () => {
     expect(getWorkspaceEditorSshHost({}, { workspaceId: 'local-repo::/tmp/x' })).toBeNull()
-    expect(getWorkspaceEditorSshHost(stateWith({ orcadDeployment: link }), null)).toBeNull()
+    expect(getWorkspaceEditorSshHost(stateWith({ quirkydDeployment: link }), null)).toBeNull()
   })
 })

@@ -75,7 +75,7 @@ describe('a send addressed to an agent session', () => {
     await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(ADDRESS_X, expect.anything()))
   })
 
-  it('accepts a bare Orca session id and normalizes it', async () => {
+  it('accepts a bare Quirky session id and normalizes it', async () => {
     expect(await send(SESSION_X)).toMatchObject({
       ok: true,
       result: { message: { to_handle: ADDRESS_X } }
@@ -96,11 +96,11 @@ describe('a send addressed to an agent session', () => {
   it.each([
     [
       'an unknown session',
-      () => `orca_session_id:0b0b0b0b-1111-4222-8333-444444444444`,
+      () => `quirky_session_id:0b0b0b0b-1111-4222-8333-444444444444`,
       'session_caller_unknown'
     ],
-    ['a malformed session address', () => 'orca_session_id:term_abc', 'session_caller_unknown'],
-    ['a provider id', () => `orca_session_id:${PROVIDER_ID_X}`, 'session_caller_provider_id'],
+    ['a malformed session address', () => 'quirky_session_id:term_abc', 'session_caller_unknown'],
+    ['a provider id', () => `quirky_session_id:${PROVIDER_ID_X}`, 'session_caller_provider_id'],
     ['a bare provider id', () => PROVIDER_ID_X, 'session_caller_provider_id']
   ])('refuses %s before storing anything', async (_label, to, code) => {
     const sent = await send(to())
@@ -109,11 +109,11 @@ describe('a send addressed to an agent session', () => {
   })
 
   it.each([
-    ['a provider id', () => `orca_session_id:${PROVIDER_ID_X}`],
+    ['a provider id', () => `quirky_session_id:${PROVIDER_ID_X}`],
     ['a bare provider id', () => PROVIDER_ID_X]
-  ])('hands back the Orca session address to paste instead of %s', async (_label, to) => {
+  ])('hands back the Quirky session address to paste instead of %s', async (_label, to) => {
     expect(errorMessage(await send(to()))).toBe(
-      `${PROVIDER_ID_X} is the provider's own session id, which changes on /clear. This session's Orca session ID is orca_session_id:${SESSION_X}; address it by that instead. No message was sent.`
+      `${PROVIDER_ID_X} is the provider's own session id, which changes on /clear. This session's Quirky session ID is quirky_session_id:${SESSION_X}; address it by that instead. No message was sent.`
     )
   })
 
@@ -130,7 +130,7 @@ describe('a send addressed to an agent session', () => {
 
   it('refuses a session on another host', async () => {
     h.records.set(SESSION_Y, sessionRecord(SESSION_Y, { location: { executionHostId: 'ssh:box' } }))
-    expect(await send(`orca_session_id:${SESSION_Y}`)).toMatchObject({
+    expect(await send(`quirky_session_id:${SESSION_Y}`)).toMatchObject({
       ok: false,
       error: { code: 'session_caller_host_boundary' }
     })
@@ -139,7 +139,7 @@ describe('a send addressed to an agent session', () => {
 
   it('refuses a session whose chat was closed, naming why', async () => {
     visible = [SESSION_X]
-    const sent = await send(`orca_session_id:${SESSION_Y}`)
+    const sent = await send(`quirky_session_id:${SESSION_Y}`)
     expect(sent).toMatchObject({ ok: false, error: { code: 'session_caller_not_live' } })
     expect(errorMessage(sent)).toContain('its chat was closed')
     expect(h.db.getInbox(100)).toEqual([])
@@ -161,7 +161,7 @@ describe('a send addressed to an agent session', () => {
       maxDepth: Number.MAX_SAFE_INTEGER
     })
     structuredWorkerIdentities.clear()
-    const sent = await send(`orca_session_id:${SESSION_Y}`)
+    const sent = await send(`quirky_session_id:${SESSION_Y}`)
     expect(sent).toMatchObject({ ok: false, error: { code: 'session_caller_not_live' } })
     expect(errorMessage(sent)).toContain('worker identity')
   })
@@ -214,7 +214,7 @@ describe('a live structured worker addressed by its session id', () => {
   }
 
   it('lands in its Dispatch mailbox, which its flagless check reads', async () => {
-    // The defect this pins: the mail was stored at `orca_session_id:<id>`, pointed at the worker, and its
+    // The defect this pins: the mail was stored at `quirky_session_id:<id>`, pointed at the worker, and its
     // `check` — which reads the worker's handle and Dispatch mailboxes — returned nothing.
     const run = h.db.createRun({
       objective: 'pty coordinator',
@@ -229,7 +229,7 @@ describe('a live structured worker addressed by its session id', () => {
       creator: { kind: 'system' },
       maxDepth: Number.MAX_SAFE_INTEGER
     })
-    expect(await sendTo(`orca_session_id:${SESSION_Y}`)).toMatchObject({
+    expect(await sendTo(`quirky_session_id:${SESSION_Y}`)).toMatchObject({
       message: { to_handle: `dispatch:${dispatch.id}` }
     })
     expect(await flaglessCheck()).toMatchObject({ messages: [{ subject: 'hello' }] })
@@ -299,7 +299,7 @@ describe('mail sent to a session address reaches the mailbox that session reads'
     expect(message).toMatchObject({ to_handle: ADDRESS_X })
   })
 
-  it('refuses an Orca session this host does not run, or has no record of', async () => {
+  it('refuses an Quirky session this host does not run, or has no record of', async () => {
     h.records.set(
       SESSION_X,
       sessionRecord(SESSION_X, { location: { executionHostId: 'ssh:devbox' } })
@@ -335,7 +335,7 @@ describe('mail sent to a session address reaches the mailbox that session reads'
       assigneeHandle: handle,
       assigneePaneKey: paneKey,
       processIncarnation: structuredWorkerProcessIncarnation(SESSION_Y),
-      creator: { kind: 'session', orcaSessionId: SESSION_X },
+      creator: { kind: 'session', quirkySessionId: SESSION_X },
       maxDepth: Number.MAX_SAFE_INTEGER
     })
 

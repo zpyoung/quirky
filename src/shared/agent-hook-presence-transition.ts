@@ -30,7 +30,7 @@ export function transitionHookPresence(
     if (sender && owner.process && isSameAgentProcess(sender, owner.process)) {
       return incoming
     }
-    // Why: nested agents inherit ORCA_PANE_KEY; their hooks update status, never ownership.
+    // Why: nested agents inherit QUIRKY_PANE_KEY; their hooks update status, never ownership.
     return incoming.agentPresence === owner ? incoming : { ...incoming, agentPresence: owner }
   }
   if (exit) {

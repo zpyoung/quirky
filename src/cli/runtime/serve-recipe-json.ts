@@ -1,4 +1,4 @@
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import type { ChildProcessHandle } from '@quirky/process-host/process-spec'
 import { StringDecoder } from 'node:string_decoder'
 import {
   getEphemeralVmRecipeResultConnection,
@@ -49,7 +49,7 @@ export function waitForRecipeJson(child: ChildProcessHandle): Promise<number> {
         writeIgnoredRecipeStdout()
         return
       }
-      if (getEphemeralVmRecipeResultConnection(parsed.result).type !== 'orca-server') {
+      if (getEphemeralVmRecipeResultConnection(parsed.result).type !== 'quirky-server') {
         writeIgnoredRecipeStdout()
         return
       }
@@ -87,8 +87,8 @@ export function waitForRecipeJson(child: ChildProcessHandle): Promise<number> {
         new RuntimeClientError(
           'runtime_serve_failed',
           typeof code === 'number'
-            ? `Orca serve exited before printing valid recipe JSON with code ${code}.`
-            : `Orca serve exited before printing valid recipe JSON via ${signal}.`
+            ? `Quirky serve exited before printing valid recipe JSON with code ${code}.`
+            : `Quirky serve exited before printing valid recipe JSON via ${signal}.`
         )
       )
     }

@@ -328,14 +328,14 @@ describe('remote saves larger than one request frame', () => {
   it('refuses a save the host would answer by closing the connection', async () => {
     await expect(
       writeRuntimeFile(context, '/remote/repo/report.html', htmlBytes(2 * MB).toString('utf8'))
-    ).rejects.toThrow('File is too large to save to a remote Orca server')
+    ).rejects.toThrow('File is too large to save to a remote Quirky server')
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
   })
 
   it('counts JSON escaping, not just characters', async () => {
     await expect(
       writeRuntimeFile(context, '/remote/repo/quotes.txt', '"'.repeat(400 * 1024))
-    ).rejects.toThrow('File is too large to save to a remote Orca server')
+    ).rejects.toThrow('File is too large to save to a remote Quirky server')
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
   })
 })

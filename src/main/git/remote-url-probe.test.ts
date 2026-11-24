@@ -20,7 +20,7 @@ describe('remote URL probe', () => {
   })
 
   it('bounds local and WSL remote reads with the shared timeout', async () => {
-    gitExecFileAsyncMock.mockResolvedValue({ stdout: 'git@github.com:acme/orca.git\n' })
+    gitExecFileAsyncMock.mockResolvedValue({ stdout: 'git@github.com:acme/quirky.git\n' })
 
     await expect(
       readRemoteUrl({ repoPath: '/repo', wslDistro: 'Ubuntu' }, 'upstream')

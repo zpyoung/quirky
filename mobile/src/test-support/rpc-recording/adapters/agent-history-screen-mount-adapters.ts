@@ -39,7 +39,7 @@ export function agentHistoryScreenMountAdapters(
           createElement(
             hostClientContext.Provider,
             { value: context },
-            createElement(Panel, { hostId: HOST, worktreeId: WORKTREE, name: 'orca-history' })
+            createElement(Panel, { hostId: HOST, worktreeId: WORKTREE, name: 'quirky-history' })
           ),
         effect
       )

@@ -171,17 +171,17 @@ describe('legacyAgentJournalTurnStatusBody', () => {
   })
 
   it('names any other agent by its own name, never as Codex', () => {
-    expect(legacyAgentJournalTurnStatusBody(turn, 'orca:command-turn:t1', 'gemini').text).toBe(
+    expect(legacyAgentJournalTurnStatusBody(turn, 'quirky:command-turn:t1', 'gemini').text).toBe(
       'Gemini turn completed'
     )
     expect(legacyAgentJournalTurnStatusBody(turn, 'legacy:gemini:s:turn-lifecycle%3At1').text).toBe(
       'Gemini turn completed'
     )
     // Nothing names the agent: say so rather than guess one.
-    expect(legacyAgentJournalTurnStatusBody(turn, 'orca:command-turn:t1').text).toBe(
+    expect(legacyAgentJournalTurnStatusBody(turn, 'quirky:command-turn:t1').text).toBe(
       'Agent turn completed'
     )
-    expect(legacyAgentJournalTurnStatusBody(turn, 'orca:command-turn:t1', 'codex').text).toBe(
+    expect(legacyAgentJournalTurnStatusBody(turn, 'quirky:command-turn:t1', 'codex').text).toBe(
       'Codex turn completed'
     )
   })

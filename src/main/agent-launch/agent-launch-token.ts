@@ -11,5 +11,5 @@ export function withAgentLaunchToken(
   env: Record<string, string> | undefined,
   launchToken: string | undefined
 ): Record<string, string> {
-  return { ...env, ...(launchToken ? { ORCA_AGENT_LAUNCH_TOKEN: launchToken } : {}) }
+  return { ...env, ...(launchToken ? { QUIRKY_AGENT_LAUNCH_TOKEN: launchToken } : {}) }
 }

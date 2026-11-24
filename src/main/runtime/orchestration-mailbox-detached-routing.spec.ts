@@ -27,7 +27,7 @@ describe('orchestration detached mailbox routing', () => {
 
   it('routes active worker direct mail through a stable Dispatch pointer and Delivery', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-dispatch-')
+    const db = createDatabase('quirky-mailbox-dispatch-')
     const harness = createRuntime(db)
     const run = db.createRun({
       objective: 'Worker Run',
@@ -65,7 +65,7 @@ describe('orchestration detached mailbox routing', () => {
 
   it('normalizes direct mail that arrives while its Run is displaced', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-late-rebind-')
+    const db = createDatabase('quirky-mailbox-late-rebind-')
     const harness = createRuntime(db)
     const runA = createBoundRun(db, 'Run A')
     const runB = createBoundRun(db, 'Run B')
@@ -104,7 +104,7 @@ describe('orchestration detached mailbox routing', () => {
 
   it('preserves an active Dispatch as owner of displaced direct mail', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-displaced-dispatch-')
+    const db = createDatabase('quirky-mailbox-displaced-dispatch-')
     const harness = createRuntime(db)
     const workerRun = db.createRun({
       objective: 'Worker Run',
@@ -150,7 +150,7 @@ describe('orchestration detached mailbox routing', () => {
 
   it('uses bounded ownership lookup for direct arrivals while the agent is working', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-bounded-')
+    const db = createDatabase('quirky-mailbox-bounded-')
     const harness = createRuntime(db)
     const run = createBoundRun(db, 'Working Run')
     await harness.runtime.listTerminals()
@@ -169,7 +169,7 @@ describe('orchestration detached mailbox routing', () => {
 
   it('wakes a bound Run waiter when same-Run direct mail arrives', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-waiter-')
+    const db = createDatabase('quirky-mailbox-waiter-')
     const harness = createRuntime(db)
     const run = createBoundRun(db, 'Waiting Run')
     await driveToLiveIdle(harness.runtime)
@@ -200,7 +200,7 @@ describe('orchestration detached mailbox routing', () => {
   })
 
   it('routes a stale-leaf arrival to its bound Run waiter', async () => {
-    const db = createDatabase('orca-mailbox-stale-leaf-waiter-')
+    const db = createDatabase('quirky-mailbox-stale-leaf-waiter-')
     const harness = createRuntime(db)
     const run = createBoundRun(db, 'Stale leaf waiter')
     const waiting = checkBoundMailbox(harness.runtime, { wait: true })
@@ -226,7 +226,7 @@ describe('orchestration detached mailbox routing', () => {
   })
 
   it('keeps an unowned detached-recipient message in its direct mailbox', async () => {
-    const db = createDatabase('orca-mailbox-detached-direct-')
+    const db = createDatabase('quirky-mailbox-detached-direct-')
     const harness = createRuntime(db)
     const run = createBoundRun(db, 'Detached direct recipient')
     const detachedHandle = 'term_detached_worker'
@@ -248,7 +248,7 @@ describe('orchestration detached mailbox routing', () => {
   })
 
   it('wakes canonical and direct waiters for mixed detached ownership', async () => {
-    const db = createDatabase('orca-mailbox-detached-mixed-')
+    const db = createDatabase('quirky-mailbox-detached-mixed-')
     const harness = createRuntime(db)
     const detachedHandle = 'term_retired_coordinator'
     const ownedRun = db.createRun({
@@ -294,7 +294,7 @@ describe('orchestration detached mailbox routing', () => {
   })
 
   it('does not wake a filtered direct waiter for a routed type', async () => {
-    const db = createDatabase('orca-mailbox-detached-filtered-direct-')
+    const db = createDatabase('quirky-mailbox-detached-filtered-direct-')
     const harness = createRuntime(db)
     const detachedHandle = 'term_detached_filtered'
     const ownedRun = db.createRun({
@@ -343,7 +343,7 @@ describe('orchestration detached mailbox routing', () => {
   })
 
   it('routes a stale-leaf reminted handle to its Dispatch waiter', async () => {
-    const db = createDatabase('orca-mailbox-stale-leaf-reminted-dispatch-')
+    const db = createDatabase('quirky-mailbox-stale-leaf-reminted-dispatch-')
     const harness = createRuntime(db)
     const run = db.createRun({
       objective: 'Reminted Dispatch',
@@ -376,7 +376,7 @@ describe('orchestration detached mailbox routing', () => {
   })
 
   it('deduplicates Dispatch ownership before limiting a routing page', () => {
-    const db = createDatabase('orca-mailbox-duplicate-dispatch-owners-')
+    const db = createDatabase('quirky-mailbox-duplicate-dispatch-owners-')
     const run = db.createRun({
       objective: 'Duplicate Dispatch ownership',
       coordinatorHandle: 'term_coordinator',
@@ -419,7 +419,7 @@ describe('orchestration detached mailbox routing', () => {
   })
 
   it('does not rebind active Dispatch mail through coordinator history', () => {
-    const db = createDatabase('orca-mailbox-coordinator-dispatch-overlap-')
+    const db = createDatabase('quirky-mailbox-coordinator-dispatch-overlap-')
     const run = db.createRun({
       objective: 'Coordinator and Dispatch overlap',
       coordinatorHandle: TERMINAL_HANDLE,
@@ -448,7 +448,7 @@ describe('orchestration detached mailbox routing', () => {
   })
 
   it('does not route active Dispatch mail through a paged Run check', () => {
-    const db = createDatabase('orca-mailbox-paged-coordinator-dispatch-overlap-')
+    const db = createDatabase('quirky-mailbox-paged-coordinator-dispatch-overlap-')
     const run = db.createRun({
       objective: 'Paged coordinator and Dispatch overlap',
       coordinatorHandle: TERMINAL_HANDLE,
@@ -478,7 +478,7 @@ describe('orchestration detached mailbox routing', () => {
   })
 
   it('uses primary-key lookups for bounded routing updates', () => {
-    const db = createDatabase('orca-mailbox-bounded-routing-indexes-')
+    const db = createDatabase('quirky-mailbox-bounded-routing-indexes-')
     const sqlite = sqliteFor(db)
     const run = db.createRun({
       objective: 'Bounded routing indexes',

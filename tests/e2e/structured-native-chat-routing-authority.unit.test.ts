@@ -61,7 +61,7 @@ describe('shared feasibility owns every caller decision', () => {
           const launchSettings: Partial<GlobalSettings> & typeof settings = {
             ...settings,
             agentDefaultArgs: { [agent]: '--custom' },
-            agentDefaultEnv: { [agent]: { ORCA_ROUTING_AUTHORITY: '1' } },
+            agentDefaultEnv: { [agent]: { QUIRKY_ROUTING_AUTHORITY: '1' } },
             ...(customized ? { agentCmdOverrides: { [agent]: `${agent}-wrapper` } } : {})
           }
           const input = { params: { agent, ...placement }, settings: launchSettings }

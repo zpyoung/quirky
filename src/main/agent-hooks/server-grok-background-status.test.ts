@@ -17,11 +17,11 @@ async function postGrokHook(
   payload: Record<string, unknown>
 ): Promise<void> {
   const env = server.buildPtyEnv()
-  const response = await fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/grok`, {
+  const response = await fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/grok`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+      'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
     },
     body: JSON.stringify(buildBody(payload))
   })
@@ -187,7 +187,7 @@ describe('Grok background status ownership', () => {
   })
 
   it('retains an id-less Grok turn fence across status hydration', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-grok-status-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-grok-status-'))
     const firstServer = new AgentHookServer()
     const restoredServer = new AgentHookServer()
     try {

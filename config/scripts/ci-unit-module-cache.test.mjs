@@ -18,7 +18,7 @@ afterEach(() => {
 })
 
 function options() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-unit-cache-identity-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-unit-cache-identity-'))
   temporary.push(directory)
   return {
     root: directory,

@@ -4,16 +4,16 @@ import type {
   OrchestrationSessionAddressResult
 } from '../../../../../shared/orchestration-caller-status'
 import {
-  formatOrcaSessionAddress,
-  isOrcaSessionId
-} from '../../../../../shared/orca-session-address'
+  formatQuirkySessionAddress,
+  isQuirkySessionId
+} from '../../../../../shared/quirky-session-address'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as CODES } from '../../../../../shared/orchestration-session-caller-codes'
 import {
   PartyLocationParams,
   SessionAddressParams
 } from '../../../../../shared/rpc-contract/orchestration-params'
 import { OrchestrationError } from '../../../orchestration/orchestration-error'
-import { resolveOrcaSessionParty } from '../../../orchestration/orchestration-party'
+import { resolveQuirkySessionParty } from '../../../orchestration/orchestration-party'
 import { locateOrchestrationParty } from '../../../orchestration/orchestration-party-location'
 import { readAgentSessionRecordStore } from '../../../orchestration/structured-session-lineage'
 import { defineMethod } from '../../core'
@@ -27,7 +27,10 @@ export const ORCHESTRATION_CALLER_METHODS = [
     // and a session it cannot admit never reaches here: its refusal is the answer.
     handler: (_params, { orchestrationCaller }): OrchestrationCallerShowResult => ({
       caller: orchestrationCaller
-        ? { orcaSessionId: formatOrcaSessionAddress(orchestrationCaller.orcaSessionId), live: true }
+        ? {
+            quirkySessionId: formatQuirkySessionAddress(orchestrationCaller.quirkySessionId),
+            live: true
+          }
         : null
     })
   }),
@@ -37,15 +40,15 @@ export const ORCHESTRATION_CALLER_METHODS = [
     params: SessionAddressParams,
     // Why host-side: only the host's session records know a chat's `/clear` root.
     handler: (params, { runtime }): OrchestrationSessionAddressResult => {
-      if (!isOrcaSessionId(params.sessionId)) {
+      if (!isQuirkySessionId(params.sessionId)) {
         throw new OrchestrationError(
           CODES.unknown,
-          `${params.sessionId} is not an Orca session ID.`,
+          `${params.sessionId} is not an Quirky session ID.`,
           { effectsApplied: false }
         )
       }
-      const party = resolveOrcaSessionParty(params.sessionId, runtime.getOrchestrationDb())
-      return { orcaSessionId: formatOrcaSessionAddress(party.orcaSessionId) }
+      const party = resolveQuirkySessionParty(params.sessionId, runtime.getOrchestrationDb())
+      return { quirkySessionId: formatQuirkySessionAddress(party.quirkySessionId) }
     }
   }),
   defineMethod({

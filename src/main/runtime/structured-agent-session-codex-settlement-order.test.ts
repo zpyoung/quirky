@@ -121,7 +121,7 @@ function streamedReplyAhead(): void {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-settlement-order-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-settlement-order-'))
   answers = 0
   turns = codexTurnLifecycleFake(
     THREAD,
@@ -211,7 +211,7 @@ describe('a settlement Codex proves keeps its place behind the frame that proved
     await vi.waitFor(() => expect(seqOf(dispatchRow(sent, 'accepted'))).toBeDefined())
     await host.flushStreamedEvents(SESSION)
     // The echo reconciles into the send's own bubble: its row is the turn now naming that send.
-    const echoed = seqOf((entry) => turnOf(entry)?.userItemId === `orca:${sent}`)
+    const echoed = seqOf((entry) => turnOf(entry)?.userItemId === `quirky:${sent}`)
     expect(echoed).toBeDefined()
     expect(seqOf(dispatchRow(sent, 'accepted'))).toBeGreaterThan(echoed!)
   })

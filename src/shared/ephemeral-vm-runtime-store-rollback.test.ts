@@ -105,7 +105,7 @@ describe('ephemeral VM runtime store rollback projection', () => {
   })
 
   function makeUserDataPath(): string {
-    const path = mkdtempSync(join(tmpdir(), 'orca-vm-rollback-store-'))
+    const path = mkdtempSync(join(tmpdir(), 'quirky-vm-rollback-store-'))
     tempDirs.push(path)
     return path
   }
@@ -138,7 +138,7 @@ describe('ephemeral VM runtime store rollback projection', () => {
   it('projects an explicit ordinary checkout mode without changing its current meaning', () => {
     const userDataPath = makeUserDataPath()
     const runtime = runtimeRecord({
-      recipe: { ...runtimeRecord().recipe!, checkoutMode: 'orca-worktree' }
+      recipe: { ...runtimeRecord().recipe!, checkoutMode: 'quirky-worktree' }
     })
 
     upsertEphemeralVmRuntime(userDataPath, runtime)
@@ -316,9 +316,9 @@ describe('runtime feature restoration scaling', () => {
       true
     )
     expect(restoreRuntimeFeatureList([runtimes[0]], [])[0]).toBe(runtimes[0])
-    const first = { ...features[0], recipeCheckoutMode: 'orca-worktree' as const }
+    const first = { ...features[0], recipeCheckoutMode: 'quirky-worktree' as const }
     expect(
       restoreRuntimeFeatureList([runtimes[0]], [first, features[0]])[0].recipe?.checkoutMode
-    ).toBe('orca-worktree')
+    ).toBe('quirky-worktree')
   })
 })

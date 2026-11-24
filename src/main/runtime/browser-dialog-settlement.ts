@@ -4,7 +4,7 @@ import type { ActiveBrowserScreencastPage } from './browser/browser-screencast-c
  * What `browser.dialogAccept` and `browser.dialogDismiss` answer, on either path.
  *
  * One shape for both, because which path ran is an implementation detail of whether a pane happens
- * to be streaming the page: `orca browser dialog accept --json` printed the agent-browser payload
+ * to be streaming the page: `quirky browser dialog accept --json` printed the agent-browser payload
  * with no viewer and an empty object with one. The bridge's own body is not forwarded — it is
  * whichever JSON that CLI version prints, which is the thing a caller cannot rely on.
  */

@@ -559,14 +559,14 @@ describe('addHostSectionRows', () => {
           id: 'runtime:env-1',
           kind: 'runtime',
           label: 'env-1',
-          detail: 'Orca server',
+          detail: 'Quirky server',
           health: 'available'
         },
         {
           id: 'runtime:env-2',
           kind: 'runtime',
           label: 'env-2',
-          detail: 'Orca server',
+          detail: 'Quirky server',
           health: 'available'
         }
       ],
@@ -674,7 +674,7 @@ describe('addHostSectionRows', () => {
           id: 'runtime:env-1',
           kind: 'runtime',
           label: 'env-1',
-          detail: 'Orca server',
+          detail: 'Quirky server',
           health: 'available'
         }
       ],
@@ -714,7 +714,7 @@ describe('addHostSectionRows', () => {
           id: 'runtime:env-1',
           kind: 'runtime',
           label: 'env-1',
-          detail: 'Orca server',
+          detail: 'Quirky server',
           health: 'blocked',
           compatibility: {
             kind: 'blocked',
@@ -759,7 +759,7 @@ describe('addHostSectionRows', () => {
           id: 'runtime:env-1',
           kind: 'runtime',
           label: 'env-1',
-          detail: 'Orca server',
+          detail: 'Quirky server',
           health: 'available'
         }
       ],

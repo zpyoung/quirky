@@ -19,7 +19,7 @@ function git(cwd, args) {
 }
 
 function withGitRepo(run) {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-draft-release-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-draft-release-'))
   try {
     git(dir, ['init', '--initial-branch=main'])
     git(dir, ['config', 'user.name', 'Test Bot'])
@@ -256,7 +256,7 @@ describe('publishCompleteDraftReleases', () => {
 
 describe('writeGithubOutputs', () => {
   it('writes count outputs for workflow conditions', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-release-outputs-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-release-outputs-'))
     const outputPath = join(dir, 'output')
     try {
       writeGithubOutputs(

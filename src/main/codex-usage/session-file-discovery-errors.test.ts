@@ -7,7 +7,7 @@ import { join } from 'node:path'
 const state = vi.hoisted(() => ({ managed: '', system: '', blocked: '', code: '' }))
 
 vi.mock('../codex/codex-home-paths', () => ({
-  getOrcaManagedCodexHomePath: () => state.managed,
+  getQuirkyManagedCodexHomePath: () => state.managed,
   getSystemCodexHomePath: () => state.system
 }))
 
@@ -38,7 +38,7 @@ let root: string
 let sessions: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-discovery-error-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-discovery-error-'))
   state.managed = join(root, 'managed')
   state.system = join(root, 'system')
   state.blocked = ''

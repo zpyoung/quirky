@@ -61,10 +61,10 @@ const LOCAL_HOST_LABEL = getLocalExecutionHostLabel('darwin')
 const repos = [
   {
     id: 'repo-1',
-    displayName: 'orca',
-    path: '/src/orca',
+    displayName: 'quirky',
+    path: '/src/quirky',
     kind: 'git',
-    upstream: { owner: 'stablyai', repo: 'orca' }
+    upstream: { owner: 'stablyai', repo: 'quirky' }
   }
 ]
 
@@ -142,10 +142,10 @@ describe('NewWorktreeModal project targets', () => {
 
     expect(sendRequest).toHaveBeenCalledWith('repo.list')
     expect(pickerItems(renderer, 'Project')).toEqual([
-      expect.objectContaining({ label: 'orca', detail: 'stablyai/orca' })
+      expect.objectContaining({ label: 'quirky', detail: 'stablyai/orca' })
     ])
     expect(pickerItems(renderer, 'Run on')).toEqual([
-      expect.objectContaining({ label: LOCAL_HOST_LABEL, detail: '/src/orca' })
+      expect.objectContaining({ label: LOCAL_HOST_LABEL, detail: '/src/quirky' })
     ])
   })
 
@@ -154,11 +154,11 @@ describe('NewWorktreeModal project targets', () => {
       ...repos,
       {
         id: 'repo-2',
-        displayName: 'orca',
-        path: '/home/dev/orca',
+        displayName: 'quirky',
+        path: '/home/dev/quirky',
         connectionId: 'build-server',
         kind: 'git',
-        upstream: { owner: 'stablyai', repo: 'orca' }
+        upstream: { owner: 'stablyai', repo: 'quirky' }
       }
     ]
     const client = {
@@ -187,13 +187,13 @@ describe('NewWorktreeModal project targets', () => {
     })
 
     expect(pickerItems(renderer, 'Project')).toEqual([
-      expect.objectContaining({ label: 'orca', detail: 'stablyai/orca' })
+      expect.objectContaining({ label: 'quirky', detail: 'stablyai/orca' })
     ])
     expect(pickerItems(renderer, 'Run on')).toEqual([
-      expect.objectContaining({ label: LOCAL_HOST_LABEL, detail: '/src/orca' }),
+      expect.objectContaining({ label: LOCAL_HOST_LABEL, detail: '/src/quirky' }),
       expect.objectContaining({
         label: 'build-server',
-        detail: '/home/dev/orca'
+        detail: '/home/dev/quirky'
       })
     ])
   })
@@ -201,11 +201,11 @@ describe('NewWorktreeModal project targets', () => {
   it('loads SSH state before detecting agents on the selected remote target', async () => {
     const remoteRepo = {
       id: 'repo-remote',
-      displayName: 'orca',
-      path: '/home/dev/orca',
+      displayName: 'quirky',
+      path: '/home/dev/quirky',
       connectionId: 'build-server',
       kind: 'git',
-      upstream: { owner: 'stablyai', repo: 'orca' }
+      upstream: { owner: 'stablyai', repo: 'quirky' }
     }
     setCachedRepos('host-ssh', [remoteRepo])
     const sendRequest = vi.fn().mockImplementation((method: string) => {
@@ -364,7 +364,7 @@ describe('NewWorktreeModal project targets', () => {
   })
 
   it("creates a server repo's workspace on that server and names it for the route", async () => {
-    const serverRepo = { ...repos[0]!, id: 'server-repo', path: '/srv/orca' }
+    const serverRepo = { ...repos[0]!, id: 'server-repo', path: '/srv/quirky' }
     const serverSshRepo = { ...serverRepo, id: 'server-ssh', connectionId: 'its-own-ssh' }
     const reply = (method: string, listed: unknown[], hostPlatform: string) => {
       if (method === 'repo.list') {
@@ -376,7 +376,7 @@ describe('NewWorktreeModal project targets', () => {
       if (method === 'worktree.create') {
         return Promise.resolve({
           ok: true,
-          result: { worktree: { id: 'srv-wt', displayName: 'srv-wt', path: '/srv/orca-wt' } }
+          result: { worktree: { id: 'srv-wt', displayName: 'srv-wt', path: '/srv/quirky-wt' } }
         })
       }
       if (method === 'settings.get') {
@@ -406,8 +406,8 @@ describe('NewWorktreeModal project targets', () => {
 
     const runTargets = pickerItems(renderer, 'Run on')
     expect(runTargets.map((item) => [item.label, item.detail])).toEqual([
-      [LOCAL_HOST_LABEL, '/src/orca'],
-      ['scratch-server', '/srv/orca']
+      [LOCAL_HOST_LABEL, '/src/quirky'],
+      ['scratch-server', '/srv/quirky']
     ])
     const serverTarget = runTargetPicker(renderer)
     const iconOf = (item: unknown) => {
@@ -445,7 +445,7 @@ describe('NewWorktreeModal project targets', () => {
   })
 
   it("offers the desktop's servers, by name, in a sheet opened before the list has them", async () => {
-    const serverRepo = { ...repos[0]!, id: 'server-repo', path: '/srv/orca' }
+    const serverRepo = { ...repos[0]!, id: 'server-repo', path: '/srv/quirky' }
     // One desktop: its own repos, its server list, and a server's repos relayed through it.
     const desktop = new FakeSession('connected')
     desktop.sendRequest.mockImplementation(async (method: string, ...rest: unknown[]) => {
@@ -487,8 +487,8 @@ describe('NewWorktreeModal project targets', () => {
     await act(async () => renderer.update(sheet(true)))
     await flushUpdates()
     expect(pickerItems(renderer, 'Run on').map((item) => [item.label, item.detail])).toEqual([
-      [expect.any(String), '/src/orca'],
-      ['scratch-vm', '/srv/orca']
+      [expect.any(String), '/src/quirky'],
+      ['scratch-vm', '/srv/quirky']
     ])
   })
 
@@ -515,11 +515,11 @@ describe('NewWorktreeModal project targets', () => {
     await flushUpdates()
 
     expect(hungServer).toHaveBeenCalledWith('repo.list')
-    expect(pickerItems(renderer, 'Run on').map((item) => item.detail)).toEqual(['/src/orca'])
+    expect(pickerItems(renderer, 'Run on').map((item) => item.detail)).toEqual(['/src/quirky'])
   })
 
   it('keeps a server repo picked when the desktop lists a repo with the same id', async () => {
-    const serverRepo = { ...repos[0]!, path: '/srv/orca' }
+    const serverRepo = { ...repos[0]!, path: '/srv/quirky' }
     const listing = (listed: unknown[]) =>
       vi.fn((method: string) =>
         method === 'repo.list'
@@ -547,7 +547,7 @@ describe('NewWorktreeModal project targets', () => {
     expect(runTargetPicker(renderer).props.selectedId).toBe('runtime:env-1')
     expect(
       renderer.root.find((node) => node.props.runTarget !== undefined).props.runTarget.detail
-    ).toBe('/srv/orca')
+    ).toBe('/srv/quirky')
   })
 
   it('ignores a stale repo list after the client changes', async () => {

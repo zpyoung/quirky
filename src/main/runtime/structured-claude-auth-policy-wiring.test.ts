@@ -23,7 +23,7 @@ describe('structured Claude auth policy wiring', () => {
     })
 
     it('refuses loudly rather than defaulting to a guess', async () => {
-      stateDirectory = await mkdtemp(join(tmpdir(), 'orca-auth-policy-wiring-'))
+      stateDirectory = await mkdtemp(join(tmpdir(), 'quirky-auth-policy-wiring-'))
 
       await expect(
         ensureStructuredAgentSessionHost({

@@ -73,7 +73,7 @@ export function getServeSuperviseValidationError(input: {
     return null
   }
   if ((input.platform ?? process.platform) === 'win32') {
-    return '--supervise is not supported on Windows yet. Run `orca serve` under your own service wrapper instead.'
+    return '--supervise is not supported on Windows yet. Run `quirky serve` under your own service wrapper instead.'
   }
   if (input.recipeJson) {
     return '--recipe-json starts a detached server and returns; it cannot be combined with --supervise.'
@@ -113,7 +113,7 @@ async function settle(run: () => Promise<number>): Promise<PromiseSettledResult<
 }
 
 /**
- * `orca serve --supervise`: the restart owner for a service manager. It never exits because its
+ * `quirky serve --supervise`: the restart owner for a service manager. It never exits because its
  * child died; it exits on a stop signal, or with 0 after giving up so the manager stops too.
  */
 export async function superviseServeService(options: SupervisedServeOptions): Promise<number> {
@@ -219,7 +219,7 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
         if (held?.reason !== evidence.reason) {
           hold.current = { reason: evidence.reason, since: now(), reportedStuck: false }
           log(
-            `[serve] Waiting before starting Orca serve: ${SERVE_INSTALL_HOLD_REASON_TEXT[evidence.reason]}.`
+            `[serve] Waiting before starting Quirky serve: ${SERVE_INSTALL_HOLD_REASON_TEXT[evidence.reason]}.`
           )
         } else if (
           evidence.reason === 'bundle-missing' &&
@@ -227,7 +227,7 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
         ) {
           // Why exit 1: the manager restarts the CLI through the stable launcher, which finds the installed build.
           log(
-            '[serve] The Orca executable this service started from is gone; exiting so the service manager starts the installed Orca.'
+            '[serve] The Quirky executable this service started from is gone; exiting so the service manager starts the installed Quirky.'
           )
           return 1
         } else if (!held.reportedStuck && now() - held.since >= SERVE_INSTALL_HOLD_STUCK_MS) {
@@ -272,10 +272,10 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
       if (attempt.settled.status === 'fulfilled') {
         const code = attempt.settled.value
         if (code === SINGLE_INSTANCE_ALREADY_RUNNING_EXIT_CODE) {
-          // Why not a failure: another Orca serves this profile, so wait for it instead of racing it.
+          // Why not a failure: another Quirky serves this profile, so wait for it instead of racing it.
           const delayMs = standbyDelayMs(standbyAttempt++, random)
           log(
-            `[serve] Another Orca serves this profile; checking again in ${Math.round(delayMs / 1000)}s.`
+            `[serve] Another Quirky serves this profile; checking again in ${Math.round(delayMs / 1000)}s.`
           )
           await sleep(delayMs)
           continue
@@ -283,9 +283,9 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
         failure = `exited with code ${code}`
       } else {
         const error: unknown = attempt.settled.reason
-        // Why: the child's own errors read "Orca serve exited via SIGKILL."; the log line names serve once.
+        // Why: the child's own errors read "Quirky serve exited via SIGKILL."; the log line names serve once.
         failure = (error instanceof Error ? error.message : String(error))
-          .replace(/^Orca serve /, '')
+          .replace(/^Quirky serve /, '')
           .replace(/\.$/, '')
       }
       standbyAttempt = 0
@@ -297,7 +297,7 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
         return 0
       }
       log(
-        `[serve] Orca serve ${failure}; restarting in ${Math.max(1, Math.round(next.action.delayMs / 1000))}s.`
+        `[serve] Quirky serve ${failure}; restarting in ${Math.max(1, Math.round(next.action.delayMs / 1000))}s.`
       )
       await sleep(next.action.delayMs)
     }

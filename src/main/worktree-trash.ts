@@ -12,7 +12,7 @@ import type { Repo } from '../shared/repo-types'
 import { parseWslPath } from './wsl'
 import { getRepoRoutingConnectionId } from '../shared/execution-host'
 
-export const WORKTREE_TRASH_DIR_NAME = '.orca-worktree-trash'
+export const WORKTREE_TRASH_DIR_NAME = '.quirky-worktree-trash'
 
 // `<epoch-ms>-<nonce>`: the only names the retired rename ever generated.
 const TRASH_ENTRY_PATTERN = /^wt-\d+-[0-9a-f]{8}$/
@@ -80,7 +80,7 @@ async function collectExistingTrashRoots(workspaceRoots: readonly string[]): Pro
   return [...trashRoots]
 }
 
-/** Workspace roots of local git repos — the only places Orca ever created worktree trash. */
+/** Workspace roots of local git repos — the only places Quirky ever created worktree trash. */
 export function collectWorktreeTrashSweepRoots(
   repos: readonly Repo[],
   settings: Pick<GlobalSettings, 'workspaceDir' | 'nestWorkspaces'>

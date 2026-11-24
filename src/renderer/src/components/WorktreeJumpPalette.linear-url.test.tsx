@@ -452,13 +452,13 @@ describe('WorktreeJumpPalette Linear URL intent', () => {
     const localSibling = {
       ...makeRepo(),
       id: 'local-sibling',
-      upstream: { owner: 'stablyai', repo: 'orca' }
+      upstream: { owner: 'stablyai', repo: 'quirky' }
     }
     const runtimeOwnedRepo = {
       ...makeRepo(),
       id: 'runtime-owned',
       connectionId: 'runtime-ssh-workspace-1',
-      upstream: { owner: 'stablyai', repo: 'orca' }
+      upstream: { owner: 'stablyai', repo: 'quirky' }
     }
     const fetchLinearIssue = vi.fn(async () => makeLinearIssue())
     await renderPalette({

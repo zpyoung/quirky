@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 it('loads and delivers actual host notifications in plain Node without Electron installed', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-headless-attention-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-headless-attention-'))
   const bundle = join(directory, 'notification-host.cjs')
   try {
     await build({

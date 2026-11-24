@@ -20,12 +20,12 @@ describe('supervised update replacement spawns', () => {
   })
 
   async function resume(): Promise<{ code: number; spawnChild: ReturnType<typeof vi.fn> }> {
-    const root = await mkdtemp(join(tmpdir(), 'orca-update-gate-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-update-gate-'))
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
     const spawnChild = vi.fn()
     try {
       const code = await resumeInterruptedServeUpdate({
-        spec: { program: join(root, 'orca') },
+        spec: { program: join(root, 'quirky') },
         spawnChild,
         handoffPath: join(root, 'handoff.json'),
         handoff: HANDOFF

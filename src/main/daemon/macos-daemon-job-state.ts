@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const JOB_REMOVAL_TIMEOUT_MS = 3_000
 const JOB_REMOVAL_POLL_MS = 50

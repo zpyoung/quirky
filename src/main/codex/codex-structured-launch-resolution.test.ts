@@ -117,7 +117,7 @@ describe('codex structured launch resolution', () => {
   })
 
   it('resumes a floating session in its pinned folder, not the current floating setting', async () => {
-    const pinned = mkdtempSync(join(tmpdir(), 'orca-codex-floating-'))
+    const pinned = mkdtempSync(join(tmpdir(), 'quirky-codex-floating-'))
     const resolveWorkspacePath = vi.fn(async () => '/floating/current-setting')
     const floating = record({
       location: { ...record().location, workspaceId: FLOATING_TERMINAL_WORKTREE_ID },
@@ -178,7 +178,7 @@ describe('codex structured launch resolution', () => {
       const resolveLaunch = createCodexStructuredLaunchResolver({
         resolveLaunchArgs: () => [],
         store: { getRecord: () => record(), pinLaunchDirectory: vi.fn() },
-        resolveWorkspacePath: async () => String.raw`C:\workspaces\orca`,
+        resolveWorkspacePath: async () => String.raw`C:\workspaces\quirky`,
         resolveCommand: () => command
       })
 
@@ -195,7 +195,7 @@ describe('codex structured launch resolution', () => {
       const resolveLaunch = createCodexStructuredLaunchResolver({
         resolveLaunchArgs: () => [],
         store: { getRecord: () => record(), pinLaunchDirectory: vi.fn() },
-        resolveWorkspacePath: async () => String.raw`C:\workspaces\orca`,
+        resolveWorkspacePath: async () => String.raw`C:\workspaces\quirky`,
         resolveCommand: () => 'codex.exe'
       })
 

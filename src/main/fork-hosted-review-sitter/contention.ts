@@ -1,5 +1,5 @@
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { runtimePathsEqual } from '../runtime/runtime-worktree-path-identity'
 import type {
   RuntimeTerminalAgentStatus,
@@ -37,7 +37,7 @@ export type HostedReviewOwnedWorkerIdentity = {
 }
 
 function ownedWorkerTerminalHandle(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   definition: HostedReviewSitterDefinition,
   identity: HostedReviewOwnedWorkerIdentity | undefined
 ): string | null {
@@ -64,7 +64,7 @@ function isProvenExitCause(cause: TerminalExitCause | undefined): boolean {
  * incomplete host answer is unknown, never proof that a terminal or agent disappeared.
  */
 export async function inspectHostedReviewSitterContention(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   definition: HostedReviewSitterDefinition,
   ownWorker?: HostedReviewOwnedWorkerIdentity,

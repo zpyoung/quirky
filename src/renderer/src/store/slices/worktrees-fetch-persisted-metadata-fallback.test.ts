@@ -43,16 +43,16 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
     const sshRepo = {
       id: 'repo-ssh',
-      path: '/home/orca/repo',
+      path: '/home/quirky/repo',
       displayName: 'SSH Repo',
       badgeColor: '#000',
       addedAt: 0,
       connectionId: 'ssh-1'
     }
     const queued = makeWorktree({
-      id: 'repo-ssh::/home/orca/queued',
+      id: 'repo-ssh::/home/quirky/queued',
       repoId: 'repo-ssh',
-      path: '/home/orca/queued',
+      path: '/home/quirky/queued',
       displayName: 'queued'
     })
     const detected = makeDetectedResult('repo-ssh', [queued], {
@@ -97,25 +97,25 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
     const sshRepo = {
       id: 'repo-ssh',
-      path: '/home/orca/repo',
+      path: '/home/quirky/repo',
       displayName: 'SSH Repo',
       badgeColor: '#000',
       addedAt: 0,
       connectionId: 'ssh-1'
     }
     const existing = makeWorktree({
-      id: 'repo-ssh::/home/orca/existing',
+      id: 'repo-ssh::/home/quirky/existing',
       repoId: 'repo-ssh',
-      path: '/home/orca/existing',
+      path: '/home/quirky/existing',
       hostId: 'ssh:ssh-1',
       head: 'live-head',
       branch: 'refs/heads/live-branch'
     })
     const metadataExisting = { ...existing, head: '', branch: '' }
     const queued = makeWorktree({
-      id: 'repo-ssh::/home/orca/queued',
+      id: 'repo-ssh::/home/quirky/queued',
       repoId: 'repo-ssh',
-      path: '/home/orca/queued'
+      path: '/home/quirky/queued'
     })
     listKnownForExecutionHostMock.mockResolvedValueOnce({
       status: 'complete',
@@ -144,7 +144,7 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
     const sshRepo = {
       id: 'repo-shared',
-      path: '/home/orca/repo',
+      path: '/home/quirky/repo',
       displayName: 'SSH Repo',
       badgeColor: '#000',
       addedAt: 0,
@@ -152,9 +152,9 @@ describe('fetchWorktrees', () => {
     }
     const localRepo = { ...sshRepo, path: '/local/repo', connectionId: undefined }
     const sshExisting = makeWorktree({
-      id: 'repo-shared::/home/orca/existing',
+      id: 'repo-shared::/home/quirky/existing',
       repoId: sshRepo.id,
-      path: '/home/orca/existing',
+      path: '/home/quirky/existing',
       hostId: 'ssh:ssh-1'
     })
     const localExisting = makeWorktree({
@@ -164,9 +164,9 @@ describe('fetchWorktrees', () => {
       hostId: LOCAL_EXECUTION_HOST_ID
     })
     const queued = makeWorktree({
-      id: 'repo-shared::/home/orca/queued',
+      id: 'repo-shared::/home/quirky/queued',
       repoId: sshRepo.id,
-      path: '/home/orca/queued'
+      path: '/home/quirky/queued'
     })
     listKnownForExecutionHostMock.mockResolvedValueOnce({
       status: 'complete',
@@ -196,23 +196,23 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
     const sshRepo = {
       id: 'repo-ssh',
-      path: '/home/orca/repo',
+      path: '/home/quirky/repo',
       displayName: 'SSH Repo',
       badgeColor: '#000',
       addedAt: 0,
       connectionId: 'ssh-1'
     }
     const live = makeWorktree({
-      id: 'repo-ssh::/home/orca/live',
+      id: 'repo-ssh::/home/quirky/live',
       repoId: 'repo-ssh',
-      path: '/home/orca/live',
+      path: '/home/quirky/live',
       hostId: 'ssh:ssh-1'
     })
     // Why: deleted on the host, so an authoritative scan already purged it; the late metadata write must not resurrect it.
     const purged = makeWorktree({
-      id: 'repo-ssh::/home/orca/purged',
+      id: 'repo-ssh::/home/quirky/purged',
       repoId: 'repo-ssh',
-      path: '/home/orca/purged'
+      path: '/home/quirky/purged'
     })
     listKnownForExecutionHostMock.mockImplementationOnce(async (args) => {
       store.setState({
@@ -255,22 +255,22 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
     const sshRepo = {
       id: 'repo-ssh',
-      path: '/home/orca/repo',
+      path: '/home/quirky/repo',
       displayName: 'SSH Repo',
       badgeColor: '#000',
       addedAt: 0,
       connectionId: 'ssh-1'
     }
     const live = makeWorktree({
-      id: 'repo-ssh::/home/orca/live',
+      id: 'repo-ssh::/home/quirky/live',
       repoId: 'repo-ssh',
-      path: '/home/orca/live',
+      path: '/home/quirky/live',
       hostId: 'ssh:ssh-1'
     })
     const stale = makeWorktree({
-      id: 'repo-ssh::/home/orca/stale',
+      id: 'repo-ssh::/home/quirky/stale',
       repoId: 'repo-ssh',
-      path: '/home/orca/stale'
+      path: '/home/quirky/stale'
     })
     listKnownForExecutionHostMock.mockResolvedValueOnce({
       status: 'complete',
@@ -300,7 +300,7 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
     const sshRepo = {
       id: 'repo-shared',
-      path: '/home/orca/repo',
+      path: '/home/quirky/repo',
       displayName: 'SSH Repo',
       badgeColor: '#000',
       addedAt: 0,
@@ -313,9 +313,9 @@ describe('fetchWorktrees', () => {
       path: '/local/scanned'
     })
     const fromMetadata = makeWorktree({
-      id: 'repo-shared::/home/orca/queued',
+      id: 'repo-shared::/home/quirky/queued',
       repoId: sshRepo.id,
-      path: '/home/orca/queued'
+      path: '/home/quirky/queued'
     })
     const authoritative = makeDetectedResult(sshRepo.id, [scanned])
     listKnownForExecutionHostMock.mockResolvedValueOnce({
@@ -349,22 +349,22 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
     const sshRepo = {
       id: 'repo-ssh',
-      path: '/home/orca/repo',
+      path: '/home/quirky/repo',
       displayName: 'SSH Repo',
       badgeColor: '#000',
       addedAt: 0,
       connectionId: 'ssh-1'
     }
     const live = makeWorktree({
-      id: 'repo-ssh::/home/orca/live',
+      id: 'repo-ssh::/home/quirky/live',
       repoId: 'repo-ssh',
-      path: '/home/orca/live',
+      path: '/home/quirky/live',
       hostId: 'ssh:ssh-1'
     })
     const deletedOnRemote = makeWorktree({
-      id: 'repo-ssh::/home/orca/deleted',
+      id: 'repo-ssh::/home/quirky/deleted',
       repoId: 'repo-ssh',
-      path: '/home/orca/deleted'
+      path: '/home/quirky/deleted'
     })
     const metadataResult = () => ({
       status: 'complete' as const,
@@ -402,22 +402,22 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
     const sshRepo = {
       id: 'repo-ssh',
-      path: '/home/orca/repo',
+      path: '/home/quirky/repo',
       displayName: 'SSH Repo',
       badgeColor: '#000',
       addedAt: 0,
       connectionId: 'ssh-1'
     }
     const live = makeWorktree({
-      id: 'repo-ssh::/home/orca/live',
+      id: 'repo-ssh::/home/quirky/live',
       repoId: 'repo-ssh',
-      path: '/home/orca/live',
+      path: '/home/quirky/live',
       hostId: 'ssh:ssh-1'
     })
     const deletedOnRemote = makeWorktree({
-      id: 'repo-ssh::/home/orca/deleted',
+      id: 'repo-ssh::/home/quirky/deleted',
       repoId: 'repo-ssh',
-      path: '/home/orca/deleted'
+      path: '/home/quirky/deleted'
     })
     const connectedStates = createTestStore().getState().sshConnectionStates
     listKnownForExecutionHostMock.mockResolvedValueOnce({
@@ -483,7 +483,7 @@ describe('fetchWorktrees', () => {
     const store = createTestStore()
     const sshRepo = {
       id: 'repo-ssh',
-      path: '/home/orca/repo',
+      path: '/home/quirky/repo',
       displayName: 'SSH Repo',
       badgeColor: '#000',
       addedAt: 0,

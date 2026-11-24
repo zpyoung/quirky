@@ -45,7 +45,7 @@ afterEach(async () => {
 })
 
 async function writeSession(meta: string, transcript?: string): Promise<string> {
-  root = await mkdtemp(join(tmpdir(), 'orca-kiro-sessions-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-kiro-sessions-'))
   const path = join(root, `${SESSION_ID}.json`)
   await writeFile(path, meta)
   if (transcript !== undefined) {

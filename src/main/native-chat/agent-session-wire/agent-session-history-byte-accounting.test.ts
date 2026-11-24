@@ -50,7 +50,7 @@ async function appendItems(count: number, text: string): Promise<void> {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-wire-history-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-wire-history-'))
   clock = 1_000
   epochs = 0
   journal = await journals.open({

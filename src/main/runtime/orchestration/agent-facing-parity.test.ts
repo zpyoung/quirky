@@ -1,8 +1,8 @@
 /**
  * A chat agent and a terminal agent run the same orchestration process: the same preamble, the
  * same pointer text and the same guide. They differ in how each is named (a terminal by its handle,
- * exactly as on main, a session by its Orca session ID) and in the preamble calling a chat a chat.
- * Orca absorbs everything else.
+ * exactly as on main, a session by its Quirky session ID) and in the preamble calling a chat a chat.
+ * Quirky absorbs everything else.
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -13,7 +13,7 @@ import {
   setAppEnvironment,
   type AppEnvironment
 } from '../../../shared/app-environment'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { deliverWorkerDispatchPreamble } from '../rpc/methods/orchestration/worker/deliver-worker-dispatch-preamble'
 import {
   localOrchestrationCliCommand,
@@ -29,7 +29,7 @@ import {
   CHAT_REDISPATCH_PARAGRAPH as CHAT_REDISPATCH,
   TERMINAL_REDISPATCH_PARAGRAPH as TERMINAL_REDISPATCH
 } from './preamble'
-import { ORCA_SESSION_ID_AS_ADDRESS } from '../../../shared/orca-session-id-wording-test-fixture'
+import { QUIRKY_SESSION_ID_AS_ADDRESS } from '../../../shared/quirky-session-id-wording-test-fixture'
 
 const sent = vi.hoisted((): { preambles: string[] } => ({ preambles: [] }))
 vi.mock('../rpc/methods/orchestration-structured-worker-session', () => ({
@@ -39,13 +39,13 @@ vi.mock('../rpc/methods/orchestration-structured-worker-session', () => ({
 }))
 
 const CHAT_SESSION = '4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37'
-const CHAT_ADDRESS = `orca_session_id:${CHAT_SESSION}`
+const CHAT_ADDRESS = `quirky_session_id:${CHAT_SESSION}`
 const TERMINAL_HANDLE = 'term_worker'
 // A structured worker's mailbox key: the handle it was minted, which its preamble never shows.
 const CHAT_WORKER_HANDLE = 'structworker_1'
 
 const db = new OrchestrationDb(':memory:')
-const SELF_LINE = `\nYour Orca session ID is: ${CHAT_ADDRESS}`
+const SELF_LINE = `\nYour Quirky session ID is: ${CHAT_ADDRESS}`
 const previousEnvironment = hasAppEnvironment() ? getAppEnvironment() : null
 
 afterEach(() => {
@@ -61,8 +61,8 @@ afterAll(() => {
 
 function installApp(isPackaged: boolean): void {
   setAppEnvironment({
-    getPath: () => '/tmp/orca-parity',
-    getAppPath: () => '/tmp/orca-parity',
+    getPath: () => '/tmp/quirky-parity',
+    getAppPath: () => '/tmp/quirky-parity',
     getVersion: () => '0.0.0-test',
     isPackaged: () => isPackaged,
     onWillQuit: () => {},
@@ -71,22 +71,23 @@ function installApp(isPackaged: boolean): void {
   } satisfies AppEnvironment)
 }
 
-function runtime(prompts: string[]): OrcaRuntimeService {
+function runtime(prompts: string[]): QuirkyRuntimeService {
   const fake: Pick<
-    OrcaRuntimeService,
+    QuirkyRuntimeService,
     'getNestedWorkerMaxDepth' | 'getTerminalOrchestrationCliCommand' | 'sendTerminalAgentPrompt'
-  > & { orchestrationSenderNames: Pick<OrcaRuntimeService['orchestrationSenderNames'], 'nameOf'> } =
-    {
-      orchestrationSenderNames: { nameOf: () => null },
-      getNestedWorkerMaxDepth: () => 2,
-      getTerminalOrchestrationCliCommand: () => 'orca',
-      sendTerminalAgentPrompt: async (handle, text) => {
-        prompts.push(text)
-        return { handle, accepted: true, bytesWritten: text.length }
-      }
+  > & {
+    orchestrationSenderNames: Pick<QuirkyRuntimeService['orchestrationSenderNames'], 'nameOf'>
+  } = {
+    orchestrationSenderNames: { nameOf: () => null },
+    getNestedWorkerMaxDepth: () => 2,
+    getTerminalOrchestrationCliCommand: () => 'quirky',
+    sendTerminalAgentPrompt: async (handle, text) => {
+      prompts.push(text)
+      return { handle, accepted: true, bytesWritten: text.length }
     }
+  }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: preamble delivery reads only the members the fake implements.
-  return fake as OrcaRuntimeService
+  return fake as QuirkyRuntimeService
 }
 
 type StructuredSession = Parameters<typeof deliverWorkerDispatchPreamble>[0]['structuredSession']
@@ -153,7 +154,7 @@ describe('a chat agent and a terminal agent see the same text but for how each i
     const terminal = await renderPreamble('terminal')
     const withoutRedispatch = chat.replace(CHAT_REDISPATCH, TERMINAL_REDISPATCH)
 
-    expect(terminal).not.toContain('Orca session ID')
+    expect(terminal).not.toContain('Quirky session ID')
     expect(chat).toContain(`Your task ID is: task_1${SELF_LINE}\n`)
     expect(chat).not.toContain(CHAT_WORKER_HANDLE)
     expect(chat).not.toContain('this terminal')
@@ -183,7 +184,7 @@ describe('a chat agent and a terminal agent see the same text but for how each i
         worktreeId: 'repo::/tmp/wt',
         runtimeCliCommand: runtimeOrchestrationCliCommand()
       })
-      expect(terminalCli).toBe(packaged ? 'orca' : 'orca-dev')
+      expect(terminalCli).toBe(packaged ? 'quirky' : 'quirky-dev')
 
       for (const mailbox of ['run:run_parity', CHAT_ADDRESS]) {
         expect(await renderChatPointer(mailbox)).toBe(
@@ -194,7 +195,7 @@ describe('a chat agent and a terminal agent see the same text but for how each i
   )
 })
 
-describe('agent-read text about an Orca session ID', () => {
+describe('agent-read text about an Quirky session ID', () => {
   const guideDir = join(process.cwd(), 'skill-guides')
   const guide = [
     join(guideDir, 'orchestration.md'),
@@ -235,7 +236,7 @@ describe('agent-read text about an Orca session ID', () => {
     ['the refusals that name a session', () => refusalSources]
   ])('never calls it an address in %s', (_where, texts) => {
     for (const text of texts()) {
-      expect(text).not.toMatch(ORCA_SESSION_ID_AS_ADDRESS)
+      expect(text).not.toMatch(QUIRKY_SESSION_ID_AS_ADDRESS)
     }
   })
 })

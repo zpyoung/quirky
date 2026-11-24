@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RpcContext } from '../../../core'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import type { OrchestrationCompatibilityEvidence } from '../../../../../../shared/orchestration-compatibility-evidence'
-import { testOrcaSessionId } from '../../../../../../shared/orca-session-address-test-fixture'
+import { testQuirkySessionId } from '../../../../../../shared/quirky-session-address-test-fixture'
 import {
   createRootDispatch,
   reattachDispatchConsumer
@@ -24,7 +24,7 @@ type CheckResult = {
 describe('orchestration.check on a re-attached Dispatch', () => {
   const h = createOrchestrationRpcHarness()
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let ctx: RpcContext
 
   afterEach(() => {
@@ -242,7 +242,7 @@ const WORKER_PROCESS = 'runtime_test:term_worker:1'
 describe('worker report authority without a Dispatch capability', () => {
   const harness = createOrchestrationRpcHarness()
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let ctx: RpcContext
   let panes: Record<string, string>
 
@@ -337,7 +337,7 @@ describe('worker report authority without a Dispatch capability', () => {
     it.each<[string, OrchestrationCompatibilityEvidence | undefined]>([
       ['no identity env (old CLI, scrubbed env)', undefined],
       ['its own pane', { paneKey: WORKER_PANE, terminalHandle: 'term_stale_after_remint' }],
-      ["another Orca's pane", { paneKey: 'tab_elsewhere:eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' }],
+      ["another Quirky's pane", { paneKey: 'tab_elsewhere:eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' }],
       ['a stale handle', { terminalHandle: 'term_gone' }],
       ['a live pane that is no orchestration party', { paneKey: NON_PARTY_PANE }]
     ])('accepts a report whose env names %s', async (_case, evidence) => {
@@ -384,7 +384,7 @@ describe('worker report authority without a Dispatch capability', () => {
         setup()
         const worker = startWorker('worker', WORKER_PANE)
         db.beginWorkerStop(worker.dispatchId, 'epoch_home')
-        db.markWorkerStopUnknown(worker.dispatchId, 'tab not owned by Orca')
+        db.markWorkerStopUnknown(worker.dispatchId, 'tab not owned by Quirky')
 
         expect(await workerDone(worker, undefined, outcome)).toMatchObject({
           lifecycle: { action: taskStatus }
@@ -401,7 +401,7 @@ describe('worker report authority without a Dispatch capability', () => {
       setup()
       const worker = startWorker('worker', WORKER_PANE)
       db.beginWorkerStop(worker.dispatchId, 'epoch_home')
-      db.markWorkerStopUnknown(worker.dispatchId, 'tab not owned by Orca')
+      db.markWorkerStopUnknown(worker.dispatchId, 'tab not owned by Quirky')
       vi.mocked(runtime.getTerminalProcessIncarnation).mockReturnValue('runtime_test:term_worker:2')
 
       expect(await workerDone(worker)).toMatchObject({
@@ -446,7 +446,7 @@ describe('worker report authority without a Dispatch capability', () => {
         (dispatchId: string) => {
           db.markRemoteAttachmentReady(dispatchId)
           db.beginRemoteAttachmentStop(dispatchId)
-          db.markRemoteAttachmentStopUnknown(dispatchId, 'tab not owned by Orca')
+          db.markRemoteAttachmentStopUnknown(dispatchId, 'tab not owned by Quirky')
         }
       ],
       [
@@ -483,7 +483,7 @@ describe('worker report authority without a Dispatch capability', () => {
 
 const PANE = 'tab_lead:22222222-2222-4222-9222-222222222222'
 const OTHER = 'tab_other:33333333-3333-4333-8333-333333333333'
-const SESSION = testOrcaSessionId('4bd46b4a-035b-41dd-a122-a9c29122ff11')
+const SESSION = testQuirkySessionId('4bd46b4a-035b-41dd-a122-a9c29122ff11')
 
 describe.each([false, true])('Dispatch recipient identity (settled=%s)', (settled) => {
   const h = createOrchestrationRpcHarness()
@@ -512,13 +512,13 @@ describe.each([false, true])('Dispatch recipient identity (settled=%s)', (settle
   }
   function sessionRun() {
     state.db.db
-      .prepare('UPDATE dispatch_contexts SET assignee_orca_session_id = ? WHERE id = ?')
+      .prepare('UPDATE dispatch_contexts SET assignee_quirky_session_id = ? WHERE id = ?')
       .run(SESSION, dispatch.id)
     return state.db.createRun({
       objective: 'session lead',
       coordinatorHandle: 'term_lead',
       coordinatorPaneKey: null,
-      coordinatorOrcaSessionId: SESSION
+      coordinatorQuirkySessionId: SESSION
     })
   }
   async function expectRun(runId: string) {

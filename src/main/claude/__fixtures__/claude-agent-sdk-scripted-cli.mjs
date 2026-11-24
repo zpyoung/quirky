@@ -4,16 +4,16 @@
 // observes to a report file, and plays back the steps listed in a scenario file.
 //
 // Env contract (set by the test):
-//   ORCA_SDK_CONTRACT_SCENARIO_PATH — JSON file
+//   QUIRKY_SDK_CONTRACT_SCENARIO_PATH — JSON file
 //     { steps: Step[], controlResponses?: { [subtype]: <response> },
 //       controlResponseLeadingFrames?: { [subtype]: <frame>[] } } where a Step is
 //     { emit: <frame> } | { awaitUserMessage: true } | { stderr: <text> } |
 //     { awaitControlRequest: <subtype> } | { awaitControlResponse: <request_id> } | { awaitFile: { path, timeoutMs } } |
 //     { delayMs: <n> } | { exit: <code> }
-//   ORCA_SDK_CONTRACT_REPORT_PATH — where argv/env observations are written
-//   ORCA_SDK_CONTRACT_IGNORE_SIGTERM — trap SIGTERM/SIGINT and outlive stdin close
-//   ORCA_SDK_CONTRACT_IGNORE_CONTROL_REQUESTS — record control requests but never answer
-//   ORCA_SDK_CONTRACT_DESCENDANT — fork an idle grandchild and report its pid
+//   QUIRKY_SDK_CONTRACT_REPORT_PATH — where argv/env observations are written
+//   QUIRKY_SDK_CONTRACT_IGNORE_SIGTERM — trap SIGTERM/SIGINT and outlive stdin close
+//   QUIRKY_SDK_CONTRACT_IGNORE_CONTROL_REQUESTS — record control requests but never answer
+//   QUIRKY_SDK_CONTRACT_DESCENDANT — fork an idle grandchild and report its pid
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
@@ -24,8 +24,8 @@ if (process.argv.includes('--version')) {
   process.exit(0)
 }
 
-const scenarioPath = process.env.ORCA_SDK_CONTRACT_SCENARIO_PATH
-const reportPath = process.env.ORCA_SDK_CONTRACT_REPORT_PATH
+const scenarioPath = process.env.QUIRKY_SDK_CONTRACT_SCENARIO_PATH
+const reportPath = process.env.QUIRKY_SDK_CONTRACT_REPORT_PATH
 
 const report = {
   argv: process.argv.slice(1),
@@ -34,7 +34,7 @@ const report = {
   env: Object.fromEntries(
     Object.entries(process.env).filter(
       ([key]) =>
-        key.startsWith('ORCA_') || ['HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR'].includes(key)
+        key.startsWith('QUIRKY_') || ['HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR'].includes(key)
     )
   ),
   controlRequests: [],
@@ -53,12 +53,12 @@ writeReport()
 
 const scenario = scenarioPath ? JSON.parse(readFileSync(scenarioPath, 'utf8')) : { steps: [] }
 
-if (process.env.ORCA_SDK_CONTRACT_IGNORE_SIGTERM) {
+if (process.env.QUIRKY_SDK_CONTRACT_IGNORE_SIGTERM) {
   process.on('SIGTERM', () => {})
   process.on('SIGINT', () => {})
   setInterval(() => {}, 1_000_000)
 }
-if (process.env.ORCA_SDK_CONTRACT_DESCENDANT) {
+if (process.env.QUIRKY_SDK_CONTRACT_DESCENDANT) {
   const descendant = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000000)'], {
     stdio: 'ignore'
   })
@@ -112,7 +112,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     report.controlRequests.push(frame)
     settle('control_request', frame.request?.subtype)
     writeReport()
-    if (process.env.ORCA_SDK_CONTRACT_IGNORE_CONTROL_REQUESTS) {
+    if (process.env.QUIRKY_SDK_CONTRACT_IGNORE_CONTROL_REQUESTS) {
       return
     }
     const response = {
@@ -148,7 +148,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
 // this process open forever if the SDK side stops driving the scenario.
 setTimeout(
   () => process.exit(3),
-  Number(process.env.ORCA_SDK_CONTRACT_TIMEOUT_MS ?? 20_000)
+  Number(process.env.QUIRKY_SDK_CONTRACT_TIMEOUT_MS ?? 20_000)
 ).unref()
 
 for (const step of scenario.steps) {

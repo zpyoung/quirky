@@ -14,7 +14,7 @@ export function buildMarkdownDiskFallbackDoc(args: {
 }): Extract<MarkdownDocState, { status: 'ready' }> {
   const readOnlyReason = args.tabIsDirty
     ? 'Desktop has unsaved changes. Showing disk content.'
-    : 'Editing needs Orca desktop running.'
+    : 'Editing needs Quirky desktop running.'
   return {
     status: 'ready',
     content: args.content,

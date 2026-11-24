@@ -20,7 +20,7 @@ export async function callAntigravityAccounts(
     await assertRuntimeEnvironmentCapability(
       owner.environmentId,
       ANTIGRAVITY_ACCOUNTS_RUNTIME_CAPABILITY,
-      'This execution host does not support native Antigravity Accounts yet. Update Orca on that host.'
+      'This execution host does not support native Antigravity Accounts yet. Update Quirky on that host.'
     )
   }
   return callRuntimeRpc(
@@ -36,7 +36,7 @@ async function assertChatSignInHost(owner: RuntimeClientTarget): Promise<void> {
     await assertRuntimeEnvironmentCapability(
       owner.environmentId,
       ANTIGRAVITY_CHAT_SIGN_IN_RUNTIME_CAPABILITY,
-      'This execution host does not support Antigravity chat sign-in yet. Update Orca on that host.'
+      'This execution host does not support Antigravity chat sign-in yet. Update Quirky on that host.'
     )
   }
 }

@@ -1,7 +1,7 @@
 import { extractLinearInlineMedia } from '../../shared/linear/inline-media'
 import { getPublicFileUrlClient, isAuthError, type LinearClientForWorkspace } from './client'
 
-const DESCRIPTION_QUERY = `query OrcaLinearDescriptionImages($id: String!) {
+const DESCRIPTION_QUERY = `query QuirkyLinearDescriptionImages($id: String!) {
   issue(id: $id) { description }
 }`
 

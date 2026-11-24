@@ -73,7 +73,7 @@ describe('openNodeSpeechDownloadRequest', () => {
     expect(listeners.response).toHaveBeenCalledWith(ok)
   })
 
-  // Why: the download detaches before aborting; an unheard ClientRequest error crashes orcad.
+  // Why: the download detaches before aborting; an unheard ClientRequest error crashes quirkyd.
   it('swallows the error abort raises after the download detached', () => {
     const handle = openNodeSpeechDownloadRequest('https://models.example/a.tar.bz2')
     const listeners = { error: vi.fn(), response: vi.fn(), redirect: vi.fn() }

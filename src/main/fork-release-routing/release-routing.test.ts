@@ -26,7 +26,7 @@ describe('fork release routing', () => {
       ok: true,
       json: async () =>
         url === 'https://api.github.com/repos/zpyoung/quirky/releases?per_page=100'
-          ? [{ tag_name: tag, assets: [{ name: 'latest-mac.yml' }, { name: 'orca.dmg' }] }]
+          ? [{ tag_name: tag, assets: [{ name: 'latest-mac.yml' }, { name: 'quirky.dmg' }] }]
           : []
     }))
 

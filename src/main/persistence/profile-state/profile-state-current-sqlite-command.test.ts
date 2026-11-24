@@ -31,15 +31,15 @@ afterEach(() => {
 })
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-current-sqlite-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-current-sqlite-'))
   roots.push(root)
   const directory = join(root, 'profiles', profileId)
   mkdirSync(directory, { recursive: true })
   writeFileSync(
-    join(root, 'orca-profile-index.json'),
+    join(root, 'quirky-profile-index.json'),
     JSON.stringify({ activeProfileId: profileId, profiles: [{ id: profileId }] })
   )
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const databaseFile = join(directory, 'profile-state.db')
   const originalJson = JSON.stringify(sqliteState)
   writeFileSync(dataFile, originalJson)
@@ -90,7 +90,7 @@ describe('keeping SQLite over JSON edited by an older build', () => {
       removedDatabaseFiles: []
     })
     expect(result.backupId).toBeUndefined()
-    expect(readFileSync(join(result.quarantineDirectory, 'orca-data.json'), 'utf8')).toBe(
+    expect(readFileSync(join(result.quarantineDirectory, 'quirky-data.json'), 'utf8')).toBe(
       editedJson
     )
     expect(readFileSync(join(result.quarantineDirectory, 'profile-state.db'))).toEqual(
@@ -112,7 +112,7 @@ describe('keeping SQLite over JSON edited by an older build', () => {
     const profile = fixture()
     writeFileSync(profile.dataFile, 'not json')
     const result = rollback(profile)
-    expect(readFileSync(join(result.quarantineDirectory, 'orca-data.json'), 'utf8')).toBe(
+    expect(readFileSync(join(result.quarantineDirectory, 'quirky-data.json'), 'utf8')).toBe(
       'not json'
     )
     expect(JSON.parse(readFileSync(profile.dataFile, 'utf8'))).toEqual(sqliteState)

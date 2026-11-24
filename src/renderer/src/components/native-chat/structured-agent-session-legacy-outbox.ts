@@ -17,7 +17,7 @@ import { agentSessionWriteNoticeText } from './agent-session-write-notice-text'
 import { handBackStructuredAgentSessionMessage } from './structured-agent-session-message-hand-back'
 import { setStructuredAgentSessionSendNotice } from './structured-agent-session-pending-sends'
 
-const LEGACY_OUTBOX_PREFIX = 'orca:desktopStructuredAgentSessionOutbox:v1:'
+const LEGACY_OUTBOX_PREFIX = 'quirky:desktopStructuredAgentSessionOutbox:v1:'
 
 type LegacyOutboxMessage = { clientMessageId: string; body: AgentJournalMessageItem }
 

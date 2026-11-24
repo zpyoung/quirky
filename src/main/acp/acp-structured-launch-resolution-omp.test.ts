@@ -48,7 +48,7 @@ function resolver(
 }
 
 describe('OMP ACP launch resolution', () => {
-  // OMP has no bypass flag: the chat's own mode alone decides whether Orca answers its requests.
+  // OMP has no bypass flag: the chat's own mode alone decides whether Quirky answers its requests.
   it("runs `omp acp` pointed at the agent directory the chat pinned, in the chat's own mode", async () => {
     for (const permissionMode of ['ask', 'full-access'] as const) {
       const launch = await resolver(ompRecord())({ identity, spawnToken: 'token', permissionMode })
@@ -79,12 +79,12 @@ describe('OMP ACP launch resolution', () => {
         env: launch.env,
         envToDelete: [...STRUCTURED_CHILD_ENV_TO_DELETE, ...launch.envToDelete]
       },
-      { ORCA_PANE_KEY: 'tab-1:pane-1' },
+      { QUIRKY_PANE_KEY: 'tab-1:pane-1' },
       'darwin'
     ).env
     expect(child).toMatchObject(userEnv)
-    // A pane's identity would let OMP's Orca status extension report for this chat too.
-    expect(child.ORCA_PANE_KEY).toBeUndefined()
+    // A pane's identity would let OMP's Quirky status extension report for this chat too.
+    expect(child.QUIRKY_PANE_KEY).toBeUndefined()
   })
 
   it('keeps a chat on the directory it pinned when the launch env names another', async () => {

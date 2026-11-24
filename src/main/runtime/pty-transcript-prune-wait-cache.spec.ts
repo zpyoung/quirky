@@ -1,6 +1,6 @@
 // A disconnected transcript must not keep a wait-scan cache from before its history was pruned.
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { MAX_TAIL_LINES } from './terminal-tail-limits'
 import * as terminalWaitTailState from './terminal-wait-tail-state'
 import type { TerminalTailWaitState } from './terminal-wait-tail-state'
@@ -41,8 +41,8 @@ export function registerPtyTranscriptPruneWaitCacheTests(): void {
 
   describe('pruneDisconnectedPtyTranscript clears the wait-scan cache', () => {
     it('empties the tail and drops tailWaitState so resume recomputes', () => {
-      const runtime = new OrcaRuntimeService()
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: both protected methods are declared on OrcaRuntimeService's inheritance chain.
+      const runtime = new QuirkyRuntimeService()
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: both protected methods are declared on QuirkyRuntimeService's inheritance chain.
       const internals = runtime as unknown as RuntimeInternals
       const pty = internals.recordPtyWorktree('pty-1', 'wt-1', { connected: true })
 
@@ -62,7 +62,7 @@ export function registerPtyTranscriptPruneWaitCacheTests(): void {
     })
 
     it('reuses the real leaf wait scan and stamps each newly arriving blocked prompt', async () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       const ptyId = 'pty-memo'
       const leafId = '11111111-1111-4111-8111-111111111111'
       runtime.attachWindow(1)

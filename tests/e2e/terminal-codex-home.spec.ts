@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   execInTerminal,
   getTerminalContent,
@@ -11,7 +11,7 @@ import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } fro
 
 type CodexHomeProbe = {
   codexHome: string | null
-  orcaCodexHome: string | null
+  quirkyCodexHome: string | null
 }
 
 function readCodexHomeProbe(pageContent: string, marker: string): CodexHomeProbe | null {
@@ -23,26 +23,26 @@ function readCodexHomeProbe(pageContent: string, marker: string): CodexHomeProbe
 }
 
 test.describe('Terminal Codex runtime home', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
   })
 
   test('terminal process receives the selected account Codex home', async ({
     electronApp,
-    orcaPage
+    quirkyPage
   }) => {
     const userData = await electronApp.evaluate(({ app }) => app.getPath('userData'))
     const accountId = 'e2e-terminal-home'
     const managedHomePath = path.join(userData, 'codex-accounts', accountId, 'home')
     mkdirSync(managedHomePath, { recursive: true })
-    writeFileSync(path.join(managedHomePath, '.orca-managed-home'), `${accountId}\n`)
+    writeFileSync(path.join(managedHomePath, '.quirky-managed-home'), `${accountId}\n`)
     writeFileSync(
       path.join(managedHomePath, 'auth.json'),
       JSON.stringify({ OPENAI_API_KEY: 'e2e-placeholder' })
     )
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       async ({ accountId, managedHomePath }) => {
         const state = window.__store!.getState()
         await state.updateSettings({
@@ -65,25 +65,25 @@ test.describe('Terminal Codex runtime home', () => {
       },
       { accountId, managedHomePath }
     )
-    await waitForActiveTerminalManager(orcaPage)
-    const ptyId = await waitForActivePanePtyId(orcaPage)
-    const marker = `__ORCA_CODEX_HOME_E2E_${Date.now()}__`
+    await waitForActiveTerminalManager(quirkyPage)
+    const ptyId = await waitForActivePanePtyId(quirkyPage)
+    const marker = `__QUIRKY_CODEX_HOME_E2E_${Date.now()}__`
     const command = [
       'node -e',
-      `"console.log('${marker}:' + JSON.stringify({codexHome: process.env.CODEX_HOME || null, orcaCodexHome: process.env.ORCA_CODEX_HOME || null}))"`
+      `"console.log('${marker}:' + JSON.stringify({codexHome: process.env.CODEX_HOME || null, quirkyCodexHome: process.env.QUIRKY_CODEX_HOME || null}))"`
     ].join(' ')
 
-    await execInTerminal(orcaPage, ptyId, command)
+    await execInTerminal(quirkyPage, ptyId, command)
 
     let probe: CodexHomeProbe | null = null
     await expect
       .poll(
         async () => {
-          probe = readCodexHomeProbe(await getTerminalContent(orcaPage), marker)
+          probe = readCodexHomeProbe(await getTerminalContent(quirkyPage), marker)
           return probe
         },
         { timeout: 15_000, message: 'Terminal did not expose the selected Codex account home' }
       )
-      .toEqual({ codexHome: managedHomePath, orcaCodexHome: managedHomePath })
+      .toEqual({ codexHome: managedHomePath, quirkyCodexHome: managedHomePath })
   })
 })

@@ -36,8 +36,8 @@ export async function focusPairedClientWindow(
   { timeoutMs = 15_000 }: { timeoutMs?: number } = {}
 ): Promise<PairedClientWindowFocusReport> {
   await client.app.evaluate(() => {
-    if (process.env.ORCA_BACKGROUND_LAUNCH === '1') {
-      throw new Error('Native focus is forbidden by ORCA_BACKGROUND_LAUNCH')
+    if (process.env.QUIRKY_BACKGROUND_LAUNCH === '1') {
+      throw new Error('Native focus is forbidden by QUIRKY_BACKGROUND_LAUNCH')
     }
   })
   const revealed = await revealPairedClientWindow(client)
@@ -63,8 +63,8 @@ export async function revealPairedClientWindow(
   client: RevealablePairedClient
 ): Promise<PairedClientWindowRevealReport> {
   const report = await client.app.evaluate(({ BrowserWindow }) => {
-    if (process.env.ORCA_BACKGROUND_LAUNCH === '1') {
-      throw new Error('Window reveal is forbidden by ORCA_BACKGROUND_LAUNCH')
+    if (process.env.QUIRKY_BACKGROUND_LAUNCH === '1') {
+      throw new Error('Window reveal is forbidden by QUIRKY_BACKGROUND_LAUNCH')
     }
     const windows = BrowserWindow.getAllWindows()
     const window = windows[0]

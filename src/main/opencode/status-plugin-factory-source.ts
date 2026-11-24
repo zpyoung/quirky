@@ -11,8 +11,9 @@ export function getStatusPluginFactorySource(options: {
   const expectedAgent = options.expectedAgent ?? (options.emitNextEvents ? 'opencode2' : 'opencode')
   // Why: opencode and opencode2 share one config dir, so both plugin files load in
   // either binary. Distinct ids keep the loader from reporting a duplicate-id
-  // collision as an 'orca-opencode-status' plugin failure.
-  const pluginID = expectedAgent === 'opencode2' ? 'orca-opencode2-status' : 'orca-opencode-status'
+  // collision as an 'quirky-opencode-status' plugin failure.
+  const pluginID =
+    expectedAgent === 'opencode2' ? 'quirky-opencode2-status' : 'quirky-opencode-status'
   return [
     ...(options.emitNextEvents ? getOpenCode2EventNormalizationSource() : []),
     '// Why: accept the factory argument as an optional opaque parameter instead',
@@ -20,8 +21,8 @@ export function getStatusPluginFactorySource(options: {
     '// plugin factory with undefined during startup, which makes the',
     '// destructuring form throw synchronously and crash OpenCode with an opaque',
     '// UnknownError before any event is ever dispatched.',
-    'export const OrcaOpenCodeStatusPlugin = async (_ctx) => {',
-    `  if (process.env.ORCA_OPENCODE_AGENT && process.env.ORCA_OPENCODE_AGENT !== '${expectedAgent}') return {};`,
+    'export const QuirkyOpenCodeStatusPlugin = async (_ctx) => {',
+    `  if (process.env.QUIRKY_OPENCODE_AGENT && process.env.QUIRKY_OPENCODE_AGENT !== '${expectedAgent}') return {};`,
     '  const client = _ctx?.client;',
     '  const sessionsOutliveDispose = _ctx?.sessionsOutliveDispose === true;',
     '  const factoryID = ++nextFactoryID;',
@@ -53,7 +54,7 @@ export function getStatusPluginFactorySource(options: {
           '',
           '    // OpenCode 2 publishes the next-generation event family through the',
           '    // same plugin event hook. Convert those events into the existing',
-          '    // bounded Orca lifecycle and preview posts.',
+          '    // bounded Quirky lifecycle and preview posts.',
           '    if (event.type === "session.next.prompt.admitted") {',
           '      if (!sessionID) return;',
           '      if ((await isChildSession(client, sessionID)) !== false) return;',
@@ -290,9 +291,9 @@ export function getStatusPluginFactorySource(options: {
     ...(options.emitNextEvents ? getOpenCode2ModuleSource(pluginID, expectedAgent) : []),
     '',
     '// OpenCode 1 requires a callable default; OpenCode 2 validates a plugin object.',
-    'export default process.env.ORCA_OPENCODE_PLUGIN_API === "v1" ? OrcaOpenCodeStatusPlugin : {',
+    'export default process.env.QUIRKY_OPENCODE_PLUGIN_API === "v1" ? QuirkyOpenCodeStatusPlugin : {',
     `  id: "${pluginID}",`,
-    '  server: OrcaOpenCodeStatusPlugin,',
+    '  server: QuirkyOpenCodeStatusPlugin,',
     ...(options.emitNextEvents ? ['  setup: setupOpenCode2Status,'] : []),
     '};',
     ''

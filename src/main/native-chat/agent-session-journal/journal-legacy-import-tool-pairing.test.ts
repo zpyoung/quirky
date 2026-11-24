@@ -16,7 +16,7 @@ afterEach(async () => {
 })
 
 async function importRows(records: unknown[], agent: 'claude' | 'codex' = 'claude') {
-  const root = await mkdtemp(join(tmpdir(), 'orca-import-tool-pairing-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-import-tool-pairing-'))
   roots.push(root)
   const filePath = join(root, 'transcript.jsonl')
   await writeFile(filePath, `${records.map((record) => JSON.stringify(record)).join('\n')}\n`)

@@ -8,7 +8,7 @@ import {
 } from './browser-host-client-identity'
 
 function profileDirectory(): string {
-  return mkdtempSync(join(tmpdir(), 'orca-host-identity-'))
+  return mkdtempSync(join(tmpdir(), 'quirky-host-identity-'))
 }
 
 describe('browser host client identity', () => {
@@ -23,7 +23,7 @@ describe('browser host client identity', () => {
     expect(first).toMatch(/^[0-9a-f-]{36}$/)
   })
 
-  it('gives each Orca profile its own hosting identity', () => {
+  it('gives each Quirky profile its own hosting identity', () => {
     expect(readOrCreateBrowserHostClientId(profileDirectory())).not.toBe(
       readOrCreateBrowserHostClientId(profileDirectory())
     )

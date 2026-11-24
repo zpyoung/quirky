@@ -6,21 +6,21 @@ import { promisify } from 'node:util'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { CODEX_NO_DAEMON_SKIP_ARGS } from '../../shared/codex-shell-function'
 
-// Why: Orca's codex shell wrapper puts --no-daemon first for every subcommand but
+// Why: Quirky's codex shell wrapper puts --no-daemon first for every subcommand but
 // agents/queue (src/shared/codex-shell-function.ts). Its tests use a fake codex, so
 // only the real binary can catch a renamed flag or a new subcommand rejecting it.
 
 const execFileAsync = promisify(execFile)
-const binary = process.env.ORCA_CODEX_NO_DAEMON_CONTRACT_BINARY
-const expectedVersion = process.env.ORCA_CODEX_NO_DAEMON_CONTRACT_VERSION
+const binary = process.env.QUIRKY_CODEX_NO_DAEMON_CONTRACT_BINARY
+const expectedVersion = process.env.QUIRKY_CODEX_NO_DAEMON_CONTRACT_VERSION
 const WRAPPER_SKIPPED_SUBCOMMANDS: ReadonlySet<string> = new Set(CODEX_NO_DAEMON_SKIP_ARGS)
 const TIMEOUT_MS = 30_000
 
-describe.runIf(process.env.ORCA_CODEX_NO_DAEMON_CONTRACT_REQUIRED === '1' && !binary)(
+describe.runIf(process.env.QUIRKY_CODEX_NO_DAEMON_CONTRACT_REQUIRED === '1' && !binary)(
   'codex --no-daemon contract prerequisites',
   () => {
     it('was given a Codex binary to run against', () => {
-      expect.fail('ORCA_CODEX_NO_DAEMON_CONTRACT_REQUIRED=1 but no binary was given')
+      expect.fail('QUIRKY_CODEX_NO_DAEMON_CONTRACT_REQUIRED=1 but no binary was given')
     })
   }
 )
@@ -31,7 +31,7 @@ describe.runIf(binary)('codex --no-daemon binary contract', { timeout: 120_000 }
 
   beforeAll(async () => {
     // Why a disposable home: never read or start anything under the user's ~/.codex.
-    home = mkdtempSync(join(tmpdir(), 'orca-codex-no-daemon-contract-'))
+    home = mkdtempSync(join(tmpdir(), 'quirky-codex-no-daemon-contract-'))
     const version = await run(['--version'])
     expect(version.stdout.trim()).toBe(`codex-cli ${expectedVersion}`)
     help = (await run(['--help'])).stdout

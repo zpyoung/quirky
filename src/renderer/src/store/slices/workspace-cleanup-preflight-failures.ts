@@ -91,11 +91,11 @@ export function getWorkspaceCleanupRepoScanFailure(
     message: error.executionHostId
       ? translate(
           'auto.store.slices.workspace.cleanup.gitStatusUnavailable',
-          "Orca couldn't check this workspace's git status. Try again, or delete it from its host-specific sidebar or project list."
+          "Quirky couldn't check this workspace's git status. Try again, or delete it from its host-specific sidebar or project list."
         )
       : translate(
           'auto.store.slices.workspace.cleanup.gitStatusUnavailableOlderPeer',
-          "Orca couldn't match this git-status failure to a host. Update the older connected peer, or delete the workspace from its host-specific sidebar or project list."
+          "Quirky couldn't match this git-status failure to a host. Update the older connected peer, or delete the workspace from its host-specific sidebar or project list."
         ),
     canDeleteAnyway: true
   }
@@ -111,7 +111,7 @@ export function getWorkspaceCleanupGitUnavailableFailure(
     displayName: candidate.displayName,
     message: translate(
       'auto.store.slices.workspace.cleanup.gitStatusUnavailable',
-      "Orca couldn't check this workspace's git status. Try again, or delete it from its host-specific sidebar or project list."
+      "Quirky couldn't check this workspace's git status. Try again, or delete it from its host-specific sidebar or project list."
     ),
     canDeleteAnyway: true
   }

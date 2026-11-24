@@ -1,6 +1,6 @@
-import type { SpawnedProcess } from '@orca/process-host/process-spec'
+import type { SpawnedProcess } from '@quirky/process-host/process-spec'
 import { delimiter, win32 as pathWin32 } from 'node:path'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import type { ShellHydrationFailureReason } from '../../shared/shell-path-hydration-types'
 import { resolveWindowsShellStartupFamily } from '../../shared/windows-terminal-shell'
 import { SHELL_PATH_DELIMITER as DELIMITER, shellPathProbe } from './shell-path-probe'
@@ -61,7 +61,7 @@ const LAUNCH_PATH_KEY =
 const LAUNCH_PATH = process.env[LAUNCH_PATH_KEY] ?? null
 // Why: rc files that exec into a multiplexer or start a heavy prompt can outrun the
 // probe budget. This lets them detect the probe and take a fast path.
-export const PROBE_MARKER_ENV_VAR = 'ORCA_SHELL_PATH_PROBE'
+export const PROBE_MARKER_ENV_VAR = 'QUIRKY_SHELL_PATH_PROBE'
 let launchPathOverride: { key: string; value: string } | null = null
 let configuredWindowsShell = 'powershell.exe'
 let configuredWindowsGitBashPath: string | null = null
@@ -157,7 +157,7 @@ function shellProbeEnv(): NodeJS.ProcessEnv {
   return env
 }
 
-/** Run a synchronous launcher without passing Orca's seeded PATH to its child. */
+/** Run a synchronous launcher without passing Quirky's seeded PATH to its child. */
 export function runWithLaunchPath<T>(action: () => T): T {
   const key = launchPathOverride?.key ?? LAUNCH_PATH_KEY
   const value = launchPathOverride?.value ?? LAUNCH_PATH
@@ -197,7 +197,7 @@ function spawnShellAndReadPath(shell: string): Promise<HydrationResult> {
         // Why: inherit current env so the shell sees the same baseline, then let
         // it layer its own rc files on top. Do NOT forward stdio — some shells
         // (oh-my-zsh setups, powerlevel10k) print a lot to stderr on startup,
-        // and we don't want that in Orca's console.
+        // and we don't want that in Quirky's console.
         env: shellProbeEnv(),
         stdio: ['ignore', 'pipe', 'ignore'],
         detached: false

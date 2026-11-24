@@ -23,7 +23,7 @@ vi.mock('./structured-agent-session-pending-sends', () => ({
 import { recoverLegacyStructuredAgentSessionOutbox } from './structured-agent-session-legacy-outbox'
 
 const SESSION = 'session-1'
-const KEY = `orca:desktopStructuredAgentSessionOutbox:v1:${SESSION}`
+const KEY = `quirky:desktopStructuredAgentSessionOutbox:v1:${SESSION}`
 const target = { kind: 'local' } as const
 
 function saved(clientMessageId: string, text: string) {

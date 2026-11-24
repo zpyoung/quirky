@@ -3,7 +3,7 @@ import { preparePendingSplitClose } from './pending-split-close-test-fixture'
 import { preparePendingRuntimeClose } from './pending-runtime-pane-close-test-fixture'
 import { flushPtySideEffects } from './pty-transport-test-harness'
 import type { PtyRunningWorkProbe } from '../terminal/pty-running-work-probe'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => vi.useRealTimers())
@@ -28,7 +28,7 @@ async function prepare(remote = false, requestedPtyId?: string) {
   const closed = () =>
     paired
       ? paired.runtimeCall.mock.calls.some(([request]) => request.method === 'terminal.close')
-      : ORCA_LAYOUT_OWNER_IS_MAIN
+      : QUIRKY_LAYOUT_OWNER_IS_MAIN
         ? 'sentPaneCloses' in p && p.sentPaneCloses().length > 0
         : vi.mocked(window.api.pty.kill).mock.calls.length > 0
   const settle = async () => {

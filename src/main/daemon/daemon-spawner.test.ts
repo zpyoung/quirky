@@ -96,7 +96,7 @@ describe('DaemonSpawner', () => {
       const pidPath = getDaemonPidPath(dir)
 
       if (process.platform === 'win32') {
-        expect(socketPath).toContain(`orca-terminal-host-v${PROTOCOL_VERSION}`)
+        expect(socketPath).toContain(`quirky-terminal-host-v${PROTOCOL_VERSION}`)
       } else {
         expect(socketPath).toBe(join(dir, `daemon-v${PROTOCOL_VERSION}.sock`))
       }
@@ -109,7 +109,7 @@ describe('DaemonSpawner', () => {
       const info = await s.ensureRunning()
 
       if (process.platform === 'win32') {
-        expect(info.socketPath).toContain(`orca-terminal-host-v${PROTOCOL_VERSION}`)
+        expect(info.socketPath).toContain(`quirky-terminal-host-v${PROTOCOL_VERSION}`)
       } else {
         expect(info.socketPath).toContain(dir)
       }
@@ -299,9 +299,9 @@ describe('daemon socket publication', () => {
 
     for (let i = 0; i < 20; i++) {
       const names = [
-        basename(getDaemonSocketBindPath(getDaemonSocketPath('/tmp/orca-daemon'))),
-        basename(getDaemonPidSwapClaimPath('/tmp/orca-daemon/daemon-v32.pid')),
-        basename(getDaemonArtifactHoldClaimPath('/tmp/orca-daemon/daemon-v32.token'))
+        basename(getDaemonSocketBindPath(getDaemonSocketPath('/tmp/quirky-daemon'))),
+        basename(getDaemonPidSwapClaimPath('/tmp/quirky-daemon/daemon-v32.pid')),
+        basename(getDaemonArtifactHoldClaimPath('/tmp/quirky-daemon/daemon-v32.token'))
       ]
       for (const name of names) {
         expect(name).not.toMatch(RELEASED_SWEEPER_PATTERN)
@@ -311,7 +311,7 @@ describe('daemon socket publication', () => {
 
   it('keeps the bind name shorter than the canonical endpoint', () => {
     // sockaddr_un caps the path, so the private bind name must never extend it.
-    const canonicalPath = getDaemonSocketPath('/tmp/orca-daemon-runtime')
+    const canonicalPath = getDaemonSocketPath('/tmp/quirky-daemon-runtime')
 
     expect(getDaemonSocketBindPath(canonicalPath).length).toBeLessThan(canonicalPath.length)
   })

@@ -1,6 +1,6 @@
 // Forked from src/main/runtime/rpc/methods/orchestration/messaging/send-point-to-point.ts at 4bb6f2072b07c1f0664b809551f77754700570e4.
 import type { MessageType, OrchestrationDb } from '../../runtime/orchestration/db'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { reconcileLifecycleMessage } from '../../runtime/orchestration/lifecycle-reconciliation'
 import { bindCoordinatorMutationPayload } from '../../runtime/orchestration/dispatch-message-binding'
 import {
@@ -24,7 +24,7 @@ type SendReceipt = <T extends object>(receipt: T) => T & { warnings?: SendRecipi
 
 export async function sendPointToPointMessage(args: {
   params: SendParamsInput
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   db: OrchestrationDb
   from: string
   to: string

@@ -14,7 +14,7 @@ afterEach(async () => {
 
 describe('scanAiVaultSessions Claude title selection', () => {
   it('prefers the latest generated ai-title over the first user prompt, but a custom-title wins over both', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-ai-title-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-ai-title-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     const projectDir = join(roots.claudeProjectsDir, 'project')

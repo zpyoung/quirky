@@ -1,10 +1,10 @@
 /**
- * The things Orca installs into `~/.orca-remote/`, and the rules that keep them from
+ * The things Quirky installs into `~/.quirky-remote/`, and the rules that keep them from
  * touching each other.
  *
  * Design D10 (to be tracked in docs/reference/remote-server-install-model.md): the relay and
- * orcad converge into one server package; on the host that is `server-<version>/` plus the
- * shared `runtimes/node-<sha256>/` store. Legacy `relay-*` / `orcad-*` directories belong to a
+ * quirkyd converge into one server package; on the host that is `server-<version>/` plus the
+ * shared `runtimes/node-<sha256>/` store. Legacy `relay-*` / `quirkyd-*` directories belong to a
  * migration sweep that deletes only on an `exited` verdict, handed over in two releases: this
  * one lists them as diagnostics only. Until then each is its own namespace, so the prefix has
  * to be a parameter rather than a literal.
@@ -12,7 +12,7 @@
  * GC ownership is the trap that parameterization creates. Each model garbage-collects ONLY
  * its own directories — see `remoteInstallDirOwner`. Relay's regex happened to be narrow
  * enough already; making the prefix a parameter is exactly what could have widened it into
- * deleting a live orcad tree, so the ownership rule is asserted here rather than left to
+ * deleting a live quirkyd tree, so the ownership rule is asserted here rather than left to
  * whichever regex a caller passes.
  */
 import {
@@ -21,14 +21,14 @@ import {
   RELAY_VERSION_FILENAME
 } from '../../ssh/relay-install-artifacts'
 import {
-  orcadArtifactFilenames,
-  ORCAD_INSTALL_COMPLETE_FILENAME,
-  ORCAD_RUNTIMES_DIRNAME,
-  ORCAD_VERSION_FILENAME
-} from '../../../shared/orcad-artifacts'
+  quirkydArtifactFilenames,
+  QUIRKYD_INSTALL_COMPLETE_FILENAME,
+  QUIRKYD_RUNTIMES_DIRNAME,
+  QUIRKYD_VERSION_FILENAME
+} from '../../../shared/quirkyd-artifacts'
 import { isWindowsRemoteHost, type RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 
-export type RemoteInstallModelId = 'relay' | 'orcad'
+export type RemoteInstallModelId = 'relay' | 'quirkyd'
 
 export type RemoteInstallModel = {
   readonly id: RemoteInstallModelId
@@ -45,26 +45,26 @@ export type RemoteInstallModel = {
 export const RELAY_INSTALL_MODEL: RemoteInstallModel = {
   id: 'relay',
   dirPrefix: 'relay',
-  nativeDepsPackageName: 'orca-relay',
+  nativeDepsPackageName: 'quirky-relay',
   versionFilename: RELAY_VERSION_FILENAME,
   installCompleteFilename: RELAY_INSTALL_COMPLETE_FILENAME,
   requiredArtifacts: (host) => relayArtifactFilenames(isWindowsRemoteHost(host))
 }
 
-export const ORCAD_INSTALL_MODEL: RemoteInstallModel = {
-  id: 'orcad',
-  dirPrefix: 'orcad',
-  nativeDepsPackageName: 'orca-orcad',
-  versionFilename: ORCAD_VERSION_FILENAME,
-  installCompleteFilename: ORCAD_INSTALL_COMPLETE_FILENAME,
+export const QUIRKYD_INSTALL_MODEL: RemoteInstallModel = {
+  id: 'quirkyd',
+  dirPrefix: 'quirkyd',
+  nativeDepsPackageName: 'quirky-quirkyd',
+  versionFilename: QUIRKYD_VERSION_FILENAME,
+  installCompleteFilename: QUIRKYD_INSTALL_COMPLETE_FILENAME,
   // libc changes no file name, so `<os>-<arch>` names every slot file. The page's hashed assets
   // are named only by its manifest, required here; the sentinel follows the whole-tree upload.
-  requiredArtifacts: (host) => orcadArtifactFilenames(`${host.os}-${host.arch}`, [])
+  requiredArtifacts: (host) => quirkydArtifactFilenames(`${host.os}-${host.arch}`, [])
 }
 
 export const REMOTE_INSTALL_MODELS: readonly RemoteInstallModel[] = [
   RELAY_INSTALL_MODEL,
-  ORCAD_INSTALL_MODEL
+  QUIRKYD_INSTALL_MODEL
 ]
 
 /**
@@ -114,16 +114,16 @@ export function remoteInstallListingRegexSource(model: RemoteInstallModel): stri
 }
 
 /**
- * Which owner a directory found in `~/.orca-remote/` belongs to, or null for anything no
+ * Which owner a directory found in `~/.quirky-remote/` belongs to, or null for anything no
  * owner created.
  *
  * Design D10: **the model that created a directory owns it, and nothing else may delete it**
  * (amended only in the release after the two-step hand-over). A relay GC pass that saw
- * `orcad-0.1.0+abc` would be looking at the live install of a peer whose lifecycle it has no
+ * `quirkyd-0.1.0+abc` would be looking at the live install of a peer whose lifecycle it has no
  * view into — the SSH-execution-boundary collapse in directory form.
  */
 export function remoteInstallDirOwner(dirName: string): RemoteInstallDirOwner | null {
-  if (dirName === ORCAD_RUNTIMES_DIRNAME) {
+  if (dirName === QUIRKYD_RUNTIMES_DIRNAME) {
     return 'runtimes'
   }
   for (const model of REMOTE_INSTALL_MODELS) {
@@ -147,9 +147,9 @@ export type RemoteInstallDirOwner = RemoteInstallModelId | 'runtimes'
 
 export type RemoteInstallInventory = Record<RemoteInstallDirOwner | 'unknown', string[]>
 
-/** Group a raw `~/.orca-remote/` listing by owning model, for diagnostics and the client's choice. */
+/** Group a raw `~/.quirky-remote/` listing by owning model, for diagnostics and the client's choice. */
 export function inventoryRemoteInstallDirs(dirNames: readonly string[]): RemoteInstallInventory {
-  const inventory: RemoteInstallInventory = { relay: [], orcad: [], runtimes: [], unknown: [] }
+  const inventory: RemoteInstallInventory = { relay: [], quirkyd: [], runtimes: [], unknown: [] }
   for (const name of dirNames) {
     const owner = remoteInstallDirOwner(name)
     if (owner) {

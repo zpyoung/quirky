@@ -3,7 +3,7 @@ const { readFileSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const { load, loadSources, canonicalLf } = require('./sources.cjs')
 const { scenario, realWritableScenario, inFlightOwnership } = require('./scenario.cjs')
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function')
 function checkCrlfLoader() {
   const normal = loadSources()

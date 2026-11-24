@@ -19,7 +19,7 @@ function option(name) {
   return process.argv.find((value) => value.startsWith(`--${name}=`))?.slice(name.length + 3)
 }
 
-// Why: the exact rail Orca runs for both install and update, pinned to this PR's commit.
+// Why: the exact rail Quirky runs for both install and update, pinned to this PR's commit.
 // A unit test holds it, and this pinned skills CLI, equal to the shared builder's argv.
 const PINNED_SKILLS_CLI_VERSION = '1.7.2'
 
@@ -40,7 +40,7 @@ export function roundTripAddArgs(source, ref, skillName, cliVersion = PINNED_SKI
 }
 
 async function main() {
-  // Why: defaults to the version Orca pins; `--cli=latest` previews the next release.
+  // Why: defaults to the version Quirky pins; `--cli=latest` previews the next release.
   const cliVersion = option('cli') ?? PINNED_SKILLS_CLI_VERSION
   const autocrlf = option('autocrlf')
   const placement = option('shape')
@@ -54,7 +54,7 @@ async function main() {
     !source ||
     !ref ||
     !/^[^/\s]+\/[^/\s]+$/.test(source) ||
-    // Why: Orca pins to a full commit, never a branch or tag.
+    // Why: Quirky pins to a full commit, never a branch or tag.
     !/^[0-9a-f]{40}$/.test(ref)
   ) {
     throw new Error(
@@ -62,10 +62,10 @@ async function main() {
     )
   }
 
-  const sandbox = await mkdtemp(path.join(tmpdir(), 'orca-skill-update-roundtrip-'))
+  const sandbox = await mkdtemp(path.join(tmpdir(), 'quirky-skill-update-roundtrip-'))
   const home = path.join(sandbox, 'home')
   const stateHome = path.join(home, '.state')
-  const targetName = 'orca-cli'
+  const targetName = 'quirky-cli'
   const controlName = 'orchestration'
   const manifest = JSON.parse(await readFile('resources/skills/current-manifest.json', 'utf8'))
 
@@ -89,7 +89,7 @@ async function main() {
     const markdown = await readFile(path.join('skills', name, 'SKILL.md'), 'utf8')
     await writeFile(
       path.join(canonical, 'SKILL.md'),
-      `${markdown}\nA line no Orca release ever shipped.\n`.replace(/\n/g, '\r\n')
+      `${markdown}\nA line no Quirky release ever shipped.\n`.replace(/\n/g, '\r\n')
     )
     const providerRoot = path.join(home, '.claude', 'skills')
     const provider = path.join(providerRoot, name)

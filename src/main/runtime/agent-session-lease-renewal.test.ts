@@ -65,7 +65,7 @@ async function establishOwner(
 }
 
 async function liveStore(): Promise<{ directory: string; store: AgentSessionRecordStore }> {
-  const directory = await mkdtemp(join(tmpdir(), 'orca-lease-renewal-batch-'))
+  const directory = await mkdtemp(join(tmpdir(), 'quirky-lease-renewal-batch-'))
   directories.push(directory)
   const store = await openTestAgentSessionRecordStore(directory)
   await establishOwner(store, directory, 'a')

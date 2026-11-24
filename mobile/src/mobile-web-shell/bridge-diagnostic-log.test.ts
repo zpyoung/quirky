@@ -57,8 +57,8 @@ describe('the bridge diagnostic log', () => {
 
   it('names the key a page was refused a write to', () => {
     const report = createBridgeDiagnosticReporter()
-    report({ kind: 'storage-refused', key: 'orca:pins:another-host' })
-    expect(lines()[0]).toContain('orca:pins:another-host')
+    report({ kind: 'storage-refused', key: 'quirky:pins:another-host' })
+    expect(lines()[0]).toContain('quirky:pins:another-host')
     expect(lines()[0]).not.toContain('outlived')
   })
 

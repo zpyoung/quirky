@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const STEP = 'Refuse a ref that still ships the SSH relay'
 const directory = mkdtempSync(join(tmpdir(), 'relay-era-ref-refusal-'))

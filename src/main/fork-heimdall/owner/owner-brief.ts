@@ -411,9 +411,9 @@ export function buildOwnerPromptText(args: {
       ' execution evidence. An approval hold requires the operator, not another owner answer.',
     'Keep every free-text response field within its advertised bound. Summarize supporting evidence' +
       ' and cite the bounded state or an existing artifact instead of pasting unlimited verbatim output.',
-    'Then send, using the worker identifiers Orca supplied in your preamble:',
-    `orca orchestration send --from <yourWorkerHandle> --run ${args.runId} --type status --subject "heimdall-owner-intervention:${args.watcherId}:${args.wakeToken}" --body "ready"`,
-    'Orca validates the intervention before accepting "ready". If it rejects the submission,' +
+    'Then send, using the worker identifiers Quirky supplied in your preamble:',
+    `quirky orchestration send --from <yourWorkerHandle> --run ${args.runId} --type status --subject "heimdall-owner-intervention:${args.watcherId}:${args.wakeToken}" --body "ready"`,
+    'Quirky validates the intervention before accepting "ready". If it rejects the submission,' +
       ' correct the reported field in this same report file and resend the same ready command;' +
       ' the current owner turn and retry budget remain available.'
   ].join('\n\n')

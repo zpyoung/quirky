@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { resolveStructuredCodexAccountKind } from './structured-agent-account-home'
-import { getSystemCodexHomePath, resolveOrcaManagedCodexHomePath } from '../codex/codex-home-paths'
+import {
+  getSystemCodexHomePath,
+  resolveQuirkyManagedCodexHomePath
+} from '../codex/codex-home-paths'
 import type { CodexManagedAccount } from '../../shared/managed-account-types'
 const ACCOUNT: CodexManagedAccount = {
   id: 'account-a',
@@ -31,7 +34,7 @@ describe('Codex sign-in instructions follow the probed home', () => {
     'classifies the shared mirror with selection=%s',
     (activeCodexManagedAccountId, kind) => {
       expect(
-        resolveStructuredCodexAccountKind(resolveOrcaManagedCodexHomePath(), {
+        resolveStructuredCodexAccountKind(resolveQuirkyManagedCodexHomePath(), {
           ...SETTINGS,
           activeCodexManagedAccountId
         })

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../../src/main/runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../src/main/runtime/quirky-runtime'
 import { makeAgentStatusStoreWiring } from '../../src/main/runtime/agent-status-store-wiring.test-fixture'
 import type {
   RuntimeMobileSessionTabsResult,
@@ -22,14 +22,14 @@ type RuntimeInternals = {
 type Harness = {
   internals: RuntimeInternals
   publications: RuntimeMobileSessionTabsResult[]
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   tab: TerminalTab
   unsubscribe: () => void
 }
 
 function createHarness(): Harness {
   const statusWiring = makeAgentStatusStoreWiring()
-  const runtime = new OrcaRuntimeService(null, undefined, statusWiring.deps)
+  const runtime = new QuirkyRuntimeService(null, undefined, statusWiring.deps)
   const uninstallStatusRepublish = statusWiring.attach(runtime)
   runtime.registerPty(PTY_ID, WORKTREE_ID)
   const tab: TerminalTab = {

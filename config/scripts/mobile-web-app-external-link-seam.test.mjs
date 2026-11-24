@@ -174,7 +174,7 @@ describe('the order a red list is read in', () => {
   // Against a written fixture rather than the tree: the ordering this pins needs one module with
   // sites on lines 2 and 10, the pair that sorts one way as numbers and the other as text, and no
   // module in the closure has to keep having one.
-  const root = mkdtempSync(join(tmpdir(), 'orca-seam-census-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-seam-census-'))
   const lines = ["import * as RN from 'react-native'", 'RN.Linking.openURL(a)']
   while (lines.length < 9) {
     lines.push('')

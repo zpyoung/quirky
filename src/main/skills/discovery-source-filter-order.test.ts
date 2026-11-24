@@ -21,7 +21,7 @@ import { discoverSkills } from './discovery'
 
 describe('native skill source filtering', () => {
   it('serves home and bundled filters from one raw root observation', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-skill-source-filter-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-skill-source-filter-'))
     const homeSkill = join(root, '.codex', 'skills', 'home-skill')
     const bundledSkill = join(root, '.codex', 'skills', '.system', 'bundled-skill')
     await mkdir(homeSkill, { recursive: true })

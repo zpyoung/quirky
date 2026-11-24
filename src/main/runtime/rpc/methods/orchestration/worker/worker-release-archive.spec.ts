@@ -114,7 +114,7 @@ export function registerWorkerReleaseArchiveTests(): void {
 
     it('reads an immutable transcript snapshot after the provider file disappears', async () => {
       h.setup()
-      const directory = await mkdtemp(join(tmpdir(), 'orca-worker-release-snapshot-'))
+      const directory = await mkdtemp(join(tmpdir(), 'quirky-worker-release-snapshot-'))
       const transcriptPath = join(directory, 'rollout.jsonl')
       try {
         await writeFile(
@@ -159,7 +159,7 @@ export function registerWorkerReleaseArchiveTests(): void {
 
     it('preserves payload clipping metadata in the released transcript snapshot', async () => {
       h.setup()
-      const directory = await mkdtemp(join(tmpdir(), 'orca-worker-release-clipped-snapshot-'))
+      const directory = await mkdtemp(join(tmpdir(), 'quirky-worker-release-clipped-snapshot-'))
       const transcriptPath = join(directory, 'rollout.jsonl')
       try {
         await writeFile(

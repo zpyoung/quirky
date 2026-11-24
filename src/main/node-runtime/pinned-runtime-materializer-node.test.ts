@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   NODE_RUNTIME_ASSETS,
   NODE_RUNTIME_PIN,
@@ -45,7 +45,7 @@ async function nodeDistArchiveFixture(executable: Uint8Array): Promise<Uint8Arra
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-node-runtime-materializer-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-node-runtime-materializer-'))
 })
 
 afterEach(async () => {

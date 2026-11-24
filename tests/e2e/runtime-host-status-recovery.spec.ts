@@ -1,7 +1,7 @@
 import { createConnection, createServer, type Socket, type AddressInfo } from 'node:net'
 import type { Page } from '@stablyai/playwright-test'
 import { decodePairingOffer, encodePairingOffer } from '../../src/shared/pairing'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   createRuntimeDesktopPairingOffer,
   launchPairedElectronClient,
@@ -102,7 +102,7 @@ async function expectWorkspaceHostAppearance(
 for (const topology of ['desktop', 'headless'] as const) {
   test(`connection-owned status recovers with a ${topology} host and independent viewers`, async ({
     electronApp,
-    orcaPage: page,
+    quirkyPage: page,
     testRepoPath
   }, testInfo) => {
     test.setTimeout(180_000)

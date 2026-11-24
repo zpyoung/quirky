@@ -67,7 +67,7 @@ export function openSettingsFromSystemMenu(): void {
 }
 
 /**
- * A user Quit (menu, tray, renderer-recovery prompt). Under `orca serve` the process is the
+ * A user Quit (menu, tray, renderer-recovery prompt). Under `quirky serve` the process is the
  * server its paired clients use, so a user Quit only closes the desktop windows (#15537);
  * signals, supervisor stops and update installs still quit through app.quit().
  */
@@ -151,7 +151,7 @@ export function createSystemTrayDeferred(
 }
 
 function resolveMenuTargetRenderer(targetWindow?: BrowserWindow | null): WebContents | undefined {
-  // Why: a native browser popup is a BrowserWindow hosting a web page, not Orca's renderer.
+  // Why: a native browser popup is a BrowserWindow hosting a web page, not Quirky's renderer.
   return targetWindow && !targetWindow.isDestroyed() && !isNativeBrowserPopupWindow(targetWindow)
     ? targetWindow.webContents
     : state.mainWindow?.webContents

@@ -30,7 +30,7 @@ export function findMissingCodexHookApprovals(
 }
 
 /**
- * Writes Orca's approvals, then its entries through `writeEntries`. When that
+ * Writes Quirky's approvals, then its entries through `writeEntries`. When that
  * throws, an approval goes back to its prior tables only if `hooksJsonPath`
  * does not hold its entry and the approval still reads as this call wrote it,
  * so another writer's change is never overwritten. The error is rethrown. Throws

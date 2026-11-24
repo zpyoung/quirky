@@ -1,7 +1,7 @@
 // Why: byte-preserving edits of jcode's `~/.jcode/config.toml` [hooks] table,
 // following the codebase convention of hand-rolled TOML scanning (no TOML
 // dependency, see src/main/codex/config-toml-line-scan.ts). jcode hook values
-// are scalar commands; user-owned values are left untouched so Orca never
+// are scalar commands; user-owned values are left untouched so Quirky never
 // silently disables a user's own hook.
 import {
   createTomlLineScanState,
@@ -130,7 +130,7 @@ export function applyJcodeManagedHooks(
           // Why the parsed value and not the raw line: a user-owned command whose
           // trailing comment merely mentions the managed script would otherwise read
           // as managed, and on Windows tomlQuoteString escapes `\` so the raw line
-          // never matched Orca's own value at all.
+          // never matched Quirky's own value at all.
           const value = parseTomlSingleLineStringValue(line, parsed.end + 1)?.value
           if (!isManaged(value)) {
             userOwnedEvents.push(key)
@@ -139,7 +139,7 @@ export function applyJcodeManagedHooks(
           } else {
             // A managed entry pointing at a script that no longer exists — a copied
             // ~/.jcode, or a platform switch between .sh and .cmd. Rewrite it, or the
-            // hooks stay broken with no Orca action able to repair them.
+            // hooks stay broken with no Quirky action able to repair them.
             staleKeyIndexes.set(key, index)
           }
         }

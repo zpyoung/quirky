@@ -3,19 +3,19 @@ import { HostAccountLaunchEnvParams } from '../../shared/host-account-launch-env
 import { prepareLocalCommitMessageAgentEnv } from '../text-generation/commit-message-agent-environment'
 import { RuntimeAccountController, type RuntimeAccountServices } from './runtime-account-controller'
 import { withHostAccountLaunchEnv } from './runtime-agent-terminal-startup'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 export function registerHostAccountLaunchEnvTests(): void {
   const LAUNCH_ENV = HostAccountLaunchEnvParams.parse({
     wslDistro: 'Ubuntu',
     claude: {
-      CLAUDE_CONFIG_DIR: '/home/u/.orca/claude/a',
-      ORCA_CLAUDE_INJECTED_CONFIG_DIR: '/home/u/.orca/claude/a',
-      CODEX_HOME: '/home/u/.orca/codex/b'
+      CLAUDE_CONFIG_DIR: '/home/u/.quirky/claude/a',
+      QUIRKY_CLAUDE_INJECTED_CONFIG_DIR: '/home/u/.quirky/claude/a',
+      CODEX_HOME: '/home/u/.quirky/codex/b'
     },
     terminal: {
-      ORCA_CLAUDE_PROFILE_POINTER: '~/.orca/claude-pointer',
-      CODEX_HOME: '/home/u/.orca/codex/b'
+      QUIRKY_CLAUDE_PROFILE_POINTER: '~/.quirky/claude-pointer',
+      CODEX_HOME: '/home/u/.quirky/codex/b'
     }
   })
 
@@ -36,11 +36,11 @@ export function registerHostAccountLaunchEnvTests(): void {
       expect(() => accounts.setHostLaunchEnv(LAUNCH_ENV)).toThrow(/its own provider accounts/)
     })
 
-    it('points `orca account` at the desktop that owns the accounts', () => {
+    it('points `quirky account` at the desktop that owns the accounts', () => {
       const accounts = new RuntimeAccountController()
       expect(() => accounts.getSnapshot()).toThrow('Account services are not configured')
       accounts.setHostLaunchEnv(LAUNCH_ENV)
-      expect(() => accounts.getSnapshot()).toThrow(/Orca desktop app.*Ubuntu \(WSL\)/)
+      expect(() => accounts.getSnapshot()).toThrow(/Quirky desktop app.*Ubuntu \(WSL\)/)
     })
 
     it('runs AI commit text under the selected accounts', async () => {
@@ -49,8 +49,8 @@ export function registerHostAccountLaunchEnvTests(): void {
       const resolvers = accounts.getCommitMessageAgentEnvironment()
       const codex = await prepareLocalCommitMessageAgentEnv('codex', resolvers)
       const claude = await prepareLocalCommitMessageAgentEnv('claude', resolvers)
-      expect(codex.ok && codex.env?.CODEX_HOME).toBe('/home/u/.orca/codex/b')
-      expect(claude.ok && claude.env?.CLAUDE_CONFIG_DIR).toBe('/home/u/.orca/claude/a')
+      expect(codex.ok && codex.env?.CODEX_HOME).toBe('/home/u/.quirky/codex/b')
+      expect(claude.ok && claude.env?.CLAUDE_CONFIG_DIR).toBe('/home/u/.quirky/claude/a')
     })
   })
 
@@ -86,7 +86,7 @@ export function registerHostAccountLaunchEnvTests(): void {
   })
 
   describe('launches a WSL host starts on its own', () => {
-    function runtimeWithHostAccounts(): OrcaRuntimeService {
+    function runtimeWithHostAccounts(): QuirkyRuntimeService {
       const store = {
         getSettings: () => ({
           disabledTuiAgents: [],
@@ -98,7 +98,7 @@ export function registerHostAccountLaunchEnvTests(): void {
         })
       }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these paths read only getSettings().
-      const runtime = new OrcaRuntimeService(store as never)
+      const runtime = new QuirkyRuntimeService(store as never)
       runtime.setHostAccountLaunchEnv(LAUNCH_ENV)
       return runtime
     }

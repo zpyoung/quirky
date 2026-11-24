@@ -7,7 +7,7 @@ data with each worktree's independent import directory.
 
 ## How it works
 
-Seeds live under `<git-common-dir>/orca-cache/release-source/format-8/<commit>`.
+Seeds live under `<git-common-dir>/quirky-cache/release-source/format-8/<commit>`.
 The resolved commit and extraction format identify the source, including its rewritten imports.
 The common Git directory lets sibling worktrees reuse the same seed without scanning them.
 Existing local checkouts remain in place; the new format creates fresh import directories.
@@ -34,7 +34,7 @@ already-created import directories usable.
 ## Controls and scope
 
 Sharing is enabled for ordinary local cross-version tests. Set
-`ORCA_DISABLE_SHARED_RELEASE_CACHE=1` to keep ordinary local extraction. CI and explicit
+`QUIRKY_DISABLE_SHARED_RELEASE_CACHE=1` to keep ordinary local extraction. CI and explicit
 `cacheRoot` options remain isolated unless a caller explicitly supplies `sharedCacheRoot`.
 
 This only changes test tooling. It adds no development-server task or background worktree
@@ -96,12 +96,12 @@ Tests cover concurrent publication, lock heartbeats and eviction, independent br
 corrupt seeds, fallback, the opt-out, and preserved read-only files. Run them with:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 pnpm test tests/e2e/cross-version-wire/release-source-cache.unit.test.ts tests/e2e/cross-version-wire/release-source-retention.unit.test.ts tests/e2e/cross-version-wire/release-checkout.unit.test.ts tests/e2e/cross-version-wire/release-checkout-tree.unit.test.ts tests/e2e/cross-version-wire/release-missing-packages.unit.test.ts config/scripts/space-sharing-copy.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm test tests/e2e/cross-version-wire/release-source-cache.unit.test.ts tests/e2e/cross-version-wire/release-source-retention.unit.test.ts tests/e2e/cross-version-wire/release-checkout.unit.test.ts tests/e2e/cross-version-wire/release-checkout-tree.unit.test.ts tests/e2e/cross-version-wire/release-missing-packages.unit.test.ts config/scripts/space-sharing-copy.test.ts
 ```
 
 ## P3 remains an experiment
 
-P3 shares the tracked source of new Orca worktrees. It requires independent writable files,
+P3 shares the tracked source of new Quirky worktrees. It requires independent writable files,
 Git indexes, and matching checkout settings, and has more compatibility risk than P2's
 immutable test source. The APFS experiment demonstrated substantial storage savings but
 variable creation time and stays out of this change. Its code, measurements, and design notes

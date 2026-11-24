@@ -34,7 +34,7 @@ describe('readCodexDispatchEcho', () => {
     expect(
       readCodexDispatchEcho(
         { type: 'userMessage', id: 'item-1', clientId: 'client-1' },
-        { provider: 'orca', clientMessageId: 'codex-item:thread-1:item-1' }
+        { provider: 'quirky', clientMessageId: 'codex-item:thread-1:item-1' }
       )
     ).toBeNull()
   })

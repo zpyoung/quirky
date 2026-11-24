@@ -31,7 +31,7 @@ const hello: AgentJournalMessageItem = {
   blocks: [{ type: 'text', text: 'hello' }]
 }
 
-/** Grok's own capabilities: it loads and resumes sessions; Orca reopens with `session/load`. */
+/** Grok's own capabilities: it loads and resumes sessions; Quirky reopens with `session/load`. */
 const RESUMES = { agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } } }
 const resume = {
   launch: {
@@ -66,9 +66,9 @@ function sendsWhileAttaching(agent: AcpScriptedAgent, reply: string): void {
   })
 }
 
-/** Orca's send of `hello` as `m1` and Grok's reply, ended or cut off. */
+/** Quirky's send of `hello` as `m1` and Grok's reply, ended or cut off. */
 async function exchange(rig: AcpAdapterRig, reply: string, end: boolean): Promise<void> {
-  await rig.rig.eventSink.appendItem({ provider: 'orca', clientMessageId: 'm1' }, hello, {
+  await rig.rig.eventSink.appendItem({ provider: 'quirky', clientMessageId: 'm1' }, hello, {
     turnScope: { kind: 'thread' }
   })
   await sendHello(rig, 'm1')

@@ -51,7 +51,7 @@ const managedAccounts = {
 function pinnedAccount(launchEnv: Record<string, string>) {
   return openCodeAcpAccountBinding(() => managedAccounts).resolve({
     launchEnv,
-    stateDirectory: '/orca-data'
+    stateDirectory: '/quirky-data'
   })
 }
 
@@ -74,7 +74,7 @@ function createSupport(settings: ReturnType<typeof rigSettings>) {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-opencode-rig-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-opencode-rig-'))
   await mkdir(join(root, 'proj'))
   const homebrew = await fakeOpencode(join(root, 'homebrew'), '2.0.21')
   privateOpencode = await fakeOpencode(join(root, 'oc-prefix', 'bin'), '1.18.31')

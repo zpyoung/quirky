@@ -1,15 +1,15 @@
 /**
- * Serves the `orca orchestration` commands a relay-era terminal still runs, on this desktop's
+ * Serves the `quirky orchestration` commands a relay-era terminal still runs, on this desktop's
  * runtime, where that terminal's Dispatch and Run records live.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  *
- * Gated per host by "Allow this host's orca CLI to control Orca" and read on every call. Calls run
+ * Gated per host by "Allow this host's quirky CLI to control Quirky" and read on every call. Calls run
  * through a dispatcher that registers only the orchestration methods below, as a paired caller with
  * no grants (the desktop browser bridge's shape), after legacy-relay-cli-caller.ts bound them.
  */
 import { createHash, randomUUID } from 'node:crypto'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../shared/protocol-version'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { RpcResponse } from '../../runtime/rpc/core'
 import { RpcDispatcher } from '../../runtime/rpc/dispatcher'
 import { ALL_RPC_METHODS } from '../../runtime/rpc/methods'
@@ -49,29 +49,29 @@ const COMMANDS: ReadonlySet<string> = new Set(
 )
 
 export const LEGACY_RELAY_CLI_CONTROL_OFF =
-  'This terminal was started by an older version of Orca. Its orca orchestration commands reach ' +
-  'this desktop only when "Allow this host\'s orca CLI to control Orca" is on for this host in ' +
+  'This terminal was started by an older version of Quirky. Its quirky orchestration commands reach ' +
+  'this desktop only when "Allow this host\'s quirky CLI to control Quirky" is on for this host in ' +
   'Settings > SSH. Otherwise, run them in a new terminal on this host.'
 
 export const LEGACY_RELAY_CLI_UNSUPPORTED =
-  'This terminal was started by an older version of Orca, so only orca orchestration check, ' +
-  'inbox, send, ask and reply work in it. Run other orca commands in a new terminal on this host.'
+  'This terminal was started by an older version of Quirky, so only quirky orchestration check, ' +
+  'inbox, send, ask and reply work in it. Run other quirky commands in a new terminal on this host.'
 
 const LEGACY_RELAY_CLI_HELP =
-  'This terminal was started by an older version of Orca. It runs orca orchestration check, ' +
-  'inbox, send, ask and reply; open a new terminal on this host for full orca help.'
+  'This terminal was started by an older version of Quirky. It runs quirky orchestration check, ' +
+  'inbox, send, ask and reply; open a new terminal on this host for full quirky help.'
 
 export type LegacyRelayCliServerDeps = {
   targetId: string
-  runtime: () => OrcaRuntimeService | null
+  runtime: () => QuirkyRuntimeService | null
   /** The per-host switch, read on every call so turning it off applies to the next command. */
   remoteCliControl: () => boolean
   livePane: (paneKey: string) => LegacyRelayLivePane | null
 }
 
-const dispatchers = new WeakMap<OrcaRuntimeService, RpcDispatcher>()
+const dispatchers = new WeakMap<QuirkyRuntimeService, RpcDispatcher>()
 
-function dispatcherFor(runtime: OrcaRuntimeService): RpcDispatcher {
+function dispatcherFor(runtime: QuirkyRuntimeService): RpcDispatcher {
   let dispatcher = dispatchers.get(runtime)
   if (!dispatcher) {
     dispatcher = new RpcDispatcher({
@@ -116,7 +116,7 @@ function buildCall(
           types: flag('types'),
           format: has('format') ? true : undefined,
           inject: has('inject') ? true : undefined,
-          compatibilityCliCommand: 'orca',
+          compatibilityCliCommand: 'quirky',
           run: flag('run'),
           ack: flag('ack'),
           wait: has('wait') ? true : undefined,
@@ -155,7 +155,7 @@ function buildCall(
           resume: flag('resume'),
           options: flag('options'),
           timeoutMs: cappedWait(numberFlag(flags, 'timeout-ms')),
-          compatibilityCliCommand: 'orca'
+          compatibilityCliCommand: 'quirky'
         }
       }
     case 'orchestration reply':
@@ -176,12 +176,12 @@ function buildCall(
 /** Its own receipt namespace per host terminal: a host can never replay another caller's result. */
 function callerFingerprint(targetId: string, env: Record<string, string>): string {
   return createHash('sha256')
-    .update(['legacy-relay-cli-v1', targetId, env.ORCA_TERMINAL_HANDLE ?? ''].join('\0'))
+    .update(['legacy-relay-cli-v1', targetId, env.QUIRKY_TERMINAL_HANDLE ?? ''].join('\0'))
     .digest('hex')
 }
 
 type Invocation = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   caller: LegacyRelayCliCaller
   env: Record<string, string>
   fingerprint: string
@@ -210,7 +210,7 @@ async function dispatchAsCaller(
     const exactReplay = isExactLegacyRelayCliReplay(runtime, fingerprint, requestId, call)
     const db = runtime.getOrchestrationDb()
     assertLegacyRelayCliScope(db, caller, call, deps.livePane, exactReplay)
-    const launchToken = env.ORCA_AGENT_LAUNCH_TOKEN?.trim()
+    const launchToken = env.QUIRKY_AGENT_LAUNCH_TOKEN?.trim()
     return await dispatcherFor(runtime).dispatch(
       {
         id: `legacy-relay-cli-${requestId}`,

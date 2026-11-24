@@ -8,7 +8,7 @@ import { summarizeBenchmarkSamples } from './benchmark-sample-summary.mjs'
 const root = fileURLToPath(new URL('../..', import.meta.url))
 const output = path.join(root, '.build/preflight-benchmark')
 mkdirSync(output, { recursive: true })
-const bun = process.env.ORCA_BENCHMARK_BUN ?? 'bun'
+const bun = process.env.QUIRKY_BENCHMARK_BUN ?? 'bun'
 const report = { sourceSha: process.env.GITHUB_SHA ?? null, measurements: [], comparison: null }
 const save = () =>
   writeFileSync(
@@ -47,7 +47,11 @@ try {
         arm === 'bun' ? bun : process.execPath,
         args,
         `extraction-${pair}-${arm}`,
-        { ...process.env, ORCA_BACKGROUND_LAUNCH: '1', ORCA_I18N_EXTRACTION_OUTPUT: outputPattern }
+        {
+          ...process.env,
+          QUIRKY_BACKGROUND_LAUNCH: '1',
+          QUIRKY_I18N_EXTRACTION_OUTPUT: outputPattern
+        }
       )
       const extracted = JSON.stringify(
         JSON.parse(readFileSync(path.join(directory, 'en.json'), 'utf8'))

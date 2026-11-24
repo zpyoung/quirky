@@ -1,5 +1,5 @@
 import type { Page, TestInfo } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 const DRAFT_LINE = 6
@@ -13,17 +13,17 @@ async function attachDiffScreenshot(page: Page, testInfo: TestInfo, name: string
 }
 
 test.describe('Diff note draft', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
   })
 
   test('opens an inline draft without overlapping code and saves it', async ({
-    orcaPage
+    quirkyPage
   }, testInfo) => {
-    await orcaPage.setViewportSize({ width: 1200, height: 800 })
-    const worktreeId = await waitForActiveWorktree(orcaPage)
-    const relativePath = await orcaPage.evaluate(async (wId) => {
+    await quirkyPage.setViewportSize({ width: 1200, height: 800 })
+    const worktreeId = await waitForActiveWorktree(quirkyPage)
+    const relativePath = await quirkyPage.evaluate(async (wId) => {
       const store = window.__store
       if (!store) {
         throw new Error('window.__store is not available')
@@ -51,24 +51,24 @@ test.describe('Diff note draft', () => {
       return relative
     }, worktreeId)
 
-    const followingLine = orcaPage
+    const followingLine = quirkyPage
       .locator('.modified-in-monaco-diff-editor .view-lines .view-line')
       .filter({ hasText: FOLLOWING_LINE })
       .first()
     await expect(followingLine).toBeVisible({ timeout: 15_000 })
     // Let the filesystem watcher finish its model refresh before opening a draft in that model.
-    await orcaPage.waitForTimeout(3_000)
+    await quirkyPage.waitForTimeout(3_000)
 
-    const draftLine = orcaPage
+    const draftLine = quirkyPage
       .locator('.modified-in-monaco-diff-editor .view-lines .view-line')
       .filter({ hasText: `export const line${String(DRAFT_LINE).padStart(2, '0')} = "value-06"` })
       .first()
     await draftLine.hover({ position: { x: 4, y: 8 } })
-    const addButton = orcaPage.locator('.orca-diff-comment-add-btn')
+    const addButton = quirkyPage.locator('.quirky-diff-comment-add-btn')
     await expect(addButton).toBeVisible()
     await addButton.click()
 
-    const draftCard = orcaPage.locator('.orca-diff-comment-draft-card')
+    const draftCard = quirkyPage.locator('.quirky-diff-comment-draft-card')
     const textarea = draftCard.locator('textarea')
     await expect(draftCard).toBeVisible({ timeout: 15_000 })
     await expect(draftCard).toContainText('Line 6')
@@ -76,7 +76,7 @@ test.describe('Diff note draft', () => {
     await expect
       .poll(() => textarea.evaluate((element) => document.activeElement === element))
       .toBe(true)
-    await expect(orcaPage.locator('.orca-diff-comment-draft-margin')).toBeVisible()
+    await expect(quirkyPage.locator('.quirky-diff-comment-draft-margin')).toBeVisible()
     await expect
       .poll(
         async () => {
@@ -89,22 +89,22 @@ test.describe('Diff note draft', () => {
         { message: 'inline draft overlaps the following diff line' }
       )
       .toBeGreaterThanOrEqual(0)
-    await attachDiffScreenshot(orcaPage, testInfo, 'inline-diff-note-draft')
+    await attachDiffScreenshot(quirkyPage, testInfo, 'inline-diff-note-draft')
 
     await textarea.fill(NOTE_BODY)
     const submitButton = draftCard.locator('button').filter({ hasText: /add note/i })
     await expect(submitButton).toBeEnabled()
     await submitButton.click()
     await expect(draftCard).toBeHidden()
-    const savedCard = orcaPage
-      .locator('.orca-diff-comment-card')
+    const savedCard = quirkyPage
+      .locator('.quirky-diff-comment-card')
       .filter({ hasText: NOTE_BODY })
       .first()
     await expect(savedCard).toBeVisible({ timeout: 15_000 })
     await expect
       .poll(
         async () =>
-          await orcaPage.evaluate(
+          await quirkyPage.evaluate(
             ({ wId, filePath, body }) => {
               const comments = window.__store?.getState().getDiffComments(wId) ?? []
               return comments.some(
@@ -115,6 +115,6 @@ test.describe('Diff note draft', () => {
           )
       )
       .toBe(true)
-    await attachDiffScreenshot(orcaPage, testInfo, 'saved-inline-diff-note')
+    await attachDiffScreenshot(quirkyPage, testInfo, 'saved-inline-diff-note')
   })
 })

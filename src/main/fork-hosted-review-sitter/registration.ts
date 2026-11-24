@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { HOSTED_REVIEW_AGENT_CHANNELS } from '../../shared/fork-hosted-review-sitter/api'
 import { isTuiAgent } from '../../shared/tui-agent-config'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { launchHostedReviewSitterFixAgent } from './agent'
 
 const MAX_ID_LENGTH = 4_096
@@ -23,7 +23,7 @@ const AgentLaunchSchema = z.object({
 
 /** Register only the explicitly human-invoked manual fix path. */
 export function registerHostedReviewAgentIpcHandlers(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store
 ): void {
   ipcMain.removeHandler(HOSTED_REVIEW_AGENT_CHANNELS.launchFix)

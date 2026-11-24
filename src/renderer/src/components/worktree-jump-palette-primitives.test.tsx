@@ -45,7 +45,7 @@ it('renders no badge when every secondary match is already shown', () => {
 })
 
 it('elides a deep path from the head so the matched tail stays visible', () => {
-  const path = '/Users/me/projects/orca/new-create-button-design/proposals/create-button.html'
+  const path = '/Users/me/projects/quirky/new-create-button-design/proposals/create-button.html'
   const start = path.indexOf('create-butt')
   const { container } = render(
     <TooltipProvider>
@@ -62,7 +62,7 @@ it('elides a deep path from the head so the matched tail stays visible', () => {
   const secondary = container.querySelector('[data-slot="palette-open-tab-secondary"]')
   expect(secondary?.textContent).toBe(path)
   const [head, tail] = Array.from(secondary?.children ?? [])
-  expect(head?.textContent).toBe('/Users/me/projects/orca')
+  expect(head?.textContent).toBe('/Users/me/projects/quirky')
   expect(tail?.textContent).toBe('/new-create-button-design/proposals/create-button.html')
   expect(tail?.querySelector('.font-semibold')?.textContent).toBe('create-butt')
 })
@@ -92,7 +92,7 @@ it('folds the worktree into the repo chip and drops it when it repeats the repo 
   const { container, rerender } = render(
     <TooltipProvider>
       <PaletteLocationChip
-        repoName="orca"
+        repoName="quirky"
         repoRanges={[]}
         worktreeName="new-create-button-design"
         worktreeRanges={[]}
@@ -100,7 +100,7 @@ it('folds the worktree into the repo chip and drops it when it repeats the repo 
     </TooltipProvider>
   )
   expect(container.querySelector('[data-slot="palette-location-chip"]')?.textContent).toBe(
-    'orca·new-create-button-design'
+    'quirky·new-create-button-design'
   )
   const chip = container.querySelector('[data-slot="palette-location-chip"]')
   const repo = container.querySelector('[data-slot="palette-location-repo"]')
@@ -116,17 +116,17 @@ it('folds the worktree into the repo chip and drops it when it repeats the repo 
   rerender(
     <TooltipProvider>
       <PaletteLocationChip
-        repoName="orca"
+        repoName="quirky"
         repoRanges={[]}
-        worktreeName="orca"
+        worktreeName="quirky"
         worktreeRanges={[{ start: 0, end: 4 }]}
       />
     </TooltipProvider>
   )
-  expect(container.querySelector('[data-slot="palette-location-chip"]')?.textContent).toBe('orca')
+  expect(container.querySelector('[data-slot="palette-location-chip"]')?.textContent).toBe('quirky')
   expect(
     container.querySelector('[data-slot="palette-location-repo"] .font-semibold')?.textContent
-  ).toBe('orca')
+  ).toBe('quirky')
 })
 
 it('keeps a short title at its natural width so the session age stays beside it', () => {

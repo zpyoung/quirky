@@ -1,5 +1,5 @@
 import { expect, vi } from 'vitest'
-import { OrcaRuntimeService } from '../../../src/main/runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../../src/main/runtime/quirky-runtime'
 import {
   buildMobileSessionTabSnapshots,
   registerRuntimeTerminalTab,
@@ -9,7 +9,7 @@ import {
 import { makeState } from '../../../src/renderer/src/runtime/sync-runtime-graph-test-harness'
 import { graphState } from '../../../src/renderer/src/runtime/sync-runtime-graph/graph-state'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
   throw new Error('background required')
 }
 
@@ -21,7 +21,7 @@ const INC = '10000000-0000-4000-8000-000000000003'
 const PTY = `${TEST_WORKTREE_ID}@@sleep-review`
 
 export async function runPreservedHistoryScenario() {
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   const worktree = {
     id: TEST_WORKTREE_ID,
     path: TEST_WORKTREE_PATH,

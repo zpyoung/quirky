@@ -25,7 +25,7 @@ export async function copyStructuredChatConversation(
   const record = ownership ? host?.deps.store.getRecord(ownership.sessionId) : undefined
   const copy = host?.deps.adapter.copyConversation
   if (!host || !ownership || !record || !copy) {
-    throw new Error('This chat is no longer in Orca, so it cannot be copied to a new CLI.')
+    throw new Error('This chat is no longer in Quirky, so it cannot be copied to a new CLI.')
   }
   return copyStructuredChatRecordConversation(record, ownership.providerSessionId)
 }

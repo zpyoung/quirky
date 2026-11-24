@@ -1,10 +1,10 @@
 import type { TuiAgent } from './tui-agent'
 
 /**
- * Agents Orca can place an installed skill for.
+ * Agents Quirky can place an installed skill for.
  *
  * `null` segments mean the agent reads the canonical `.agents/skills` root at
- * that scope, so it needs no placement of its own. Ids are Orca agent ids so a
+ * that scope, so it needs no placement of its own. Ids are Quirky agent ids so a
  * detected agent maps straight to a destination.
  */
 type SkillInstallProviderEntry = {

@@ -287,7 +287,7 @@ describe('AutomationsPage mutations', () => {
     })
   })
 
-  it('opens an Orca-owned Hermes record in the normal editor with its history', async () => {
+  it('opens an Quirky-owned Hermes record in the normal editor with its history', async () => {
     const automation = makeAutomation({
       id: 'a-1',
       agentId: 'hermes',
@@ -355,7 +355,7 @@ describe('AutomationsPage mutations', () => {
     })
   })
 
-  it('creates an Orca automation with Hermes at the stated destination', async () => {
+  it('creates an Quirky automation with Hermes at the stated destination', async () => {
     api.automations.list.mockResolvedValue([])
 
     await renderPage()

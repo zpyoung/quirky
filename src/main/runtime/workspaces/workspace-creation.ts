@@ -3,7 +3,7 @@ import type {
   WorktreeLineageInput,
   WorktreeLineageResolution
 } from '../runtime-worktree-lineage-resolution'
-import { OrcaRuntimeWithGetWorktreeTerminalProvisioningHost } from './startup/workspace-terminal-provisioning'
+import { QuirkyRuntimeWithGetWorktreeTerminalProvisioningHost } from './startup/workspace-terminal-provisioning'
 import type { RuntimeManagedWorktreeCreateArgs } from '../runtime-managed-worktree-create-types'
 import type { CreateWorktreeResult } from '../../../shared/worktree/create-types'
 import { isFolderRepo } from '../../../shared/repo-kind'
@@ -29,16 +29,18 @@ import {
   WorkspaceCreationRegistry,
   type WorkspaceCreationHandle
 } from '../sidebar-inputs/workspace-creation-registry'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 
-export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWorktreeTerminalProvisioningHost {
+export abstract class QuirkyRuntimeWithCreateManagedWorktree extends QuirkyRuntimeWithGetWorktreeTerminalProvisioningHost {
   protected abstract resolveLineageForWorktreeCreate(
     input?: WorktreeLineageInput,
     childRepo?: Repo
   ): Promise<WorktreeLineageResolution>
 
   // Switch point: only a build where main produces the sidebar's inputs lists creations.
-  readonly workspaceCreations = ORCA_SIDEBAR_INPUTS_IS_MAIN ? new WorkspaceCreationRegistry() : null
+  readonly workspaceCreations = QUIRKY_SIDEBAR_INPUTS_IS_MAIN
+    ? new WorkspaceCreationRegistry()
+    : null
 
   async createManagedWorktree(
     args: RuntimeManagedWorktreeCreateArgs

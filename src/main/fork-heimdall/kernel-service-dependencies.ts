@@ -1,5 +1,5 @@
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { BudgetClock } from './budget-clock'
 import type { HeimdallDatabase } from './database'
 import type { EnrollmentStore } from './enrollment-store'
@@ -9,7 +9,7 @@ import type { HeimdallOrchestrationAdapter } from './orchestration/orchestration
 import type { RunnerLedgerStore } from './runner-state'
 
 export type HeimdallKernelServiceDependencies = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   store: Store
   storageAuthority?: 'desktop' | 'runtime'
   database?: HeimdallDatabase

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createSessionSearchClient } from '../../shared/ai-vault-search-client'
 import { fakeSearchService } from '../../shared/ai-vault-search-test-fixture'
 import { RpcDispatcher } from '../runtime/rpc/dispatcher'
-import { OrcaRuntimeService } from '../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { AI_VAULT_METHODS } from '../runtime/rpc/methods/ai-vault'
 import {
   installSessionSearchScopeCatalogSource,
@@ -16,7 +16,7 @@ const CATALOG = {
   projects: [],
   projectHostSetups: [],
   worktreeMeta: {},
-  settings: { workspaceDir: '/home/me/orca/workspaces', nestWorkspaces: true }
+  settings: { workspaceDir: '/home/me/quirky/workspaces', nestWorkspaces: true }
 }
 const WITHIN = { kind: 'workspace', worktreeId: 'repo-1::/work/app' } as const
 
@@ -42,7 +42,7 @@ describe('every search entry point carries the scope identity through', () => {
     setSessionSearchService(service)
     installSessionSearchScopeCatalogSource(() => CATALOG)
     const rpc = new RpcDispatcher({
-      runtime: new OrcaRuntimeService(),
+      runtime: new QuirkyRuntimeService(),
       methods: AI_VAULT_METHODS
     })
     await rpc.dispatch({

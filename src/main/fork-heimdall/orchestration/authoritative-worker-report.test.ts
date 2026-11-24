@@ -82,7 +82,7 @@ function workerDoneMessage(input: {
       outcome: input.outcome,
       ...(input.reportPath ? { reportPath: input.reportPath } : {}),
       ...(input.filesModified === undefined ? {} : { filesModified: input.filesModified }),
-      ...(input.rejection ? { _orcaLifecycleRejection: input.rejection } : {})
+      ...(input.rejection ? { _quirkyLifecycleRejection: input.rejection } : {})
     }),
     read: 1,
     sequence: 7,
@@ -145,14 +145,14 @@ describe('authoritative worker report recovery', () => {
         outcome: 'succeeded',
         messageId: 'message-1',
         body: 'Report accepted.',
-        reportPath: '.orca/report.json',
+        reportPath: '.quirky/report.json',
         filesModified: ['src/fix.ts']
       },
       message: workerDoneMessage({
         messageId: 'message-1',
         body: 'Report accepted.',
         outcome: 'succeeded',
-        reportPath: '.orca/report.json',
+        reportPath: '.quirky/report.json',
         filesModified: ['src/fix.ts']
       })
     })
@@ -171,7 +171,7 @@ describe('authoritative worker report recovery', () => {
           dispatchId: 'dispatch-1',
           taskId: 'task-1',
           outcome: 'succeeded',
-          reportPath: '.orca/report.json',
+          reportPath: '.quirky/report.json',
           filesModified: ['src/fix.ts'],
           result: 'Report accepted.'
         }
@@ -196,7 +196,7 @@ describe('authoritative worker report recovery', () => {
         reportedOutcome: 'succeeded',
         messageId: 'message-1',
         body: 'Rejected report.',
-        reportPath: '.orca/report.json',
+        reportPath: '.quirky/report.json',
         filesModified: ['src/bad.ts'],
         preflightRejection: {
           code: 'invalid_report',
@@ -206,9 +206,9 @@ describe('authoritative worker report recovery', () => {
       },
       message: workerDoneMessage({
         messageId: 'message-1',
-        body: 'Orca rejected worker_done. Original body: Rejected report.',
+        body: 'Quirky rejected worker_done. Original body: Rejected report.',
         outcome: 'succeeded',
-        reportPath: '.orca/report.json',
+        reportPath: '.quirky/report.json',
         filesModified: ['src/bad.ts'],
         rejection: {
           code: 'invalid_report',
@@ -233,7 +233,7 @@ describe('authoritative worker report recovery', () => {
           dispatchId: 'dispatch-1',
           taskId: 'task-1',
           outcome: 'failed',
-          reportPath: '.orca/report.json',
+          reportPath: '.quirky/report.json',
           filesModified: ['src/bad.ts'],
           reportRejection: {
             code: 'invalid_report',
@@ -259,7 +259,7 @@ describe('authoritative worker report recovery', () => {
         outcome: 'succeeded',
         messageId: 'message-1',
         body: 'Unproven report.',
-        reportPath: '.orca/report.json'
+        reportPath: '.quirky/report.json'
       }
     })
 

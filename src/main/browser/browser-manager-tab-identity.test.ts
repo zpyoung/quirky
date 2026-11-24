@@ -61,7 +61,7 @@ const MODES = [
 ] as const
 const ORDINARY_URL = 'https://example.com/'
 const AUTH_URL = 'https://accounts.google.com/v3/signin/identifier'
-const APP_TOKENS = /Electron\/|orca\//i
+const APP_TOKENS = /Electron\/|quirky\//i
 let nextGuestId = 7000
 
 type Observed = {
@@ -167,7 +167,7 @@ function expectClientHintsKept(observed: Observed): void {
 
 describe('tab identity ownership', () => {
   beforeEach(() => {
-    expect(process.env.ORCA_BACKGROUND_LAUNCH).toBe('1')
+    expect(process.env.QUIRKY_BACKGROUND_LAUNCH).toBe('1')
     resetBrowserManagerMocks(mocks)
     resetBrowserManagerState()
     guests.clear()

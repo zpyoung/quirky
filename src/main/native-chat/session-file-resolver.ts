@@ -14,7 +14,7 @@ import {
   codexHomeSessionsDir,
   uniqueDirs
 } from '../ai-vault/session-scanner-roots'
-import { resolveOrcaManagedCodexHomePath } from '../codex/codex-home-paths'
+import { resolveQuirkyManagedCodexHomePath } from '../codex/codex-home-paths'
 import {
   findGrokChatHistoryBySessionId,
   resolveGrokSessionsDir
@@ -37,13 +37,13 @@ function claudeProjectsDirs(): string[] {
   return uniqueDirs([...claudeProjectsHostDirs(), ...claudeProfileHistoryDirs('projects')])
 }
 
-// Why: Orca launches Codex with its own managed CODEX_HOME, so Orca-started rollouts
-// land there; search it first, then CODEX_HOME/~/.codex for non-Orca sessions.
+// Why: Quirky launches Codex with its own managed CODEX_HOME, so Quirky-started rollouts
+// land there; search it first, then CODEX_HOME/~/.codex for non-Quirky sessions.
 // WSL roots are a separate lazy tier — see resolveCodexSessionFile.
-// resolveOrcaManagedCodexHomePath avoids the getter's mkdirSync; creating the
+// resolveQuirkyManagedCodexHomePath avoids the getter's mkdirSync; creating the
 // runtime home belongs to launch, not this resolve poll.
 function codexSessionsDirs(): string[] {
-  return uniqueDirs([join(resolveOrcaManagedCodexHomePath(), 'sessions'), codexHomeSessionsDir()])
+  return uniqueDirs([join(resolveQuirkyManagedCodexHomePath(), 'sessions'), codexHomeSessionsDir()])
 }
 
 // Why a tier after a miss: per-account homes (and, on a WSL host, the ones the desktop made)
@@ -68,7 +68,7 @@ export type ResolveSessionFileOptions = {
   /** Override the Claude projects root (used by tests / isolated scans). */
   claudeProjectsDir?: string
   /** Override the Codex sessions roots, searched in order (tests / isolated
-   *  scans). Defaults to the orca-managed home then CODEX_HOME/~/.codex. */
+   *  scans). Defaults to the quirky-managed home then CODEX_HOME/~/.codex. */
   codexSessionsDirs?: string[]
   /** Override the Grok sessions root (`~/.grok/sessions`). */
   grokSessionsDir?: string

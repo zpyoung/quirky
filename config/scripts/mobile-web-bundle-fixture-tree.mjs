@@ -34,10 +34,10 @@ export async function writeMobileWebBundleFixtureTree({ outDir, body = 'fixture'
   // One asset per content type the guard's own cases reach for by extension: a script, a
   // stylesheet and an image. Fewer would make those cases read `undefined.path` rather than fail.
   const script = hashedAsset(
-    Buffer.from(`globalThis.orca = ${JSON.stringify(body)}\n`, 'utf8'),
+    Buffer.from(`globalThis.quirky = ${JSON.stringify(body)}\n`, 'utf8'),
     'js'
   )
-  const stylesheet = hashedAsset(Buffer.from(`:root{--orca:${body}}\n`, 'utf8'), 'css')
+  const stylesheet = hashedAsset(Buffer.from(`:root{--quirky:${body}}\n`, 'utf8'), 'css')
   const image = hashedAsset(PIXEL_PNG, 'png')
   const indexBytes = Buffer.from(
     `<!doctype html><meta charset="utf-8">` +

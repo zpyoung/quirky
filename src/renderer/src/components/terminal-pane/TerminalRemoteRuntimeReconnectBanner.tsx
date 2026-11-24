@@ -82,12 +82,12 @@ export function TerminalRemoteRuntimeReconnectBanner({
             {pairingRefused
               ? translate(
                   'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.pairingRefusedBody',
-                  "Orca couldn't pair with it again over SSH. Nothing on the host was stopped. Reconnect to try again."
+                  "Quirky couldn't pair with it again over SSH. Nothing on the host was stopped. Reconnect to try again."
                 )
               : retrying
                 ? translate(
                     'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingBody',
-                    'Orca is retrying automatically. This terminal will resume if the connection returns.'
+                    'Quirky is retrying automatically. This terminal will resume if the connection returns.'
                   )
                 : translate(
                     'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedBody',

@@ -23,7 +23,7 @@ vi.mock('@/runtime/runtime-file-read-client', async (importOriginal) => ({
   ...(await importOriginal<typeof RuntimeFileReadClient>()),
   readRuntimeFileContent: mocks.readRuntimeFileContent
 }))
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })

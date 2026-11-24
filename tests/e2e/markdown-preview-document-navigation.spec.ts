@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   cleanupMarkdownFixture,
   createMarkdownFixture,
@@ -7,16 +7,16 @@ import {
 } from './helpers/markdown-editor-fixture'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
-const FIXTURE_DIRECTORY = 'orca-e2e-preview-document-navigation'
+const FIXTURE_DIRECTORY = 'quirky-e2e-preview-document-navigation'
 
 for (const kind of ['relative', 'wiki'] as const) {
   for (const anchored of [false, true]) {
     test(`${kind} ${anchored ? 'anchored' : 'plain'} links stay in Markdown preview`, async ({
-      orcaPage
+      quirkyPage
     }, testInfo) => {
-      await waitForSessionReady(orcaPage)
-      await waitForActiveWorktree(orcaPage)
-      const context = await getActiveWorktreeContext(orcaPage)
+      await waitForSessionReady(quirkyPage)
+      await waitForActiveWorktree(quirkyPage)
+      const context = await getActiveWorktreeContext(quirkyPage)
       let sourcePath: string | null = null
       let targetPath: string | null = null
 
@@ -41,7 +41,7 @@ for (const kind of ['relative', 'wiki'] as const) {
           testInfo.workerIndex,
           `# Source\n\n${link}\n`
         )
-        await orcaPage.evaluate(
+        await quirkyPage.evaluate(
           ({ filePath, relativePath, worktreeId }) => {
             window.__store!.getState().openMarkdownPreview({
               filePath,
@@ -56,7 +56,7 @@ for (const kind of ['relative', 'wiki'] as const) {
             worktreeId: context.worktreeId
           }
         )
-        const linkElement = orcaPage.getByRole('link', { name: 'Open target', exact: true })
+        const linkElement = quirkyPage.getByRole('link', { name: 'Open target', exact: true })
         await expect(linkElement).toBeVisible()
         if (kind === 'wiki') {
           await expect(linkElement).not.toHaveClass(/markdown-doc-link-broken/)
@@ -65,7 +65,7 @@ for (const kind of ['relative', 'wiki'] as const) {
 
         await expect
           .poll(() =>
-            orcaPage.evaluate(() => {
+            quirkyPage.evaluate(() => {
               const state = window.__store!.getState()
               const file = state.openFiles.find((entry) => entry.id === state.activeFileId)
               return file
@@ -82,9 +82,9 @@ for (const kind of ['relative', 'wiki'] as const) {
             mode: 'markdown-preview',
             anchor: anchored ? 'target' : null
           })
-        await expect(orcaPage.getByRole('heading', { name: 'Target', exact: true })).toBeVisible()
+        await expect(quirkyPage.getByRole('heading', { name: 'Target', exact: true })).toBeVisible()
         const screenshotPath = testInfo.outputPath('destination-preview.png')
-        await orcaPage.screenshot({ path: screenshotPath })
+        await quirkyPage.screenshot({ path: screenshotPath })
         await testInfo.attach('destination-preview', {
           path: screenshotPath,
           contentType: 'image/png'

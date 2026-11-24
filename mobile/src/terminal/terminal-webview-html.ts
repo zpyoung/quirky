@@ -27,8 +27,8 @@ export const XTERM_HTML = [
  */
 export function xtermWebViewSource(start: { textScale: number; shown: boolean }) {
   const startValues =
-    `window.__orcaTerminalTextScale = ${JSON.stringify(start.textScale)};\n` +
-    `window.__orcaTerminalShown = ${JSON.stringify(start.shown)};\n`
+    `window.__quirkyTerminalTextScale = ${JSON.stringify(start.textScale)};\n` +
+    `window.__quirkyTerminalShown = ${JSON.stringify(start.shown)};\n`
   return {
     html: [
       TERMINAL_HTML_DOCUMENT_SHELL,

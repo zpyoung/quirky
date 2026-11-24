@@ -4,7 +4,7 @@ import { writePtyFromRuntimeController } from '../ipc/pty/runtime/operations'
 import { getLocalPtyProvider, setLocalPtyProvider } from '../ipc/pty/provider/registry'
 import type { IPtyProvider } from '../providers/pty-provider-contract'
 import { settledWriteStub } from '../providers/settled-pty-write-stub'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import { writeOrchestrationPointerWithSettlement } from './orchestration/mailbox-pointer-pty-write'
 import { sendTerminalStreamInput } from './rpc/methods/terminal/terminal-input-delivery'
@@ -35,7 +35,7 @@ const PTY_ID = 'pty-run-facts-input'
 const priorProvider = getLocalPtyProvider()
 
 type FreshRun = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   controller: RuntimePtyController
   handle: string
   /** The kind each provider write was sent with, and whether input was recorded by then. */
@@ -46,7 +46,7 @@ type FreshRun = {
 
 /** A fresh shell whose controller writes go through main's real write funnel to a fake provider. */
 async function createFreshRun(): Promise<FreshRun> {
-  const runtime = new OrcaRuntimeService(makeStore() as never)
+  const runtime = new QuirkyRuntimeService(makeStore() as never)
   const firstUserInputAt = (): number | null =>
     runtime.terminalRunFacts.read(PTY_ID, null).firstUserInputAt
   const writes: FreshRun['writes'] = []

@@ -66,7 +66,7 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI targeted stop'
     async () => {
       const providerSessionId = randomUUID()
       const { claudeConfigDir, env } = realClaudeLaunchHome()
-      const cwd = await mkdtemp(join(tmpdir(), 'orca-real-stop-task-'))
+      const cwd = await mkdtemp(join(tmpdir(), 'quirky-real-stop-task-'))
       const events: ClaudeStructuredSessionEvent[] = []
       const sink: StructuredAgentSessionEventSink = {
         appendItem: () => {},

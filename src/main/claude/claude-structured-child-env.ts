@@ -21,13 +21,13 @@ export type ClaudeEnvDeps = {
   resolveCommand?: (options?: { pathEnv?: string | null; homePath?: string }) => string
   /** Refreshes the inherited env after the command was not found in it; absent never retries. */
   refreshEnvironmentAfterMiss?: (askedAt: number) => Promise<void>
-  /** Where the program starts, for a PATH entry relative to it; Orca's own when absent. */
+  /** Where the program starts, for a PATH entry relative to it; Quirky's own when absent. */
   resolveWorkingDirectory?: () => Promise<string> | string
   resolveEnv?: () =>
     | Promise<Record<string, string> | undefined>
     | Record<string, string>
     | undefined
-  /** The env the child inherits before auth stripping; absent inherits Orca's own process env. */
+  /** The env the child inherits before auth stripping; absent inherits Quirky's own process env. */
   resolveInheritedEnv?: () => Promise<Record<string, string>>
 }
 

@@ -18,11 +18,11 @@ vi.mock('electron', () => ({
 async function createStore() {
   const { Store } = await import('../persistence')
   const { createSqliteTestStore } = await import('../persistence-test-harness')
-  return createSqliteTestStore(Store, { dataFile: join(dataDir, 'orca-data.json') })
+  return createSqliteTestStore(Store, { dataFile: join(dataDir, 'quirky-data.json') })
 }
 
 beforeEach(() => {
-  dataDir = mkdtempSync(join(tmpdir(), 'orca-project-groups-'))
+  dataDir = mkdtempSync(join(tmpdir(), 'quirky-project-groups-'))
 })
 
 afterEach(async () => {
@@ -62,7 +62,7 @@ describe('Store project group worktree membership', () => {
 
   it('tolerates a corrupt persisted worktree metadata entry', async () => {
     writeFileSync(
-      join(dataDir, 'orca-data.json'),
+      join(dataDir, 'quirky-data.json'),
       JSON.stringify({
         schemaVersion: 1,
         repos: [],

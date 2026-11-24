@@ -57,7 +57,7 @@ export function buildAccumulatedWorkspaceSeed(
   config: NormalizedAccumulatedWorkspaceFixtureOptions,
   now = Date.now()
 ): AccumulatedWorkspaceSeed {
-  const syntheticRoot = path.join(path.parse(process.cwd()).root, 'orca-typing-benchmark')
+  const syntheticRoot = path.join(path.parse(process.cwd()).root, 'quirky-typing-benchmark')
   const repos: Repo[] = Array.from({ length: config.repositories }, (_, index) => ({
     id: `synthetic-repo-${index}`,
     path: path.join(syntheticRoot, `repo-${index}`),

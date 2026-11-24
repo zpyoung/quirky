@@ -10,7 +10,7 @@
  * Swapping either ordering loses output with no error anywhere.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { HeadlessEmulator } from '../daemon/headless-emulator'
 
 const store = {
@@ -38,8 +38,8 @@ const store = {
 
 const PTY_ID = 'pty-dispose-ordering'
 
-function createRuntime(): OrcaRuntimeService {
-  const runtime = new OrcaRuntimeService(store)
+function createRuntime(): QuirkyRuntimeService {
+  const runtime = new QuirkyRuntimeService(store)
   runtime.setPtyController({
     write: () => true,
     kill: () => true,

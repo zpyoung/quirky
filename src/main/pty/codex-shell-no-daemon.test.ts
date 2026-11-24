@@ -90,7 +90,7 @@ type Sandbox = { bin: string; codex: string; helpFile: string; helpLog: string }
 
 /** Fake codex: `--help` prints the help file and logs the probe; any other call prints its argv. */
 function makeSandbox(help: string): Sandbox {
-  const root = mkdtempSync(join(tmpdir(), 'orca-codex-no-daemon-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-codex-no-daemon-'))
   roots.push(root)
   const bin = join(root, 'bin')
   mkdirSync(bin)
@@ -189,7 +189,7 @@ function run(
       ...process.env,
       PATH: `${sandbox.bin}${delimiter}${process.env.PATH ?? ''}`,
       CODEX_HOME: join(sandbox.bin, '..', 'codex-home'),
-      // Why: a run inside an Orca terminal inherits its identity, which the wrapper forwards.
+      // Why: a run inside an Quirky terminal inherits its identity, which the wrapper forwards.
       ...Object.fromEntries(CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => [key, ''])),
       ...env
     }
@@ -216,7 +216,7 @@ const shells: [Shell, boolean][] = [
 
 describe('codex wrapper --no-daemon rule', () => {
   it('has pwsh when CI demanded it', () => {
-    expect(process.env.ORCA_REQUIRE_PWSH !== '1' || pwshAvailable).toBe(true)
+    expect(process.env.QUIRKY_REQUIRE_PWSH !== '1' || pwshAvailable).toBe(true)
   })
 
   for (const [shell, available] of shells) {
@@ -241,19 +241,19 @@ describe('codex wrapper --no-daemon rule', () => {
         expect(lines(result.stdout)).toEqual(ADDED.map((argv) => expectedLine(argv, false)))
       })
 
-      it('adds nothing with ORCA_CODEX_ISOLATE=0, read on every call', () => {
+      it('adds nothing with QUIRKY_CODEX_ISOLATE=0, read on every call', () => {
         const sandbox = makeSandbox(HELP_WITH_FLAG)
         const setIsolate = (value: string): string =>
           isPowerShell(shell)
-            ? `$env:ORCA_CODEX_ISOLATE = '${value}'`
+            ? `$env:QUIRKY_CODEX_ISOLATE = '${value}'`
             : shell === 'fish'
-              ? `set -gx ORCA_CODEX_ISOLATE ${value}`
-              : `export ORCA_CODEX_ISOLATE=${value}`
+              ? `set -gx QUIRKY_CODEX_ISOLATE ${value}`
+              : `export QUIRKY_CODEX_ISOLATE=${value}`
         const result = run(
           shell,
           ['codex a', setIsolate('1'), 'codex b', setIsolate('0'), 'codex c'].join('\n'),
           sandbox,
-          { ORCA_CODEX_ISOLATE: '0' }
+          { QUIRKY_CODEX_ISOLATE: '0' }
         )
 
         expect(lines(result.stdout)).toEqual(['ARGV|a', 'ARGV|--no-daemon|b', 'ARGV|c'])
@@ -295,12 +295,12 @@ describe('codex wrapper --no-daemon rule', () => {
 
   describe('caller identity for commands Codex runs', () => {
     const identity = {
-      ORCA_TERMINAL_HANDLE: 'term_abc',
-      ORCA_USER_DATA_PATH: '/Users/a b/Library/Application Support/orca $HOME \\x "q"'
+      QUIRKY_TERMINAL_HANDLE: 'term_abc',
+      QUIRKY_USER_DATA_PATH: '/Users/a b/Library/Application Support/quirky $HOME \\x "q"'
     }
     const identityOverrides = [
-      "shell_environment_policy.set.ORCA_TERMINAL_HANDLE='term_abc'",
-      `shell_environment_policy.set.ORCA_USER_DATA_PATH='${identity.ORCA_USER_DATA_PATH}'`
+      "shell_environment_policy.set.QUIRKY_TERMINAL_HANDLE='term_abc'",
+      `shell_environment_policy.set.QUIRKY_USER_DATA_PATH='${identity.QUIRKY_USER_DATA_PATH}'`
     ]
     // Why unordered: the overrides set distinct keys, so only which ones arrive matters.
     const splitOverrides = (line: string): { overrides: string[]; rest: string[] } => {
@@ -356,8 +356,8 @@ describe('codex wrapper --no-daemon rule', () => {
       it.skipIf(!available)(`${shell} skips a value holding an apostrophe`, () => {
         const sandbox = makeSandbox(HELP_WITHOUT_FLAG)
         const result = run(shell, codexCall(shell, ['x']), sandbox, {
-          ORCA_TERMINAL_HANDLE: 'term_abc',
-          ORCA_USER_DATA_PATH: "/Users/o'brien/orca'"
+          QUIRKY_TERMINAL_HANDLE: 'term_abc',
+          QUIRKY_USER_DATA_PATH: "/Users/o'brien/quirky'"
         })
 
         expect(lines(result.stdout).map(splitOverrides)).toEqual([
@@ -365,11 +365,11 @@ describe('codex wrapper --no-daemon rule', () => {
         ])
       })
 
-      it.skipIf(!available)(`${shell} forwards nothing with ORCA_CODEX_ISOLATE=0`, () => {
+      it.skipIf(!available)(`${shell} forwards nothing with QUIRKY_CODEX_ISOLATE=0`, () => {
         const sandbox = makeSandbox(HELP_WITH_FLAG)
         const result = run(shell, codexCall(shell, ['x']), sandbox, {
           ...identity,
-          ORCA_CODEX_ISOLATE: '0'
+          QUIRKY_CODEX_ISOLATE: '0'
         })
 
         expect(lines(result.stdout)).toEqual(['ARGV|x'])
@@ -415,7 +415,7 @@ describe('codex wrapper --no-daemon rule', () => {
       `${shell} runs under StrictMode and Stop with a failing, noisy hook prep`,
       () => {
         const sandbox = makeSandbox(HELP_WITH_FLAG)
-        const prep = join(sandbox.bin, isWindows ? 'orca-prep.cmd' : 'orca-prep')
+        const prep = join(sandbox.bin, isWindows ? 'quirky-prep.cmd' : 'quirky-prep')
         writeExecutable(
           prep,
           isWindows
@@ -426,7 +426,7 @@ describe('codex wrapper --no-daemon rule', () => {
           shell,
           'codex x\n"status=$LASTEXITCODE"',
           sandbox,
-          { ORCA_CODEX_LAUNCH_PREFLIGHT: prep },
+          { QUIRKY_CODEX_LAUNCH_PREFLIGHT: prep },
           [
             'Set-StrictMode -Version Latest',
             '$ErrorActionPreference = "Stop"',

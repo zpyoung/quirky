@@ -1,11 +1,11 @@
 /** A valid WSL move journal record whose manifest is bound to it. */
-import { ORCAD_MIGRATION_MANIFEST_VERSION } from '../../../../shared/orcad-migration/orcad-migration-manifest-validation'
+import { QUIRKYD_MIGRATION_MANIFEST_VERSION } from '../../../../shared/quirkyd-migration/quirkyd-migration-manifest-validation'
 import {
   wslMoveJournalKey,
   type WslMoveCutover,
   type WslMoveCutoverPhase
 } from '../../../../shared/wsl-move/wsl-move-cutover'
-import { computeOrcadMigrationManifestSha256 } from '../../../orcad/orcad-migration-manifest-digest'
+import { computeQuirkydMigrationManifestSha256 } from '../../../quirkyd/quirkyd-migration-manifest-digest'
 
 export function wslMoveCutoverFixture(
   migrationId = 'move-1',
@@ -16,7 +16,7 @@ export function wslMoveCutoverFixture(
   const repoIds = scope.repoIds ?? ['repo-1']
   const folderWorkspaceIds = scope.folderWorkspaceIds ?? []
   const unsigned = {
-    version: ORCAD_MIGRATION_MANIFEST_VERSION,
+    version: QUIRKYD_MIGRATION_MANIFEST_VERSION,
     migrationId,
     createdAt: '2026-10-13T00:00:00.000Z',
     source: {
@@ -53,7 +53,7 @@ export function wslMoveCutoverFixture(
     },
     destinationEnvironmentId: 'wsl:Ubuntu'
   }
-  const manifest = { ...unsigned, manifestSha256: computeOrcadMigrationManifestSha256(unsigned) }
+  const manifest = { ...unsigned, manifestSha256: computeQuirkydMigrationManifestSha256(unsigned) }
   return {
     version: 1,
     migrationId,

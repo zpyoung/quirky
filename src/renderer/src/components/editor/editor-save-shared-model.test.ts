@@ -2,9 +2,9 @@
 // text, baseline and conflict state must stay in step across both tabs.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
-  ORCA_EDITOR_FILE_CACHE_STALE_EVENT,
-  ORCA_EDITOR_SAVE_AND_CLOSE_EVENT,
+  QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
+  QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT,
+  QUIRKY_EDITOR_SAVE_AND_CLOSE_EVENT,
   requestEditorFileSave,
   type EditorSaveAndCloseDetail
 } from './editor-autosave'
@@ -17,7 +17,7 @@ import {
   reloadTabContentFromDisk
 } from './ExternalFileChangeBanner'
 import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
-import { ORCA_EDITOR_SAVE_DIRTY_FILES_EVENT } from '../../../../shared/editor-save-events'
+import { QUIRKY_EDITOR_SAVE_DIRTY_FILES_EVENT } from '../../../../shared/editor-save-events'
 import { GUARDED_PATH, stubGuardedDisk } from './editor-save-guarded-disk-fixture'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import { toast } from 'sonner'
@@ -103,7 +103,7 @@ describe('two tabs sharing one model', () => {
       const disk = stubGuardedDisk({ [GUARDED_PATH]: 'A' })
       const { store, a, b, edit, tab } = openSharedTabs('A')
       const dropped: string[] = []
-      window.addEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, (event) => {
+      window.addEventListener(QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT, (event) => {
         if (event instanceof CustomEvent) {
           dropped.push(event.detail.fileId)
         }
@@ -184,7 +184,7 @@ describe('two tabs sharing one model', () => {
     const cleanup = attachEditorAutosaveController(store)
     try {
       window.dispatchEvent(
-        new CustomEvent(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
+        new CustomEvent(QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
           detail: { worktreeId: 'wt-1', worktreePath: '/repo', relativePath: 'file.ts' }
         })
       )
@@ -203,7 +203,7 @@ describe('two tabs sharing one model', () => {
     try {
       const reason = await new Promise((resolve) => {
         const detail: EditorSaveAndCloseDetail = { fileId: a.id, onNotClosed: resolve }
-        window.dispatchEvent(new CustomEvent(ORCA_EDITOR_SAVE_AND_CLOSE_EVENT, { detail }))
+        window.dispatchEvent(new CustomEvent(QUIRKY_EDITOR_SAVE_AND_CLOSE_EVENT, { detail }))
       })
       expect(reason).toBe('blocked-stale')
       expect(store.getState().openFiles).toHaveLength(2)
@@ -221,7 +221,7 @@ describe('two tabs sharing one model', () => {
     try {
       await new Promise<void>((resolve, reject) => {
         window.dispatchEvent(
-          new CustomEvent(ORCA_EDITOR_SAVE_DIRTY_FILES_EVENT, {
+          new CustomEvent(QUIRKY_EDITOR_SAVE_DIRTY_FILES_EVENT, {
             detail: { claim: () => undefined, resolve, reject: (m: string) => reject(new Error(m)) }
           })
         )

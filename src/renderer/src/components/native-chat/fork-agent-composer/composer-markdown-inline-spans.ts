@@ -42,7 +42,7 @@ export function tokenizeComposerMarkdownInline(
     budget
   )
   tokenizeEmphasis(text, start, end, decorations, opaqueRanges, budget)
-  tokenizeOrcaTokens(
+  tokenizeQuirkyTokens(
     text,
     start,
     end,
@@ -385,7 +385,7 @@ function canCloseDelimiter(
   return true
 }
 
-function tokenizeOrcaTokens(
+function tokenizeQuirkyTokens(
   text: string,
   start: number,
   end: number,

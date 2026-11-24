@@ -5,7 +5,7 @@ import {
   heimdallEnrollmentRefusalError
 } from '../../../../../shared/fork-heimdall/enrollment-refusal-error'
 import type { EnrollInput, EnrollResult } from '../../../../../shared/fork-heimdall/watcher-types'
-import { OrcaRuntimeService } from '../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { mapRuntimeError } from '../../errors'
 import { eraseRpcMethods, isStreamingMethod, type RpcMethod } from '../../core'
 import { HEIMDALL_METHODS } from './heimdall'
@@ -37,7 +37,7 @@ describe('Heimdall enrollment refusal RPC errors', () => {
       reason: 'duplicate-workspace',
       existingWatcherId: 'existing-1'
     }
-    const runtime = new OrcaRuntimeService(null)
+    const runtime = new QuirkyRuntimeService(null)
     const kernel = { enroll: vi.fn(async () => refusal) }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this method test binds only the enrollment implementation used by the RPC handler.
     bindHeimdallKernel(runtime, kernel as never)

@@ -40,7 +40,7 @@ created before tracking was added. A maintenance lock prevents cleanup racing wi
 Desktop and web caches are reclaimed together; the next dev launch regenerates them as needed.
 
 Use `--repo DIRECTORY` to choose another local repository. Git's worktree list determines scope,
-including registered worktrees outside Orca's workspace directory. Folder workspaces without Git
+including registered worktrees outside Quirky's workspace directory. Folder workspaces without Git
 have no repository-wide sweep. These commands run on the local host: they do not inspect or delete
 anything on SSH hosts. Run maintenance on the execution host when maintaining remote repositories.
 
@@ -55,7 +55,7 @@ or copying failures are also reported as skipped rather than silently omitted.
 in the background after the dev process starts. It never prompts or waits before launching the app.
 The worktree being launched is excluded from Electron sharing, dev bundle removal, and Vite cleanup; active
 sibling apps and recent unfinished builds remain protected by the existing bundle checks.
-Background sweep output is suppressed; worker start or exit failures are reported without stopping dev. Set `ORCA_SKIP_DEV_STORAGE_RECLAIM=1` to opt out.
+Background sweep output is suppressed; worker start or exit failures are reported without stopping dev. Set `QUIRKY_SKIP_DEV_STORAGE_RECLAIM=1` to opt out.
 The worker finishes independently if the dev app exits, and each cleanup operation has a ten-minute limit.
 
 Historical test cache cleanup runs only in the explicit manual command with `--tests-stopped`.

@@ -98,7 +98,7 @@ async function waitForChildCount(
 }
 
 beforeAll(async () => {
-  workDir = mkdtempSync(join(tmpdir(), 'orca-relay-incumbent-'))
+  workDir = mkdtempSync(join(tmpdir(), 'quirky-relay-incumbent-'))
   writeFileSync(join(workDir, 'relay.js'), FAKE_RELAY_SOURCE)
   for (const filename of RELAY_DAEMON_SERVICE_ENTRY_FILENAMES) {
     writeFileSync(join(workDir, filename), IDLE_SERVICE_SOURCE)

@@ -1,6 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RpcDispatcher } from '../dispatcher'
 import { JIRA_METHODS } from './jira'
 
@@ -9,7 +9,7 @@ it('keeps verified reads and combined board filters in separate public argument 
   const stub = { getRuntimeId: () => 'board-runtime', jiraListIssues }
   const dispatcher = new RpcDispatcher({
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This test dispatches only the fixture's Jira list method.
-    runtime: stub as unknown as OrcaRuntimeService,
+    runtime: stub as unknown as QuirkyRuntimeService,
     methods: JIRA_METHODS
   })
   const filters = { statuses: ['Blocked', 'In Progress'], currentSprint: true }

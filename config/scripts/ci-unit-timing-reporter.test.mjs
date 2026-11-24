@@ -38,11 +38,11 @@ describe('unit worker timing evidence', () => {
   it.each([undefined, '24.21.0', '26.6.0'])(
     'writes reporter provenance for selected Node version %s',
     (nodeVersion) => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-unit-timing-'))
-      const previous = process.env.ORCA_UNIT_TIMING_REPORT
-      process.env.ORCA_UNIT_TIMING_REPORT = join(directory, 'unit-timings.json')
-      vi.stubEnv('ORCA_TEST_NODE_VERSION', nodeVersion)
-      vi.stubEnv('ORCA_UNIT_PHASE_REPORT', undefined)
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-unit-timing-'))
+      const previous = process.env.QUIRKY_UNIT_TIMING_REPORT
+      process.env.QUIRKY_UNIT_TIMING_REPORT = join(directory, 'unit-timings.json')
+      vi.stubEnv('QUIRKY_TEST_NODE_VERSION', nodeVersion)
+      vi.stubEnv('QUIRKY_UNIT_PHASE_REPORT', undefined)
       try {
         const reporter = new UnitTimingReporter()
         reporter.onInit({ config: { root: process.cwd(), shard: { index: 1, count: 8 } } })
@@ -62,23 +62,23 @@ describe('unit worker timing evidence', () => {
           [],
           'passed'
         )
-        expect(JSON.parse(readFileSync(process.env.ORCA_UNIT_TIMING_REPORT, 'utf8'))).toMatchObject(
-          {
-            metric: 'module-duration-v1',
-            nodeVersion: nodeVersion ?? process.versions.node,
-            ...(process.versions.bun ? { bunVersion: process.versions.bun } : {}),
-            shard: { index: 1, count: 8 },
-            status: 'passed',
-            unhandledErrors: 0,
-            timings: { 'src/example.test.ts': 215 }
-          }
-        )
+        expect(
+          JSON.parse(readFileSync(process.env.QUIRKY_UNIT_TIMING_REPORT, 'utf8'))
+        ).toMatchObject({
+          metric: 'module-duration-v1',
+          nodeVersion: nodeVersion ?? process.versions.node,
+          ...(process.versions.bun ? { bunVersion: process.versions.bun } : {}),
+          shard: { index: 1, count: 8 },
+          status: 'passed',
+          unhandledErrors: 0,
+          timings: { 'src/example.test.ts': 215 }
+        })
       } finally {
         vi.unstubAllEnvs()
         if (previous === undefined) {
-          delete process.env.ORCA_UNIT_TIMING_REPORT
+          delete process.env.QUIRKY_UNIT_TIMING_REPORT
         } else {
-          process.env.ORCA_UNIT_TIMING_REPORT = previous
+          process.env.QUIRKY_UNIT_TIMING_REPORT = previous
         }
         rmSync(directory, { recursive: true, force: true })
       }
@@ -151,13 +151,13 @@ const phaseContext = (state) => ({
 })
 
 function withReporterOutputs(run) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-unit-phases-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-unit-phases-'))
   const timingPath = join(directory, 'unit-timings.json')
   const phasePath = join(directory, 'unit-phase-diagnostics.json')
-  vi.stubEnv('ORCA_UNIT_TIMING_REPORT', timingPath)
-  vi.stubEnv('ORCA_UNIT_PHASE_REPORT', undefined)
-  vi.stubEnv('ORCA_UNIT_SELECTION_PLAN', join(directory, 'missing-selection.json'))
-  vi.stubEnv('ORCA_SHARD_SOURCE_SHA', 'phase-source')
+  vi.stubEnv('QUIRKY_UNIT_TIMING_REPORT', timingPath)
+  vi.stubEnv('QUIRKY_UNIT_PHASE_REPORT', undefined)
+  vi.stubEnv('QUIRKY_UNIT_SELECTION_PLAN', join(directory, 'missing-selection.json'))
+  vi.stubEnv('QUIRKY_SHARD_SOURCE_SHA', 'phase-source')
   vi.stubEnv('GITHUB_RUN_ID', 'phase-run')
   vi.stubEnv('GITHUB_RUN_ATTEMPT', '3')
   try {
@@ -183,7 +183,7 @@ describe('optional unit phase diagnostics', () => {
       const timing = readFileSync(timingPath, 'utf8')
       expect(existsSync(phasePath)).toBe(false)
 
-      vi.stubEnv('ORCA_UNIT_PHASE_REPORT', phasePath)
+      vi.stubEnv('QUIRKY_UNIT_PHASE_REPORT', phasePath)
       reporter.onTestRunEnd(modules, [], 'passed')
       expect(readFileSync(timingPath, 'utf8')).toBe(timing)
       expect(JSON.parse(timing).timings).toEqual({ 'src/example.test.ts': 44 })
@@ -256,7 +256,7 @@ describe('optional unit phase diagnostics', () => {
 
   it('reports successful worker startup counters for the current run separately', () => {
     withReporterOutputs(({ phasePath }) => {
-      vi.stubEnv('ORCA_UNIT_PHASE_REPORT', phasePath)
+      vi.stubEnv('QUIRKY_UNIT_PHASE_REPORT', phasePath)
       const state = { workersSpawned: 2, startupTime: 10 }
       const reporter = new UnitTimingReporter()
       reporter.onInit(phaseContext(state))
@@ -331,7 +331,7 @@ describe('optional unit phase diagnostics', () => {
         reporter.onTestRunEnd(modules, [], 'passed')
         const timing = readFileSync(timingPath, 'utf8')
         vi.stubEnv(
-          'ORCA_UNIT_PHASE_REPORT',
+          'QUIRKY_UNIT_PHASE_REPORT',
           target === 'unwritable' ? `${timingPath}/unwritable.json` : timingPath
         )
         expect(() => reporter.onTestRunEnd(modules, [], 'passed')).not.toThrow()

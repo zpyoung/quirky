@@ -1,4 +1,4 @@
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 import { filterRecord, omitStoredFields, withoutKey } from './stored-record-fields'
 import { canReplacePreviewContentType, partitionPinnedTabOrder } from './tab-order'
 import { getNextTerminalOrdinal } from './terminal-tab-ordinal'
@@ -105,7 +105,7 @@ export function closeTab(
       ...next,
       editorFiles: next.editorFiles.filter(
         // Why the switch: shipped builds close through this code too.
-        ORCA_LAYOUT_OWNER_IS_MAIN
+        QUIRKY_LAYOUT_OWNER_IS_MAIN
           ? keptAfterEditorClose(workspace, next, tab.entityId)
           : (file) => !editorTabShowsFile(tab.entityId, file, next.worktreeId)
       )

@@ -240,7 +240,7 @@ describe.skipIf(process.platform === 'win32')('POSIX hook JSON stdin reader', ()
       const payload = '{"hook_event_name":"session_start"}'
 
       const result = await runReader([Buffer.from(`${payload}\n`, 'utf8')], {
-        env: { ...process.env, HOME: '/nonexistent/orca-hook-home' }
+        env: { ...process.env, HOME: '/nonexistent/quirky-hook-home' }
       })
 
       expect(result.timedOut, 'reader returned').toBe(false)

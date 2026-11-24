@@ -8,10 +8,10 @@ import {
   getDraftExtraAgentArgsError,
   parseDraftTime
 } from './automation-draft-model'
-import { saveOrcaAutomation } from './automation-orca-save'
+import { saveQuirkyAutomation } from './automation-quirky-save'
 import type { AutomationSaveContext } from './automation-save-context'
 
-/** Validates editor input then runs the Orca save transaction. */
+/** Validates editor input then runs the Quirky save transaction. */
 export function createAutomationSaveAction(context: AutomationSaveContext) {
   return async function saveAutomation(now = Date.now()): Promise<void> {
     const { store, local, destinationForm, destination } = context
@@ -99,7 +99,7 @@ export function createAutomationSaveAction(context: AutomationSaveContext) {
           return
         }
       }
-      await saveOrcaAutomation(context, { hour, minute, now })
+      await saveQuirkyAutomation(context, { hour, minute, now })
     } catch (error) {
       toast.error(
         error instanceof Error

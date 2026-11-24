@@ -8,7 +8,7 @@ import {
   getFolderWorkspacePathStatus,
   getFolderWorkspacePathStatusForPath
 } from '../../project-groups/folder-workspace-path-status'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { notifyReposChanged } from './repos-changed-notification'
 import {
   FolderWorkspaceCreateArgs,
@@ -17,7 +17,7 @@ import {
   FolderWorkspaceUpdateArgs,
   parseProjectGroupIpcArgs
 } from './repo-ipc-arg-schemas'
-import { visibleFolderWorkspaces } from '../../ssh/orcad-retained-source'
+import { visibleFolderWorkspaces } from '../../ssh/quirkyd-retained-source'
 import {
   isLocalWslMoveRow,
   shouldDropWslMoveProjectUpdate
@@ -26,7 +26,7 @@ import {
 export function registerFolderWorkspaceHandlers(
   mainWindow: BrowserWindow,
   store: Store,
-  runtime: Pick<OrcaRuntimeService, 'deleteFolderWorkspace'>
+  runtime: Pick<QuirkyRuntimeService, 'deleteFolderWorkspace'>
 ): void {
   ipcMain.handle('folderWorkspaces:list', (): FolderWorkspace[] => visibleFolderWorkspaces(store))
 

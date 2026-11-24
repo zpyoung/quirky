@@ -45,7 +45,7 @@ it('handles native background JSON and scopes dismissal to the originating host'
 it('does not turn ordinary alerts into dismissals', async () => {
   vi.mocked(dismissPresentedPushNotification).mockClear()
   await state.task!({
-    data: { data: { orca: { hostFingerprint: 'host-a', notificationId: 'same-id' } } }
+    data: { data: { quirky: { hostFingerprint: 'host-a', notificationId: 'same-id' } } }
   })
   expect(dismissPresentedPushNotification).not.toHaveBeenCalled()
 })

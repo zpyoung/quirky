@@ -405,7 +405,7 @@ describe('runtime file import pairing revision', () => {
       .filter((args) => args.method === 'files.delete')
     expect(deleteCalls).toHaveLength(2)
     expect(deleteCalls.map((args) => args.params?.recursive)).toEqual([false, true])
-    expect(deleteCalls[0]?.params?.relativePath).toMatch(/^assets\/\.broken\.txt\.orca-upload-/)
+    expect(deleteCalls[0]?.params?.relativePath).toMatch(/^assets\/\.broken\.txt\.quirky-upload-/)
     expect(deleteCalls[1]?.params?.relativePath).toBe('assets')
     expectEveryRuntimeCallBoundToCapturedRevision(nestedSshContext)
   })

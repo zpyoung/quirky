@@ -50,8 +50,8 @@ function allowAsking(): void {
 }
 
 beforeEach(() => {
-  userData = mkdtempSync(join(tmpdir(), 'orca-codex-hash-lookup-'))
-  vi.stubEnv('ORCA_USER_DATA_PATH', userData)
+  userData = mkdtempSync(join(tmpdir(), 'quirky-codex-hash-lookup-'))
+  vi.stubEnv('QUIRKY_USER_DATA_PATH', userData)
   mocks.codexPath = join(userData, 'codex')
   writeFileSync(mocks.codexPath, 'codex 0.150.1')
   mocks.probeCodexVersion.mockResolvedValue('codex-cli 0.150.1')
@@ -74,7 +74,7 @@ describe('what a lookup may spawn', () => {
   it('never asks Codex outside the app, reading only what the app learned', async () => {
     const answer = await resolveCodexHookAnswer()
 
-    expect(answer).toEqual({ kind: 'pending', failure: 'Orca has not asked Codex yet' })
+    expect(answer).toEqual({ kind: 'pending', failure: 'Quirky has not asked Codex yet' })
     expect(mocks.probeCodexVersion).not.toHaveBeenCalled()
 
     allowAsking()
@@ -179,7 +179,7 @@ describe('what a lookup may spawn', () => {
 
     expect(missing).toEqual({
       kind: 'pending',
-      failure: `Orca could not find Codex at ${mocks.codexPath}`,
+      failure: `Quirky could not find Codex at ${mocks.codexPath}`,
       codexMissing: true
     })
     writeFileSync(mocks.codexPath, 'codex 0.150.1')
@@ -192,7 +192,7 @@ describe('what a lookup may spawn', () => {
     mocks.deriveCodexHookHashes.mockResolvedValue({
       kind: 'refused',
       codexVersion: 'codex-cli 0.150.1',
-      failure: 'Codex 0.150.1 did not recognize Orca status hook'
+      failure: 'Codex 0.150.1 did not recognize Quirky status hook'
     })
     await resolveCodexHookAnswer()
     // Why: a new process, as after a restart; the version's answer is saved.
@@ -238,7 +238,7 @@ describe('the answer status reads', () => {
 
     expect(readKnownCodexHookAnswer()).toEqual({
       kind: 'pending',
-      failure: `Orca could not find Codex at ${mocks.codexPath}`,
+      failure: `Quirky could not find Codex at ${mocks.codexPath}`,
       codexMissing: true
     })
   })

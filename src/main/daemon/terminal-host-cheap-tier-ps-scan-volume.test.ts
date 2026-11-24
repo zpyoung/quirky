@@ -22,13 +22,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // and a restart, produces the identical foregroundProcess series with the cheap tier on and off.
 
 // Two seams because the two tiers spawn differently: the full evidence reader still forks
-// through node:child_process, the cheap reader through Orca's runProcess entry point.
+// through node:child_process, the cheap reader through Quirky's runProcess entry point.
 const { execFileMock, runProcessMock } = vi.hoisted(() => ({
   execFileMock: vi.fn(),
   runProcessMock: vi.fn()
 }))
 vi.mock('node:child_process', () => ({ execFile: execFileMock }))
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 
 // Inject /dev data without bypassing the production translator.
 vi.mock('../../shared/darwin-terminal-names', async (importOriginal) => {

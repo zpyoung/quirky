@@ -14,7 +14,7 @@ import {
 let home: string
 const tomlPath = (): string => join(home, 'config.toml')
 const hooksPath = (): string => join(home, 'hooks.json')
-const COMMAND = '/u/.orca/agent-hooks/codex-hook.sh'
+const COMMAND = '/u/.quirky/agent-hooks/codex-hook.sh'
 
 function approval(eventLabel: 'stop' | 'session_start', trustedHash: string): CodexTrustEntry {
   return {
@@ -36,7 +36,7 @@ function writeHooks(): void {
 }
 
 beforeEach(() => {
-  home = realpathSync(mkdtempSync(join(tmpdir(), 'orca-codex-approval-first-')))
+  home = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-codex-approval-first-')))
 })
 
 afterEach(() => {
@@ -85,7 +85,7 @@ describe('writeCodexHookApprovalsBeforeEntries', () => {
         tomlPath(),
         [approval('stop', 'sha256:codex-stop'), approval('session_start', 'sha256:codex-start')],
         () => {
-          // Why: another writer approves the same key while Orca's entry write is failing.
+          // Why: another writer approves the same key while Quirky's entry write is failing.
           upsertHookTrustEntries(tomlPath(), [approval('session_start', 'sha256:other-writer')])
           throw new Error('disk full')
         },

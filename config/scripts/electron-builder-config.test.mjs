@@ -25,7 +25,6 @@ describe('electron-builder config', () => {
       expect.arrayContaining([
         '!src{,/**/*}',
         '!config{,/**/*}',
-        '!cloud{,/**/*}',
         '!docs{,/**/*}',
         '!mobile{,/**/*}',
         '!native{,/**/*}',
@@ -85,11 +84,11 @@ describe('electron-builder config', () => {
     expect(packs('out/web/web-index.html')).toBe(false)
     expect(packs('out/web/assets/shared.js')).toBe(false)
     expect(packs('out/renderer/web-index.html')).toBe(true)
-    expect(packs('out/renderer/.orca-web-client-files.json')).toBe(true)
+    expect(packs('out/renderer/.quirky-web-client-files.json')).toBe(true)
   })
 
   it.each(['file', 'directory'])('keeps a root notes %s out of app.asar', async (kind) => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-packaging-notes-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-packaging-notes-'))
     const source = join(root, 'app')
     const destination = join(root, 'selected')
     const runtimePaths = [
@@ -108,9 +107,9 @@ describe('electron-builder config', () => {
         ? ['notes']
         : [
             'notes/build.log',
-            'notes/installed-orca-backup/Orca.exe',
-            'notes/installed-orca-backup/resources/app.asar',
-            'notes/orca-windows-setup.exe',
+            'notes/installed-quirky-backup/Quirky.exe',
+            'notes/installed-quirky-backup/resources/app.asar',
+            'notes/quirky-windows-setup.exe',
             'notes/.recovery/state.json'
           ]
     try {
@@ -157,9 +156,9 @@ describe('electron-builder config', () => {
 
     for (const authoringOnly of [
       'examples/plugins/hostile-panel/panel.html',
-      'examples/plugins/hostile-panel/orca-plugin.json',
-      'examples/plugins/hello-orca/main.mjs',
-      'examples/plugins/hello-orca/orca-plugin.json'
+      'examples/plugins/hostile-panel/quirky-plugin.json',
+      'examples/plugins/hello-quirky/main.mjs',
+      'examples/plugins/hello-quirky/quirky-plugin.json'
     ]) {
       expect(packs(authoringOnly)).toBe(false)
     }
@@ -176,8 +175,8 @@ describe('electron-builder config', () => {
     const packs = (repoPath) => isPacked(join('/app', repoPath), { isDirectory: () => false })
 
     for (const devBundlePath of [
-      'out/electron-dev/1a2b3c4d5e6f/Orca: dev.app/Contents/MacOS/Electron',
-      'out/electron-dev/1a2b3c4d5e6f/orca-dev-electron-app.json',
+      'out/electron-dev/1a2b3c4d5e6f/Quirky: dev.app/Contents/MacOS/Electron',
+      'out/electron-dev/1a2b3c4d5e6f/quirky-dev-electron-app.json',
       '.cache/vite/renderer/deps/react.js',
       '.cache/vite/web/deps/react.js',
       '.cache/vite.lock/owner'
@@ -230,8 +229,8 @@ describe('electron-builder config', () => {
     expect(electronBuilderConfig.mac.extraResources).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          from: 'native/computer-use-macos/.build/release/Orca Computer Use.app',
-          to: 'Orca Computer Use.app'
+          from: 'native/computer-use-macos/.build/release/Quirky Computer Use.app',
+          to: 'Quirky Computer Use.app'
         })
       ])
     )
@@ -248,7 +247,7 @@ describe('electron-builder config', () => {
   })
 
   it.each(['mac'])('loads Codex TOML parsing after %s runtime pruning', async (platform) => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-packaged-codex-toml-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-packaged-codex-toml-'))
     try {
       const resource = electronBuilderConfig[platform].extraResources.find(
         (entry) => entry.to === join('node_modules', 'smol-toml')
@@ -281,13 +280,13 @@ describe('electron-builder config', () => {
     expect(electronBuilderConfig.mac.extraFiles).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          from: 'native/notification-status-macos/.build/release/orca-notification-status',
-          to: 'MacOS/orca-notification-status'
+          from: 'native/notification-status-macos/.build/release/quirky-notification-status',
+          to: 'MacOS/quirky-notification-status'
         })
       ])
     )
     expect(electronBuilderConfig.mac.extraResources).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ to: 'orca-notification-status' })])
+      expect.arrayContaining([expect.objectContaining({ to: 'quirky-notification-status' })])
     )
   })
 
@@ -295,13 +294,13 @@ describe('electron-builder config', () => {
     expect(electronBuilderConfig.mac.extraFiles).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          from: 'native/keyboard-layout-macos/.build/release/orca-keyboard-layout',
-          to: 'MacOS/orca-keyboard-layout'
+          from: 'native/keyboard-layout-macos/.build/release/quirky-keyboard-layout',
+          to: 'MacOS/quirky-keyboard-layout'
         })
       ])
     )
     expect(electronBuilderConfig.mac.extraResources).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ to: 'orca-keyboard-layout' })])
+      expect.arrayContaining([expect.objectContaining({ to: 'quirky-keyboard-layout' })])
     )
   })
 
@@ -320,13 +319,13 @@ describe('electron-builder config', () => {
   })
 
   // Why: the CLI runs this entry under ELECTRON_RUN_AS_NODE, which cannot read
-  // app.asar, so a packed copy sends every `orca serve` to Electron (#27307).
-  it('unpacks the orcad serve-selection entry the CLI runs', async () => {
+  // app.asar, so a packed copy sends every `quirky serve` to Electron (#27307).
+  it('unpacks the quirkyd serve-selection entry the CLI runs', async () => {
     const sharedSource = await readFile(
-      join(REPO_ROOT, 'src', 'shared', 'orcad-local-serve-selection.ts'),
+      join(REPO_ROOT, 'src', 'shared', 'quirkyd-local-serve-selection.ts'),
       'utf8'
     )
-    const entryName = sharedSource.match(/ORCAD_LOCAL_SERVE_SELECTION_ENTRY = '([^']+)'/)?.[1]
+    const entryName = sharedSource.match(/QUIRKYD_LOCAL_SERVE_SELECTION_ENTRY = '([^']+)'/)?.[1]
     expect(entryName).toBeDefined()
 
     const matcher = new FileMatcher(
@@ -354,7 +353,7 @@ describe('electron-builder config', () => {
     for (const webPath of [
       'out/renderer/web-index.html',
       'out/renderer/assets/index-abc123.js',
-      'out/renderer/.orca-web-client-files.json',
+      'out/renderer/.quirky-web-client-files.json',
       'out/mobile-web/manifest.json',
       'out/mobile-web/assets/index-abc123.js'
     ]) {
@@ -370,25 +369,25 @@ describe('electron-builder config', () => {
 
   it('overrides packaged semver only for local macOS builds', () => {
     const configPath = require.resolve('../electron-builder.config.cjs')
-    const original = process.env.ORCA_LOCAL_BUILD_VERSION
-    const originalMacRelease = process.env.ORCA_MAC_RELEASE
+    const original = process.env.QUIRKY_LOCAL_BUILD_VERSION
+    const originalMacRelease = process.env.QUIRKY_MAC_RELEASE
     try {
       delete require.cache[configPath]
-      delete process.env.ORCA_MAC_RELEASE
-      process.env.ORCA_LOCAL_BUILD_VERSION = '1.4.159-rc.0.local.123.abc'
+      delete process.env.QUIRKY_MAC_RELEASE
+      process.env.QUIRKY_LOCAL_BUILD_VERSION = '1.4.159-rc.0.local.123.abc'
       expect(require('../electron-builder.config.cjs').extraMetadata).toEqual({
         version: '1.4.159-rc.0.local.123.abc'
       })
     } finally {
       if (originalMacRelease === undefined) {
-        delete process.env.ORCA_MAC_RELEASE
+        delete process.env.QUIRKY_MAC_RELEASE
       } else {
-        process.env.ORCA_MAC_RELEASE = originalMacRelease
+        process.env.QUIRKY_MAC_RELEASE = originalMacRelease
       }
       if (original === undefined) {
-        delete process.env.ORCA_LOCAL_BUILD_VERSION
+        delete process.env.QUIRKY_LOCAL_BUILD_VERSION
       } else {
-        process.env.ORCA_LOCAL_BUILD_VERSION = original
+        process.env.QUIRKY_LOCAL_BUILD_VERSION = original
       }
       delete require.cache[configPath]
       require('../electron-builder.config.cjs')
@@ -397,30 +396,30 @@ describe('electron-builder config', () => {
 
   it('never applies local semver to release packaging', () => {
     const configPath = require.resolve('../electron-builder.config.cjs')
-    const originalLocalVersion = process.env.ORCA_LOCAL_BUILD_VERSION
-    const originalMacRelease = process.env.ORCA_MAC_RELEASE
+    const originalLocalVersion = process.env.QUIRKY_LOCAL_BUILD_VERSION
+    const originalMacRelease = process.env.QUIRKY_MAC_RELEASE
     try {
       delete require.cache[configPath]
-      process.env.ORCA_LOCAL_BUILD_VERSION = '1.4.159-local.123.abc'
-      process.env.ORCA_MAC_RELEASE = '1'
+      process.env.QUIRKY_LOCAL_BUILD_VERSION = '1.4.159-local.123.abc'
+      process.env.QUIRKY_MAC_RELEASE = '1'
       expect(require('../electron-builder.config.cjs').extraMetadata).toBeUndefined()
     } finally {
       if (originalLocalVersion === undefined) {
-        delete process.env.ORCA_LOCAL_BUILD_VERSION
+        delete process.env.QUIRKY_LOCAL_BUILD_VERSION
       } else {
-        process.env.ORCA_LOCAL_BUILD_VERSION = originalLocalVersion
+        process.env.QUIRKY_LOCAL_BUILD_VERSION = originalLocalVersion
       }
       if (originalMacRelease === undefined) {
-        delete process.env.ORCA_MAC_RELEASE
+        delete process.env.QUIRKY_MAC_RELEASE
       } else {
-        process.env.ORCA_MAC_RELEASE = originalMacRelease
+        process.env.QUIRKY_MAC_RELEASE = originalMacRelease
       }
       delete require.cache[configPath]
       require('../electron-builder.config.cjs')
     }
   })
 
-  it('uses Orca native rebuild hook instead of electron-builder default rebuild', () => {
+  it('uses Quirky native rebuild hook instead of electron-builder default rebuild', () => {
     expect(electronBuilderConfig.beforeBuild).toBe(electronBuilderNativeRebuild)
     expect(electronBuilderConfig.npmRebuild).toBe(true)
   })
@@ -440,7 +439,7 @@ describe('arch-aware packaging guard', () => {
   let scratch
   let bundleDir
   beforeAll(async () => {
-    scratch = await mkdtemp(join(tmpdir(), 'orca-electron-builder-guard-'))
+    scratch = await mkdtemp(join(tmpdir(), 'quirky-electron-builder-guard-'))
     bundleDir = join(scratch, 'mobile-web')
     await writeMobileWebBundleFixtureTree({ outDir: bundleDir })
   })
@@ -456,23 +455,23 @@ describe('arch-aware packaging guard', () => {
   })
 
   it('refuses to package a dark layout-owner build', () => {
-    const previous = process.env.ORCA_LAYOUT_OWNER
-    process.env.ORCA_LAYOUT_OWNER = 'main'
+    const previous = process.env.QUIRKY_LAYOUT_OWNER
+    process.env.QUIRKY_LAYOUT_OWNER = 'main'
     try {
-      expect(() => packHost(HOST_ARCH)).toThrow('ORCA_LAYOUT_OWNER=main')
+      expect(() => packHost(HOST_ARCH)).toThrow('QUIRKY_LAYOUT_OWNER=main')
     } finally {
       if (previous === undefined) {
-        delete process.env.ORCA_LAYOUT_OWNER
+        delete process.env.QUIRKY_LAYOUT_OWNER
       } else {
-        process.env.ORCA_LAYOUT_OWNER = previous
+        process.env.QUIRKY_LAYOUT_OWNER = previous
       }
     }
   })
 
-  it('refuses to package an orcad template marked by a dark test build', async () => {
-    const templateDir = join(scratch, 'orcad-template')
+  it('refuses to package an quirkyd template marked by a dark test build', async () => {
+    const templateDir = join(scratch, 'quirkyd-template')
     await mkdir(templateDir, { recursive: true })
-    await writeFile(join(templateDir, 'ORCA_LAYOUT_OWNER_MAIN'), 'dark\n')
+    await writeFile(join(templateDir, 'QUIRKY_LAYOUT_OWNER_MAIN'), 'dark\n')
     try {
       expect(() =>
         electronBuilderConfig.beforePack(
@@ -480,7 +479,7 @@ describe('arch-aware packaging guard', () => {
           bundleDir,
           templateDir
         )
-      ).toThrow(`${templateDir} holds an ORCA_LAYOUT_OWNER=main build`)
+      ).toThrow(`${templateDir} holds an QUIRKY_LAYOUT_OWNER=main build`)
     } finally {
       await rm(templateDir, { recursive: true, force: true })
     }

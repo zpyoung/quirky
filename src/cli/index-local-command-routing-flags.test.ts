@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 const {
   callMock,
   runtimeClientConstructorMock,
-  serveOrcaAppMock,
+  serveQuirkyAppMock,
   getDefaultUserDataPathMock,
   addEnvironmentFromPairingCodeMock,
   listEnvironmentsMock,
@@ -13,8 +13,8 @@ const {
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   removeEnvironmentMock: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock('./runtime-client', async () => {
   return createRuntimeClientModuleMock({
     callMock,
     runtimeClientConstructorMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock
   })
 })
@@ -90,7 +90,7 @@ function fakeMachineNameRuntime(detectedName: string): { updates: unknown[] } {
 describe('runtime-selector flags on locally pinned CLI commands', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock,
     addEnvironmentFromPairingCodeMock,
     listEnvironmentsMock,
@@ -171,9 +171,9 @@ describe('runtime-selector flags on locally pinned CLI commands', () => {
 
   /** The selectors an agent's environment carries: set empty, which the CLI reads as unset. */
   function agentSelectors(): void {
-    process.env.ORCA_ENVIRONMENT = ''
-    process.env.ORCA_PAIRING_CODE = ''
-    process.env.ORCA_REMOTE_PAIRING = ''
+    process.env.QUIRKY_ENVIRONMENT = ''
+    process.env.QUIRKY_PAIRING_CODE = ''
+    process.env.QUIRKY_REMOTE_PAIRING = ''
   }
 
   it("keeps explicit --environment routing under an agent's empty selectors", async () => {
@@ -195,17 +195,17 @@ describe('runtime-selector flags on locally pinned CLI commands', () => {
     const priorExitCode = process.exitCode
     await main(['project', 'setups', '--host', 'runtime:gpu', '--json'], '/tmp/repo')
     expect([...log.mock.calls, ...err.mock.calls].flat().join('\n')).not.toContain(
-      'name different Orca servers'
+      'name different Quirky servers'
     )
     expect(callMock).toHaveBeenCalledWith('projectHostSetup.list')
     expect(runtimeClientConstructorMock).toHaveBeenCalledWith(null, 'gpu')
     process.exitCode = priorExitCode
   })
 
-  it('routes `host name` through an ambient ORCA_ENVIRONMENT, unlike the pinned `host list`', async () => {
+  it('routes `host name` through an ambient QUIRKY_ENVIRONMENT, unlike the pinned `host list`', async () => {
     // Why: the pin used to cover the whole `host` family, which silently answered for this machine
     // when the shell was pointed at another one. `host name` describes one runtime, so it routes.
-    process.env.ORCA_ENVIRONMENT = 'm4air'
+    process.env.QUIRKY_ENVIRONMENT = 'm4air'
     pairRuntimeEnvironment(listEnvironmentsMock, 'env-m4air', 'm4air')
     fakeMachineNameRuntime('M4 Air')
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -250,7 +250,9 @@ describe('runtime-selector flags on locally pinned CLI commands', () => {
 
   it('reports an unreachable runtime as an error instead of inventing a name', async () => {
     const { RuntimeClientError } = await import('./runtime/types.js')
-    callMock.mockRejectedValue(new RuntimeClientError('runtime_unavailable', 'Orca is not running'))
+    callMock.mockRejectedValue(
+      new RuntimeClientError('runtime_unavailable', 'Quirky is not running')
+    )
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(['host', 'name', '--json'], '/tmp/repo')
@@ -275,7 +277,7 @@ describe('runtime-selector flags on locally pinned CLI commands', () => {
     const printed = JSON.parse(String(logSpy.mock.calls[0]?.[0]))
     expect(printed.ok).toBe(false)
     expect(printed.error.code).toBe('invalid_argument')
-    expect(printed.error.message).toContain('`--environment` does not retarget `orca host list`')
+    expect(printed.error.message).toContain('`--environment` does not retarget `quirky host list`')
     expect(process.exitCode).toBe(1)
     expect(callMock).not.toHaveBeenCalled()
     expect(runtimeClientConstructorMock).not.toHaveBeenCalledWith(null, 'm4air')
@@ -292,7 +294,7 @@ describe('runtime-selector flags on locally pinned CLI commands', () => {
     expect(printed.ok).toBe(false)
     expect(printed.error.code).toBe('invalid_argument')
     expect(printed.error.message).toContain(
-      '`--environment` does not retarget `orca environment list`'
+      '`--environment` does not retarget `quirky environment list`'
     )
     process.exitCode = 0
   })
@@ -301,9 +303,9 @@ describe('runtime-selector flags on locally pinned CLI commands', () => {
     pairRuntimeEnvironment(listEnvironmentsMock, 'env-m4air', 'm4air')
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    await main(['host', 'list', '--pairing-code', 'orca://pair?code=x', '--json'], '/tmp/repo')
+    await main(['host', 'list', '--pairing-code', 'quirky://pair?code=x', '--json'], '/tmp/repo')
     await main(
-      ['environment', 'list', '--pairing-code', 'orca://pair?code=x', '--json'],
+      ['environment', 'list', '--pairing-code', 'quirky://pair?code=x', '--json'],
       '/tmp/repo'
     )
 
@@ -316,10 +318,10 @@ describe('runtime-selector flags on locally pinned CLI commands', () => {
     process.exitCode = 0
   })
 
-  it('keeps `host list` local when ORCA_ENVIRONMENT is set ambiently', async () => {
+  it('keeps `host list` local when QUIRKY_ENVIRONMENT is set ambiently', async () => {
     // Why: the ambient variable produced the same two-machine listing as the explicit flag, with
     // no flag to reject. Pinning the family is what makes `runtimeId: local` true in both cases.
-    process.env.ORCA_ENVIRONMENT = 'm4air'
+    process.env.QUIRKY_ENVIRONMENT = 'm4air'
     pairRuntimeEnvironment(listEnvironmentsMock, 'env-m4air', 'm4air')
     queueSshTargetLookups(1)
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})

@@ -3,7 +3,7 @@
 The injected preamble is authoritative. Copy its command rather than
 reconstructing flags. In particular, preserve the exact executable, worker
 handle, Task ID, and Dispatch ID, and keep any other flag it carries (an older
-Orca host adds `--dispatch-capability`).
+Quirky host adds `--dispatch-capability`).
 
 ## Heartbeat
 
@@ -11,7 +11,7 @@ Send heartbeats only at the cadence required by the live preamble. Skip them
 while blocked inside `ask` or `check --wait`; those calls are liveness signals.
 
 ```text
-ORCA orchestration send --from <worker_handle> --type heartbeat --subject "alive" --task-id <task_id> --dispatch-id <dispatch_id> --phase "<investigating|implementing|reviewing|waiting>"
+QUIRKY orchestration send --from <worker_handle> --type heartbeat --subject "alive" --task-id <task_id> --dispatch-id <dispatch_id> --phase "<investigating|implementing|reviewing|waiting>"
 ```
 
 Use typed lifecycle flags, not a hand-written JSON payload. A heartbeat proves
@@ -19,13 +19,13 @@ liveness, never completion.
 
 ## Ask and resume
 
-Use Orca `ask` whenever the coordinator must answer. Never open a local question
+Use Quirky `ask` whenever the coordinator must answer. Never open a local question
 TUI the coordinator cannot answer.
 
 ```text
-ORCA orchestration ask --from <worker_handle> --question "<question>" --options "<choice-a>,<choice-b>" --timeout-ms 600000
+QUIRKY orchestration ask --from <worker_handle> --question "<question>" --options "<choice-a>,<choice-b>" --timeout-ms 600000
 
-ORCA orchestration ask --from <worker_handle> --resume <message_id> --timeout-ms 600000
+QUIRKY orchestration ask --from <worker_handle> --resume <message_id> --timeout-ms 600000
 ```
 
 A timeout or disconnect leaves the original question pending. Resume its
@@ -38,7 +38,7 @@ enqueue is durable but does not interrupt you, so nothing arrives unless you
 look:
 
 ```text
-ORCA orchestration check --terminal <worker_handle> --json
+QUIRKY orchestration check --terminal <worker_handle> --json
 ```
 
 Run it at each natural checkpoint — before starting a new file, after a test
@@ -58,7 +58,7 @@ party's terminal (a coordinator or another worker); run it from your own termina
 Escalate only before completion and only when the coordinator must intervene:
 
 ```text
-ORCA orchestration send --from <worker_handle> --type escalation --subject "Blocked: <reason>" --body "<details>" --task-id <task_id> --dispatch-id <dispatch_id>
+QUIRKY orchestration send --from <worker_handle> --type escalation --subject "Blocked: <reason>" --body "<details>" --task-id <task_id> --dispatch-id <dispatch_id>
 ```
 
 ## Completion
@@ -71,7 +71,7 @@ Append `--files-modified` or `--report-path` only when applicable, using actual
 paths. Do not send documentation placeholders as metadata.
 
 ```text
-ORCA orchestration send --from <worker_handle> --type worker_done --subject "<short status>" --body "<three sentences: work, findings, remaining>" --task-id <task_id> --dispatch-id <dispatch_id> --outcome succeeded
+QUIRKY orchestration send --from <worker_handle> --type worker_done --subject "<short status>" --body "<three sentences: work, findings, remaining>" --task-id <task_id> --dispatch-id <dispatch_id> --outcome succeeded
 ```
 
 After `worker_done`, end the dispatched turn and idle. Do not poll, close your

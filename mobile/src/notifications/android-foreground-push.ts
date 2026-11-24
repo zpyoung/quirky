@@ -1,7 +1,7 @@
 import { Platform } from 'react-native'
 import * as Notifications from 'expo-notifications'
 import { canPresentForegroundPush } from './push-receive'
-import { readOrcaPushPayload } from './push-payload'
+import { readQuirkyPushPayload } from './push-payload'
 
 export function startAndroidForegroundPushPresentation(): () => void {
   if (Platform.OS !== 'android') {
@@ -19,7 +19,7 @@ export function startAndroidForegroundPushPresentation(): () => void {
     ) {
       return
     }
-    const payload = readOrcaPushPayload(content.data)
+    const payload = readQuirkyPushPayload(content.data)
     if (!payload || payload.kind === 'dismiss' || (!content.title && !content.body)) {
       return
     }

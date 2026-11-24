@@ -8,7 +8,7 @@ const spawned = vi.hoisted(() => {
   return { specs }
 })
 
-vi.mock('@orca/process-host', () => ({
+vi.mock('@quirky/process-host', () => ({
   spawnProcess: (spec: SpawnSpec) => {
     spawned.specs.push(spec)
     const child = Object.assign(new EventEmitter(), {
@@ -53,8 +53,8 @@ describe('runClaudeCommandProcess', () => {
       ['auth', 'login', '--claudeai'],
       { windowsPath: '/data/a/home', linuxPath: null, wslDistro: null },
       1000,
-      { browser: '/data/a/home/.orca-sign-in-browser' }
+      { browser: '/data/a/home/.quirky-sign-in-browser' }
     )
-    expect(spawned.specs[0].env?.BROWSER).toBe('/data/a/home/.orca-sign-in-browser')
+    expect(spawned.specs[0].env?.BROWSER).toBe('/data/a/home/.quirky-sign-in-browser')
   })
 })

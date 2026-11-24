@@ -1,5 +1,5 @@
 /** Opt-in for tests that drive the real `claude` CLI on this machine's signed-in account. */
-export const REAL_CLAUDE_CLI_TEST_ENV = 'ORCA_REAL_CLAUDE_CLI_TEST'
+export const REAL_CLAUDE_CLI_TEST_ENV = 'QUIRKY_REAL_CLAUDE_CLI_TEST'
 
 export type ClaudeCliProbeResult = { status: number | null; stdout: string }
 

@@ -16,7 +16,7 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const WORKTREE = 'repo1::/worktree'
 const TAB = 'tab1'
@@ -78,7 +78,7 @@ const WRAPPED_AT_ROOT: TerminalPaneLayoutNode = {
 
 describe('a pane main first hears of at its terminal binding goes where the window split it', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-binding-graft-placement-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-binding-graft-placement-'))
   })
 
   afterEach(async () => {

@@ -34,7 +34,7 @@ async function loadClient() {
 }
 
 beforeEach(() => {
-  tempHome = mkdtempSync(join(tmpdir(), 'orca-jira-scoped-'))
+  tempHome = mkdtempSync(join(tmpdir(), 'quirky-jira-scoped-'))
 })
 
 afterEach(async () => {
@@ -179,7 +179,7 @@ describe('scoped Jira Cloud tokens over HTTP', () => {
     const jira = await loadClient()
 
     await expect(jira.connect(CREDENTIAL)).resolves.toMatchObject({ ok: true })
-    const stored = JSON.parse(readFileSync(join(tempHome, '.orca', 'jira-sites.json'), 'utf8'))
+    const stored = JSON.parse(readFileSync(join(tempHome, '.quirky', 'jira-sites.json'), 'utf8'))
     expect(stored.sites[0]).toMatchObject({
       siteUrl: SITE,
       authType: 'cloud',
@@ -342,7 +342,7 @@ describe('scoped Jira Cloud tokens over HTTP', () => {
   })
 
   it('keeps legacy stored sites while refusing edited gateway destinations', async () => {
-    const dir = join(tempHome, '.orca')
+    const dir = join(tempHome, '.quirky')
     mkdirSync(join(dir, 'jira-tokens'), { recursive: true })
     const sites = [
       { id: 'legacy' },

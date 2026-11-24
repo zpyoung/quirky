@@ -44,7 +44,7 @@ vi.mock('electron', () => ({
 
 describe('Store', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {
@@ -491,7 +491,7 @@ describe('Store', () => {
     })
 
     const store = await createStore()
-    expect(store.getSettings().terminalShortcutPolicy).toBe('orca-first')
+    expect(store.getSettings().terminalShortcutPolicy).toBe('quirky-first')
   })
 
   it('normalizes malformed source control group order on load', async () => {

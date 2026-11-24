@@ -32,7 +32,7 @@ function localHomePaths(context: AgentTrustLaunchContext) {
 }
 
 /**
- * Pre-trusts `workspacePath` for the agent Orca is about to start, on the host that runs
+ * Pre-trusts `workspacePath` for the agent Quirky is about to start, on the host that runs
  * it. Never throws and never waits past the preset's deadline: a miss means the agent asks.
  */
 export async function applyAgentWorkspaceTrust(
@@ -57,7 +57,7 @@ export async function applyAgentWorkspaceTrust(
           wslDistro: context.wslDistro
         }),
       codexConfigFiles: () => getLocalCodexTrustConfigFiles(agentHome),
-      // Why: Codex queues behind a config lane it shares with Orca's hook installs.
+      // Why: Codex queues behind a config lane it shares with Quirky's hook installs.
       deadlineMs:
         preset === 'codex' ? AGENT_TRUST_WRITE_DEADLINE_MS : SHORT_AGENT_TRUST_WRITE_DEADLINE_MS
     }

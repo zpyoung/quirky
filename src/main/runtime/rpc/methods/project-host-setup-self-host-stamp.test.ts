@@ -15,7 +15,7 @@ function parseParams(methodName: string, params: unknown): { hostId: string } {
 const CREATING_METHODS = [
   {
     name: 'projectHostSetup.setupExistingFolder',
-    base: { projectId: 'github:stablyai/orca', path: '/srv/orca' }
+    base: { projectId: 'github:stablyai/orca', path: '/srv/quirky' }
   },
   {
     name: 'projectHostSetup.clone',

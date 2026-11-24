@@ -78,14 +78,14 @@ vi.mock('./WorktreeCardAgents', () => ({
 vi.mock('./WorktreeContextMenu', () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
   WORKTREE_NATIVE_CONTEXT_MENU_ATTR: 'data-worktree-native-context-menu',
-  WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-orca-context-menu-scope'
+  WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-quirky-context-menu-scope'
 }))
 
 function makeRepo(overrides: Partial<Repo> = {}): Repo {
   return {
     id: 'repo-1',
     path: '/repo',
-    displayName: 'orca',
+    displayName: 'quirky',
     badgeColor: '#999999',
     repoIcon: { type: 'emoji', emoji: '🦊' },
     addedAt: 1,

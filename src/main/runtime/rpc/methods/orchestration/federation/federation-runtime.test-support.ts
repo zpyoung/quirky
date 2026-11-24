@@ -1,7 +1,7 @@
 import { vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 
-export function configureFederationWorkerRuntime(runtime: OrcaRuntimeService): void {
+export function configureFederationWorkerRuntime(runtime: QuirkyRuntimeService): void {
   vi.spyOn(runtime, 'validateOrchestrationAgentLauncher').mockImplementation(() => {})
   vi.spyOn(runtime, 'showRepo').mockResolvedValue({ id: 'windows-repo', kind: 'git' } as never)
   vi.spyOn(runtime, 'createManagedWorktree').mockResolvedValue({
@@ -33,7 +33,7 @@ export function configureFederationWorkerRuntime(runtime: OrcaRuntimeService): v
     'tab_worker:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
   )
   vi.spyOn(runtime, 'getTerminalProcessIncarnation').mockReturnValue('windows_runtime:pty:1')
-  vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('orca')
+  vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('quirky')
   vi.spyOn(runtime, 'sendTerminalAgentPrompt').mockResolvedValue({
     handle: 'term_windows_worker',
     accepted: true,

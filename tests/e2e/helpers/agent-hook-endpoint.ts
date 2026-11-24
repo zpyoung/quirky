@@ -76,7 +76,7 @@ export async function emitCodexHookStatus(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Orca-Agent-Hook-Token': endpoint.token
+      'X-Quirky-Agent-Hook-Token': endpoint.token
     },
     body: JSON.stringify({
       paneKey: status.paneKey,
@@ -109,7 +109,7 @@ export async function emitGrokHookPayload(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Orca-Agent-Hook-Token': endpoint.token
+      'X-Quirky-Agent-Hook-Token': endpoint.token
     },
     body: JSON.stringify({
       paneKey: event.paneKey,
@@ -133,7 +133,7 @@ export async function postClaudeHook(
 ): Promise<void> {
   const response = await fetch(`http://127.0.0.1:${endpoint.port}/hook/claude`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Orca-Agent-Hook-Token': endpoint.token },
+    headers: { 'Content-Type': 'application/json', 'X-Quirky-Agent-Hook-Token': endpoint.token },
     body: JSON.stringify({
       paneKey: pane.paneKey,
       tabId: pane.paneKey.split(':')[0],

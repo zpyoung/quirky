@@ -74,8 +74,8 @@ describe('forge provider interface', () => {
   })
 
   it('preserves the existing hosted provider detection order', async () => {
-    getProjectSlugMock.mockResolvedValue({ host: 'gitlab.com', path: 'team/orca' })
-    getRepoSlugMock.mockResolvedValue({ owner: 'team', repo: 'orca' })
+    getProjectSlugMock.mockResolvedValue({ host: 'gitlab.com', path: 'team/quirky' })
+    getRepoSlugMock.mockResolvedValue({ owner: 'team', repo: 'quirky' })
 
     await expect(
       detectHostedReviewProvider({ executionHostId: 'local', repoPath: '/repo' })
@@ -97,7 +97,7 @@ describe('forge provider interface', () => {
     // comes back host-qualified instead of null + separate enterprise fallback.
     getRepoSlugMock.mockResolvedValue({
       owner: 'team',
-      repo: 'orca',
+      repo: 'quirky',
       host: 'github.acme-corp.com'
     })
 
@@ -125,7 +125,7 @@ describe('forge provider interface', () => {
     createGitHubPullRequestMock.mockResolvedValue({
       ok: true,
       number: 12,
-      url: 'https://github.com/team/orca/pull/12'
+      url: 'https://github.com/team/quirky/pull/12'
     })
 
     const provider = getForgeProviderById('github')
@@ -143,7 +143,7 @@ describe('forge provider interface', () => {
     ).resolves.toEqual({
       ok: true,
       number: 12,
-      url: 'https://github.com/team/orca/pull/12'
+      url: 'https://github.com/team/quirky/pull/12'
     })
     expect(createGitHubPullRequestMock).toHaveBeenCalledWith(
       '/repo',
@@ -161,7 +161,7 @@ describe('forge provider interface', () => {
     createGitLabMergeRequestMock.mockResolvedValue({
       ok: true,
       number: 44,
-      url: 'https://gitlab.com/team/orca/-/merge_requests/44'
+      url: 'https://gitlab.com/team/quirky/-/merge_requests/44'
     })
 
     const provider = getForgeProviderById('gitlab')
@@ -179,7 +179,7 @@ describe('forge provider interface', () => {
     ).resolves.toEqual({
       ok: true,
       number: 44,
-      url: 'https://gitlab.com/team/orca/-/merge_requests/44'
+      url: 'https://gitlab.com/team/quirky/-/merge_requests/44'
     })
     expect(createGitLabMergeRequestMock).toHaveBeenCalledWith(
       '/repo',
@@ -201,7 +201,7 @@ describe('forge provider interface', () => {
         number: 7,
         title: 'Provider branch',
         state: 'open',
-        url: 'https://github.com/team/orca/pull/7',
+        url: 'https://github.com/team/quirky/pull/7',
         checksStatus: 'success',
         updatedAt: '2026-05-29T00:00:00.000Z',
         mergeable: 'MERGEABLE'

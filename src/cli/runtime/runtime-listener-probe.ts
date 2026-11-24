@@ -22,7 +22,7 @@ export function probeRuntimeListener(
   const endpoint = transport?.endpoint
   // Why: metadata is unvalidated JSON from disk. A missing or blank endpoint makes
   // createConnection throw out of serve, and a numeric one is read as a TCP port —
-  // it would dial 127.0.0.1 and could be answered by something that is not Orca.
+  // it would dial 127.0.0.1 and could be answered by something that is not Quirky.
   if (typeof endpoint !== 'string' || endpoint.trim().length === 0) {
     return Promise.resolve('not-listening')
   }

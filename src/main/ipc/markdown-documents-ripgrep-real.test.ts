@@ -9,7 +9,7 @@ describe('Markdown listing with bundled ripgrep', () => {
   let root: string
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca Markdown 日本語 '))
+    root = await mkdtemp(join(tmpdir(), 'quirky Markdown 日本語 '))
     resetBundledRipgrepPathCacheForTests()
   })
 

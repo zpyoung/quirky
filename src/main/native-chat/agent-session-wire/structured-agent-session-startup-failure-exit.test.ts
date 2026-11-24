@@ -95,7 +95,7 @@ describe('a provider that ends before it finished starting', () => {
         mutations: [
           expect.objectContaining({
             // The same row the delivery loop writes for a failed start: an error, keyed by it.
-            identity: { provider: 'orca', clientMessageId: `start-failure:${GENERATION}` },
+            identity: { provider: 'quirky', clientMessageId: `start-failure:${GENERATION}` },
             body: {
               kind: 'status',
               text: "Claude isn't signed in. Run `claude auth login`, or choose an account in Claude Accounts settings.",
@@ -133,7 +133,7 @@ describe('a provider that ends before it finished starting', () => {
         mutations: [
           expect.objectContaining({
             // The same row the delivery loop writes for a failed start: an error, keyed by it.
-            identity: { provider: 'orca', clientMessageId: `start-failure:${GENERATION}` },
+            identity: { provider: 'quirky', clientMessageId: `start-failure:${GENERATION}` },
             // The exit's stderr stays out of the sentence, as a log detail beside it.
             body: {
               kind: 'status',

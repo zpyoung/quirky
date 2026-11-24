@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   NATIVE_FILE_DROP_MAX_PATH_BYTES,
   NATIVE_FILE_DROP_MAX_PATHS,
-  ORCA_INTERNAL_FILE_DRAG_TYPE,
+  QUIRKY_INTERNAL_FILE_DRAG_TYPE,
   createRejectedNativeFileDropPayload,
   hasNativeFileDragTypes,
   validateNativeFileDropPaths
@@ -13,8 +13,8 @@ describe('hasNativeFileDragTypes', () => {
     expect(hasNativeFileDragTypes(['Files'])).toBe(true)
   })
 
-  it('rejects internal Orca file moves and URL/text drags', () => {
-    expect(hasNativeFileDragTypes(['Files', ORCA_INTERNAL_FILE_DRAG_TYPE])).toBe(false)
+  it('rejects internal Quirky file moves and URL/text drags', () => {
+    expect(hasNativeFileDragTypes(['Files', QUIRKY_INTERNAL_FILE_DRAG_TYPE])).toBe(false)
     expect(hasNativeFileDragTypes(['text/uri-list'])).toBe(false)
     expect(hasNativeFileDragTypes(['text/plain'])).toBe(false)
   })

@@ -1,4 +1,4 @@
-// What Codex itself reports as its skills for one folder, mapped to the `/` surface Orca publishes.
+// What Codex itself reports as its skills for one folder, mapped to the `/` surface Quirky publishes.
 // Shared by a running chat's report and the at-rest probe, so both list exactly what Codex loaded.
 
 import type { AgentSessionSlashCommand } from '../../shared/agent-session-wire'

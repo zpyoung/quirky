@@ -1,7 +1,7 @@
 import type { RuntimeHeadlessTabProperties as HeadlessTabPropertiesMethods } from './headless-tab-properties'
 import type { RuntimeHeadlessTabGroups as HeadlessTabGroupsMethods } from './headless-tab-group-moves'
-import type { OrcaRuntimeWithPersistHeadlessTerminalTitle as PersistHeadlessTerminalTitleMethods } from '../workspaces/workspace-file-session-targets'
-import { OrcaRuntimeWithCloseStructuredAgentSessionTab } from './structured-session-tab-close'
+import type { QuirkyRuntimeWithPersistHeadlessTerminalTitle as PersistHeadlessTerminalTitleMethods } from '../workspaces/workspace-file-session-targets'
+import { QuirkyRuntimeWithCloseStructuredAgentSessionTab } from './structured-session-tab-close'
 import type {
   RuntimeMobileSessionTabMove,
   RuntimeMobileSessionTabMoveResult,
@@ -18,7 +18,7 @@ import type { RuntimeTerminalRename } from '../../../shared/runtime-terminal-con
 import type { TerminalDockPropsPatch } from '../fork-terminal-dock/terminal-dock-session-tab-props'
 import type { RuntimeSessionTabCloseReason } from '../../../shared/runtime-session-contracts'
 
-export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWithCloseStructuredAgentSessionTab {
+export abstract class QuirkyRuntimeWithCloseHeadlessMobileTerminalTab extends QuirkyRuntimeWithCloseStructuredAgentSessionTab {
   protected abstract applyHeadlessSessionTabPropsToSnapshot(
     ...args: Parameters<HeadlessTabPropertiesMethods['applyHeadlessSessionTabPropsToSnapshot']>
   ): ReturnType<HeadlessTabPropertiesMethods['applyHeadlessSessionTabPropsToSnapshot']>

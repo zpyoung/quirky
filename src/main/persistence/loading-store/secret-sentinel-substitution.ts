@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { escapeRegex } from '../../../shared/string-utils'
 
 export type SecretSentinelSubstitution = {
-  /** The `orca-secret-slot-<uuid>` placeholder standing in the serialized state. */
+  /** The `quirky-secret-slot-<uuid>` placeholder standing in the serialized state. */
   sentinel: string
   /** What the on-disk payload gets: the ciphertext. */
   blob: string

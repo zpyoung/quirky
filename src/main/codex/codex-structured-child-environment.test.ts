@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openCodexAppServerConnection } from './codex-app-server-connection'
-import { ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
+import { QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
 import { sealStructuredSessionChild } from '../runtime/structured-session-child-env'
 import { createCodexStructuredLaunchResolver } from '../runtime/structured-agent-launch-composition.test-support'
 import { agentSessionRecordFixture } from '../native-chat/agent-session-record-test-fixture'
@@ -15,7 +15,7 @@ import {
 const DEV_CLI_BIN_FIRST = /^[^:;]*[\\/]cli[\\/]bin[:;]/
 const DEV_CLI_BIN_DIR = /^[^:;]*[\\/]cli[\\/]bin$/
 // The dev launcher by absolute path: a login shell's profile cannot reorder it behind a global.
-const DEV_CLI_LAUNCHER = /^[^:;]*[\\/]cli[\\/]bin[\\/]orca-dev$/
+const DEV_CLI_LAUNCHER = /^[^:;]*[\\/]cli[\\/]bin[\\/]quirky-dev$/
 
 /** The sealed env a Codex launch of `sessionId` spawns with, over a shell env of `env`. */
 async function codexChildEnv(
@@ -56,24 +56,24 @@ describe('the Codex child environment', () => {
         {
           EXAMPLE_GATEWAY_TOKEN: 'shell-exported',
           CODEX_HOME: '/shell/home',
-          ORCA_CLI_BIN_DIR: '/inherited/unowned-cli'
+          QUIRKY_CLI_BIN_DIR: '/inherited/unowned-cli'
         },
         'session-not-a-worker'
       )
     ).toEqual({
       EXAMPLE_GATEWAY_TOKEN: 'shell-exported',
       CODEX_HOME: '/pinned/home',
-      [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: 'spawn-token',
-      ORCA_AGENT_SESSION_ID: 'session-not-a-worker',
-      ORCA_STRUCTURED_SESSION: '1',
-      ORCA_CLI_COMMAND: expect.stringMatching(DEV_CLI_LAUNCHER),
+      [QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV]: 'spawn-token',
+      QUIRKY_AGENT_SESSION_ID: 'session-not-a-worker',
+      QUIRKY_STRUCTURED_SESSION: '1',
+      QUIRKY_CLI_COMMAND: expect.stringMatching(DEV_CLI_LAUNCHER),
       ...(process.platform !== 'win32'
-        ? { ORCA_CLI_BIN_DIR: expect.stringMatching(DEV_CLI_BIN_DIR) }
+        ? { QUIRKY_CLI_BIN_DIR: expect.stringMatching(DEV_CLI_BIN_DIR) }
         : {}),
-      ORCA_USER_DATA_PATH: expect.any(String),
-      ORCA_ENVIRONMENT: '',
-      ORCA_PAIRING_CODE: '',
-      ORCA_REMOTE_PAIRING: '',
+      QUIRKY_USER_DATA_PATH: expect.any(String),
+      QUIRKY_ENVIRONMENT: '',
+      QUIRKY_PAIRING_CODE: '',
+      QUIRKY_REMOTE_PAIRING: '',
       // The test host is unpackaged, so this app's CLI is the dev launcher dir, first on PATH.
       PATH: expect.stringMatching(DEV_CLI_BIN_FIRST)
     })
@@ -82,18 +82,18 @@ describe('the Codex child environment', () => {
   it('names every session by its id, and adds the handle only for a registered worker', () => {
     const sessionId = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
     expect(sealed(sessionId)).toEqual({
-      [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: 'spawn-token',
+      [QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV]: 'spawn-token',
       // Not a worker, so no handle: the id alone names this chat as a caller.
-      ORCA_AGENT_SESSION_ID: sessionId,
-      ORCA_STRUCTURED_SESSION: '1',
-      ORCA_CLI_COMMAND: expect.stringMatching(DEV_CLI_LAUNCHER),
+      QUIRKY_AGENT_SESSION_ID: sessionId,
+      QUIRKY_STRUCTURED_SESSION: '1',
+      QUIRKY_CLI_COMMAND: expect.stringMatching(DEV_CLI_LAUNCHER),
       ...(process.platform !== 'win32'
-        ? { ORCA_CLI_BIN_DIR: expect.stringMatching(DEV_CLI_BIN_DIR) }
+        ? { QUIRKY_CLI_BIN_DIR: expect.stringMatching(DEV_CLI_BIN_DIR) }
         : {}),
-      ORCA_USER_DATA_PATH: expect.any(String),
-      ORCA_ENVIRONMENT: '',
-      ORCA_PAIRING_CODE: '',
-      ORCA_REMOTE_PAIRING: '',
+      QUIRKY_USER_DATA_PATH: expect.any(String),
+      QUIRKY_ENVIRONMENT: '',
+      QUIRKY_PAIRING_CODE: '',
+      QUIRKY_REMOTE_PAIRING: '',
       PATH: expect.stringMatching(DEV_CLI_BIN_FIRST)
     })
 
@@ -109,11 +109,11 @@ describe('the Codex child environment', () => {
     })
     try {
       const env = sealed(sessionId)
-      expect(env.ORCA_TERMINAL_HANDLE).toBe(handle)
-      expect(env.ORCA_AGENT_SESSION_ID).toBe(sessionId)
-      expect(env.ORCA_CLI_COMMAND).toMatch(DEV_CLI_LAUNCHER)
+      expect(env.QUIRKY_TERMINAL_HANDLE).toBe(handle)
+      expect(env.QUIRKY_AGENT_SESSION_ID).toBe(sessionId)
+      expect(env.QUIRKY_CLI_COMMAND).toMatch(DEV_CLI_LAUNCHER)
       // A pane key here would leak into hook-emitted agent statuses, which assume a PTY leaf.
-      expect(env.ORCA_PANE_KEY).toBeUndefined()
+      expect(env.QUIRKY_PANE_KEY).toBeUndefined()
     } finally {
       structuredWorkerIdentities.forget(handle)
     }
@@ -131,14 +131,14 @@ const ENV_REPORTING_APP_SERVER = String.raw`
       return send({
         id: message.id,
         result: {
-          sessionId: process.env.ORCA_AGENT_SESSION_ID ?? null,
-          cliCommand: process.env.ORCA_CLI_COMMAND ?? null,
+          sessionId: process.env.QUIRKY_AGENT_SESSION_ID ?? null,
+          cliCommand: process.env.QUIRKY_CLI_COMMAND ?? null,
           selectors: [
-            process.env.ORCA_ENVIRONMENT,
-            process.env.ORCA_PAIRING_CODE,
-            process.env.ORCA_REMOTE_PAIRING
+            process.env.QUIRKY_ENVIRONMENT,
+            process.env.QUIRKY_PAIRING_CODE,
+            process.env.QUIRKY_REMOTE_PAIRING
           ],
-          cliBinDir: process.env.ORCA_CLI_BIN_DIR ?? null,
+          cliBinDir: process.env.QUIRKY_CLI_BIN_DIR ?? null,
           path: process.env.PATH ?? process.env.Path ?? null
         }
       })
@@ -151,14 +151,14 @@ describe('the spawned Codex child', () => {
     vi.unstubAllEnvs()
   })
 
-  it("runs with its own session id and this app's CLI, over an id inherited by Orca itself", async () => {
+  it("runs with its own session id and this app's CLI, over an id inherited by Quirky itself", async () => {
     // The builder's output is an overlay on process.env, so only the spawned child proves the id
-    // survives the merge — an Orca launched inside another session inherits that session's id.
-    vi.stubEnv('ORCA_AGENT_SESSION_ID', 'a0b1c2d3-0000-4000-8000-00000000abcd')
+    // survives the merge — an Quirky launched inside another session inherits that session's id.
+    vi.stubEnv('QUIRKY_AGENT_SESSION_ID', 'a0b1c2d3-0000-4000-8000-00000000abcd')
     // A server whose own env carries a profile's selectors must not hand them to its agents.
-    vi.stubEnv('ORCA_ENVIRONMENT', 'stale-shell-selection')
-    vi.stubEnv('ORCA_PAIRING_CODE', 'stale-pairing')
-    vi.stubEnv('ORCA_REMOTE_PAIRING', 'stale-remote-pairing')
+    vi.stubEnv('QUIRKY_ENVIRONMENT', 'stale-shell-selection')
+    vi.stubEnv('QUIRKY_PAIRING_CODE', 'stale-pairing')
+    vi.stubEnv('QUIRKY_REMOTE_PAIRING', 'stale-remote-pairing')
     const sessionId = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
     const env = sealed(sessionId)
     const connection = await openCodexAppServerConnection({

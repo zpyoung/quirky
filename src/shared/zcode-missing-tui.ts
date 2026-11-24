@@ -4,12 +4,12 @@
  * ZCode ships one agent runtime behind two front ends. The desktop app bundles the runtime
  * without `@zcode/tui`, because it draws its own window in Electron and would never call a
  * terminal renderer. Put that bundle on PATH as `zcode` and it answers `--version`, runs
- * `-p` headlessly, and passes `zcode doctor` — but dies the moment Orca asks it for an
+ * `-p` headlessly, and passes `zcode doctor` — but dies the moment Quirky asks it for an
  * interactive session.
  *
- * That combination is why this is worth detecting rather than documenting alone: Orca's own
+ * That combination is why this is worth detecting rather than documenting alone: Quirky's own
  * auto-setup reports success (the hooks really are installed correctly), so the only visible
- * failure is a Node stack trace inside the pane, and it reads as a broken Orca integration.
+ * failure is a Node stack trace inside the pane, and it reads as a broken Quirky integration.
  *
  * Evidence: `src/main/runtime/__fixtures__/zcode-missing-tui.txt`, a recorded PTY capture of
  * the desktop bundle refusing to start.

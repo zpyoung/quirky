@@ -36,7 +36,7 @@ describe('terminal startup command classifier', () => {
   })
 
   it('recognizes quoted Windows Codex executables', () => {
-    const command = '"C:\\Program Files\\Orca\\codex.cmd" --resume'
+    const command = '"C:\\Program Files\\Quirky\\codex.cmd" --resume'
 
     expect(isKnownTuiAgentTerminalStartupCommand(command)).toBe(true)
   })
@@ -48,7 +48,7 @@ describe('terminal startup command classifier', () => {
     expect(isKnownTuiAgentTerminalStartupCommand('/usr/local/bin/not-codex --continue')).toBe(false)
   })
 
-  it('recognizes non-Codex Orca agent startup commands', () => {
+  it('recognizes non-Codex Quirky agent startup commands', () => {
     expect(isKnownTuiAgentTerminalStartupCommand('grok --permission-mode bypassPermissions')).toBe(
       true
     )

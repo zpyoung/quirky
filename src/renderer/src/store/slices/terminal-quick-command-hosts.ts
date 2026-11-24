@@ -45,7 +45,7 @@ function readCommands(result: unknown): TerminalQuickCommand[] {
   const raw = (result as { terminalQuickCommands?: unknown } | null)?.terminalQuickCommands
   const commands = parseNormalizedTerminalQuickCommands(raw)
   if (!commands) {
-    throw new Error('Remote Orca returned invalid quick commands.')
+    throw new Error('Remote Quirky returned invalid quick commands.')
   }
   return commands
 }

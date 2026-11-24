@@ -1,7 +1,7 @@
-// A Stop that took effect still decides the turn it named after Orca restarts before the turn's end
+// A Stop that took effect still decides the turn it named after Quirky restarts before the turn's end
 // was written: the relaunch's settle reads the Stop's event, so the turn reads "Interrupted after N"
 // with the muted mark, not "Failed". A turn nobody stopped, one a Stop never named, and one a
-// turnless Stop was still settling when Orca died, still read as the news they are.
+// turnless Stop was still settling when Quirky died, still read as the news they are.
 
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AgentSessionDeathEvidence } from '../../../shared/agent-session-record'
@@ -69,7 +69,7 @@ async function runningTurn(
   )
 }
 
-/** Orca dies with the turn's end unwritten; the relaunch reopens the chat from disk and proves
+/** Quirky dies with the turn's end unwritten; the relaunch reopens the chat from disk and proves
  *  the old child gone (its last renewal came before the Stop), then settles what it left. */
 async function restartAndSettle(
   proof: 'pid-absent' | 'exit-observed' | 'unproven' = 'pid-absent'
@@ -139,7 +139,7 @@ describe('a restart between a Stop and its turn end', () => {
   })
 
   // A Stop naming its turn, as the phone sends one: its event names the turn, which is what a
-  // relaunch reads, so it still counts though Orca died with its interrupt out.
+  // relaunch reads, so it still counts though Quirky died with its interrupt out.
   it.each([
     ['Claude', CLAUDE_TURN],
     ['Codex', CODEX_TURN]
@@ -345,10 +345,10 @@ describe('a restart between a Stop and its turn end', () => {
   })
 
   // What a turnless Stop binds is held in memory: a relaunch finds it unsettled, and it binds none.
-  it('reads the turn a turnless Stop was settling when Orca died as no Stop of its', async () => {
+  it('reads the turn a turnless Stop was settling when Quirky died as no Stop of its', async () => {
     rig = await createQueuedMessageTestRig()
     const stopped = await rig.workingSend()
-    // Orca dies while the interrupt is out: the Stop never settles.
+    // Quirky dies while the interrupt is out: the Stop never settles.
     rig.cancelTurn.mockImplementationOnce(async () => {
       await journal().appendItem(
         CODEX_TURN,

@@ -3,7 +3,7 @@ import type { Repo } from '../../shared/repo-types'
 import { createRuntimeFolderWorktree } from './runtime-folder-worktree-create'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 type CreateArgs = Parameters<typeof createRuntimeFolderWorktree>[0]
 

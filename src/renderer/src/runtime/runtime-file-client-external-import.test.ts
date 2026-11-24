@@ -141,7 +141,7 @@ describe('runtime file client', () => {
 
     const uploads = uploadRequests()
     expect(uploads).toHaveLength(2)
-    expect(uploads[0]?.relativePath).toMatch(/^uploads\/assets\/\.logo\.png\.orca-upload-/)
+    expect(uploads[0]?.relativePath).toMatch(/^uploads\/assets\/\.logo\.png\.quirky-upload-/)
     expect(uploads[0]).toEqual({
       environmentId: 'env-1',
       sourceRootPath: '/Users/me/assets',
@@ -159,7 +159,7 @@ describe('runtime file client', () => {
       entryRelativePath: 'large.bin',
       expected: identityOf(large)
     })
-    expect(uploads[1]?.relativePath).toMatch(/^uploads\/assets\/\.large\.bin\.orca-upload-/)
+    expect(uploads[1]?.relativePath).toMatch(/^uploads\/assets\/\.large\.bin\.quirky-upload-/)
 
     expect(runtimeEnvironmentCall).toHaveBeenNthCalledWith(5, {
       selector: 'env-1',
@@ -237,7 +237,7 @@ describe('runtime file client', () => {
     })
 
     const upload = uploadRequests()[0]
-    expect(upload?.relativePath).toMatch(/^uploads\/\.large\.bin\.orca-upload-/)
+    expect(upload?.relativePath).toMatch(/^uploads\/\.large\.bin\.quirky-upload-/)
     expect(upload?.sourceRootPath).toBe('/Users/me/large.bin')
     expect(upload?.entryRelativePath).toBe('')
     expect(upload?.expected).toEqual(identityOf(entry))
@@ -400,7 +400,9 @@ describe('runtime file client', () => {
       results: [{ status: 'failed', reason: 'disk full' }]
     })
 
-    expect(uploadRequests()[0]?.relativePath).toMatch(/^uploads\/assets\/\.logo\.png\.orca-upload-/)
+    expect(uploadRequests()[0]?.relativePath).toMatch(
+      /^uploads\/assets\/\.logo\.png\.quirky-upload-/
+    )
     expect(runtimeEnvironmentCall).toHaveBeenLastCalledWith({
       selector: 'env-1',
       method: 'files.delete',

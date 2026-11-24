@@ -226,7 +226,7 @@ describe('TerminalQuickCommandDialog animation structure', () => {
 
     const alert = document.body.querySelector('[role="alert"]')
     expect(alert?.textContent).toBe('Too long to save.')
-    expect(document.body.textContent).not.toContain('Update Orca')
+    expect(document.body.textContent).not.toContain('Update Quirky')
     // Measured in the unit the limit is: the chat message's bytes.
     expect(document.body.textContent).toContain('257 KB / 256 KB')
   })

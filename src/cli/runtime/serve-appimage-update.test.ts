@@ -27,18 +27,18 @@ async function backdate(path: string): Promise<void> {
   await utimes(path, past, past)
 }
 
-/** A service the stable launcher started from the copy unpacked from `Orca.AppImage`. */
+/** A service the stable launcher started from the copy unpacked from `Quirky.AppImage`. */
 async function makeRunningGeneration() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-serve-appimage-update-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-serve-appimage-update-'))
   created.push(root)
-  const appImagePath = join(root, 'Orca.AppImage')
+  const appImagePath = join(root, 'Quirky.AppImage')
   await writeFile(appImagePath, 'build B', { mode: 0o755 })
   await backdate(appImagePath)
   const namespacePath = join(root, 'cache', appImageNamespaceKey(appImagePath))
   const generationPath = join(namespacePath, resolveAppImageCacheKey(appImagePath)!)
   await mkdir(generationPath, { recursive: true })
   await writeFile(join(namespacePath, APPIMAGE_SOURCE_RECORD_NAME), appImagePath)
-  return { root, appImagePath, executable: join(generationPath, 'orca-ide') }
+  return { root, appImagePath, executable: join(generationPath, 'quirky-ide') }
 }
 
 /** `mv C B`: a new inode at the same path. */
@@ -52,13 +52,13 @@ async function swapIn(appImagePath: string, content: string): Promise<void> {
 function restartDeps(overrides: Partial<AppImageRestartDeps> = {}): AppImageRestartDeps {
   return {
     isStopped: () => false,
-    argv: ['/c/orca-ide', '/u/serve-supervisor/id/out/cli/index.js', 'serve', '--supervise'],
+    argv: ['/c/quirky-ide', '/u/serve-supervisor/id/out/cli/index.js', 'serve', '--supervise'],
     env: {
       ELECTRON_RUN_AS_NODE: '1',
-      ORCA_SERVE_SUPERVISOR_APP_ROOT: '/old/app.asar.unpacked',
-      ORCA_NODE_OPTIONS: '--max-old-space-size=4096',
-      ORCA_USER_DATA_PATH: '/profiles/b1',
-      APPIMAGE: '/old/Orca.AppImage',
+      QUIRKY_SERVE_SUPERVISOR_APP_ROOT: '/old/app.asar.unpacked',
+      QUIRKY_NODE_OPTIONS: '--max-old-space-size=4096',
+      QUIRKY_USER_DATA_PATH: '/profiles/b1',
+      APPIMAGE: '/old/Quirky.AppImage',
       APPDIR: '/tmp/.mount_old'
     },
     execve: vi.fn(),
@@ -86,16 +86,16 @@ describe('supervised serve and a replaced AppImage', () => {
 
   it('watches the AppImage a mounted supervisor runs from', async () => {
     const { appImagePath, root } = await makeRunningGeneration()
-    const mount = join(root, '.mount_Orca')
+    const mount = join(root, '.mount_Quirky')
     const watch = resolveAppImageBuildWatch(
-      join(mount, 'orca-ide'),
+      join(mount, 'quirky-ide'),
       { APPIMAGE: appImagePath, APPDIR: mount },
       'linux'
     )
     expect(watch).toEqual({ appImagePath, runningKey: resolveAppImageCacheKey(appImagePath) })
     expect(
       resolveAppImageBuildWatch(
-        '/opt/Orca/orca-ide',
+        '/opt/Quirky/quirky-ide',
         { APPIMAGE: appImagePath, APPDIR: mount },
         'linux'
       )
@@ -125,14 +125,14 @@ describe('supervised serve and a replaced AppImage', () => {
       appImagePath,
       [appImagePath, 'serve', '--supervise'],
       expect.objectContaining({
-        ORCA_USER_DATA_PATH: '/profiles/b1',
+        QUIRKY_USER_DATA_PATH: '/profiles/b1',
         NODE_OPTIONS: '--max-old-space-size=4096'
       })
     )
     const env = vi.mocked(deps.execve).mock.calls[0]?.[2]
     for (const name of [
       'ELECTRON_RUN_AS_NODE',
-      'ORCA_SERVE_SUPERVISOR_APP_ROOT',
+      'QUIRKY_SERVE_SUPERVISOR_APP_ROOT',
       'APPIMAGE',
       'APPDIR'
     ]) {

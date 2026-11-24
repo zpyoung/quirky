@@ -1,8 +1,8 @@
 {
   "sources": {
-    "src/main/runtime/orca-runtime-sync-window-graph.ts": "e9527f5964af3ed93ec4815096ebdcc181118f9edc76f34e1cc25d1fa67a5fb4",
-    "src/main/runtime/orca-runtime-mark-pty-liveness-unverifiable.ts": "ff5433a848e43f22560234c98e25122237f16bcda7668603dd2640eb86cec315",
-    "src/main/runtime/orca-runtime-on-pty-exit.ts": "def5d33f70a656b13c619db8b453ab2b72cade31c7078583c6f6f6ea8d3544e6"
+    "src/main/runtime/quirky-runtime-sync-window-graph.ts": "e9527f5964af3ed93ec4815096ebdcc181118f9edc76f34e1cc25d1fa67a5fb4",
+    "src/main/runtime/quirky-runtime-mark-pty-liveness-unverifiable.ts": "ff5433a848e43f22560234c98e25122237f16bcda7668603dd2640eb86cec315",
+    "src/main/runtime/quirky-runtime-on-pty-exit.ts": "def5d33f70a656b13c619db8b453ab2b72cade31c7078583c6f6f6ea8d3544e6"
   },
   "phases": [
     {

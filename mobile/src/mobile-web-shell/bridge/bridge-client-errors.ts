@@ -70,7 +70,7 @@ export class BridgeRequestOversizedError extends Error {
   readonly code = 'bridge_request_oversized'
 
   constructor() {
-    super('This action sends too much at once to reach Orca. Try it on fewer files.')
+    super('This action sends too much at once to reach Quirky. Try it on fewer files.')
     this.name = 'BridgeRequestOversizedError'
   }
 }
@@ -93,7 +93,7 @@ export class BridgeRpcEnvelopeUngrantedError extends Error {
   readonly code = 'bridge_rpc_envelope_ungranted'
 
   constructor() {
-    super('this app version cannot send extra request fields; update the Orca app')
+    super('this app version cannot send extra request fields; update the Quirky app')
     this.name = 'BridgeRpcEnvelopeUngrantedError'
   }
 }

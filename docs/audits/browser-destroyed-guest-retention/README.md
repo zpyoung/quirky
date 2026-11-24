@@ -17,10 +17,10 @@ Nine additional controls cover progress and completion/error delivery, explicit 
 With dependencies already installed, run from the repository root:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/browser-destroyed-guest-retention/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/browser-destroyed-guest-retention/reproduce.mjs
 ```
 
-The script runs the actual manager and guest callback installers with EventEmitter WebContents fixtures. It removes only the destruction guard in memory for the baseline, then runs the same nine tests on the fixed source. A temporary test observer records actual map sizes before each assertion. It launches no Orca window or browser process, limits each worker to 512 MiB and each run to 60 seconds, uses the shared process launcher, and removes temporary files. Results include source hashes and runtime provenance.
+The script runs the actual manager and guest callback installers with EventEmitter WebContents fixtures. It removes only the destruction guard in memory for the baseline, then runs the same nine tests on the fixed source. A temporary test observer records actual map sizes before each assertion. It launches no Quirky window or browser process, limits each worker to 512 MiB and each run to 60 seconds, uses the shared process launcher, and removes temporary files. Results include source hashes and runtime provenance.
 
 | After 1,000 distinct guest destructions                                    | Before | Fixed |
 | -------------------------------------------------------------------------- | -----: | ----: |

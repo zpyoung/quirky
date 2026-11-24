@@ -2,7 +2,7 @@
 //
 // Issue #21762: in a terminal pane running a TUI that enables mouse tracking
 // (Claude Code, Codex, ...), a middle-click pastes the PRIMARY selection twice.
-// Orca's own paste path bails out in tracking mode (correctly — the TUI owns
+// Quirky's own paste path bails out in tracking mode (correctly — the TUI owns
 // the click), but bailing out also skips arming the native-paste suppression
 // window from #8993, so Chromium's native "paste PRIMARY into focused editable"
 // reaches xterm's helper textarea unsuppressed while the TUI performs its own
@@ -153,7 +153,7 @@ describe('issue 21762: middle-click native-paste suppression in mouse-tracking T
   // (SelectionService.shouldForceSelection), so the TUI never pastes. Arming
   // suppression while also returning early would leave nothing pasted at all.
   describe('Shift+middle-click in a mouse-tracking pane', () => {
-    it("takes Orca's own paste path: stops propagation and focuses the pane", () => {
+    it("takes Quirky's own paste path: stops propagation and focuses the pane", () => {
       const pane = buildTrackedPane('sgr')
       const { result } = renderHook(() => useTerminalPaneMobileActions(buildController(pane)))
 

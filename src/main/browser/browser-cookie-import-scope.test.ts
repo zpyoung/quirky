@@ -129,7 +129,7 @@ describe('native cookie import clear scope', () => {
   let targetCookiesPath: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'orca-cookie-import-scope-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'quirky-cookie-import-scope-'))
     sourceCookiesPath = join(tmpDir, 'Chrome', 'Default', 'Network', 'Cookies')
     targetCookiesPath = join(tmpDir, 'userData', 'Partitions', 'test', 'Network', 'Cookies')
     cookiesRemoveMock = vi.fn().mockResolvedValue(undefined)
@@ -264,7 +264,7 @@ describe('native cookie import clear scope', () => {
     const staged = new DatabaseSync(stagedPath, { readOnly: true })
     try {
       expect(
-        staged.prepare('SELECT domain, format_version FROM orca_cookie_import_scope').all()
+        staged.prepare('SELECT domain, format_version FROM quirky_cookie_import_scope').all()
       ).toEqual([{ domain: 'github.com', format_version: 1 }])
       const rows = (
         staged

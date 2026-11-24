@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import type * as NodeOs from 'node:os'
 import type * as GitExecError from '../git/exec-error'
 import type * as WorkItemLookup from './client/fetch/get-work-item'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const { ghMock, fixture } = vi.hoisted(() => {
   const fixture: {
@@ -77,7 +77,7 @@ async function fixtureGit(args: string[]): Promise<void> {
 }
 
 beforeEach(async () => {
-  fixture.path = await mkdtemp(join(tmpdir(), 'orca-issue-config-change-'))
+  fixture.path = await mkdtemp(join(tmpdir(), 'quirky-issue-config-change-'))
   await mkdir(join(fixture.path, 'isolated-home'))
   await fixtureGit(['init', '--quiet'])
   await fixtureGit(['remote', 'add', 'origin', 'https://github.com/fork-owner/widgets.git'])

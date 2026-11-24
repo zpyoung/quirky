@@ -30,7 +30,7 @@ import { DEVICE_KEY_RUNTIME_CAPABILITIES } from './device-key-capability'
 import { FILES_RUNTIME_CAPABILITIES } from './files-runtime-capabilities'
 import { HOST_RUNTIME_CAPABILITIES } from './host-runtime-capabilities'
 import { MOBILE_RUNTIME_CAPABILITIES } from './mobile-runtime-capabilities'
-import { ORCAD_RUNTIME_CAPABILITIES } from './orcad-runtime-capabilities'
+import { QUIRKYD_RUNTIME_CAPABILITIES } from './quirkyd-runtime-capabilities'
 import { ORCHESTRATION_RUNTIME_CAPABILITIES } from './orchestration-runtime-capabilities'
 import { PREFLIGHT_RUNTIME_CAPABILITIES } from './preflight-runtime-capabilities'
 import {
@@ -50,7 +50,7 @@ import {
   WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY
 } from './worktree-runtime-capabilities'
 
-// Why: declares the Orca runtime RPC compatibility contract. Desktop,
+// Why: declares the Quirky runtime RPC compatibility contract. Desktop,
 // headless server, CLI, and mobile builds may drift in app version, but
 // they must agree on this protocol range before runtime RPCs are allowed.
 //
@@ -158,7 +158,7 @@ export const RUNTIME_CAPABILITIES = [
   ...HOST_RUNTIME_CAPABILITIES,
   ...DEVICE_KEY_RUNTIME_CAPABILITIES,
   ...MOBILE_RUNTIME_CAPABILITIES,
-  ...ORCAD_RUNTIME_CAPABILITIES,
+  ...QUIRKYD_RUNTIME_CAPABILITIES,
   ...ORCHESTRATION_RUNTIME_CAPABILITIES,
   ...agentLaunchCapabilities.AGENT_LAUNCH_RUNTIME_CAPABILITIES,
   ...AGENT_SESSION_RUNTIME_CAPABILITIES,

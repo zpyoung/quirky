@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn<typeof sendLayoutCommandToOwner>(),
   toastError: vi.fn()
 }))
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('@/runtime/layout-owner-command', () => ({ sendLayoutCommandToOwner: mocks.send }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }))
 

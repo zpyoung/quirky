@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 function makeRoot() {
-  const root = mkdtempSync(path.join(tmpdir(), 'orca-shared-tree-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'quirky-shared-tree-'))
   roots.push(root)
   return root
 }

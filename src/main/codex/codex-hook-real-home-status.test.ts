@@ -39,7 +39,7 @@ import { CODEX_EVENT_LABEL } from './codex-hook-definition'
 import type { CodexHookAnswer, CodexHookHashes } from './codex-hook-trust-derivation'
 
 // Why this file: status reports on the home the next native pane gets, and
-// says why ~/.codex has no status when Orca cannot approve its entry there.
+// says why ~/.codex has no status when Quirky cannot approve its entry there.
 
 let root: string
 let home: string
@@ -64,7 +64,7 @@ async function answer(next: CodexHookAnswer): Promise<void> {
   await resolveCodexHookAnswer()
 }
 
-async function writeOrcaEntry(hashes: CodexHookHashes | null): Promise<void> {
+async function writeQuirkyEntry(hashes: CodexHookHashes | null): Promise<void> {
   mkdirSync(join(home, '.codex'), { recursive: true })
   writeFileSync(hooksPath(), '{ "hooks": {} }\n')
   await reconcileRealHomeCodexHookEntries({
@@ -78,12 +78,12 @@ const status = () => new CodexHookService().getStatus()
 
 beforeEach(() => {
   // Why realpath: a symlinked temp dir (macOS /var) would give ~/.codex a second key spelling.
-  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'orca-codex-real-home-status-')))
+  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'quirky-codex-real-home-status-')))
   home = join(root, 'home')
   userData = join(root, 'user-data')
   mkdirSync(home)
   mkdirSync(userData)
-  vi.stubEnv('ORCA_USER_DATA_PATH', userData)
+  vi.stubEnv('QUIRKY_USER_DATA_PATH', userData)
   vi.stubEnv('CODEX_HOME', '')
   mocks.homedir.mockReturnValue(home)
   mocks.codexPath = join(userData, 'codex')
@@ -99,40 +99,40 @@ afterEach(() => {
 })
 
 describe('Codex hook status for ~/.codex', () => {
-  it('reports on ~/.codex outside the app, naming the file, before Orca asked Codex', () => {
+  it('reports on ~/.codex outside the app, naming the file, before Quirky asked Codex', () => {
     expect(status()).toEqual({
       agent: 'codex',
       state: 'not_installed',
       configPath: hooksPath(),
       managedHooksPresent: false,
-      detail: 'Orca has not asked Codex yet'
+      detail: 'Quirky has not asked Codex yet'
     })
   })
 
-  it("is installed once ~/.codex holds Orca's entry approved with Codex's hash", async () => {
+  it("is installed once ~/.codex holds Quirky's entry approved with Codex's hash", async () => {
     await answer({ kind: 'hashes', codexVersion: 'codex-cli 0.160.1', hashes: CODEX_HASHES })
-    await writeOrcaEntry(CODEX_HASHES)
+    await writeQuirkyEntry(CODEX_HASHES)
 
     expect(status()).toMatchObject({ state: 'installed', detail: null })
   })
 
   it('says to update a Codex that cannot approve hooks', async () => {
-    const failure = 'Codex 0.120.0 is too old for Orca status; update Codex'
+    const failure = 'Codex 0.120.0 is too old for Quirky status; update Codex'
     await answer({ kind: 'refused', codexVersion: 'codex-cli 0.120.0', failure })
 
     expect(status()).toMatchObject({ state: 'not_installed', detail: failure })
   })
 
-  it("says Codex was not found, and that Orca's own approval stands until it answers", async () => {
-    const failure = `Orca could not find Codex at ${mocks.codexPath}`
+  it("says Codex was not found, and that Quirky's own approval stands until it answers", async () => {
+    const failure = `Quirky could not find Codex at ${mocks.codexPath}`
     await answer({ kind: 'pending', failure })
     expect(status()).toMatchObject({ state: 'not_installed', detail: failure })
 
-    await writeOrcaEntry(null)
+    await writeQuirkyEntry(null)
 
     expect(status()).toMatchObject({
       state: 'installed',
-      detail: `Approved by Orca; not yet confirmed by Codex (${failure})`
+      detail: `Approved by Quirky; not yet confirmed by Codex (${failure})`
     })
   })
 
@@ -141,11 +141,11 @@ describe('Codex hook status for ~/.codex', () => {
     mkdirSync(join(home, '.codex'), { recursive: true })
     writeFileSync(tomlPath(), 'model = "m"\nhooks = { state = {} }\n')
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    await writeOrcaEntry(CODEX_HASHES)
+    await writeQuirkyEntry(CODEX_HASHES)
 
     expect(status()).toMatchObject({
       state: 'not_installed',
-      detail: `${tomlPath()} keeps hook approvals inline, so Orca cannot add its own there; Orca shows no status for ~/.codex until they are tables`
+      detail: `${tomlPath()} keeps hook approvals inline, so Quirky cannot add its own there; Quirky shows no status for ~/.codex until they are tables`
     })
   })
 
@@ -168,7 +168,7 @@ describe('Codex hook status for ~/.codex', () => {
       state: 'error',
       configPath: hooksPath(),
       managedHooksPresent: false,
-      detail: `Orca cannot add its hook to ${hooksPath()}, so Orca shows no status for ~/.codex`
+      detail: `Quirky cannot add its hook to ${hooksPath()}, so Quirky shows no status for ~/.codex`
     })
   })
 
@@ -184,7 +184,7 @@ describe('Codex hook status for ~/.codex', () => {
 
     expect(status()).toMatchObject({
       configPath: join(accountHome, 'hooks.json'),
-      detail: 'Orca has not asked Codex yet'
+      detail: 'Quirky has not asked Codex yet'
     })
   })
 })

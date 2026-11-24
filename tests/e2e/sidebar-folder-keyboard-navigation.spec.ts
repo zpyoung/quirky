@@ -1,22 +1,22 @@
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 
 test('cycles visible folder workspaces with shortcuts and focused list arrows', async ({
-  orcaPage,
+  quirkyPage,
   electronApp,
   registerPostElectronShutdownCleanup
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  await orcaPage.emulateMedia({ reducedMotion: 'reduce' })
-  const folderPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-folder-navigation-')))
+  await waitForSessionReady(quirkyPage)
+  await quirkyPage.emulateMedia({ reducedMotion: 'reduce' })
+  const folderPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-folder-navigation-')))
   registerPostElectronShutdownCleanup(async () =>
     rmSync(folderPath, { recursive: true, force: true })
   )
 
-  const ids = await orcaPage.evaluate(async (parentPath) => {
+  const ids = await quirkyPage.evaluate(async (parentPath) => {
     const store = window.__store!
     const group = await window.api.projectGroups.create({
       name: 'Folder project',
@@ -51,7 +51,7 @@ test('cycles visible folder workspaces with shortcuts and focused list arrows', 
       BrowserWindow.getAllWindows().every((window) => !window.isVisible())
     )
   ).toBe(true)
-  const sidebar = orcaPage.locator('[data-worktree-sidebar]')
+  const sidebar = quirkyPage.locator('[data-worktree-sidebar]')
   const row = (id: string) =>
     sidebar.locator(`[role="option"][data-worktree-id=${JSON.stringify(id)}]`)
   await expect(sidebar.locator('[role="option"]')).toHaveCount(3)
@@ -66,7 +66,7 @@ test('cycles visible folder workspaces with shortcuts and focused list arrows', 
   if (!first || !folder || !last) {
     throw new Error('Missing navigation targets')
   }
-  const mod = await orcaPage.evaluate(() =>
+  const mod = await quirkyPage.evaluate(() =>
     navigator.userAgent.includes('Mac') ? 'Meta' : 'Control'
   )
   const transitions = [
@@ -85,10 +85,10 @@ test('cycles visible folder workspaces with shortcuts and focused list arrows', 
       await row(from).click()
       await expect(row(from)).toHaveAttribute('aria-current', 'page')
       if (mode === 'focused-list') {
-        await orcaPage.keyboard.press(`${mod}+Shift+0`)
+        await quirkyPage.keyboard.press(`${mod}+Shift+0`)
         await expect(sidebar).toBeFocused()
       }
-      await orcaPage.keyboard.press(mode === 'shortcut' ? `${mod}+Shift+${key}` : key)
+      await quirkyPage.keyboard.press(mode === 'shortcut' ? `${mod}+Shift+${key}` : key)
       await expect.soft(row(to)).toHaveAttribute('aria-current', 'page', { timeout: 3000 })
       observed.push({
         mode,
@@ -118,18 +118,18 @@ test('cycles visible folder workspaces with shortcuts and focused list arrows', 
   await folderSection.click()
   await expect(row(folder)).toHaveCount(0)
   await row(first).click()
-  await orcaPage.keyboard.press(`${mod}+Shift+ArrowDown`)
+  await quirkyPage.keyboard.press(`${mod}+Shift+ArrowDown`)
   await expect(row(last)).toHaveAttribute('aria-current', 'page')
   await folderSection.click()
   await expect(row(folder)).toHaveCount(1)
 
   await row(first).click()
-  await orcaPage.setViewportSize({ width: 1000, height: 400 })
+  await quirkyPage.setViewportSize({ width: 1000, height: 400 })
   await expect.poll(() => sidebar.evaluate((element) => element.clientHeight)).toBeGreaterThan(50)
   await sidebar.evaluate((element) => {
     element.scrollTop = 0
   })
-  await orcaPage.keyboard.press(`${mod}+Shift+ArrowDown`)
+  await quirkyPage.keyboard.press(`${mod}+Shift+ArrowDown`)
   await expect(row(folder)).toHaveAttribute('aria-current', 'page')
   await expect(row(folder)).toBeInViewport({ ratio: 1 })
   await expect.poll(() => sidebar.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)

@@ -1,6 +1,6 @@
 export function installPersistenceCallProbe() {
-  const store = globalThis.__orcaLiveStoreProbeTarget
-  if (!store || globalThis.__orcaPersistenceCallProbe) {
+  const store = globalThis.__quirkyLiveStoreProbeTarget
+  if (!store || globalThis.__quirkyPersistenceCallProbe) {
     throw new Error('Missing verified live store, or probe already active')
   }
   const contextSymbol = Object.getOwnPropertySymbols(store).find(
@@ -72,13 +72,13 @@ export function installPersistenceCallProbe() {
       layoutExists: !!session.terminalLayoutsByTabId?.[args.tabId]?.root
     }
   })
-  globalThis.__orcaPersistenceCallProbe = {
+  globalThis.__quirkyPersistenceCallProbe = {
     stop() {
       for (const restore of cleanup.toReversed()) {
         restore()
       }
-      delete globalThis.__orcaPersistenceCallProbe
-      delete globalThis.__orcaLiveStoreProbeTarget
+      delete globalThis.__quirkyPersistenceCallProbe
+      delete globalThis.__quirkyLiveStoreProbeTarget
       return { events }
     }
   }

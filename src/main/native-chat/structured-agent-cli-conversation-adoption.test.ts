@@ -48,8 +48,8 @@ async function createAdoptionTestDirectory(prefix: string): Promise<string> {
 
 beforeEach(() => {
   // Grok and Pi also look where Session History lists them from; keep that off the real home.
-  vi.stubEnv('GROK_HOME', join(tmpdir(), 'orca-adopt-no-grok-home'))
-  vi.stubEnv('PI_CODING_AGENT_DIR', join(tmpdir(), 'orca-adopt-no-pi-home'))
+  vi.stubEnv('GROK_HOME', join(tmpdir(), 'quirky-adopt-no-grok-home'))
+  vi.stubEnv('PI_CODING_AGENT_DIR', join(tmpdir(), 'quirky-adopt-no-pi-home'))
 })
 
 afterEach(async () => {
@@ -65,7 +65,7 @@ afterEach(async () => {
 /** Each agent's CLI conversation as its own CLI lays it out under an account home. */
 const RECORDED: Record<'grok' | 'omp' | 'pi', (home: string, text: string) => Promise<string>> = {
   grok: async (home, text) => {
-    const dir = join(home, 'sessions', encodeURIComponent('/repo/orca'), SESSION_ID)
+    const dir = join(home, 'sessions', encodeURIComponent('/repo/quirky'), SESSION_ID)
     await mkdir(dir, { recursive: true })
     const file = join(dir, 'chat_history.jsonl')
     await writeFile(
@@ -75,7 +75,7 @@ const RECORDED: Record<'grok' | 'omp' | 'pi', (home: string, text: string) => Pr
     return file
   },
   omp: async (home, text) => {
-    const dir = join(home, 'sessions', '--repo-orca--')
+    const dir = join(home, 'sessions', '--repo-quirky--')
     await mkdir(dir, { recursive: true })
     const file = join(dir, `2026-10-12T00-00-00-000Z_${SESSION_ID}.jsonl`)
     await writeFile(
@@ -84,7 +84,7 @@ const RECORDED: Record<'grok' | 'omp' | 'pi', (home: string, text: string) => Pr
         {
           type: 'session',
           id: SESSION_ID,
-          cwd: '/repo/orca',
+          cwd: '/repo/quirky',
           timestamp: '2026-10-12T00:00:00.000Z'
         },
         {
@@ -102,11 +102,11 @@ const RECORDED: Record<'grok' | 'omp' | 'pi', (home: string, text: string) => Pr
   },
   // Pi's documented format: a system message carries the prompt in `sections`, its content empty.
   pi: async (home, text) => {
-    const dir = join(home, 'sessions', '--repo-orca--')
+    const dir = join(home, 'sessions', '--repo-quirky--')
     await mkdir(dir, { recursive: true })
     const file = join(dir, `2026-10-12T00-00-00-000Z_${SESSION_ID}.jsonl`)
     const records = [
-      { type: 'session', version: 3, id: SESSION_ID, cwd: '/repo/orca' },
+      { type: 'session', version: 3, id: SESSION_ID, cwd: '/repo/quirky' },
       {
         type: 'message',
         id: 'a0b1c2d3',
@@ -142,7 +142,7 @@ function adopt(
   selectedAccountHome: AgentSessionAccountHome,
   providerSessionId = SESSION_ID,
   launchEnv: NodeJS.ProcessEnv = process.env,
-  workspaceCwd = '/repo/orca'
+  workspaceCwd = '/repo/quirky'
 ) {
   const transcriptImport = structuredAgentRuntimeRegistration(agent)?.transcriptImport
   if (!transcriptImport) {
@@ -185,7 +185,7 @@ describe('which chats can take over a CLI conversation', () => {
 it.each([false, true])(
   'finds a Grok cwd beyond the generic cap (long path: %s)',
   async (longPath) => {
-    root = await createAdoptionTestDirectory(join(tmpdir(), 'orca-grok-adopt-cwd-'))
+    root = await createAdoptionTestDirectory(join(tmpdir(), 'quirky-grok-adopt-cwd-'))
     const workspaceCwd = join(root, longPath ? '中'.repeat(80) : 'workspace')
     const recorded = await RECORDED.grok(root, 'CURRENT-WORKSPACE')
     const group = grokEncodedCwdDirName(workspaceCwd)
@@ -225,7 +225,7 @@ it.each([false, true])(
 )
 
 it('looks up OMP history under the configured launch XDG and profile root', async () => {
-  root = await createAdoptionTestDirectory(join(tmpdir(), 'orca-omp-adopt-env-'))
+  root = await createAdoptionTestDirectory(join(tmpdir(), 'quirky-omp-adopt-env-'))
   const ambientData = join(root, 'ambient-data')
   const launchData = join(root, 'launch-data')
   const profile = 'work'
@@ -261,7 +261,7 @@ it('looks up OMP history under the configured launch XDG and profile root', asyn
 })
 
 it('uses the configured OMP profile when the ambient profile names another session', async () => {
-  root = await createAdoptionTestDirectory(join(tmpdir(), 'orca-omp-adopt-profile-'))
+  root = await createAdoptionTestDirectory(join(tmpdir(), 'quirky-omp-adopt-profile-'))
   const xdgData = join(root, 'data')
   const ambientProfile = 'ambient'
   const launchProfile = 'configured'
@@ -296,7 +296,7 @@ it('uses the configured OMP profile when the ambient profile names another sessi
 it.each(['win32', 'linux', 'darwin'] as const)(
   'follows the child home precedence for a named OMP profile on %s',
   async (platform) => {
-    root = await createAdoptionTestDirectory(join(tmpdir(), 'orca-omp-adopt-home-'))
+    root = await createAdoptionTestDirectory(join(tmpdir(), 'quirky-omp-adopt-home-'))
     const home = join(root, 'home')
     const userProfile = join(root, 'user-profile')
     const profile = 'work'
@@ -329,7 +329,7 @@ it.each(['win32', 'linux', 'darwin'] as const)(
 )
 
 it('refuses OMP history from another workspace without creating a blank chat', async () => {
-  root = await createAdoptionTestDirectory(join(tmpdir(), 'orca-omp-adopt-other-cwd-'))
+  root = await createAdoptionTestDirectory(join(tmpdir(), 'quirky-omp-adopt-other-cwd-'))
   await RECORDED.omp(root, 'OTHER-WORKSPACE')
   await expect(
     adopt(
@@ -346,8 +346,8 @@ it('refuses OMP history from another workspace without creating a blank chat', a
 
 describe.each(['grok', 'omp', 'pi'] as const)('adopting a %s CLI conversation', (agent) => {
   it('finds the conversation under the chat account and imports its history', async () => {
-    root = await createAdoptionTestDirectory(join(tmpdir(), `orca-${agent}-adopt-`))
-    const recorded = await RECORDED[agent](root, `ORCA-${agent}-ADOPT`)
+    root = await createAdoptionTestDirectory(join(tmpdir(), `quirky-${agent}-adopt-`))
+    const recorded = await RECORDED[agent](root, `QUIRKY-${agent}-ADOPT`)
     if (agent === 'pi') {
       vi.stubEnv('PI_CODING_AGENT_DIR', root)
     }
@@ -361,7 +361,7 @@ describe.each(['grok', 'omp', 'pi'] as const)('adopting a %s CLI conversation', 
       sessionId: SESSION_ID,
       options: { filePath: adoption.transcriptPath }
     })
-    expect(imported.ok && JSON.stringify(imported.items)).toContain(`ORCA-${agent}-ADOPT`)
+    expect(imported.ok && JSON.stringify(imported.items)).toContain(`QUIRKY-${agent}-ADOPT`)
     if (agent === 'pi' && imported.ok) {
       expect(imported.items.map((item) => item.body.kind === 'message' && item.body.role)).toEqual([
         'user',
@@ -371,7 +371,7 @@ describe.each(['grok', 'omp', 'pi'] as const)('adopting a %s CLI conversation', 
   })
 
   it('refuses a conversation the account does not hold, rather than opening a blank chat', async () => {
-    root = await createAdoptionTestDirectory(join(tmpdir(), `orca-${agent}-adopt-missing-`))
+    root = await createAdoptionTestDirectory(join(tmpdir(), `quirky-${agent}-adopt-missing-`))
     await expect(
       adopt(agent, { variable: ACCOUNT_VARIABLE[agent], path: root })
     ).rejects.toMatchObject({
@@ -382,7 +382,7 @@ describe.each(['grok', 'omp', 'pi'] as const)('adopting a %s CLI conversation', 
 
 describe('adopting a Pi CLI conversation', () => {
   it('pins the Session History account when another Pi home has the same id', async () => {
-    root = await createAdoptionTestDirectory(join(tmpdir(), 'orca-pi-adopt-homes-'))
+    root = await createAdoptionTestDirectory(join(tmpdir(), 'quirky-pi-adopt-homes-'))
     const selected = join(root, 'selected')
     const history = join(root, 'history')
     await RECORDED.pi(selected, 'SELECTED')
@@ -397,7 +397,7 @@ describe('adopting a Pi CLI conversation', () => {
 })
 
 describe('adopting an OpenCode CLI conversation', () => {
-  const OPENCODE_SESSION = 'ses_orca_adopt'
+  const OPENCODE_SESSION = 'ses_quirky_adopt'
   const unmanaged: AgentSessionAccountHome = { kind: 'opencode', locator: { kind: 'unmanaged' } }
 
   function openCodeData(home: string): string {
@@ -409,7 +409,7 @@ describe('adopting an OpenCode CLI conversation', () => {
   }
 
   it('imports from the configured database the resumed OpenCode child opens', async () => {
-    root = await createAdoptionTestDirectory(join(tmpdir(), 'orca-opencode-configured-adopt-'))
+    root = await createAdoptionTestDirectory(join(tmpdir(), 'quirky-opencode-configured-adopt-'))
     const defaultDb = openCodeData(root)
     const configuredDb = join(root, 'data', 'opencode', 'work.db')
     writeOpenCodeSqliteDatabase(defaultDb, [

@@ -126,7 +126,7 @@ describe('resolveClientCreationActionPolicy', () => {
 
 describe('client creation action guards', () => {
   it('fails closed for an older paired runtime and rejects local browser materialization', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     const state = {
       settings: { activeRuntimeEnvironmentId: 'runtime-1' },
       runtimeStatusByEnvironmentId: new Map([
@@ -146,7 +146,7 @@ describe('client creation action guards', () => {
   })
 
   it('permits host-confirmed remote browser materialization in paired web', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     const state = {
       runtimeStatusByEnvironmentId: new Map([
         ['runtime-1', { status: runtimeStatus(['browser.screencast.v1']), checkedAt: 1 }]
@@ -158,7 +158,7 @@ describe('client creation action guards', () => {
   })
 
   it('treats the floating workspace as local even with an active capable runtime', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     const state = {
       settings: { activeRuntimeEnvironmentId: 'runtime-1' },
       runtimeStatusByEnvironmentId: new Map([
@@ -174,7 +174,7 @@ describe('client creation action guards', () => {
   })
 
   it('uses folder and SSH workspace ownership instead of the focused runtime', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     const capableStatus = runtimeStatus(['browser.screencast.v1'])
     const state = {
       settings: { activeRuntimeEnvironmentId: 'focused-runtime' },
@@ -216,7 +216,7 @@ describe('client creation action guards', () => {
 
 describe('a runtime whose pages this desktop hosts', () => {
   function hostingState(
-    environment: Pick<PublicKnownRuntimeEnvironment, 'id' | 'orcadDeployment'>,
+    environment: Pick<PublicKnownRuntimeEnvironment, 'id' | 'quirkydDeployment'>,
     settings: RuntimeBrowserHostingState['settings'] = {}
   ): RuntimeBrowserHostingState {
     return {
@@ -232,9 +232,11 @@ describe('a runtime whose pages this desktop hosts', () => {
   }
 
   it('creates runtime-placed tabs for a paired server with no browser of its own', () => {
-    const state = hostingState({ id: 'orcad-server' })
-    expect(runtimeHostsPagesOnThisDesktop(state, 'orcad-server')).toBe(true)
-    expect(() => assertRuntimeManagedBrowserCreationAvailable(state, 'orcad-server')).not.toThrow()
+    const state = hostingState({ id: 'quirkyd-server' })
+    expect(runtimeHostsPagesOnThisDesktop(state, 'quirkyd-server')).toBe(true)
+    expect(() =>
+      assertRuntimeManagedBrowserCreationAvailable(state, 'quirkyd-server')
+    ).not.toThrow()
     expect(
       resolveClientCreationActionPolicy({
         surface: 'electron',
@@ -247,7 +249,7 @@ describe('a runtime whose pages this desktop hosts', () => {
   it('keeps a managed SSH deployment on its desktop tabs and SSH browser route', () => {
     const state = hostingState({
       id: 'managed-ssh',
-      orcadDeployment: {
+      quirkydDeployment: {
         sshTargetId: 'target-1',
         sshTargetGeneration: 1,
         localPort: 1,
@@ -260,13 +262,13 @@ describe('a runtime whose pages this desktop hosts', () => {
 
   it('stays off when desktop-hosted remote pages are turned off, and in the web client', () => {
     const disabled = hostingState(
-      { id: 'orcad-server' },
+      { id: 'quirkyd-server' },
       { browserClientHostedRemoteEnabled: false }
     )
-    expect(runtimeHostsPagesOnThisDesktop(disabled, 'orcad-server')).toBe(false)
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    expect(runtimeHostsPagesOnThisDesktop(disabled, 'quirkyd-server')).toBe(false)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     expect(
-      runtimeHostsPagesOnThisDesktop(hostingState({ id: 'orcad-server' }), 'orcad-server')
+      runtimeHostsPagesOnThisDesktop(hostingState({ id: 'quirkyd-server' }), 'quirkyd-server')
     ).toBe(false)
   })
 })

@@ -3,7 +3,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { withChatTabChanges, type ChatTabChange } from './agent-session-tab-layout'
 
 // rollback build (switch-off) — delete with the switch-off code post-flip
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: false }))
 
 const WT = 'repo-1::/tmp/worktree-a'
 

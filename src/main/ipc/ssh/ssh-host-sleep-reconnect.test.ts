@@ -7,8 +7,8 @@ vi.mock('electron', async () => {
   const { EventEmitter } = await import('node:events')
   return { powerMonitor: new EventEmitter() }
 })
-vi.mock('../../managed-server/lifecycle/orcad-managed-tunnel', () => ({
-  recoverOrcadManagedTunnelsAfterHostResume: recoverManagedTunnels
+vi.mock('../../managed-server/lifecycle/quirkyd-managed-tunnel', () => ({
+  recoverQuirkydManagedTunnelsAfterHostResume: recoverManagedTunnels
 }))
 vi.mock('../../ssh/targets/ssh-target-registry', () => ({
   getSshConnectionManager: () => ({ retryStalledReconnects })

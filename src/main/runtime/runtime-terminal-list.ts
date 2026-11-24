@@ -4,7 +4,7 @@ import type {
   RuntimeTerminalSummary
 } from '../../shared/runtime-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type { PtyControllerInventory } from './runtime-pty-controller-contract'
 import type { ResolvedWorktreeSnapshot } from './runtime-resolved-worktree-cache'
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
@@ -129,7 +129,7 @@ export class RuntimeTerminalList {
         if (
           !leaf.ptyId &&
           liveWorktreeIds.has(leaf.worktreeId) &&
-          !(ORCA_LAYOUT_OWNER_IS_MAIN && this.deps.listsEveryPane?.(leaf.worktreeId))
+          !(QUIRKY_LAYOUT_OWNER_IS_MAIN && this.deps.listsEveryPane?.(leaf.worktreeId))
         ) {
           continue
         }

@@ -1,7 +1,7 @@
 {
   "capturedAt": "2026-09-28T08:15:00.339Z",
   "platform": "darwin",
-  "command": ["qodercli", "--cwd", "/tmp/orca-qoder-probe/workspace"],
+  "command": ["qodercli", "--cwd", "/tmp/quirky-qoder-probe/workspace"],
   "cols": 100,
   "rows": 32,
   "note": "Qoder CLI 1.1.64; existing browser-login config; credit limit reached; no prompt submitted",

@@ -59,7 +59,7 @@ const openDeps = () => ({
 const opened: AgentSessionJournal[] = []
 
 beforeEach(async () => {
-  journalRoot = await mkdtemp(join(tmpdir(), 'orca-read-restore-'))
+  journalRoot = await mkdtemp(join(tmpdir(), 'quirky-read-restore-'))
 })
 
 afterEach(async () => {

@@ -425,7 +425,7 @@ describe('AgentTerminalPreview', () => {
     expect(terminal.customKeyHandler!(cmdC('keydown'))).toBe(true)
     expect(terminal.customKeyHandler!(cmdC('keyup'))).toBe(true)
 
-    // A highlight of blank cells copies no text but is still Orca's selection, as in the pane.
+    // A highlight of blank cells copies no text but is still Quirky's selection, as in the pane.
     Object.assign(terminal, { hasSelection: () => true })
     expect(terminal.customKeyHandler!(cmdC('keydown'))).toBe(false)
     expect(terminal.customKeyHandler!(cmdC('keyup'))).toBe(false)

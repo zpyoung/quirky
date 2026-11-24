@@ -113,7 +113,7 @@ function providerSink() {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-append-delivery-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-append-delivery-'))
   resetHostTestOperationIds()
   generation = 0
   acquire = vi.fn(async ({ fence, spawnToken }) => ({
@@ -180,7 +180,7 @@ describe('an open chat receives every row its journal commits', () => {
 
   it('shows a revision the provider queued with no publish behind it', async () => {
     const pane = await liveReader()
-    const identity = { provider: 'orca' as const, clientMessageId: 'context-usage' }
+    const identity = { provider: 'quirky' as const, clientMessageId: 'context-usage' }
     const body = { kind: 'status' as const, text: 'context usage answered after the turn' }
 
     expect(
@@ -203,7 +203,7 @@ describe('an open chat receives every row its journal commits', () => {
     }
 
     await journal.appendItem(
-      { provider: 'orca', clientMessageId: 'host-note' },
+      { provider: 'quirky', clientMessageId: 'host-note' },
       { kind: 'status', text: 'written by a writer that publishes nothing' },
       {
         fence: store.getRecord(SESSION)?.lease.runtimeFence ?? 0,
@@ -226,7 +226,7 @@ describe('an open chat receives each row once', () => {
     const readSince = vi.spyOn(journal, 'readSince')
 
     sink.appendItem(
-      { provider: 'orca', clientMessageId: 'streamed' },
+      { provider: 'quirky', clientMessageId: 'streamed' },
       { kind: 'status', text: 'streamed row' },
       { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
     )
@@ -246,7 +246,7 @@ describe('an open chat receives each row once', () => {
     }
 
     await journal.appendItem(
-      { provider: 'orca', clientMessageId: 'host-row' },
+      { provider: 'quirky', clientMessageId: 'host-row' },
       { kind: 'status', text: 'host row' },
       {
         fence: store.getRecord(SESSION)?.lease.runtimeFence ?? 0,

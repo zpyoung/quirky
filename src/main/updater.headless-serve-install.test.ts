@@ -223,7 +223,7 @@ describe('headless serve update install handoff', () => {
           status.state === 'error' &&
           'message' in status &&
           typeof status.message === 'string' &&
-          status.message.includes('orca serve')
+          status.message.includes('quirky serve')
       ),
       deferralDiagnostics: recordUpdaterLifecycleMock.mock.calls.filter(
         ([event]) => event === 'headless_serve_install_deferred'
@@ -546,7 +546,7 @@ describe('headless serve update install handoff', () => {
       expect(requestServeUpdateHandoffMock).toHaveBeenCalledTimes(2)
       expect(armUpdateInstallExitWatchdogMock).toHaveBeenCalledOnce()
       expect(killAllPtyMock).toHaveBeenCalledOnce()
-      // Why: MacUpdater keeps the failed attempt's listener too, so both quit; Orca commits once.
+      // Why: MacUpdater keeps the failed attempt's listener too, so both quit; Quirky commits once.
       expect(lifecycle).toEqual([
         'native-quit-and-install',
         'native-quit-and-install',
@@ -653,7 +653,10 @@ describe('headless serve update install handoff', () => {
       )
       expect(send).toHaveBeenCalledWith(
         'updater:status',
-        expect.objectContaining({ state: 'error', message: expect.stringContaining('orca serve') })
+        expect.objectContaining({
+          state: 'error',
+          message: expect.stringContaining('quirky serve')
+        })
       )
     }
   )
@@ -715,7 +718,10 @@ describe('headless serve update install handoff', () => {
       expect(killAllPtyMock).not.toHaveBeenCalled()
       expect(send).toHaveBeenCalledWith(
         'updater:status',
-        expect.objectContaining({ state: 'error', message: expect.stringContaining('orca serve') })
+        expect.objectContaining({
+          state: 'error',
+          message: expect.stringContaining('quirky serve')
+        })
       )
     }
   )

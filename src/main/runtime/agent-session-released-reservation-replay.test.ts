@@ -27,7 +27,7 @@ const INDETERMINATE: AgentSessionOwnerProbe = { outcome: 'indeterminate', reason
 let directory: string
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-released-reservation-replay-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-released-reservation-replay-'))
 })
 
 afterEach(async () => {

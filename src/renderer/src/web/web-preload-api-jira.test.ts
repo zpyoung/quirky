@@ -105,10 +105,10 @@ describe('web Jira preload API', () => {
       window: { api }
     } = await installApi()
 
-    await api.jira.searchIssues({ jql: 'project = ORCA', siteId: 'site-1', requestId: 'r1' })
-    await api.jira.lookupIssueSummary({ key: 'ORCA-1', siteId: 'site-1', requestId: 'r2' })
+    await api.jira.searchIssues({ jql: 'project = QUIRKY', siteId: 'site-1', requestId: 'r1' })
+    await api.jira.lookupIssueSummary({ key: 'QUIRKY-1', siteId: 'site-1', requestId: 'r2' })
     await api.jira.listAssignableUsersForProject({
-      projectIdOrKey: 'ORCA',
+      projectIdOrKey: 'QUIRKY',
       query: 'ann',
       siteId: 'site-1'
     })
@@ -116,14 +116,14 @@ describe('web Jira preload API', () => {
     await expect(api.jira.cancelIssueSummary({ requestId: 'r2' })).resolves.toBeUndefined()
 
     expect(runtimeCalls).toEqual([
-      { method: 'jira.searchIssues', params: { jql: 'project = ORCA', siteId: 'site-1' } },
-      { method: 'jira.lookupIssueSummary', params: { key: 'ORCA-1', siteId: 'site-1' } },
+      { method: 'jira.searchIssues', params: { jql: 'project = QUIRKY', siteId: 'site-1' } },
+      { method: 'jira.lookupIssueSummary', params: { key: 'QUIRKY-1', siteId: 'site-1' } },
       { method: 'jira.searchUsers', params: { query: 'ann', siteId: 'site-1' } }
     ])
   })
 
   it('streams issue details so inline images are not cut off by the socket frame cap', async () => {
-    const issue = { key: 'ORCA-1', title: 'Large issue' }
+    const issue = { key: 'QUIRKY-1', title: 'Large issue' }
     const runtimeCalls = mockRuntimeClient((method) =>
       method === 'jira.getIssueStream' ? issue : null
     )
@@ -131,9 +131,9 @@ describe('web Jira preload API', () => {
       window: { api }
     } = await installApi()
 
-    await expect(api.jira.getIssue({ key: 'ORCA-1', siteId: 'site-1' })).resolves.toEqual(issue)
+    await expect(api.jira.getIssue({ key: 'QUIRKY-1', siteId: 'site-1' })).resolves.toEqual(issue)
     expect(runtimeCalls).toEqual([
-      { method: 'jira.getIssueStream', params: { key: 'ORCA-1', siteId: 'site-1' } }
+      { method: 'jira.getIssueStream', params: { key: 'QUIRKY-1', siteId: 'site-1' } }
     ])
   })
 

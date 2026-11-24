@@ -1,6 +1,6 @@
 {
   "recordedAt": "2026-10-09T19:59:42.766Z",
-  "appPath": "/Users/nwparker/orca/workspaces/orca/perf-2",
+  "appPath": "/Users/nwparker/quirky/workspaces/quirky/perf-2",
   "baselineCommit": "51e7181850b022bae2d41091fe1229accef4bd50",
   "headAtStart": "51e7181850b022bae2d41091fe1229accef4bd50",
   "overlayFiles": [
@@ -20,9 +20,9 @@
   },
   "specSha256": "708ebb635900d9a5ef0fd15a05a8ec08169afd998751eb34a93b22241dcaecb6",
   "commands": {
-    "ensureElectron": "ORCA_BACKGROUND_LAUNCH=1 pnpm run ensure:electron-runtime",
-    "build": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec electron-vite build --mode e2e",
-    "test": "ORCA_BACKGROUND_LAUNCH=1 SKIP_BUILD=1 pnpm exec playwright test tests/e2e/native-chat-tool-pairing-baseline-proof.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1 --retries=0 --output=/tmp/orca-perf-2-pr-proof/baseline-test-results"
+    "ensureElectron": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm run ensure:electron-runtime",
+    "build": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec electron-vite build --mode e2e",
+    "test": "QUIRKY_BACKGROUND_LAUNCH=1 SKIP_BUILD=1 pnpm exec playwright test tests/e2e/native-chat-tool-pairing-baseline-proof.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1 --retries=0 --output=/tmp/quirky-perf-2-pr-proof/baseline-test-results"
   },
   "scope": "Only three chat implementation files overlaid; current hidden launch policy, real Claude JSONL fixture, real UI clicks, no DOM mutation",
   "afterReference": {
@@ -34,14 +34,14 @@
     "exitCode": 0,
     "signal": null,
     "seconds": 0.58,
-    "logfile": "/tmp/orca-perf-2-pr-proof/ensure-electron.log"
+    "logfile": "/tmp/quirky-perf-2-pr-proof/ensure-electron.log"
   },
   "overlayStartedAt": "2026-10-09T19:59:43.364Z",
   "baseline-build": {
     "exitCode": 0,
     "signal": null,
     "seconds": 8.124,
-    "logfile": "/tmp/orca-perf-2-pr-proof/baseline-build.log"
+    "logfile": "/tmp/quirky-perf-2-pr-proof/baseline-build.log"
   },
   "baselineBuildOutputSha256": {
     "out/main/index.js": "62d8b312d8fa6d6f25b93ecdfb4f3b272d4ced03e50d946344d0a5e770277572",
@@ -51,10 +51,10 @@
     "exitCode": 0,
     "signal": null,
     "seconds": 7.175,
-    "logfile": "/tmp/orca-perf-2-pr-proof/baseline-test.log"
+    "logfile": "/tmp/quirky-perf-2-pr-proof/baseline-test.log"
   },
   "launch": {
-    "appPath": "/Users/nwparker/orca/workspaces/orca/perf-2",
+    "appPath": "/Users/nwparker/quirky/workspaces/quirky/perf-2",
     "windows": [
       {
         "visible": false,
@@ -94,7 +94,7 @@
     "exitCode": 0,
     "signal": null,
     "seconds": 6.993,
-    "logfile": "/tmp/orca-perf-2-pr-proof/restored-current-build.log"
+    "logfile": "/tmp/quirky-perf-2-pr-proof/restored-current-build.log"
   },
   "restoredBuildOutputSha256": {
     "out/main/index.js": "4b5611df4675a9d9fcbb9ff555ff725b3b89121cd70ccf44f0e8a337b0fad80f",

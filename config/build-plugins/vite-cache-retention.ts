@@ -4,7 +4,7 @@ import { retainViteCache } from '../scripts/vite-cache-activity.mjs'
 
 export function createViteCacheRetentionPlugin(cacheRoot = resolve('.cache/vite')): Plugin {
   return {
-    name: 'orca-vite-cache-retention',
+    name: 'quirky-vite-cache-retention',
     apply: 'serve',
     async configureServer(server) {
       const release = await retainViteCache(cacheRoot)

@@ -176,7 +176,7 @@ async function spawnAndPublishSession(
     sessionId: opts.sessionId,
     cols: size.cols,
     rows: size.rows,
-    terminalHandle: opts.env?.ORCA_TERMINAL_HANDLE,
+    terminalHandle: opts.env?.QUIRKY_TERMINAL_HANDLE,
     launchAgent: opts.launchAgent,
     subprocess,
     ownerBackend: resolvePtyOwnerBackend({
@@ -240,7 +240,7 @@ async function spawnAndPublishSession(
     staging = stageStartupCommand({
       command: opts.command,
       shellPath: subprocess.shellPath,
-      orcaBuiltLine: opts.launchAgent !== undefined
+      quirkyBuiltLine: opts.launchAgent !== undefined
     })
     const notice = startupStagingFailureNotice(staging)
     if (notice) {
@@ -254,7 +254,7 @@ async function spawnAndPublishSession(
         // Diagnostics must never turn a live PTY into a failed create.
       }
     }
-    // Why: only Orca-wrapped shells advertise the paste-safe startup barrier.
+    // Why: only Quirky-wrapped shells advertise the paste-safe startup barrier.
     session.write(
       buildStartupCommandSubmission(staging.command, {
         bracketedPasteSafe: shellReadySupported

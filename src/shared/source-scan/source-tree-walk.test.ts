@@ -25,7 +25,7 @@ vi.mock('node:fs', async (importOriginal) => {
 let root: string
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-source-tree-walk-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-source-tree-walk-'))
   vi.mocked(readdirSync).mockReset()
   vi.mocked(statSync).mockClear()
 })

@@ -67,7 +67,7 @@ export class FakeAcpChild extends AcpSessionRuntime implements AcpStructuredConn
     this.drainNotifications(error)
     return this.proveClose().finally(() => super.close(error))
   }
-  /** The agent process ends on its own (or Orca's close landed). */
+  /** The agent process ends on its own (or Quirky's close landed). */
   exit(): void {
     if (this.gone) {
       return

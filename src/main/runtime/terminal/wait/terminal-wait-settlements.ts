@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithBindPtyIncarnationHandle } from '../identity/terminal-handle-bindings'
+import { QuirkyRuntimeWithBindPtyIncarnationHandle } from '../identity/terminal-handle-bindings'
 import type {
   RuntimeLeafRecord,
   RuntimePtyWorktreeRecord
@@ -18,18 +18,18 @@ import {
   type TuiIdleVerdict
 } from '../../tui-idle-evidence'
 import { leafTuiIdleEvidence, ptyTuiIdleEvidence } from '../../tui-idle-evidence-source'
-import { TUI_IDLE_QUIESCENCE_MS } from '../../orca-runtime-postlude'
+import { TUI_IDLE_QUIESCENCE_MS } from '../../quirky-runtime-postlude'
 
-import type { OrcaRuntimeWithResolveWaiter } from '../../orca-runtime-resolve-waiter'
+import type { QuirkyRuntimeWithResolveWaiter } from '../../quirky-runtime-resolve-waiter'
 
-export abstract class OrcaRuntimeWithResolveExitWaiters extends OrcaRuntimeWithBindPtyIncarnationHandle {
+export abstract class QuirkyRuntimeWithResolveExitWaiters extends QuirkyRuntimeWithBindPtyIncarnationHandle {
   protected abstract resolveWaiter(
-    ...args: Parameters<OrcaRuntimeWithResolveWaiter['resolveWaiter']>
-  ): ReturnType<OrcaRuntimeWithResolveWaiter['resolveWaiter']>
+    ...args: Parameters<QuirkyRuntimeWithResolveWaiter['resolveWaiter']>
+  ): ReturnType<QuirkyRuntimeWithResolveWaiter['resolveWaiter']>
 
   protected abstract removeWaiter(
-    ...args: Parameters<OrcaRuntimeWithResolveWaiter['removeWaiter']>
-  ): ReturnType<OrcaRuntimeWithResolveWaiter['removeWaiter']>
+    ...args: Parameters<QuirkyRuntimeWithResolveWaiter['removeWaiter']>
+  ): ReturnType<QuirkyRuntimeWithResolveWaiter['removeWaiter']>
 
   protected resolveExitWaiters(leaf: RuntimeLeafRecord): void {
     const handle = this.issueHandle(leaf)

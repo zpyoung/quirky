@@ -77,7 +77,7 @@ function store(args: {
 }
 
 describe('resolveAgentLaunchExecutionContext from a Windows client', () => {
-  it('quotes for the Linux Orca server that runs the agent, not the client (#22204, #12252)', () => {
+  it('quotes for the Linux Quirky server that runs the agent, not the client (#22204, #12252)', () => {
     const context = resolveAgentLaunchExecutionContext(
       store({
         repo: { path: '/srv/repo', executionHostId: 'runtime:linux-box' },
@@ -93,7 +93,7 @@ describe('resolveAgentLaunchExecutionContext from a Windows client', () => {
     })
   })
 
-  it('does not apply the client PowerShell setting to a Windows Orca server', () => {
+  it('does not apply the client PowerShell setting to a Windows Quirky server', () => {
     const context = resolveAgentLaunchExecutionContext(
       store({
         repo: { path: 'D:\\repo', executionHostId: 'runtime:win-box' },
@@ -108,7 +108,7 @@ describe('resolveAgentLaunchExecutionContext from a Windows client', () => {
     })
   })
 
-  it('withholds the launch when the Orca server has never reported its OS', () => {
+  it('withholds the launch when the Quirky server has never reported its OS', () => {
     const context = resolveAgentLaunchExecutionContext(
       store({
         repo: { path: '/srv/repo', executionHostId: 'runtime:linux-box' },
@@ -146,7 +146,7 @@ describe('resolveAgentLaunchExecutionContext from a Windows client', () => {
     expect(context).toBeNull()
   })
 
-  it('reads a nested SSH target from the Orca server that reaches it', () => {
+  it('reads a nested SSH target from the Quirky server that reaches it', () => {
     const context = resolveAgentLaunchExecutionContext(
       store({
         repo: {

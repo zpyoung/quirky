@@ -70,7 +70,7 @@ function assertCloneHostIsSupported(hostId: ExecutionHostId | null | undefined):
 }
 
 export const SERVER_SSH_PROJECT_ADD_UNAVAILABLE_MESSAGE =
-  "This Orca server can't add projects on its SSH hosts. Add the SSH host on your computer to open its projects."
+  "This Quirky server can't add projects on its SSH hosts. Add the SSH host on your computer to open its projects."
 
 function sshTargetNotServedError(connectionId: string): SshHostNotServedError {
   return new SshHostNotServedError(connectionId, sshTargetNotConnectedMessage(connectionId))

@@ -215,7 +215,7 @@ describe('a Stop holds the queue, in order', () => {
 })
 
 describe('after a restart, nothing sends by itself', () => {
-  /** A turn runs with cards A and B waiting, and Orca quits: a quit writes no Stop event. */
+  /** A turn runs with cards A and B waiting, and Quirky quits: a quit writes no Stop event. */
   async function restartedWithCards(): Promise<{ first: string; second: string }> {
     await rig.workingSend()
     const first = await queuedDraft('A')
@@ -262,11 +262,11 @@ describe('after a restart, nothing sends by itself', () => {
     ])
   })
 
-  it("Resume: Orca's carry-on turn runs first, then A, then B, as if no restart happened", async () => {
+  it("Resume: Quirky's carry-on turn runs first, then A, then B, as if no restart happened", async () => {
     const { first, second } = await restartedIdleWithCards()
     expect(await published()).toEqual({ queuePause: null, nextQueuedMessageId: null })
     const views = await watchClient()
-    // The restart prompt's Resume sends the carry-on as Orca's own message, straight to the agent.
+    // The restart prompt's Resume sends the carry-on as Quirky's own message, straight to the agent.
     const carryOn = rig.send('continue where you left off')
     expect(await carryOn.result).toMatchObject({
       ok: true,

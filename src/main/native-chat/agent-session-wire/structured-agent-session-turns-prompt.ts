@@ -159,9 +159,9 @@ export async function performPrompt(
     if (!committed.item) {
       throw error
     }
-    // The adapter's error is Orca's; the row says only what the user needs to know.
+    // The adapter's error is Quirky's; the row says only what the user needs to know.
     await ctx.journal.appendItem(
-      { provider: 'orca', clientMessageId: `${input.itemId}#delivery` },
+      { provider: 'quirky', clientMessageId: `${input.itemId}#delivery` },
       {
         kind: 'status',
         ...agentSessionFailureWords(agentSessionFailureFact('answerUnconfirmed'), {

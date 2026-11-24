@@ -117,13 +117,13 @@ describe('native chat right-click targets', () => {
 
     await rightClick('docs link')
     // The same destinations, in the same order, as the click popover in use-native-chat-link-actions.
-    expect(menuItemNames().slice(0, 3)).toEqual(['System Browser', 'Orca Browser', 'Copy link'])
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Orca Browser' }))
+    expect(menuItemNames().slice(0, 3)).toEqual(['System Browser', 'Quirky Browser', 'Copy link'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Quirky Browser' }))
     expect(mocks.openRoutedHttpLink).toHaveBeenCalledWith('https://example.com/docs', {
       worktreeId: 'wt-1',
       sourceOwner: { kind: 'local' },
       modifierHeld: false,
-      forceDestination: 'orca'
+      forceDestination: 'quirky'
     })
   })
 

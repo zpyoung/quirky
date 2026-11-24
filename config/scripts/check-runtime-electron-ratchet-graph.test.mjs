@@ -12,7 +12,7 @@ afterEach(() => {
 })
 
 function fixture(files) {
-  const root = mkdtempSync(path.join(tmpdir(), 'orca-electron-ratchet-graph-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'quirky-electron-ratchet-graph-'))
   roots.push(root)
   for (const [file, source] of Object.entries(files)) {
     const absolute = path.join(root, file)

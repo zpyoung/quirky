@@ -34,7 +34,7 @@ export type CodexStructuredInvocationDeps = Pick<
   resolveEnvironment?: () => Promise<NodeJS.ProcessEnv>
   /** Rereads that environment when Codex is not found in it; absent never retries. */
   refreshEnvironmentAfterMiss?: (askedAt: number) => Promise<void>
-  /** Where the program starts, for a PATH entry relative to it; Orca's own when absent. */
+  /** Where the program starts, for a PATH entry relative to it; Quirky's own when absent. */
   resolveWorkingDirectory?: () => Promise<string> | string
 }
 
@@ -115,7 +115,7 @@ export function codexStructuredLaunchPart(
         { ...environment, ...(accountHome.path ? { CODEX_HOME: accountHome.path } : {}) },
         visuals
       ),
-      // Without visuals, a folder Orca itself inherited (started from a chat) names another chat's.
+      // Without visuals, a folder Quirky itself inherited (started from a chat) names another chat's.
       inheritedEnvToDelete: [
         ...(visuals ? [] : [NATIVE_CHAT_SCRATCH_DIR_ENV]),
         LEGACY_NATIVE_CHAT_VISUALS_DIR_ENV

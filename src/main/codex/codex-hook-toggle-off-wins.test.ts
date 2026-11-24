@@ -42,7 +42,7 @@ import {
 import { _internals, startCodexHooks } from './codex-hook-reconcile'
 import { _internals as lookupInternals } from './codex-hook-hash-lookup'
 import { CODEX_EVENT_LABEL, getCodexManagedHookInstallMaterial } from './codex-hook-definition'
-import { getOrcaManagedCodexHomePath } from './codex-home-paths'
+import { getQuirkyManagedCodexHomePath } from './codex-home-paths'
 import type { CodexHookHashes } from './codex-hook-trust-derivation'
 import { readHookTrustEntries } from './config-toml-trust'
 
@@ -60,7 +60,7 @@ const CODEX_HASHES: CodexHookHashes = Object.fromEntries(
 const installCodex = MANAGED_AGENT_HOOK_INSTALLERS.find(([agent]) => agent === 'codex')![1]
 const removeCodex = MANAGED_AGENT_HOOK_REMOVERS.find(([agent]) => agent === 'codex')![1]
 
-function expectNoOrcaHook(codexHome: string): void {
+function expectNoQuirkyHook(codexHome: string): void {
   const hooksPath = join(codexHome, 'hooks.json')
   if (existsSync(hooksPath)) {
     expect(readFileSync(hooksPath, 'utf-8')).not.toContain(
@@ -72,12 +72,12 @@ function expectNoOrcaHook(codexHome: string): void {
 
 beforeEach(() => {
   // Why realpath: a symlinked temp dir (macOS /var) would give ~/.codex a second key spelling.
-  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'orca-codex-toggle-')))
+  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'quirky-codex-toggle-')))
   home = join(root, 'home')
   const userData = join(root, 'user-data')
   mkdirSync(home)
   mkdirSync(userData)
-  vi.stubEnv('ORCA_USER_DATA_PATH', userData)
+  vi.stubEnv('QUIRKY_USER_DATA_PATH', userData)
   vi.stubEnv('CODEX_HOME', '')
   mocks.homedir.mockReturnValue(home)
   mocks.codexPath = join(userData, 'codex')
@@ -97,7 +97,7 @@ describe('turning hooks off while turning them on still waits for Codex', () => 
   it.each([
     ['~/.codex', true],
     ['a custom CODEX_HOME', false]
-  ])('leaves no Orca entry or approval with %s selected', async (_name, realHome) => {
+  ])('leaves no Quirky entry or approval with %s selected', async (_name, realHome) => {
     usesRealHome = realHome
     let answer!: () => void
     mocks.deriveCodexHookHashes.mockReturnValue(
@@ -129,7 +129,7 @@ describe('turning hooks off while turning them on still waits for Codex', () => 
     await on
     await _internals.settledForTesting()
 
-    expectNoOrcaHook(join(home, '.codex'))
-    expectNoOrcaHook(getOrcaManagedCodexHomePath())
+    expectNoQuirkyHook(join(home, '.codex'))
+    expectNoQuirkyHook(getQuirkyManagedCodexHomePath())
   })
 })

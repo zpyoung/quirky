@@ -2,9 +2,9 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
-import { createRestartSession } from './helpers/orca-restart'
-import { seedRelayEraProfile } from './helpers/orcad-upgrade-profile'
+import { test, expect } from './helpers/quirky-app'
+import { createRestartSession } from './helpers/quirky-restart'
+import { seedRelayEraProfile } from './helpers/quirkyd-upgrade-profile'
 import { mutateStoppedProfileState } from './helpers/persisted-profile-state'
 import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { waitForSessionReady, waitForStartupWorktreeRefresh } from './helpers/store'
@@ -16,7 +16,7 @@ import {
 
 test.skip(
   !SIDEBAR_INPUTS_BUILD,
-  'main publishes sidebar inputs only in an ORCA_SIDEBAR_INPUTS=main build'
+  'main publishes sidebar inputs only in an QUIRKY_SIDEBAR_INPUTS=main build'
 )
 
 async function readMainRows(page: Page): Promise<Record<string, WorkspaceRow>> {
@@ -30,17 +30,17 @@ async function readMainRows(page: Page): Promise<Record<string, WorkspaceRow>> {
 }
 
 test('main lists the window’s git and folder workspaces and follows its metadata writes', async ({
-  orcaPage,
+  quirkyPage,
   registerPostElectronShutdownCleanup
 }) => {
-  await waitForSessionReady(orcaPage)
-  await waitForStartupWorktreeRefresh(orcaPage)
-  const folderPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-workspace-rows-')))
+  await waitForSessionReady(quirkyPage)
+  await waitForStartupWorktreeRefresh(quirkyPage)
+  const folderPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-workspace-rows-')))
   registerPostElectronShutdownCleanup(async () =>
     rmSync(folderPath, { recursive: true, force: true })
   )
 
-  const { worktreeId, folderKey } = await orcaPage.evaluate(async (parentPath) => {
+  const { worktreeId, folderKey } = await quirkyPage.evaluate(async (parentPath) => {
     const store = window.__store!
     const group = await window.api.projectGroups.create({
       name: 'Rows folder project',
@@ -63,22 +63,22 @@ test('main lists the window’s git and folder workspaces and follows its metada
   }, folderPath)
   const rowKey = `local|${worktreeId}`
 
-  await expect.poll(async () => Object.keys(await readMainRows(orcaPage))).toContain(folderKey)
-  const before = (await readMainRows(orcaPage))[rowKey]
+  await expect.poll(async () => Object.keys(await readMainRows(quirkyPage))).toContain(folderKey)
+  const before = (await readMainRows(quirkyPage))[rowKey]
   expect(before).toMatchObject({ kind: 'git', hostId: 'local', isPinned: false })
 
   // The window writes metadata without announcing it; main must still follow.
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     (id) => window.__store!.getState().updateWorktreeMeta(id, { isPinned: true, comment: 'rows' }),
     worktreeId
   )
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     (id) => window.__store!.getState().updateFolderWorkspace(id, { isPinned: true }),
     folderKey.slice('local|folder:'.length)
   )
   await expect
     .poll(async () => {
-      const rows = await readMainRows(orcaPage)
+      const rows = await readMainRows(quirkyPage)
       return [rows[rowKey]?.isPinned, rows[rowKey]?.comment, rows[folderKey]?.isPinned]
     })
     .toEqual([true, 'rows', true])
@@ -127,7 +127,7 @@ test('a disconnected SSH host keeps its rows, and its state reads not connected'
           .sort()
       )
       .toEqual([
-        ['folder', 'orcad upgrade folder', false],
+        ['folder', 'quirkyd upgrade folder', false],
         ['git', 'Remote feature', true]
       ])
     const facts = await page.evaluate(() =>

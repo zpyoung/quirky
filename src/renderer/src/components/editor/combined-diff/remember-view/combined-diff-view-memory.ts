@@ -1,5 +1,5 @@
 import {
-  ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
+  QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
   type EditorPathMutationTarget
 } from '../../editor-autosave'
 import { forgetCombinedDiffViewsShowingPath } from './combined-diff-view-cache'
@@ -22,7 +22,7 @@ function handleCombinedDiffExternalFileChange(event: Event): void {
 export function disposeCombinedDiffViewMemory(): void {
   if (typeof window !== 'undefined') {
     window.removeEventListener(
-      ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
+      QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
       handleCombinedDiffExternalFileChange
     )
   }
@@ -30,7 +30,7 @@ export function disposeCombinedDiffViewMemory(): void {
 
 if (typeof window !== 'undefined') {
   window.addEventListener(
-    ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
+    QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
     handleCombinedDiffExternalFileChange
   )
 }

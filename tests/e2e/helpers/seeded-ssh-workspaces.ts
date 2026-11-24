@@ -1,9 +1,9 @@
 import type { ElectronApplication, Page, TestInfo } from '@stablyai/playwright-test'
 import type { Repo } from '../../../src/shared/repo-types'
 import { toSshExecutionHostId } from '../../../src/shared/execution-host'
-import { expect } from './orca-app'
-import { seedRelayEraTarget } from './orcad-upgrade-profile'
-import { attachRepoAndOpenTerminal, createRestartSession } from './orca-restart'
+import { expect } from './quirky-app'
+import { seedRelayEraTarget } from './quirkyd-upgrade-profile'
+import { attachRepoAndOpenTerminal, createRestartSession } from './quirky-restart'
 import { mutateStoppedProfileState } from './persisted-profile-state'
 import { waitForSessionReady, waitForStartupWorktreeRefresh } from './store'
 

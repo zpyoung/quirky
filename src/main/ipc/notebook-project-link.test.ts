@@ -51,7 +51,7 @@ beforeEach(async () => {
     ready: Promise.resolve({ status: 'ready' }),
     exited: new Promise(() => {})
   })
-  base = await mkdtemp(join(await realpath(tmpdir()), 'orca-notebook-link-'))
+  base = await mkdtemp(join(await realpath(tmpdir()), 'quirky-notebook-link-'))
   project = join(base, 'project')
   userData.path = join(base, 'user-data')
   await mkdir(join(project, 'analysis'), { recursive: true })

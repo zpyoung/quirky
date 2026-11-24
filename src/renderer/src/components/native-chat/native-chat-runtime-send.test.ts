@@ -716,14 +716,14 @@ describe('sendNativeChatMessageWithImageAttachments', () => {
 
   it('clears the line, then bracket-pastes image paths before prompt text', async () => {
     const handle = sendNativeChatMessageWithImageAttachments(TARGET, 'what do you see?', [
-      '/tmp/orca-paste-image.png'
+      '/tmp/quirky-paste-image.png'
     ])
 
     expect(handle.settleAfterMs).toBe(
       NATIVE_CHAT_IMAGE_ATTACHMENT_SETTLE_MS + NATIVE_CHAT_SUBMIT_DELAY_MS
     )
 
-    const framedImage = buildNativeChatImagePasteBytes('/tmp/orca-paste-image.png')
+    const framedImage = buildNativeChatImagePasteBytes('/tmp/quirky-paste-image.png')
     await vi.advanceTimersByTimeAsync(0)
     expectWriteOrder([NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT, framedImage])
 
@@ -746,7 +746,7 @@ describe('sendNativeChatMessageWithImageAttachments', () => {
 
   it('waits the normal submit gap for an attachment-only send', async () => {
     const handle = sendNativeChatMessageWithImageAttachments(TARGET, '', [
-      '/tmp/orca-paste-image.png'
+      '/tmp/quirky-paste-image.png'
     ])
 
     expect(handle.settleAfterMs).toBe(NATIVE_CHAT_SUBMIT_DELAY_MS)
@@ -754,7 +754,7 @@ describe('sendNativeChatMessageWithImageAttachments', () => {
     await vi.advanceTimersByTimeAsync(0)
     expectWriteOrder([
       NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT,
-      '\x1b[200~/tmp/orca-paste-image.png\x1b[201~'
+      '\x1b[200~/tmp/quirky-paste-image.png\x1b[201~'
     ])
 
     await vi.advanceTimersByTimeAsync(NATIVE_CHAT_SUBMIT_DELAY_MS - 1)
@@ -771,7 +771,7 @@ describe('sendNativeChatMessageWithImageAttachments', () => {
 
   it('cancels deferred prompt and Enter writes after the attachment path', async () => {
     const handle = sendNativeChatMessageWithImageAttachments(TARGET, 'describe', [
-      '/tmp/orca-paste-image.png'
+      '/tmp/quirky-paste-image.png'
     ])
     await vi.advanceTimersByTimeAsync(0)
     handle.cancel()
@@ -780,7 +780,7 @@ describe('sendNativeChatMessageWithImageAttachments', () => {
     // Pre-clear + image body + cancel clear; no Enter.
     expectWriteOrder([
       NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT,
-      buildNativeChatImagePasteBytes('/tmp/orca-paste-image.png'),
+      buildNativeChatImagePasteBytes('/tmp/quirky-paste-image.png'),
       NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT
     ])
     expect(
@@ -797,7 +797,7 @@ describe('sendNativeChatMessageWithImageAttachments', () => {
     sendNativeChatMessageWithImageAttachments(
       TARGET,
       'describe this',
-      ['/tmp/orca-paste-image.png'],
+      ['/tmp/quirky-paste-image.png'],
       { onOutcome }
     )
 
@@ -832,7 +832,7 @@ describe('sendNativeChatMessageWithImageAttachments', () => {
     const handle = sendNativeChatMessageWithImageAttachments(
       TARGET,
       'describe',
-      ['/tmp/orca-paste-image.png'],
+      ['/tmp/quirky-paste-image.png'],
       { onOutcome }
     )
 
@@ -856,12 +856,12 @@ describe('agent-aware image attachments', () => {
 
   it('escapes a pasted image path with spaces, so an attachment agent sees one path', async () => {
     sendNativeChatMessageWithAgentImageAttachments('codex', TARGET, '', [
-      '/Users/me/Library/Application Support/orca/native-chat-pastes/orca-paste-1-ab.png'
+      '/Users/me/Library/Application Support/quirky/native-chat-pastes/quirky-paste-1-ab.png'
     ])
     await vi.advanceTimersByTimeAsync(0)
     expectWriteOrder([
       NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT,
-      '\x1b[200~/Users/me/Library/Application\\ Support/orca/native-chat-pastes/orca-paste-1-ab.png\x1b[201~'
+      '\x1b[200~/Users/me/Library/Application\\ Support/quirky/native-chat-pastes/quirky-paste-1-ab.png\x1b[201~'
     ])
   })
 })

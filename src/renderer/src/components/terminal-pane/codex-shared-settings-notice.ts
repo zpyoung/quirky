@@ -9,13 +9,13 @@ function showCodexSharedSettingsNotice(): void {
   // Why mark before showing: seen means shown, so a quit or reload never repeats it.
   useAppStore.getState().markCodexSharedSettingsNoticeSeen()
   toast.info(
-    translate('terminal.codexSharedSettingsNotice.title', 'Codex in Orca now uses ~/.codex'),
+    translate('terminal.codexSharedSettingsNotice.title', 'Codex in Quirky now uses ~/.codex'),
     {
       // Why a stable id: a late sync that resets the flag can't stack a second toast.
       id: 'codex-shared-settings-notice',
       description: translate(
         'terminal.codexSharedSettingsNotice.description',
-        'Codex may ask again to trust folders or approve commands. Re-add any MCP servers you added only in Orca.'
+        'Codex may ask again to trust folders or approve commands. Re-add any MCP servers you added only in Quirky.'
       ),
       // Why no timeout: it is marked seen before showing, so an auto-close would lose it for good.
       duration: Infinity

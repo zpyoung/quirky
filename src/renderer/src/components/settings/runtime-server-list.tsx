@@ -1,10 +1,10 @@
 import { Server } from 'lucide-react'
 import type { ComponentProps } from 'react'
 import {
-  getOrcadSshDeployment,
+  getQuirkydSshDeployment,
   type PublicKnownRuntimeEnvironment
 } from '../../../../shared/runtime-environments'
-import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
+import type { ManagedQuirkydPreloadApi } from '../../../../preload/api/managed-quirkyd-api'
 import type { RemoteServerUpdateEntry } from '@/runtime/remote-server-update-coordinator'
 import type { UpdateCheckOptions } from '../../../../shared/update-status-types'
 import { translate } from '@/i18n/i18n'
@@ -25,7 +25,7 @@ function ManagedRuntimeServerRow({
   onChanged,
   ...props
 }: Omit<RowProps, 'managed'> & {
-  api: ManagedOrcadPreloadApi
+  api: ManagedQuirkydPreloadApi
   onChanged: () => void
 }): React.JSX.Element {
   const lifecycle = useManagedServerLifecycle({ api, environment: props.environment, onChanged })
@@ -101,7 +101,9 @@ export function RuntimeServerList({
     )
   }
 
-  const firstManagedId = environments.find((environment) => getOrcadSshDeployment(environment))?.id
+  const firstManagedId = environments.find((environment) =>
+    getQuirkydSshDeployment(environment)
+  )?.id
   return (
     <div
       data-settings-section={firstManagedId ? undefined : 'managed-servers'}
@@ -133,7 +135,7 @@ export function RuntimeServerList({
           rechecking
         }
         const row =
-          api && getOrcadSshDeployment(environment) ? (
+          api && getQuirkydSshDeployment(environment) ? (
             <ManagedRuntimeServerRow {...rowProps} api={api} onChanged={onChanged} />
           ) : (
             <RuntimeServerRow {...rowProps} onChanged={onChanged} />

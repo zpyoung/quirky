@@ -1,5 +1,5 @@
 {
-  "name": "@orca/audit-tools",
+  "name": "@quirky/audit-tools",
   "private": true,
   "description": "Locked command-line audits, installed separately from the application",
   "dependencies": {

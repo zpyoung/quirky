@@ -9,7 +9,7 @@
 // picks out exactly one unclaimed item. Never by text equality: the same
 // question asked twice is two messages, and collapsing them silently loses one.
 //
-// Orca never re-sends on the user's behalf. An unresolved submission stays
+// Quirky never re-sends on the user's behalf. An unresolved submission stays
 // `unknown` — a displayed state meaning "delivery unconfirmed", neither sent nor
 // failed — and the user chooses to resend or discard.
 
@@ -31,7 +31,7 @@ export type ProviderHistoryItem = {
    *  provider content. Used only to break an otherwise unique tie. */
   payloadFingerprint: string | null
   /** Absent when the provider keeps no identity of its own for the item: a submission it matches
-   *  keeps Orca's (`orca:<clientMessageId>`), which is the identity its row already has. */
+   *  keeps Quirky's (`quirky:<clientMessageId>`), which is the identity its row already has. */
   identity?: AgentJournalItemIdentity
 }
 
@@ -172,7 +172,7 @@ function resolveOne(
       clientMessageId: submission.clientMessageId,
       outcome: 'accepted',
       providerItemId: item.providerItemId,
-      identity: item.identity ?? { provider: 'orca', clientMessageId: submission.clientMessageId }
+      identity: item.identity ?? { provider: 'quirky', clientMessageId: submission.clientMessageId }
     }
   }
   if (ambiguous.has(submission.clientMessageId)) {

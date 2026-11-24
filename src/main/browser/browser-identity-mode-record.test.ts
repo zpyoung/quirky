@@ -9,7 +9,7 @@ import {
 } from './browser-identity-mode-record'
 
 function makeUserData(): string {
-  return mkdtempSync(join(tmpdir(), 'orca-browser-identity-'))
+  return mkdtempSync(join(tmpdir(), 'quirky-browser-identity-'))
 }
 
 function writeRecord(userDataPath: string, value: unknown): void {

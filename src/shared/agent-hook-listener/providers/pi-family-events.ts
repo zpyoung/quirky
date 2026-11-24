@@ -32,7 +32,7 @@ export function normalizePiCompatibleEvent(
   // Why: the OMP extension stamps `provider/id` on every post; Pi posts carry none.
   const model = readString(hookPayload, 'model')
   const modelSwitchCommand =
-    hookPayload.model_switch_command === 'orca-model' ? 'orca-model' : undefined
+    hookPayload.model_switch_command === 'quirky-model' ? 'quirky-model' : undefined
   // Why: every post restates the extension's whole live roster, so an absent list means none.
   const subagents = hookPayload.subagents
   if (eventName === 'model_select' || eventName === 'subagents_update') {

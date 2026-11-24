@@ -1,7 +1,7 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { remoteRpcContentBudget } from '../../../../shared/remote-rpc-content-budget'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { RpcRequest } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { FILE_METHODS } from './files'
@@ -20,7 +20,7 @@ describe('files.readDocPreview', () => {
         content: '<h1>safe</h1>',
         isBinary: false
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
     const request: RpcRequest = {
       id: 'req-1',
@@ -76,7 +76,7 @@ describe.each([
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       [runtimeMethod]: write
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_MUTATION_METHODS })
 
     const response = await dispatcher.dispatch({
@@ -121,7 +121,7 @@ describe('file preview RPC transport budgets', () => {
         getRuntimeId: () => 'test-runtime',
         readFileExplorerPreview,
         readTerminalArtifactPreview
-      } as unknown as OrcaRuntimeService
+      } as unknown as QuirkyRuntimeService
       const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
       const id = '\u0001'.repeat(8_192)
       const reply = vi.fn()
@@ -167,7 +167,7 @@ describe('files.listAll page size', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       listRuntimeFiles: vi.fn().mockResolvedValue(['src/index.ts'])
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -187,7 +187,7 @@ describe('files.listAll page size', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       listRuntimeFiles: vi.fn().mockResolvedValue(['src/index.ts'])
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -209,7 +209,7 @@ describe('files.resolveTerminalPath RPC', () => {
         exists: true,
         isDirectory: false
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     return { runtime, dispatcher: new RpcDispatcher({ runtime, methods: FILE_METHODS }) }
   }
 
@@ -289,7 +289,7 @@ describe('files.resolveTerminalPath RPC', () => {
 
 describe('file open RPC navigation', () => {
   function createDispatcher(): {
-    runtime: Pick<OrcaRuntimeService, 'openMobileFile' | 'openMobileDiff'>
+    runtime: Pick<QuirkyRuntimeService, 'openMobileFile' | 'openMobileDiff'>
     dispatcher: RpcDispatcher
   } {
     const opened = { worktree: 'wt-1', relativePath: 'a.ts', kind: 'text', opened: true }
@@ -300,7 +300,7 @@ describe('file open RPC navigation', () => {
     }
     const dispatcher = new RpcDispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: FILE_METHODS open handlers only read the stubbed members.
-      runtime: runtime as unknown as OrcaRuntimeService,
+      runtime: runtime as unknown as QuirkyRuntimeService,
       methods: FILE_METHODS
     })
     return { runtime, dispatcher }

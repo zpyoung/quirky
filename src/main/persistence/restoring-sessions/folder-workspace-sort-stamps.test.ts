@@ -3,7 +3,7 @@ import type { PersistedState } from '../../../shared/persisted-state-types'
 import { normalizeFolderWorkspaces } from '../../../shared/folder-workspaces'
 import { FolderWorkspacePersistenceOperations } from './folder-workspace-operations'
 
-vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+vi.mock('../../../shared/sidebar-inputs-switch', () => ({ QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true }))
 
 function createOperations() {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: folder operations read only these fields.

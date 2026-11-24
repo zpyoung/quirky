@@ -8,7 +8,7 @@ profile are used. The synthetic file is recreated until NTFS assigns a real inod
 above `Number.MAX_SAFE_INTEGER`; failure to obtain one fails the test.
 
 ```powershell
-$env:ORCA_BACKGROUND_LAUNCH='1'
+$env:QUIRKY_BACKGROUND_LAUNCH='1'
 pnpm exec esbuild config/scripts/session-search-file-id-e2e/run.ts --bundle --platform=node --format=esm --packages=external --outfile=notes/search-ipc/run.mjs
 node notes/search-ipc/run.mjs red
 # Expected exit 1: initial indexing/query succeeds, subsequent reconciliation fails.
@@ -48,7 +48,7 @@ Labelled fixture seams, identical in both variants:
 
 - Parent root resolution returns the existing `isolatedScanRoots` fixture.
 - `getSettings` supplies the isolated JSON policy; real enablement/settings-change functions apply it.
-- The child's allowlisted environment includes `ORCA_BACKGROUND_LAUNCH=1`.
+- The child's allowlisted environment includes `QUIRKY_BACKGROUND_LAUNCH=1`.
 - Passive child PID, IPC, stderr, and transcript-read observations are added.
 - The unused default RPC method catalog is excluded; the dispatcher receives the production `AI_VAULT_METHODS` explicitly. Its runtime context supplies only a fixture runtime ID.
 
@@ -72,7 +72,7 @@ clients. Profiles/DBs remain as evidence, not running services.
 
 ## Boundaries not exercised
 
-This is not a packaged/full Orca desktop launch. The host and scanner are bundled
+This is not a packaged/full Quirky desktop launch. The host and scanner are bundled
 from production sources by this harness, not electron-vite's complete app build.
 The actual runtime authentication/metadata server, CLI routing, remote SSH/relay
 transport, and UI are not exercised. Named-pipe framing and dispatcher are real,

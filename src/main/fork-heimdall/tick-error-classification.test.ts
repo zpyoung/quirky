@@ -12,7 +12,7 @@ describe('isExecutionHostContactLoss', () => {
     ['an SSH request with no answer', coded('timed out', 'SSH_MUX_REQUEST_TIMEOUT')],
     ['an SSH host this process does not serve', new SshHostNotServedError('box-1')],
     ['an unavailable remote runtime', coded('down', 'runtime_unavailable')],
-    ['a closed remote runtime socket', new Error('Remote Orca runtime connection closed')]
+    ['a closed remote runtime socket', new Error('Remote Quirky runtime connection closed')]
   ])('reports %s as lost contact', (_label, error) => {
     expect(isExecutionHostContactLoss(error)).toBe(true)
   })

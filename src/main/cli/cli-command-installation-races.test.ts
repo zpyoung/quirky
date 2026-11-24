@@ -80,13 +80,13 @@ afterEach(async () => {
 })
 
 async function createMacCommandFixture() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-cli-command-race-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-cli-command-race-'))
   createdRoots.push(root)
   const commandDirectory = join(root, 'bin')
-  const commandPath = join(commandDirectory, 'orca')
+  const commandPath = join(commandDirectory, 'quirky')
   const resourcesPath = join(root, 'Current.app', 'Contents', 'Resources')
-  const launcherPath = join(resourcesPath, 'bin', 'orca')
-  const staleLauncherPath = join(root, 'Old.app', 'Contents', 'Resources', 'bin', 'orca')
+  const launcherPath = join(resourcesPath, 'bin', 'quirky')
+  const staleLauncherPath = join(root, 'Old.app', 'Contents', 'Resources', 'bin', 'quirky')
   await mkdir(commandDirectory, { recursive: true })
   await mkdir(dirname(launcherPath), { recursive: true })
   await writeFile(launcherPath, '#!/usr/bin/env bash\n', { mode: 0o755 })
@@ -123,7 +123,7 @@ function createMacInstaller(
     isPackaged: true,
     userDataPath: join(fixture.root, 'user-data'),
     resourcesPath: fixture.resourcesPath,
-    execPath: join(fixture.root, 'Current.app', 'Contents', 'MacOS', 'Orca'),
+    execPath: join(fixture.root, 'Current.app', 'Contents', 'MacOS', 'Quirky'),
     appPath: join(fixture.root, 'Current.app', 'Contents', 'Resources', 'app.asar'),
     homePath: join(fixture.root, 'home'),
     commandPathOverride: fixture.commandPath,
@@ -133,12 +133,12 @@ function createMacInstaller(
 
 async function recoveryPath(commandDirectory: string): Promise<string> {
   const transactionName = (await readdir(commandDirectory)).find((name) =>
-    name.startsWith('.orca-cli-')
+    name.startsWith('.quirky-cli-')
   )
   if (!transactionName) {
     throw new Error('Expected a preserved CLI command transaction.')
   }
-  return join(commandDirectory, transactionName, 'orca')
+  return join(commandDirectory, transactionName, 'quirky')
 }
 
 async function rejectionFrom(operation: Promise<unknown>): Promise<Error> {
@@ -194,10 +194,10 @@ describe.skipIf(process.platform === 'win32')('CLI command filesystem races', ()
       }
     })
 
-    await expect(installer.install()).rejects.toThrow('Refusing to replace non-Orca command')
+    await expect(installer.install()).rejects.toThrow('Refusing to replace non-Quirky command')
     await expect(readlink(fixture.commandPath)).resolves.toBe(foreignTarget)
     expect(
-      (await readdir(fixture.commandDirectory)).some((name) => name.startsWith('.orca-cli-'))
+      (await readdir(fixture.commandDirectory)).some((name) => name.startsWith('.quirky-cli-'))
     ).toBe(false)
   })
 
@@ -209,8 +209,8 @@ describe.skipIf(process.platform === 'win32')('CLI command filesystem races', ()
       [
         '#!/usr/bin/env bash',
         `CLI='${oldCliPath}'`,
-        'export ORCA_NODE_OPTIONS="${NODE_OPTIONS-}"',
-        'export ORCA_NODE_REPL_EXTERNAL_MODULE="${NODE_REPL_EXTERNAL_MODULE-}"',
+        'export QUIRKY_NODE_OPTIONS="${NODE_OPTIONS-}"',
+        'export QUIRKY_NODE_REPL_EXTERNAL_MODULE="${NODE_REPL_EXTERNAL_MODULE-}"',
         'ELECTRON_RUN_AS_NODE=1 exec electron "$CLI" "$@"'
       ].join('\n')
     )
@@ -225,7 +225,7 @@ describe.skipIf(process.platform === 'win32')('CLI command filesystem races', ()
       }
     })
 
-    await expect(installer.install()).rejects.toThrow('Refusing to replace non-Orca command')
+    await expect(installer.install()).rejects.toThrow('Refusing to replace non-Quirky command')
     await expect(readFile(fixture.commandPath, 'utf8')).resolves.toBe(
       'foreign command written into the inspected inode'
     )
@@ -247,7 +247,7 @@ describe.skipIf(process.platform === 'win32')('CLI command filesystem races', ()
       }
     })
 
-    await expect(installer.remove()).rejects.toThrow('Refusing to remove non-Orca command')
+    await expect(installer.remove()).rejects.toThrow('Refusing to remove non-Quirky command')
     await expect(readlink(fixture.commandPath)).resolves.toBe(foreignTarget)
   })
 
@@ -301,15 +301,15 @@ describe.skipIf(process.platform === 'win32')('CLI command filesystem races', ()
   })
 
   it('keeps a foreign legacy Linux command when readlink loses the inspection race', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-cli-legacy-race-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-cli-legacy-race-'))
     createdRoots.push(root)
     const homePath = join(root, 'home')
     const commandDirectory = join(homePath, '.local', 'bin')
     const resourcesPath = join(root, 'resources')
-    const launcherPath = join(resourcesPath, 'bin', 'orca-ide')
-    const legacyPath = join(commandDirectory, 'orca')
-    const managedLegacyTarget = join(resourcesPath, 'bin', 'orca')
-    const foreignTarget = join(root, 'foreign-orca')
+    const launcherPath = join(resourcesPath, 'bin', 'quirky-ide')
+    const legacyPath = join(commandDirectory, 'quirky')
+    const managedLegacyTarget = join(resourcesPath, 'bin', 'quirky')
+    const foreignTarget = join(root, 'foreign-quirky')
     await mkdir(commandDirectory, { recursive: true })
     await mkdir(dirname(launcherPath), { recursive: true })
     await writeFile(launcherPath, '#!/usr/bin/env bash\n', { mode: 0o755 })
@@ -322,7 +322,7 @@ describe.skipIf(process.platform === 'win32')('CLI command filesystem races', ()
       isPackaged: true,
       userDataPath: join(root, 'user-data'),
       resourcesPath,
-      execPath: join(root, 'orca-ide'),
+      execPath: join(root, 'quirky-ide'),
       appPath: join(root, 'resources', 'app.asar'),
       homePath,
       processPathEnv: commandDirectory
@@ -333,15 +333,15 @@ describe.skipIf(process.platform === 'win32')('CLI command filesystem races', ()
   })
 
   it('keeps a foreign legacy Linux command whose quarantined inode is reused', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-cli-legacy-identity-race-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-cli-legacy-identity-race-'))
     createdRoots.push(root)
     const homePath = join(root, 'home')
     const commandDirectory = join(homePath, '.local', 'bin')
     const resourcesPath = join(root, 'resources')
-    const launcherPath = join(resourcesPath, 'bin', 'orca-ide')
-    const legacyPath = join(commandDirectory, 'orca')
-    const managedTarget = join(resourcesPath, 'bin', 'orca')
-    const foreignTarget = join(root, 'foreign-orca')
+    const launcherPath = join(resourcesPath, 'bin', 'quirky-ide')
+    const legacyPath = join(commandDirectory, 'quirky')
+    const managedTarget = join(resourcesPath, 'bin', 'quirky')
+    const foreignTarget = join(root, 'foreign-quirky')
     await mkdir(commandDirectory, { recursive: true })
     await mkdir(dirname(launcherPath), { recursive: true })
     await writeFile(launcherPath, '#!/usr/bin/env bash\n', { mode: 0o755 })
@@ -374,7 +374,7 @@ describe.skipIf(process.platform === 'win32')('CLI command filesystem races', ()
       isPackaged: true,
       userDataPath: join(root, 'user-data'),
       resourcesPath,
-      execPath: join(root, 'orca-ide'),
+      execPath: join(root, 'quirky-ide'),
       appPath: join(root, 'resources', 'app.asar'),
       homePath,
       processPathEnv: commandDirectory

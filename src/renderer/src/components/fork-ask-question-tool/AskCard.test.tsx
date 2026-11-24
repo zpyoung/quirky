@@ -137,11 +137,11 @@ describe('AskCard — text', () => {
     const { onSubmit } = renderCard([textQuestion])
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Project name?' }), {
-      target: { value: 'orca' }
+      target: { value: 'quirky' }
     })
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
 
-    expect(onSubmit).toHaveBeenCalledWith({ name: { value: 'orca', source: 'input' } }, [])
+    expect(onSubmit).toHaveBeenCalledWith({ name: { value: 'quirky', source: 'input' } }, [])
   })
 
   it('flags an aria-invalid error when a pattern does not match', () => {
@@ -149,7 +149,7 @@ describe('AskCard — text', () => {
     const { onSubmit } = renderCard([patterned])
 
     const input = screen.getByRole('textbox', { name: 'Project name?' })
-    fireEvent.change(input, { target: { value: 'Orca123' } })
+    fireEvent.change(input, { target: { value: 'Quirky123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
 
     expect(input).toHaveAttribute('aria-invalid', 'true')

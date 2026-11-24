@@ -46,7 +46,7 @@
                   "description": "Touch probe file",
                   "subagent_type": "general-purpose",
                   "run_in_background": false,
-                  "prompt": "Run exactly this Bash command and nothing else, in the working directory /Users/user/orca-qa/c9/capture/work:\n\ntouch c9-probe-fg.txt\n\nDo not run any other tools or commands. Report back whether it succeeded."
+                  "prompt": "Run exactly this Bash command and nothing else, in the working directory /Users/user/quirky-qa/c9/capture/work:\n\ntouch c9-probe-fg.txt\n\nDo not run any other tools or commands. Report back whether it succeeded."
                 },
                 "caller": { "type": "direct" }
               }
@@ -80,7 +80,7 @@
               "description": "Touch probe file",
               "subagent_type": "general-purpose",
               "run_in_background": false,
-              "prompt": "Run exactly this Bash command and nothing else, in the working directory /Users/user/orca-qa/c9/capture/work:\n\ntouch c9-probe-fg.txt\n\nDo not run any other tools or commands. Report back whether it succeeded."
+              "prompt": "Run exactly this Bash command and nothing else, in the working directory /Users/user/quirky-qa/c9/capture/work:\n\ntouch c9-probe-fg.txt\n\nDo not run any other tools or commands. Report back whether it succeeded."
             }
           }
         }
@@ -97,7 +97,7 @@
           "is_backgrounded": false,
           "spawn_depth": 1,
           "task_type": "local_agent",
-          "prompt": "Run exactly this Bash command and nothing else, in the working directory /Users/user/orca-qa/c9/capture/work:\n\ntouch c9-probe-fg.txt\n\nDo not run any other tools or commands. Report back whether it succeeded.",
+          "prompt": "Run exactly this Bash command and nothing else, in the working directory /Users/user/quirky-qa/c9/capture/work:\n\ntouch c9-probe-fg.txt\n\nDo not run any other tools or commands. Report back whether it succeeded.",
           "uuid": "9e4bf1f5-fef6-4f55-bfdd-6b6d609dd46c",
           "session_id": "capture-fg-allow"
         }
@@ -111,7 +111,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "Run exactly this Bash command and nothing else, in the working directory /Users/user/orca-qa/c9/capture/work:\n\ntouch c9-probe-fg.txt\n\nDo not run any other tools or commands. Report back whether it succeeded."
+                "text": "Run exactly this Bash command and nothing else, in the working directory /Users/user/quirky-qa/c9/capture/work:\n\ntouch c9-probe-fg.txt\n\nDo not run any other tools or commands. Report back whether it succeeded."
               }
             ]
           },
@@ -220,19 +220,19 @@
               },
               {
                 "type": "addDirectories",
-                "directories": ["/Users/user/orca-qa/c9/capture/work"],
+                "directories": ["/Users/user/quirky-qa/c9/capture/work"],
                 "destination": "session"
               },
               { "type": "setMode", "mode": "acceptEdits", "destination": "session" }
             ],
-            "blocked_path": "/Users/user/orca-qa/c9/capture/work/c9-probe-fg.txt",
+            "blocked_path": "/Users/user/quirky-qa/c9/capture/work/c9-probe-fg.txt",
             "tool_use_id": "toolu_01FhwxeGHaF27KdU7vjJAxB5",
             "agent_id": "a8365f73bf5e489cb"
           }
         }
       },
       {
-        "from": "orca",
+        "from": "quirky",
         "frame": {
           "type": "control_response",
           "response": {
@@ -301,8 +301,8 @@
           "task_id": "a8365f73bf5e489cb",
           "tool_use_id": "toolu_01DF3UWnLKgEKcujFQZDvLHD",
           "status": "completed",
-          "output_file": "/private/tmp/claude-uid/-Users-user-orca-qa-c9-capture-work/02568eb6-49e1-48ce-bfdc-5223c12042f5/tasks/a8365f73bf5e489cb.output",
-          "summary": "The command succeeded. `touch c9-probe-fg.txt` ran in `/Users/user/orca-qa/c9/capture/work`, completed without error and printed nothing.\n\nOne difference from your instructions: I ran it as `cd /Users/user/orca-qa/c9/capture/work && touch c9-probe-fg.txt`, adding a `cd` so it would run in that directory. It was still one Bash call, and I ran no other tools or commands. I didn't check separately th [trimmed]",
+          "output_file": "/private/tmp/claude-uid/-Users-user-quirky-qa-c9-capture-work/02568eb6-49e1-48ce-bfdc-5223c12042f5/tasks/a8365f73bf5e489cb.output",
+          "summary": "The command succeeded. `touch c9-probe-fg.txt` ran in `/Users/user/quirky-qa/c9/capture/work`, completed without error and printed nothing.\n\nOne difference from your instructions: I ran it as `cd /Users/user/quirky-qa/c9/capture/work && touch c9-probe-fg.txt`, adding a `cd` so it would run in that directory. It was still one Bash call, and I ran no other tools or commands. I didn't check separately th [trimmed]",
           "usage": { "total_tokens": 18517, "tool_uses": 1, "duration_ms": 10828 },
           "uuid": "bd20ba60-ed14-4e03-bc0f-a3e77927ae47",
           "session_id": "capture-fg-allow"
@@ -333,7 +333,7 @@
           "timestamp": "2026-09-24T08:03:51.901Z",
           "tool_use_result": {
             "status": "completed",
-            "prompt": "Run exactly this Bash command and nothing else, in the working directory /Users/user/orca-qa/c9/capture/work:\n\ntouch c9-probe-fg.txt\n\nDo not run any other tools or commands. Report back whether it succeeded.",
+            "prompt": "Run exactly this Bash command and nothing else, in the working directory /Users/user/quirky-qa/c9/capture/work:\n\ntouch c9-probe-fg.txt\n\nDo not run any other tools or commands. Report back whether it succeeded.",
             "agentId": "a8365f73bf5e489cb",
             "agentType": "general-purpose",
             "harnessNoteCount": 0,
@@ -342,7 +342,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "The command succeeded. `touch c9-probe-fg.txt` ran in `/Users/user/orca-qa/c9/capture/work`, completed without error and printed nothing.\n\nOne difference from your instructions: I ran it as `cd /Users/user/orca-qa/c9/capture/work && touch c9-probe-fg.txt`, adding a `cd` so it would run in that directory. It was still one Bash call, and I ran no other tools or commands. I didn't check separately th [trimmed]"
+                "text": "The command succeeded. `touch c9-probe-fg.txt` ran in `/Users/user/quirky-qa/c9/capture/work`, completed without error and printed nothing.\n\nOne difference from your instructions: I ran it as `cd /Users/user/quirky-qa/c9/capture/work && touch c9-probe-fg.txt`, adding a `cd` so it would run in that directory. It was still one Bash call, and I ran no other tools or commands. I didn't check separately th [trimmed]"
               }
             ],
             "resolvedModel": "claude-opus-5-5[1m]",
@@ -553,7 +553,7 @@
                   "description": "Touch probe file",
                   "subagent_type": "general-purpose",
                   "run_in_background": true,
-                  "prompt": "Run exactly this Bash command and nothing else, from the working directory /Users/user/orca-qa/c9/capture/work:\n\ntouch c9-probe-bg.txt\n\nDo not run any other tools or commands. After it completes, reply with a one-line confirmation."
+                  "prompt": "Run exactly this Bash command and nothing else, from the working directory /Users/user/quirky-qa/c9/capture/work:\n\ntouch c9-probe-bg.txt\n\nDo not run any other tools or commands. After it completes, reply with a one-line confirmation."
                 },
                 "caller": { "type": "direct" }
               }
@@ -587,7 +587,7 @@
               "description": "Touch probe file",
               "subagent_type": "general-purpose",
               "run_in_background": true,
-              "prompt": "Run exactly this Bash command and nothing else, from the working directory /Users/user/orca-qa/c9/capture/work:\n\ntouch c9-probe-bg.txt\n\nDo not run any other tools or commands. After it completes, reply with a one-line confirmation."
+              "prompt": "Run exactly this Bash command and nothing else, from the working directory /Users/user/quirky-qa/c9/capture/work:\n\ntouch c9-probe-bg.txt\n\nDo not run any other tools or commands. After it completes, reply with a one-line confirmation."
             }
           }
         }
@@ -620,7 +620,7 @@
           "is_backgrounded": true,
           "spawn_depth": 1,
           "task_type": "local_agent",
-          "prompt": "Run exactly this Bash command and nothing else, from the working directory /Users/user/orca-qa/c9/capture/work:\n\ntouch c9-probe-bg.txt\n\nDo not run any other tools or commands. After it completes, reply with a one-line confirmation.",
+          "prompt": "Run exactly this Bash command and nothing else, from the working directory /Users/user/quirky-qa/c9/capture/work:\n\ntouch c9-probe-bg.txt\n\nDo not run any other tools or commands. After it completes, reply with a one-line confirmation.",
           "uuid": "f5c64953-8306-48fc-89dc-85e7d1818635",
           "session_id": "capture-bg-allow"
         }
@@ -654,8 +654,8 @@
             "agentId": "abf3e75543ca0d2a2",
             "description": "Touch probe file",
             "resolvedModel": "claude-opus-5-5[1m]",
-            "prompt": "Run exactly this Bash command and nothing else, from the working directory /Users/user/orca-qa/c9/capture/work:\n\ntouch c9-probe-bg.txt\n\nDo not run any other tools or commands. After it completes, reply with a one-line confirmation.",
-            "outputFile": "/private/tmp/claude-uid/-Users-user-orca-qa-c9-capture-work/f76ade89-32f0-445b-858f-3c34ae486bc1/tasks/abf3e75543ca0d2a2.output",
+            "prompt": "Run exactly this Bash command and nothing else, from the working directory /Users/user/quirky-qa/c9/capture/work:\n\ntouch c9-probe-bg.txt\n\nDo not run any other tools or commands. After it completes, reply with a one-line confirmation.",
+            "outputFile": "/private/tmp/claude-uid/-Users-user-quirky-qa-c9-capture-work/f76ade89-32f0-445b-858f-3c34ae486bc1/tasks/abf3e75543ca0d2a2.output",
             "canReadOutputFile": true
           }
         }
@@ -757,12 +757,12 @@
               },
               {
                 "type": "addDirectories",
-                "directories": ["/Users/user/orca-qa/c9/capture/work"],
+                "directories": ["/Users/user/quirky-qa/c9/capture/work"],
                 "destination": "session"
               },
               { "type": "setMode", "mode": "acceptEdits", "destination": "session" }
             ],
-            "blocked_path": "/Users/user/orca-qa/c9/capture/work/c9-probe-bg.txt",
+            "blocked_path": "/Users/user/quirky-qa/c9/capture/work/c9-probe-bg.txt",
             "tool_use_id": "toolu_01JLinH9tUBehmaD5aqGEQEp",
             "agent_id": "abf3e75543ca0d2a2"
           }
@@ -893,7 +893,7 @@
         }
       },
       {
-        "from": "orca",
+        "from": "quirky",
         "frame": {
           "type": "control_response",
           "response": {
@@ -955,7 +955,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "Created `c9-probe-bg.txt` in `/Users/user/orca-qa/c9/capture/work`. One difference from your instructions: I ran `cd /Users/user/orca-qa/c9/capture/work && touch c9-probe-bg.txt` rather than the bare `touch`, to make sure it ran in that directory."
+                "text": "Created `c9-probe-bg.txt` in `/Users/user/quirky-qa/c9/capture/work`. One difference from your instructions: I ran `cd /Users/user/quirky-qa/c9/capture/work && touch c9-probe-bg.txt` rather than the bare `touch`, to make sure it ran in that directory."
               }
             ],
             "container": null,
@@ -1015,8 +1015,8 @@
           "task_id": "abf3e75543ca0d2a2",
           "tool_use_id": "toolu_0113cofGsD2kJXoxmbapdZbE",
           "status": "completed",
-          "output_file": "/private/tmp/claude-uid/-Users-user-orca-qa-c9-capture-work/f76ade89-32f0-445b-858f-3c34ae486bc1/tasks/abf3e75543ca0d2a2.output",
-          "summary": "Created `c9-probe-bg.txt` in `/Users/user/orca-qa/c9/capture/work`. One difference from your instructions: I ran `cd /Users/user/orca-qa/c9/capture/work && touch c9-probe-bg.txt` rather than the bare `touch`, to make sure it ran in that directory.",
+          "output_file": "/private/tmp/claude-uid/-Users-user-quirky-qa-c9-capture-work/f76ade89-32f0-445b-858f-3c34ae486bc1/tasks/abf3e75543ca0d2a2.output",
+          "summary": "Created `c9-probe-bg.txt` in `/Users/user/quirky-qa/c9/capture/work`. One difference from your instructions: I ran `cd /Users/user/quirky-qa/c9/capture/work && touch c9-probe-bg.txt` rather than the bare `touch`, to make sure it ran in that directory.",
           "usage": { "total_tokens": 17106, "tool_uses": 1, "duration_ms": 10017 },
           "uuid": "315a7347-5eb3-4caa-8079-e1f23b7fd65d",
           "session_id": "capture-bg-allow"

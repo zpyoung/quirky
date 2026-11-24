@@ -115,9 +115,9 @@ describe('a restart batch holds a chat until its continuation is handed over', (
   })
 })
 
-// No source: Orca's own instruction is no person's, so a restart or a close rejects it, never keeps
+// No source: Quirky's own instruction is no person's, so a restart or a close rejects it, never keeps
 // it as a card; the next restart offers the continuation again.
-it('sends the continuation with no source, as Orca’s and no person’s', async () => {
+it('sends the continuation with no source, as Quirky’s and no person’s', async () => {
   const send = vi.fn(async () => {
     throw new Error('refused')
   })

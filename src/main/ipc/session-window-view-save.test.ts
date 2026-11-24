@@ -15,7 +15,7 @@ const { handlers } = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
 }))
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false },
@@ -85,7 +85,7 @@ async function call(channel: string, ...args: unknown[]): Promise<void> {
 describe('a window save in a layout-owner build', () => {
   let store: ReturnType<typeof createStore>
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
     store = createStore()
     // Main's reconnect facts are pinned elsewhere (window-save-reconnect-facts.test.ts): kept as saved.
     const runtime = {

@@ -39,7 +39,7 @@ describe('runEntryRatchet', () => {
   })
 
   function ratchet(current) {
-    root = mkdtempSync(join(tmpdir(), 'orca-ratchet-'))
+    root = mkdtempSync(join(tmpdir(), 'quirky-ratchet-'))
     writeFileSync(join(root, 'baseline.txt'), '# header\na.ts\nb.ts\n')
     return {
       name: 'demo',
@@ -76,7 +76,7 @@ describe('runCountRatchet', () => {
   })
 
   function ratchet(current) {
-    root = mkdtempSync(join(tmpdir(), 'orca-count-ratchet-'))
+    root = mkdtempSync(join(tmpdir(), 'quirky-count-ratchet-'))
     writeFileSync(join(root, 'baseline.txt'), '# header\n2 a.ts # why\n1 b.ts\n')
     return {
       name: 'demo',

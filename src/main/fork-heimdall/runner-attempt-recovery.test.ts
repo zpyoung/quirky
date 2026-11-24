@@ -16,7 +16,7 @@ import type { ObjectiveForgeAccess } from '../fork-heimdall-objective/objective-
 import type { ObjectiveStore } from '../fork-heimdall-objective/objective-store'
 import { decideObjective } from '../../shared/fork-heimdall-objective/decision'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { WatcherAttemptRecovery } from './runner-attempt-recovery'
 import type { RunnerLedgerStore, WatcherRunner } from './runner-state'
 
@@ -244,7 +244,7 @@ function buildHarness(): {
 
   const executor = createObjectiveActionExecutor({
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispatchRecord stays null in this fixture, so resolveObjectiveDispatchOutcome's only runtime access (resolveObjectiveDispatchTarget) is never reached.
-    runtime: {} as OrcaRuntimeService,
+    runtime: {} as QuirkyRuntimeService,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this test only calls resolveOutcome(), which never reads dependencies.store (only execute() does).
     store: {} as Store,
     objectiveStore,

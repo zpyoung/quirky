@@ -13,7 +13,7 @@ let context: Awaited<ReturnType<typeof prepareHostMeasurement>>
 let copy: string
 beforeAll(async () => {
   context = await prepareHostMeasurement()
-  copy = await mkdtemp(path.join(tmpdir(), 'orca-host-measurement-identity-'))
+  copy = await mkdtemp(path.join(tmpdir(), 'quirky-host-measurement-identity-'))
   for (const name of Object.keys(context.identity.sourceHashes)) {
     const target = path.join(copy, name)
     await mkdir(path.dirname(target), { recursive: true })

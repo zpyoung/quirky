@@ -70,7 +70,7 @@ describe('useGitHubSlugMetadata', () => {
 
     function LabelsProbe(): null {
       renders += 1
-      const metadata = useRepoLabelsBySlug('stablyai', 'orca', { kind: 'local' })
+      const metadata = useRepoLabelsBySlug('stablyai', 'quirky', { kind: 'local' })
       labels = metadata.data
       return null
     }
@@ -81,7 +81,7 @@ describe('useGitHubSlugMetadata', () => {
     expect(labels).toEqual(['bug'])
     expect(apiMocks.listLabelsBySlug).toHaveBeenCalledExactlyOnceWith({
       owner: 'stablyai',
-      repo: 'orca',
+      repo: 'quirky',
       host: 'github.com'
     })
     expect(renders).toBeLessThanOrEqual(4)
@@ -97,7 +97,7 @@ describe('useGitHubSlugMetadata', () => {
 
     function AssigneesProbe(): null {
       renders += 1
-      const metadata = useRepoAssigneesBySlug('stablyai', 'orca', ['jinwoo'], { kind: 'local' })
+      const metadata = useRepoAssigneesBySlug('stablyai', 'quirky', ['jinwoo'], { kind: 'local' })
       assigneeLogins = metadata.data.map((user) => user.login)
       return null
     }
@@ -108,7 +108,7 @@ describe('useGitHubSlugMetadata', () => {
     expect(assigneeLogins).toEqual(['jinwoo'])
     expect(apiMocks.listAssignableUsersBySlug).toHaveBeenCalledExactlyOnceWith({
       owner: 'stablyai',
-      repo: 'orca',
+      repo: 'quirky',
       host: 'github.com',
       seedLogins: ['jinwoo']
     })
@@ -125,7 +125,7 @@ describe('useGitHubSlugMetadata', () => {
 
     function FailingLabelsProbe(): null {
       renders += 1
-      const metadata = useRepoLabelsBySlug('stablyai', 'orca', { kind: 'local' })
+      const metadata = useRepoLabelsBySlug('stablyai', 'quirky', { kind: 'local' })
       error = metadata.error
       return null
     }
@@ -145,7 +145,7 @@ describe('useGitHubSlugMetadata', () => {
     apiMocks.listLabelsBySlug.mockResolvedValue({ ok: true, labels: ['enterprise'] })
 
     function LabelsProbe(): null {
-      useRepoLabelsBySlug('stablyai', 'orca', { kind: 'local' }, 'ghe.example.com')
+      useRepoLabelsBySlug('stablyai', 'quirky', { kind: 'local' }, 'ghe.example.com')
       return null
     }
 
@@ -154,7 +154,7 @@ describe('useGitHubSlugMetadata', () => {
 
     expect(apiMocks.listLabelsBySlug).toHaveBeenCalledExactlyOnceWith({
       owner: 'stablyai',
-      repo: 'orca',
+      repo: 'quirky',
       host: 'ghe.example.com'
     })
   })
@@ -166,7 +166,7 @@ describe('useGitHubSlugMetadata', () => {
 
     function FailingAssigneesProbe(): null {
       renders += 1
-      const metadata = useRepoAssigneesBySlug('stablyai', 'orca', ['jinwoo'], { kind: 'local' })
+      const metadata = useRepoAssigneesBySlug('stablyai', 'quirky', ['jinwoo'], { kind: 'local' })
       error = metadata.error
       return null
     }

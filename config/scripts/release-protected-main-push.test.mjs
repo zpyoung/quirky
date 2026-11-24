@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 
@@ -9,7 +9,7 @@ const workflow = parse(readFileSync('.github/workflows/release-cut.yml', 'utf8')
 const step = workflow.jobs.cut.steps.find((candidate) => candidate.name === 'Push tag')
 
 function pushRelease(mode, pushMain = 'true') {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-release-push-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-release-push-'))
   try {
     writeFileSync(
       join(directory, 'step.sh'),

@@ -29,7 +29,7 @@ describe('Dispatch mailbox Delivery', () => {
 
   it('wakes once, replays after restart, and leaves concurrent guidance for the next ack', async () => {
     vi.useFakeTimers()
-    const directory = mkdtempSync(join(tmpdir(), 'orca-dispatch-delivery-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-dispatch-delivery-'))
     temporaryDirectories.push(directory)
     const dbPath = join(directory, 'orchestration.db')
     const firstDb = new OrchestrationDb(dbPath)
@@ -107,7 +107,7 @@ describe('Dispatch mailbox Delivery', () => {
     'keeps unread attention after an ambiguous %s crash without resubmitting',
     async (_, phase) => {
       vi.useFakeTimers()
-      const directory = mkdtempSync(join(tmpdir(), 'orca-dispatch-ambiguous-pointer-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-dispatch-ambiguous-pointer-'))
       temporaryDirectories.push(directory)
       const dbPath = join(directory, 'orchestration.db')
       const firstDb = new OrchestrationDb(dbPath)

@@ -1,9 +1,9 @@
 {
-  "title": "The Orca Model",
+  "title": "The Quirky Model",
   "defaultOpen": true,
   "pages": [
     "worktrees",
-    "orca-yaml",
+    "quirky-yaml",
     "tabs-panes-splits",
     "agents-sessions",
     "session-restore",

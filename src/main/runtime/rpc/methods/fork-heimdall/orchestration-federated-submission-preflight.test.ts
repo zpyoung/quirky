@@ -8,7 +8,7 @@ import {
 } from '../../../../../shared/protocol-version'
 import type { RuntimeRpcResponse } from '../../../../../shared/runtime-rpc-envelope'
 import type { WatcherEnrollment } from '../../../../../shared/fork-heimdall/watcher-types'
-import { OrcaRuntimeService } from '../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { OrchestrationDb } from '../../../orchestration/db'
 import type { OrchestrationEnvironmentTransport } from '../../../orchestration/environment-transport'
 import { getOrchestrationPeerCapabilityCache } from '../../../orchestration/orchestration-peer-capability-cache'
@@ -53,8 +53,8 @@ function enrollmentForRun(runId: string): WatcherEnrollment {
 describe('Heimdall federated submission preflight', () => {
   let homeDb: OrchestrationDb
   let workerDb: OrchestrationDb
-  let homeRuntime: OrcaRuntimeService
-  let workerRuntime: OrcaRuntimeService
+  let homeRuntime: QuirkyRuntimeService
+  let workerRuntime: QuirkyRuntimeService
   let homeDispatcher: RpcDispatcher
   let workerDispatcher: RpcDispatcher
   let failNextAcknowledgmentBeforeDelivery: boolean
@@ -64,7 +64,7 @@ describe('Heimdall federated submission preflight', () => {
   beforeEach(() => {
     homeDb = new OrchestrationDb(':memory:')
     workerDb = new OrchestrationDb(':memory:')
-    workerRuntime = new OrcaRuntimeService()
+    workerRuntime = new QuirkyRuntimeService()
     workerRuntime.setOrchestrationDb(workerDb)
     workerDispatcher = new RpcDispatcher({ runtime: workerRuntime, methods: ORCHESTRATION_METHODS })
     failNextAcknowledgmentBeforeDelivery = false
@@ -104,7 +104,7 @@ describe('Heimdall federated submission preflight', () => {
         })
       }
     }
-    homeRuntime = new OrcaRuntimeService(null, undefined, {
+    homeRuntime = new QuirkyRuntimeService(null, undefined, {
       orchestrationEnvironmentTransport: transport
     })
     homeRuntime.setOrchestrationDb(homeDb)
@@ -150,7 +150,7 @@ describe('Heimdall federated submission preflight', () => {
     vi.spyOn(workerRuntime, 'getTerminalProcessIncarnation').mockReturnValue(
       'windows_runtime:pty:1'
     )
-    vi.spyOn(workerRuntime, 'getTerminalOrchestrationCliCommand').mockReturnValue('orca')
+    vi.spyOn(workerRuntime, 'getTerminalOrchestrationCliCommand').mockReturnValue('quirky')
     vi.spyOn(workerRuntime, 'sendTerminalAgentPrompt').mockResolvedValue({
       handle: 'term_windows_worker',
       accepted: true,
@@ -394,7 +394,7 @@ describe('Heimdall federated submission preflight', () => {
             taskId: task.id,
             dispatchId: dispatch.id,
             outcome: 'succeeded',
-            reportPath: '.orca/heimdall/report.json',
+            reportPath: '.quirky/heimdall/report.json',
             filesModified: ['src/legacy.ts'],
             additiveFutureField: { schema: 4 }
           })
@@ -426,7 +426,7 @@ describe('Heimdall federated submission preflight', () => {
         reportedOutcome: 'succeeded',
         messageId: relay.message_id,
         body: 'The worker claimed success before Run-home validation.',
-        reportPath: '.orca/heimdall/report.json',
+        reportPath: '.quirky/heimdall/report.json',
         filesModified: ['src/legacy.ts'],
         preflightRejection: {
           code: REJECTION.code,
@@ -444,7 +444,7 @@ describe('Heimdall federated submission preflight', () => {
         dispatchId: dispatch.id,
         outcome: 'succeeded',
         additiveFutureField: { schema: 4 },
-        _orcaLifecycleRejection: {
+        _quirkyLifecycleRejection: {
           code: REJECTION.code,
           reason: expect.stringContaining('No same-Dispatch correction is available'),
           originalReason: REJECTION.reason,
@@ -481,7 +481,7 @@ describe('Heimdall federated submission preflight', () => {
             dispatchId: dispatch.id,
             taskId: task.id,
             outcome: 'failed',
-            reportPath: '.orca/heimdall/report.json',
+            reportPath: '.quirky/heimdall/report.json',
             filesModified: ['src/legacy.ts'],
             reportRejection: {
               code: REJECTION.code,

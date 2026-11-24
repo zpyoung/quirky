@@ -96,7 +96,10 @@ export function AgentPermissionsSetting(props: AgentPermissionsSettingProps): Re
         </p>
         {!autoSupported ? (
           <p className="text-xs text-muted-foreground">
-            {translate('settings.agents.autoUnsupported', 'Auto needs a newer Orca on this host.')}
+            {translate(
+              'settings.agents.autoUnsupported',
+              'Auto needs a newer Quirky on this host.'
+            )}
           </p>
         ) : null}
       </div>

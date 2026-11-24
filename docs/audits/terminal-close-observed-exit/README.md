@@ -9,8 +9,8 @@ The fix captures the stamped PTY incarnation before awaiting the stop. A false s
 From the checkout, with dependencies already installed:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/terminal-close-observed-exit/reproduce.mjs /tmp/terminal-close-observed-exit.json
-ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/runtime/terminal-close-observed-exit.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/terminal-close-observed-exit/reproduce.mjs /tmp/terminal-close-observed-exit.json
+QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/runtime/terminal-close-observed-exit.test.ts
 ```
 
 The script runs eight scenarios before and after the change, reversing only the new capture and guard for the before variant. It uses the actual runtime close method, runtime controller, daemon router, and two real daemon socket endpoints. The subprocess itself is controlled by the existing test harness. The script uses temporary configuration files, checks the expected outcomes, records source hashes, and removes its temporary directory. It does not install dependencies, launch a UI, or alter the checkout. `results.json` preserves the recorded result; use a separate output path when rerunning.
@@ -32,6 +32,6 @@ In all socket scenarios, the physical provider event and runtime exit listener s
 
 This change is stacked on [#21000](https://github.com/stablyai/orca/pull/21000), branch `np-oom-scan-daemon-late-exit`, and reuses its actual daemon socket fixture and late physical-exit reconciliation. #21000 fixes final DATA arriving after a synthetic exit. This change prevents a redundant synthetic exit after a physical exit has already been accepted. The before variant is the current checkout with this narrow guard reversed, not a pristine historical build.
 
-The unconditional fallback and exit-cause assignment are present in the reported `v1.4.197` source (`orca-runtime-stop-explicitly-closed-tab-ptys.ts`, `orca-runtime-on-pty-exit.ts`). They explain a concrete way to get a failed close and `stop_unverified` despite a confirmed local exit. [#19018](https://github.com/stablyai/orca/issues/19018) does not establish that an unrelated preserved daemon was unavailable; this is a conditional explanation, not proof of the reporter's exact ordering.
+The unconditional fallback and exit-cause assignment are present in the reported `v1.4.197` source (`quirky-runtime-stop-explicitly-closed-tab-ptys.ts`, `quirky-runtime-on-pty-exit.ts`). They explain a concrete way to get a failed close and `stop_unverified` despite a confirmed local exit. [#19018](https://github.com/stablyai/orca/issues/19018) does not establish that an unrelated preserved daemon was unavailable; this is a conditional explanation, not proof of the reporter's exact ordering.
 
 Generic inventory remains fail-closed. Exact-owner verification across daemon generations is separate work. This change does not solve a thrown stop, SSH loss of contact, unstamped identities, or all same-ID shutdown races. A missing diagnostics row remains insufficient evidence of process death.

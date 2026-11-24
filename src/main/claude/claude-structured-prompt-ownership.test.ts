@@ -323,11 +323,11 @@ describe('Claude live prompt ownership', () => {
             ? [
                 {
                   ...item,
-                  identity: { provider: 'orca', clientMessageId: 'group:first' }
+                  identity: { provider: 'quirky', clientMessageId: 'group:first' }
                 },
                 {
                   ...item,
-                  identity: { provider: 'orca', clientMessageId: 'group:second' }
+                  identity: { provider: 'quirky', clientMessageId: 'group:second' }
                 }
               ]
             : []
@@ -354,15 +354,15 @@ describe('Claude live prompt ownership', () => {
       await prompts.whenWritten(prompt.promptKey)
 
       expect(tryAppendItem.mock.calls.map(([identity]) => agentJournalItemKey(identity))).toEqual([
-        'orca:group%3Afirst',
-        'orca:group%3Asecond'
+        'quirky:group%3Afirst',
+        'quirky:group%3Asecond'
       ])
       expect([...admittedRows.keys()]).toEqual(
-        ['orca:group%3Afirst', 'orca:group%3Asecond'].filter((_, index) => index !== refusedAt)
+        ['quirky:group%3Afirst', 'quirky:group%3Asecond'].filter((_, index) => index !== refusedAt)
       )
       expect(bindPromptItemId.mock.calls).toEqual([
-        ['orca:group%3Afirst', prompt.promptKey],
-        ['orca:group%3Asecond', prompt.promptKey]
+        ['quirky:group%3Afirst', prompt.promptKey],
+        ['quirky:group%3Asecond', prompt.promptKey]
       ])
       expect(written).toHaveBeenCalledTimes(refusedAt === null ? 1 : 0)
       expect([...prompts.openCards()]).toEqual(

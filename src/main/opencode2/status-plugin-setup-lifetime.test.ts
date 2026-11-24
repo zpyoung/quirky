@@ -5,7 +5,7 @@ type Hooks = { event: (event: unknown) => Promise<void>; dispose?: () => Promise
 
 function createSetup(factory: () => Promise<Hooks>) {
   const setup: unknown = new Function(
-    'OrcaOpenCodeStatusPlugin',
+    'QuirkyOpenCodeStatusPlugin',
     'AbortController',
     'console',
     `${getOpenCode2SetupSource().join('\n')}\nreturn setupOpenCode2Status;`

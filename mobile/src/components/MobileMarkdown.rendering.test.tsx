@@ -120,8 +120,8 @@ describe('MobileMarkdown rendering', () => {
     ['C19: underlined headings and closing hashes', 'Title\n=====\n\n## Sub ##', ['Title', 'Sub']],
     [
       'a README header block reads as its heading',
-      '<h1 align="center">Orca</h1>\n\nText',
-      ['Orca', 'Text']
+      '<h1 align="center">Quirky</h1>\n\nText',
+      ['Quirky', 'Text']
     ]
   ])('%s', (_name, content, expected) => {
     expect(texts(render(content))).toEqual(expected)

@@ -125,7 +125,7 @@ function routeOwnerlessIdle(
     return
   }
   const messageId = `prose-question:${observation.idleSinceMs}`
-  const reason = `Worker asked a question in prose instead of orca ask: ${
+  const reason = `Worker asked a question in prose instead of quirky ask: ${
     clipWorkerLastMessage(message, PARK_EXCERPT_MAX_BYTES).text
   }`
   const escalationId = appendWorkerEscalation(dependencies, watcherId, {

@@ -73,6 +73,6 @@ export async function claudeLaunchResumesTranscript(input: {
       )
     }
   }
-  // Found nowhere Orca knows of (e.g. a folder since removed): the stored leaf still says it ran.
+  // Found nowhere Quirky knows of (e.g. a folder since removed): the stored leaf still says it ran.
   return true
 }

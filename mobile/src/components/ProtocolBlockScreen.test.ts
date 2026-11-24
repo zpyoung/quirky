@@ -81,9 +81,9 @@ describe('ProtocolBlockScreen', () => {
       desktopVersion: 5,
       requiredMobileVersion: 99
     })
-    expect(mobile).toContain('Update Orca Mobile')
+    expect(mobile).toContain('Update Quirky Mobile')
     expect(mobile).toContain(
-      'This desktop needs a newer Orca Mobile app. Update Orca Mobile from the App Store, then try this host again.'
+      'This desktop needs a newer Quirky Mobile app. Update Quirky Mobile from the App Store, then try this host again.'
     )
     expect(mobile).toContain('Open App Store')
     act(() => renderer?.unmount())
@@ -94,9 +94,9 @@ describe('ProtocolBlockScreen', () => {
       desktopVersion: 0,
       requiredDesktopVersion: 2
     })
-    expect(desktop).toContain('Update Orca on your computer')
+    expect(desktop).toContain('Update Quirky on your computer')
     expect(desktop).toContain(
-      'This paired desktop app is too old for your current Orca Mobile app. Update Orca on your computer, then try this host again.'
+      'This paired desktop app is too old for your current Quirky Mobile app. Update Quirky on your computer, then try this host again.'
     )
     expect(desktop).toContain('Open GitHub Releases')
   })
@@ -104,9 +104,9 @@ describe('ProtocolBlockScreen', () => {
   it('tells a host without a bundle, or without this screen, the desktop is too old', () => {
     for (const reason of ['bundle-unavailable', 'page-route-unlisted'] as const) {
       const output = render({ kind: 'blocked', reason })
-      expect(output).toContain('Update Orca on your computer')
+      expect(output).toContain('Update Quirky on your computer')
       expect(output).toContain(
-        'This paired desktop app is too old for your current Orca Mobile app. Update Orca on your computer, then try this host again.'
+        'This paired desktop app is too old for your current Quirky Mobile app. Update Quirky on your computer, then try this host again.'
       )
       expect(output).not.toContain('does not include the mobile workspace')
       expect(primaryActionUrl()).toBe(RELEASES_URL)
@@ -115,8 +115,8 @@ describe('ProtocolBlockScreen', () => {
 
   it('sends a screen that needs a grant this app lacks to the mobile update', () => {
     const output = render({ kind: 'blocked', reason: 'page-route-grant-missing' })
-    expect(output).toContain('Update Orca Mobile')
-    expect(output).toContain("This desktop's mobile workspace needs a newer Orca Mobile app.")
+    expect(output).toContain('Update Quirky Mobile')
+    expect(output).toContain("This desktop's mobile workspace needs a newer Quirky Mobile app.")
   })
 
   it('sends an unknown manifest schema to the mobile update', () => {
@@ -125,11 +125,11 @@ describe('ProtocolBlockScreen', () => {
       reason: 'bundle-shell-too-old',
       schemaVersion: 2
     })
-    expect(output).toContain('Update Orca Mobile')
+    expect(output).toContain('Update Quirky Mobile')
     expect(output).toContain(
-      "This desktop's mobile workspace needs a newer Orca Mobile app. Update Orca Mobile from the App Store, then try this host again."
+      "This desktop's mobile workspace needs a newer Quirky Mobile app. Update Quirky Mobile from the App Store, then try this host again."
     )
-    expect(primaryActionUrl()).toBe('itms-apps://apps.apple.com/app/orca-ide/id6766130217')
+    expect(primaryActionUrl()).toBe('itms-apps://apps.apple.com/app/quirky-ide/id6766130217')
   })
 
   it('offers no download for a cached bundle the host outgrew, because none would clear it', () => {
@@ -148,7 +148,7 @@ describe('ProtocolBlockScreen', () => {
     // A store update cannot replace a stale cache, so neither store link is offered.
     expect(output).not.toContain('Open App Store')
     expect(output).not.toContain('Open GitHub Releases')
-    expect(output).not.toContain('Update Orca')
+    expect(output).not.toContain('Update Quirky')
     // Back to hosts is the only button left, and it is not a download.
     expect(pressableCount()).toBe(1)
     expect(output).toContain('Back to hosts')
@@ -165,8 +165,10 @@ describe('ProtocolBlockScreen', () => {
       hostProtocolVersion: 1,
       requiredHostProtocolVersion: 2
     })
-    expect(output).toContain('Update Orca on your computer')
-    expect(output).toContain('This paired desktop app is too old for your current Orca Mobile app')
+    expect(output).toContain('Update Quirky on your computer')
+    expect(output).toContain(
+      'This paired desktop app is too old for your current Quirky Mobile app'
+    )
     expect(primaryActionUrl()).toBe(RELEASES_URL)
   })
 
@@ -178,8 +180,10 @@ describe('ProtocolBlockScreen', () => {
       pageVersion: 0,
       requiredPageVersion: 1
     })
-    expect(output).toContain('Update Orca on your computer')
-    expect(output).toContain('This paired desktop app is too old for your current Orca Mobile app')
+    expect(output).toContain('Update Quirky on your computer')
+    expect(output).toContain(
+      'This paired desktop app is too old for your current Quirky Mobile app'
+    )
     expect(primaryActionUrl()).toBe(RELEASES_URL)
   })
 
@@ -190,7 +194,7 @@ describe('ProtocolBlockScreen', () => {
       reason: 'bundle-shell-too-old',
       schemaVersion: 2
     })
-    expect(output).toContain('Update Orca Mobile from GitHub Releases')
+    expect(output).toContain('Update Quirky Mobile from GitHub Releases')
     expect(primaryActionUrl()).toBe(RELEASES_URL)
   })
 
@@ -213,7 +217,7 @@ describe('ProtocolBlockScreen', () => {
         { kind: 'blocked', reason: 'bundle-shell-too-old', schemaVersion: 2 },
         release
       )
-      expect(output).toContain('Get Orca 0.0.52')
+      expect(output).toContain('Get Quirky 0.0.52')
       expect(output).not.toContain('Open App Store')
       expect(output).not.toContain('Open GitHub Releases')
       expect(primaryActionUrl()).toBe(release.url)
@@ -221,13 +225,13 @@ describe('ProtocolBlockScreen', () => {
 
     it('leaves the desktop wall on the desktop releases', () => {
       const output = render({ kind: 'blocked', reason: 'bundle-unavailable' }, release)
-      expect(output).not.toContain('Get Orca')
+      expect(output).not.toContain('Get Quirky')
       expect(primaryActionUrl()).toBe(RELEASES_URL)
     })
   })
 
   it.each([
-    ['ios', 'Open App Store', 'itms-apps://apps.apple.com/app/orca-ide/id6766130217'],
+    ['ios', 'Open App Store', 'itms-apps://apps.apple.com/app/quirky-ide/id6766130217'],
     ['android', 'Open GitHub Releases', RELEASES_URL]
   ] as const)('keeps the %s store link when no release is known', (os, label, url) => {
     nativeTestState.platform.OS = os
@@ -236,7 +240,7 @@ describe('ProtocolBlockScreen', () => {
       null
     )
     expect(output).toContain(label)
-    expect(output).not.toContain('Get Orca')
+    expect(output).not.toContain('Get Quirky')
     expect(primaryActionUrl()).toBe(url)
   })
 })

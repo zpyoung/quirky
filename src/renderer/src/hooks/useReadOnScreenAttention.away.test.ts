@@ -16,7 +16,7 @@ const previousApi = window.api
 beforeEach(() => {
   readAway.mockReset().mockResolvedValue(true)
   dismiss.mockReset()
-  vi.stubGlobal('__ORCA_WEB_CLIENT__', false)
+  vi.stubGlobal('__QUIRKY_WEB_CLIENT__', false)
   Object.assign(window, { api: { notifications: { getDesktopAwayState: readAway, dismiss } } })
   vi.spyOn(document, 'hasFocus').mockReturnValue(true)
   useAppStore.setState({
@@ -110,7 +110,7 @@ it('does not acknowledge when the presence query fails or the hook unmounts', as
 })
 
 it('acknowledges focused web completions despite unsupported native presence', async () => {
-  vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+  vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
   readAway.mockImplementation(createNotificationsApi().getDesktopAwayState)
   renderHook(() => useReadOnScreenAttention())
   await act(async () => {})
@@ -130,7 +130,7 @@ it('keeps native unknown presence conservative', async () => {
 })
 
 it.each(['focus', 'visibilitychange'])('rescans pending web attention on %s', async (signal) => {
-  vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+  vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
   readAway.mockImplementation(createNotificationsApi().getDesktopAwayState)
   const focus = vi.mocked(document.hasFocus).mockReturnValue(false)
   const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
@@ -213,7 +213,7 @@ it('rechecks the selected pane after a coalesced presence query resolves', async
 })
 
 it.each([false, true])('preserves manual unread across return signals (web=%s)', async (web) => {
-  vi.stubGlobal('__ORCA_WEB_CLIENT__', web)
+  vi.stubGlobal('__QUIRKY_WEB_CLIENT__', web)
   readAway.mockResolvedValue(false)
   renderHook(() => useReadOnScreenAttention())
   await act(async () => {})

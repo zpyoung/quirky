@@ -11,12 +11,12 @@ const mocks = vi.hoisted(() => ({
   environments: [{ id: 'env-1' }]
 }))
 
-vi.mock('electron', () => ({ app: { getPath: () => '/tmp/orca-test-user-data' } }))
+vi.mock('electron', () => ({ app: { getPath: () => '/tmp/quirky-test-user-data' } }))
 vi.mock('../../shared/runtime-environment-store', () => ({
   listEnvironments: () => mocks.environments
 }))
 vi.mock('./browser-route-partition-binding-runtime', () => ({
-  activeBrowserRoutePartitionOrcaProfileId: () => 'local-default'
+  activeBrowserRoutePartitionQuirkyProfileId: () => 'local-default'
 }))
 vi.mock('./browser-route-partition-storage-dependencies', () => ({
   browserRoutePartitionStorageDependencies: (isPartitionLive: (p: string) => boolean) => ({
@@ -29,7 +29,7 @@ vi.mock('./browser-route-partition-storage-dependencies', () => ({
         return partitions.length
       }
     },
-    partitionDataRoot: '/tmp/orca-test-partitions',
+    partitionDataRoot: '/tmp/quirky-test-partitions',
     isPartitionLive,
     clearPartitionStorage: async (partition: string) => {
       mocks.cleared.push(partition)
@@ -46,30 +46,30 @@ import {
   collectOrphanedBrowserRoutePartitionStorage
 } from './browser-route-partition-storage-runtime'
 
-const ENV_PARTITION = `persist:orca-browser-v1-${'a'.repeat(64)}`
-const LIVE_TARGET_PARTITION = `persist:orca-browser-v1-${'b'.repeat(64)}`
-const REMOVED_TARGET_PARTITION = `persist:orca-browser-v1-${'c'.repeat(64)}`
+const ENV_PARTITION = `persist:quirky-browser-v1-${'a'.repeat(64)}`
+const LIVE_TARGET_PARTITION = `persist:quirky-browser-v1-${'b'.repeat(64)}`
+const REMOVED_TARGET_PARTITION = `persist:quirky-browser-v1-${'c'.repeat(64)}`
 
 function seedBindings(): void {
   mocks.bindings.clear()
   mocks.bindings.set(ENV_PARTITION, {
     fingerprint: '1'.repeat(64),
     storageScope: deriveBrowserRoutePartitionStorageScope({
-      orcaProfileId: 'local-default',
+      quirkyProfileId: 'local-default',
       environmentId: 'env-1'
     })
   })
   mocks.bindings.set(LIVE_TARGET_PARTITION, {
     fingerprint: '2'.repeat(64),
     storageScope: deriveLocalSshBrowserRoutePartitionStorageScope({
-      orcaProfileId: 'local-default',
+      quirkyProfileId: 'local-default',
       targetId: 'target-live'
     })
   })
   mocks.bindings.set(REMOVED_TARGET_PARTITION, {
     fingerprint: '3'.repeat(64),
     storageScope: deriveLocalSshBrowserRoutePartitionStorageScope({
-      orcaProfileId: 'local-default',
+      quirkyProfileId: 'local-default',
       targetId: 'target-removed'
     })
   })

@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
-import { claudeSessionIdForOrcaSession } from '../claude/claude-structured-launch-resolution'
+import { claudeSessionIdForQuirkySession } from '../claude/claude-structured-launch-resolution'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import { createScriptedClaudeRuntime } from './structured-claude-scripted-runtime-test-support'
 import { structuredAgentSessionSeedCatalog } from '../../shared/structured-agent-session-seed-catalog'
@@ -30,7 +30,7 @@ function modelNotFoundReply(uuid: string, parentToolUseId: string | null = null)
   return {
     type: 'assistant',
     uuid,
-    session_id: claudeSessionIdForOrcaSession(SESSION),
+    session_id: claudeSessionIdForQuirkySession(SESSION),
     parent_tool_use_id: parentToolUseId,
     error: 'model_not_found',
     is_api_error_message: true,
@@ -140,7 +140,7 @@ describe("a Claude chat whose saved model the CLI says doesn't exist", () => {
     claude.child(SESSION).handlers.onMessage?.({
       type: 'system',
       subtype: 'init',
-      session_id: claudeSessionIdForOrcaSession(SESSION),
+      session_id: claudeSessionIdForQuirkySession(SESSION),
       model: RETIRED
     })
     claude.child(SESSION).handlers.onMessage?.(modelNotFoundReply('reply-1'))

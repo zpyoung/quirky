@@ -1,6 +1,6 @@
 import { quotePosixShellUnlessPlain } from '../shared/shell-argument-quoting'
 import type { ChildProcess } from 'node:child_process'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { existsSync } from 'node:fs'
 import { posix } from 'node:path'
 import { isVsCodeLauncherExecutable } from '../shared/vscode-remote-ssh-launcher'

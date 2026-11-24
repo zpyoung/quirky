@@ -14,7 +14,7 @@ describe('who delivered mail is from', () => {
         { id: 'm1', from_handle: 'term_a', run_id: 'r1', type: 'status', payload: null },
         {
           id: 'm2',
-          from_handle: `orca_session_id:${SESSION}`,
+          from_handle: `quirky_session_id:${SESSION}`,
           run_id: 'r2',
           type: 'status',
           payload: null
@@ -27,14 +27,14 @@ describe('who delivered mail is from', () => {
       kind: 'agent',
       senders: [
         {
-          party: { address: 'term_a', terminalHandle: 'term_a', orcaSessionId: null },
+          party: { address: 'term_a', terminalHandle: 'term_a', quirkySessionId: null },
           name: 'Build tab'
         },
         {
           party: {
-            address: `orca_session_id:${SESSION}`,
+            address: `quirky_session_id:${SESSION}`,
             terminalHandle: null,
-            orcaSessionId: SESSION
+            quirkySessionId: SESSION
           },
           name: null
         }
@@ -45,7 +45,7 @@ describe('who delivered mail is from', () => {
         dispatchId: null,
         messages: [
           { messageId: 'm1', runId: 'r1', from: 'term_a' },
-          { messageId: 'm2', runId: 'r2', from: `orca_session_id:${SESSION}` },
+          { messageId: 'm2', runId: 'r2', from: `quirky_session_id:${SESSION}` },
           { messageId: 'm3', runId: 'r1', from: 'term_a' }
         ]
       }

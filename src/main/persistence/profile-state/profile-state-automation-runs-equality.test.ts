@@ -15,7 +15,7 @@ import { writeProfileStateDomains } from './profile-state-domain-writes'
 const databases: { db: ReturnType<typeof openProfileStateDatabase>['db']; directory: string }[] = []
 
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-history-equality-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-history-equality-'))
   const { db } = openProfileStateDatabase(join(directory, 'state.db'), 'profile')
   const runs = [{ id: 'run', extension: { content: '雪 🐋' } }]
   const payload = JSON.stringify(runs)

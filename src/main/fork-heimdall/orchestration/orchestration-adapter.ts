@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { OrchestrationDb, RunRow } from '../../runtime/orchestration/db'
 import { OrchestrationError } from '../../runtime/orchestration/orchestration-error'
 import {
@@ -99,7 +99,7 @@ const PLACEMENT_ERROR_CODES: Record<string, true> = {
 
 export class RuntimeHeimdallOrchestrationAdapter implements HeimdallOrchestrationAdapter {
   constructor(
-    private readonly runtime: OrcaRuntimeService,
+    private readonly runtime: QuirkyRuntimeService,
     private readonly persistence: HeimdallOrchestrationPersistence
   ) {}
 

@@ -34,7 +34,7 @@ export function assertProfileStateMaintenance(
   maintenance.assertActive()
   const expectedDirectory = join(root, 'profiles', profile.profileId)
   for (const [path, expectedName] of [
-    [profile.dataFile, 'orca-data.json'],
+    [profile.dataFile, 'quirky-data.json'],
     [profile.databasePath, 'profile-state.db']
   ] as const) {
     if (

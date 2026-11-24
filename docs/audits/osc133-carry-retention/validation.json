@@ -1,5 +1,5 @@
 {
-  "backgroundLaunch": "All tests and proofs used ORCA_BACKGROUND_LAUNCH=1; Electron only ran with ELECTRON_RUN_AS_NODE=1. No app or native PTY.",
+  "backgroundLaunch": "All tests and proofs used QUIRKY_BACKGROUND_LAUNCH=1; Electron only ran with ELECTRON_RUN_AS_NODE=1. No app or native PTY.",
   "fixedTests": {
     "passed": 45,
     "failed": 0,

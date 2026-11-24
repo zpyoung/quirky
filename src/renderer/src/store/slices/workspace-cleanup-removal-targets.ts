@@ -85,7 +85,7 @@ function ambiguousHostFailure(
       displayName,
       message: translate(
         'auto.store.slices.workspace.cleanup.hostUnresolved',
-        'Orca cannot tell which host owns this workspace. Refresh projects and review it again.'
+        'Quirky cannot tell which host owns this workspace. Refresh projects and review it again.'
       )
     }
   }

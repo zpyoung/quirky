@@ -14,7 +14,7 @@ const CAN_MAKE_A_DIRECTORY_UNREADABLE = process.platform !== 'win32' && process.
 let root: string
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-folder-access-probe-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-folder-access-probe-'))
 })
 
 afterAll(async () => {

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build, version as esbuildVersion } from 'esbuild'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { nodeExecutable } from '../../../../../config/scripts/check-job-log-byte-cap-benchmark.mjs'
 import { workload } from '../../../../../config/scripts/check-job-log-performance-cases.mjs'
 
@@ -33,7 +33,7 @@ const cpuDescriptors = [8, 63].map((size) => ({
 }))
 
 export async function prepareHostMeasurement(root = process.cwd()) {
-  const directory = await mkdtemp(path.join(tmpdir(), 'orca-check-host-retention-'))
+  const directory = await mkdtemp(path.join(tmpdir(), 'quirky-check-host-retention-'))
   try {
     const bundle = await build({
       absWorkingDir: root,
@@ -78,7 +78,7 @@ export async function prepareHostMeasurement(root = process.cwd()) {
       sourceHashes[name] = hash(await readFile(path.join(root, name)))
     }
     const program = await realpath(nodeExecutable())
-    const processHostEntry = require.resolve('@orca/process-host')
+    const processHostEntry = require.resolve('@quirky/process-host')
     const processHostDirectory = path.dirname(processHostEntry)
     const processHostModules = {}
     for (const filename of Object.keys(require.cache)
@@ -161,7 +161,7 @@ export async function runHostMeasurement(context) {
         })
       ],
       cwd: context.root,
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 20_000,
       maxOutputBytes: 32 * 1024
     })
@@ -190,8 +190,8 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const context = await prepareHostMeasurement()
   try {
     const report = await runHostMeasurement(context)
-    if (process.env.ORCA_CHECK_LOG_HOST_REPORT) {
-      await writeFile(process.env.ORCA_CHECK_LOG_HOST_REPORT, JSON.stringify(report, null, 2))
+    if (process.env.QUIRKY_CHECK_LOG_HOST_REPORT) {
+      await writeFile(process.env.QUIRKY_CHECK_LOG_HOST_REPORT, JSON.stringify(report, null, 2))
     }
     process.stdout.write(`${JSON.stringify(report)}\n`)
   } finally {

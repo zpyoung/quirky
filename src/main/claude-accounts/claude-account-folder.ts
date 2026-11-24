@@ -136,7 +136,7 @@ export async function readClaudeFolderLoginAsync(
 /**
  * Deletes a host account's folder and, on macOS, the Keychain items Claude keyed to it
  * (superset profile-remove.ts). Only `claude-profiles/<id>` is reachable from an id, so an
- * older Orca's `claude-accounts/` folders are never touched.
+ * older Quirky's `claude-accounts/` folders are never touched.
  */
 export async function removeClaudeAccountFolder(
   dataRoot: string,

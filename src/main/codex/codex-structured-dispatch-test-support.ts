@@ -127,7 +127,7 @@ export async function acquiredCodexAdapter(input: {
   return adapter
 }
 
-/** Codex's own echo of a user message Orca sent, inside `turnId`. */
+/** Codex's own echo of a user message Quirky sent, inside `turnId`. */
 export function echoUserMessage(
   connection: FakeConnection,
   input: { turnId: string; itemId: string; clientId?: string; threadId?: string }

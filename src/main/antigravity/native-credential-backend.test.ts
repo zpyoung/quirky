@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe('execution-host native credential authority', () => {
   it('performs a real isolated file write/readback and detects a stale before-write credential', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-agy-backend-test-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-agy-backend-test-'))
     try {
       const path = join(dir, '.gemini', 'antigravity-cli', 'antigravity-oauth-token')
       const backend = createAntigravityFileCredentialBackend(path)

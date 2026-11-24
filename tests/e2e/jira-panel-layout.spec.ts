@@ -1,6 +1,6 @@
 import type { Page } from '@stablyai/playwright-test'
 import type { JiraIssue } from '../../src/shared/jira-types'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 
 const ISSUE_TITLE = 'Keep planning notes visible while switching between project tasks'
@@ -66,11 +66,11 @@ async function openFixtureJiraList(page: Page): Promise<void> {
 }
 
 test('Jira titles and sort headings adapt to panel width inside a wide window', async ({
-  orcaPage
+  quirkyPage
 }) => {
-  await openFixtureJiraList(orcaPage)
+  await openFixtureJiraList(quirkyPage)
 
-  const title = orcaPage.getByRole('heading', { name: ISSUE_TITLE })
+  const title = quirkyPage.getByRole('heading', { name: ISSUE_TITLE })
   await expect(title).toBeVisible()
   for (const width of [500, 780, 1050, 1320]) {
     await title.evaluate((element, width) => {
@@ -86,8 +86,8 @@ test('Jira titles and sort headings adapt to panel width inside a wide window', 
     await expect
       .poll(() => title.evaluate((element) => element.getBoundingClientRect().width))
       .toBeGreaterThan(200)
-    const mobileSort = orcaPage.getByTestId('jira-mobile-sort-controls')
-    const assignee = orcaPage.getByRole('button', { name: 'Assignee', exact: true })
+    const mobileSort = quirkyPage.getByTestId('jira-mobile-sort-controls')
+    const assignee = quirkyPage.getByRole('button', { name: 'Assignee', exact: true })
     await (width < 768 ? expect(mobileSort).toBeVisible() : expect(mobileSort).toBeHidden())
     await (width >= 1024 ? expect(assignee).toBeVisible() : expect(assignee).toBeHidden())
     if (width >= 768) {
@@ -112,10 +112,10 @@ test('Jira titles and sort headings adapt to panel width inside a wide window', 
 })
 
 test('Jira planning columns persist and hiding a sorted field selects a visible fallback', async ({
-  orcaPage
+  quirkyPage
 }) => {
-  await openFixtureJiraList(orcaPage)
-  const title = orcaPage.getByRole('heading', { name: ISSUE_TITLE })
+  await openFixtureJiraList(quirkyPage)
+  const title = quirkyPage.getByRole('heading', { name: ISSUE_TITLE })
   await expect(title).toBeVisible()
   await title.evaluate((element) => {
     const host =
@@ -126,15 +126,15 @@ test('Jira planning columns persist and hiding a sorted field selects a visible 
     }
     host.style.width = '780px'
   })
-  await orcaPage.getByRole('button', { name: 'Columns', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Columns', exact: true }).click()
   for (const name of ['Parent', 'Sprint', 'Points', 'Estimate', 'Remaining']) {
-    await orcaPage.getByRole('menuitemcheckbox', { name, exact: true }).click()
+    await quirkyPage.getByRole('menuitemcheckbox', { name, exact: true }).click()
   }
-  await orcaPage.keyboard.press('Escape')
-  await expect(orcaPage.getByText('Epic planning', { exact: true })).toBeVisible()
-  await expect(orcaPage.getByText('Sprint 12', { exact: true })).toBeVisible()
-  await expect(orcaPage.getByText('2h', { exact: true })).toBeVisible()
-  await expect(orcaPage.getByText('30m', { exact: true })).toBeVisible()
+  await quirkyPage.keyboard.press('Escape')
+  await expect(quirkyPage.getByText('Epic planning', { exact: true })).toBeVisible()
+  await expect(quirkyPage.getByText('Sprint 12', { exact: true })).toBeVisible()
+  await expect(quirkyPage.getByText('2h', { exact: true })).toBeVisible()
+  await expect(quirkyPage.getByText('30m', { exact: true })).toBeVisible()
   const layout = await title.evaluate((element) => {
     const row = element.closest('[role="button"]')
     const scroll = row?.parentElement?.parentElement?.parentElement?.parentElement
@@ -149,25 +149,25 @@ test('Jira planning columns persist and hiding a sorted field selects a visible 
   })
   expect(layout.title).toBeGreaterThanOrEqual(180)
   expect(layout.content).toBeGreaterThan(layout.viewport)
-  await orcaPage.getByRole('button', { name: 'Points', exact: true }).click()
-  await expect(orcaPage.getByRole('button', { name: 'Points, ascending' })).toHaveAttribute(
+  await quirkyPage.getByRole('button', { name: 'Points', exact: true }).click()
+  await expect(quirkyPage.getByRole('button', { name: 'Points, ascending' })).toHaveAttribute(
     'aria-pressed',
     'true'
   )
-  await orcaPage.getByRole('button', { name: 'Columns', exact: true }).click()
-  await orcaPage.getByRole('menuitemcheckbox', { name: 'Points', exact: true }).click()
-  await orcaPage.keyboard.press('Escape')
-  await expect(orcaPage.getByRole('button', { name: 'Updated, descending' })).toHaveAttribute(
+  await quirkyPage.getByRole('button', { name: 'Columns', exact: true }).click()
+  await quirkyPage.getByRole('menuitemcheckbox', { name: 'Points', exact: true }).click()
+  await quirkyPage.keyboard.press('Escape')
+  await expect(quirkyPage.getByRole('button', { name: 'Updated, descending' })).toHaveAttribute(
     'aria-pressed',
     'true'
   )
-  await orcaPage.reload()
-  await openFixtureJiraList(orcaPage)
-  await orcaPage.getByRole('button', { name: 'Columns', exact: true }).click()
+  await quirkyPage.reload()
+  await openFixtureJiraList(quirkyPage)
+  await quirkyPage.getByRole('button', { name: 'Columns', exact: true }).click()
   await expect(
-    orcaPage.getByRole('menuitemcheckbox', { name: 'Sprint', exact: true })
+    quirkyPage.getByRole('menuitemcheckbox', { name: 'Sprint', exact: true })
   ).toHaveAttribute('aria-checked', 'true')
   await expect(
-    orcaPage.getByRole('menuitemcheckbox', { name: 'Points', exact: true })
+    quirkyPage.getByRole('menuitemcheckbox', { name: 'Points', exact: true })
   ).toHaveAttribute('aria-checked', 'false')
 })

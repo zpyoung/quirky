@@ -64,7 +64,7 @@ export const JIRA_HANDLERS: Record<string, CommandHandler> = {
             `${site.id}\t${site.siteUrl}${status.selectedSiteId === site.id ? '\t(selected)' : ''}`
         ),
         ...(status.credentialError ? [status.credentialError] : []),
-        'Saved Orca Jira connections; this does not verify access or agent MCP authentication.'
+        'Saved Quirky Jira connections; this does not verify access or agent MCP authentication.'
       ].join('\n')
     )
   },

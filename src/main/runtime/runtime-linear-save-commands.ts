@@ -73,10 +73,10 @@ export class RuntimeLinearSaveCommands extends RuntimeLinearCommentCommands {
           (cause) =>
             linearError(
               'linear_write_unconfirmed',
-              'Linear may have applied the issue save, but Orca could not confirm it.',
+              'Linear may have applied the issue save, but Quirky could not confirm it.',
               {
                 nextSteps: [
-                  `Run \`orca linear issue ${target.issue.identifier} --workspace ${target.workspaceId} --json\` before retrying.`
+                  `Run \`quirky linear issue ${target.issue.identifier} --workspace ${target.workspaceId} --json\` before retrying.`
                 ],
                 ...(cause ? { cause } : {})
               }
@@ -122,10 +122,10 @@ export class RuntimeLinearSaveCommands extends RuntimeLinearCommentCommands {
         (cause) =>
           linearError(
             'linear_write_unconfirmed',
-            'Linear may have applied the task update, but Orca could not confirm it.',
+            'Linear may have applied the task update, but Quirky could not confirm it.',
             {
               nextSteps: [
-                `Run \`orca linear issue ${target.issue.identifier} --workspace ${target.workspaceId} --json\` and check the updated field before retrying.`
+                `Run \`quirky linear issue ${target.issue.identifier} --workspace ${target.workspaceId} --json\` and check the updated field before retrying.`
               ],
               ...(cause ? { cause } : {})
             }

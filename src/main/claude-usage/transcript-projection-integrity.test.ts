@@ -51,7 +51,7 @@ async function project(previous?: ClaudeUsagePersistedFile): Promise<ClaudeUsage
 }
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-claude-integrity-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-claude-integrity-'))
   transcript = join(directory, 'session.jsonl')
   await writeFile(
     transcript,

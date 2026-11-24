@@ -13,7 +13,7 @@ describe('per-job path classification', () => {
       xterm_patch_sync: false,
       shell_contracts: false,
       test: true,
-      orcad_browser: false,
+      quirkyd_browser: false,
       mobile_web_app: false,
       'cross-version-wire': false,
       managed_hook_node18: false,

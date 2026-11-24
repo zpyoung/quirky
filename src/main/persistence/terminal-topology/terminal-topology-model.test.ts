@@ -228,7 +228,7 @@ async function runSeed(seed: number): Promise<string[]> {
   const pick = <T>(items: readonly T[]): T | undefined =>
     items.length === 0 ? undefined : items[Math.floor(random() * items.length)]
   const ids = makeIds(random)
-  const directory = mkdtempSync(join(tmpdir(), 'orca-topology-model-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-topology-model-'))
   directories.push(directory)
   let store = await openTopologyStore(directory, emptyTerminalSessionProfile())
   const window = new WindowSession(structuredClone(store.getWorkspaceSession()))

@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { SESSION_TAB_METHODS } from './session-tabs'
 import { visibleSnapshot } from './session-tabs-snapshot.test-fixture'
@@ -13,19 +13,19 @@ function makeRequest(method: string, params?: unknown): RpcRequest {
 
 // The host's own structured-chat setting is off throughout: it is a launch preference, so it must
 // not decide whether chats a paired client opened come back after a restart.
-function makeRuntime(): OrcaRuntimeService {
+function makeRuntime(): QuirkyRuntimeService {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the runtime members these RPCs read are staged.
   return {
     getRuntimeId: () => 'test-runtime',
     getClientSettings: vi.fn(() => ({ experimentalNativeChat: false })),
     restoreStructuredAgentSessionTabs: vi.fn(),
     listMobileSessionTabs: vi.fn().mockResolvedValue(visibleSnapshot())
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 }
 
 async function listTabs(
   client?: Parameters<RpcDispatcher['dispatch']>[1]
-): Promise<OrcaRuntimeService> {
+): Promise<QuirkyRuntimeService> {
   const runtime = makeRuntime()
   const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
   const response = await dispatcher.dispatch(

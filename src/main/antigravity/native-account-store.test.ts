@@ -13,7 +13,7 @@ import { credential, harness } from './native-account-test-fixtures'
 
 let dir: string
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-agy-vault-test-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-agy-vault-test-'))
   setSecretStore({
     isEncryptionAvailable: () => true,
     describeProtectionGap: () => null,

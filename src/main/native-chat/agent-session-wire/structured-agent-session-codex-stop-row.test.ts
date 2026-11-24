@@ -1,6 +1,6 @@
 // What a Stop's row says when Codex took the interrupt, against the real host, journal and Codex
 // adapter. Codex answers a turn's interrupt as the turn aborts and sends the turn's end right after
-// the answer, so the end reaches Orca a moment after the Stop has its answer.
+// the answer, so the end reaches Quirky a moment after the Stop has its answer.
 
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -43,7 +43,7 @@ let log: ReturnType<typeof recordingStructuredAgentSessionLogger>
 let disposeSession: MockInstance<NonNullable<StructuredAgentSessionAdapter['disposeSession']>>
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-stop-row-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-stop-row-'))
   resetHostTestOperationIds()
   codex = fakeCodex()
   notify = (method, params) => codex.connections.at(-1)?.handlers.onNotification?.(method, params)
@@ -497,7 +497,7 @@ describe('a message after a Codex Stop whose exit was unproven', () => {
 
     old.handlers.onExit?.(new Error('codex app-server exited'), { expected: true })
 
-    // The close Orca began, ended: Orca's, never blamed on Codex as a crash.
+    // The close Quirky began, ended: Quirky's, never blamed on Codex as a crash.
     expect(handled).toHaveBeenCalledWith(
       expect.objectContaining({ cause: 'requested-close', failure: { kind: 'hostFault' } })
     )

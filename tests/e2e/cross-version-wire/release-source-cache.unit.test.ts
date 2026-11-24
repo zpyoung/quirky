@@ -2,7 +2,7 @@ import { chmod, mkdtemp, mkdir, readFile, rm, writeFile, readdir, stat } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { materializeReleaseCheckout } from './release-checkout'
 import {
   copySharedReleaseSource,
@@ -37,23 +37,23 @@ it('keeps Windows copies independent and read-only after seed removal', async ()
 
 it('keeps CI, isolated roots and the environment opt-out on local extraction', async () => {
   vi.stubEnv('CI', '')
-  vi.stubEnv('ORCA_DISABLE_SHARED_RELEASE_CACHE', '')
+  vi.stubEnv('QUIRKY_DISABLE_SHARED_RELEASE_CACHE', '')
   expect(
     await resolveSharedReleaseCacheRoot(process.cwd(), '/explicit-isolated-root')
   ).toBeUndefined()
   vi.stubEnv('CI', '1')
   expect(await resolveSharedReleaseCacheRoot(process.cwd())).toBeUndefined()
   vi.stubEnv('CI', '')
-  vi.stubEnv('ORCA_DISABLE_SHARED_RELEASE_CACHE', '1')
+  vi.stubEnv('QUIRKY_DISABLE_SHARED_RELEASE_CACHE', '1')
   expect(await resolveSharedReleaseCacheRoot(process.cwd())).toBeUndefined()
-  vi.stubEnv('ORCA_DISABLE_SHARED_RELEASE_CACHE', '')
+  vi.stubEnv('QUIRKY_DISABLE_SHARED_RELEASE_CACHE', '')
   const folder = await scratch()
   expect(await resolveSharedReleaseCacheRoot(folder)).toBeUndefined()
 })
 
 it('resolves the default cache inside the execution repository common Git directory', async () => {
   vi.stubEnv('CI', '')
-  vi.stubEnv('ORCA_DISABLE_SHARED_RELEASE_CACHE', '')
+  vi.stubEnv('QUIRKY_DISABLE_SHARED_RELEASE_CACHE', '')
   const repo = await scratch()
   const result = await runProcess({
     program: 'git',
@@ -64,7 +64,7 @@ it('resolves the default cache inside the execution repository common Git direct
   })
   expect(result.code).toBe(0)
   expect(await resolveSharedReleaseCacheRoot(repo)).toBe(
-    join(repo, '.git', 'orca-cache', 'release-source')
+    join(repo, '.git', 'quirky-cache', 'release-source')
   )
 })
 
@@ -105,7 +105,7 @@ it.each(['missing wire source', 'invalid imports metadata'])(
 )
 
 async function scratch(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-release-source-sharing-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-release-source-sharing-'))
   roots.push(root)
   return root
 }

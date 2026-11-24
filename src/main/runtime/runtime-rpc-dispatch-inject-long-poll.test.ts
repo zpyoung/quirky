@@ -2,10 +2,10 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { readRuntimeMetadata } from './runtime-metadata'
 import { classifyRuntimeLongPoll } from './runtime-rpc/runtime-rpc-long-poll'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import { openFramedSession, sleep } from './runtime-rpc-test-harness'
 
 // `dispatch --inject` into a chat waits for its agent to accept the turn, which can outlast the
@@ -20,16 +20,16 @@ describe('orchestration.dispatch --inject as a long poll', () => {
         method: 'orchestration.dispatch',
         params
       })
-    expect(dispatch({ task: 'task_1', to: 'orca_session_id:x', inject: true })).toBe('wait')
-    expect(dispatch({ task: 'task_1', to: 'orca_session_id:x' })).toBeNull()
+    expect(dispatch({ task: 'task_1', to: 'quirky_session_id:x', inject: true })).toBe('wait')
+    expect(dispatch({ task: 'task_1', to: 'quirky_session_id:x' })).toBeNull()
     // A terminal inject writes and returns; it keeps a short-RPC slot.
     expect(dispatch({ task: 'task_1', to: 'term_worker', inject: true })).toBeNull()
   })
 
   it('emits keepalives while an injected dispatch blocks', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath, keepaliveIntervalMs: 30 })
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
+    const server = new QuirkyRuntimeRpcServer({ runtime, userDataPath, keepaliveIntervalMs: 30 })
     vi.spyOn(server['dispatcher'], 'dispatch').mockImplementation(async (request) => {
       await sleep(120)
       return {
@@ -46,7 +46,7 @@ describe('orchestration.dispatch --inject as a long poll', () => {
         id: 'req_dispatch',
         authToken: metadata!.authToken,
         method: 'orchestration.dispatch',
-        params: { task: 'task_1', to: 'orca_session_id:x', inject: true }
+        params: { task: 'task_1', to: 'quirky_session_id:x', inject: true }
       })
       await session.done
 

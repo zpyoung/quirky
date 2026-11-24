@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { expect, it } from 'vitest'
 import { z } from 'zod'
 import {
@@ -19,7 +19,7 @@ it('real CLI processes carry surface choices and refuse invalid or unsupported p
     .object({ bin: z.object({ bun: z.string() }) })
     .parse(JSON.parse(readFileSync(manifest, 'utf8')))
   const program = join(dirname(manifest), bin.bun)
-  const root = mkdtempSync(join(tmpdir(), 'orca-launch-process-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-launch-process-'))
   const endpoint =
     process.platform === 'win32' ? `\\\\.\\pipe\\launch-${randomUUID()}` : join(root, 'rpc')
   const requests: { method: string; params: Record<string, unknown> }[] = []
@@ -59,7 +59,7 @@ it('real CLI processes carry surface choices and refuse invalid or unsupported p
   try {
     await new Promise<void>((ready) => server.listen(endpoint, ready))
     writeFileSync(
-      join(root, 'orca-runtime.json'),
+      join(root, 'quirky-runtime.json'),
       JSON.stringify({
         runtimeId: 'fixture-host',
         pid: process.pid,
@@ -70,14 +70,14 @@ it('real CLI processes carry surface choices and refuse invalid or unsupported p
     )
     const env = {
       ...Object.fromEntries(
-        'HOME USERPROFILE APPDATA LOCALAPPDATA XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME ORCA_E2E_HOME_DIR ORCA_E2E_USER_DATA_DIR ORCA_USER_DATA_PATH TEMP TMP TMPDIR'
+        'HOME USERPROFILE APPDATA LOCALAPPDATA XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME QUIRKY_E2E_HOME_DIR QUIRKY_E2E_USER_DATA_DIR QUIRKY_USER_DATA_PATH TEMP TMP TMPDIR'
           .split(' ')
           .map((key) => [key, root])
       ),
       CODEX_HOME: join(root, 'codex'),
       CLAUDE_CONFIG_DIR: join(root, 'claude'),
-      ORCA_BACKGROUND_LAUNCH: '1',
-      ORCA_DISABLE_MACOS_LOGIN_SHELL: '1',
+      QUIRKY_BACKGROUND_LAUNCH: '1',
+      QUIRKY_DISABLE_MACOS_LOGIN_SHELL: '1',
       PATH: process.env.PATH,
       SystemRoot: process.env.SystemRoot,
       ComSpec: process.env.ComSpec

@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'

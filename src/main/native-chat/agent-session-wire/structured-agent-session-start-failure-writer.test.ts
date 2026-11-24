@@ -29,11 +29,11 @@ import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-
 
 const CALLER = { callerKey: 'client-1' }
 const EXIT_REASON = 'Claude Code is not signed in. Sign in with the Claude CLI'
-// The exit's reason is Orca's log text; the row says only that the start stopped.
+// The exit's reason is Quirky's log text; the row says only that the start stopped.
 const EXIT_TEXT = 'Codex stopped before it finished starting. Send your message to try again.'
 // The first child (generation-1) is lost at setup; the send starts generation-2.
 const START_ROW = agentJournalItemKey({
-  provider: 'orca',
+  provider: 'quirky',
   clientMessageId: 'start-failure:generation-2'
 })
 
@@ -105,7 +105,7 @@ async function startRows(): Promise<string[]> {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-start-failure-writer-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-start-failure-writer-'))
   resetHostTestOperationIds()
   generation = 0
   frames = []

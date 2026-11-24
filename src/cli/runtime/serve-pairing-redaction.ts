@@ -1,9 +1,9 @@
-import type { ProcessSpec } from '@orca/process-host/process-spec'
+import type { ProcessSpec } from '@quirky/process-host/process-spec'
 import type { superviseForegroundServe } from './serve-update-supervisor'
 import { createInterface } from 'node:readline'
 
 export const PAIRING_HIDDEN_LINE =
-  'Pairing URL: hidden because this supervised server is not writing to a terminal. Pair from the desktop app, or run `orca serve` in a terminal.'
+  'Pairing URL: hidden because this supervised server is not writing to a terminal. Pair from the desktop app, or run `quirky serve` in a terminal.'
 
 /**
  * Drops the human readiness block's pairing secrets: the web-client URL (it embeds the offer),
@@ -12,7 +12,7 @@ export const PAIRING_HIDDEN_LINE =
 export function createPairingRedactor(): (line: string) => string | null {
   let inQr = false
   return (line) => {
-    if (line.startsWith('{') && line.includes('"orca_server_ready"')) {
+    if (line.startsWith('{') && line.includes('"quirky_server_ready"')) {
       return redactReadyJson(line)
     }
     if (line.startsWith('Mobile pairing QR:')) {
@@ -47,7 +47,7 @@ function redactReadyJson(line: string): string {
 
 /**
  * Only for `--supervise` writing to a log: a service journal must never hold a live bearer
- * offer. A plain `orca serve` keeps inheriting stdout, which scripts parse for `Pairing URL:`.
+ * offer. A plain `quirky serve` keeps inheriting stdout, which scripts parse for `Pairing URL:`.
  */
 export function shouldRedactSupervisedStdout(
   supervise: boolean,

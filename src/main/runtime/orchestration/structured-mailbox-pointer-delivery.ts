@@ -90,7 +90,7 @@ type StructuredPointerDeliveryDependencies<TWaiter extends OrchestrationMessageW
   resolveStructuredTarget: (mailboxHandle: string) => StructuredPointerTarget | null
   /** The CLI name the PTY lane types for a local agent, so both lanes send the same pointer. */
   getCliCommand: () => OrchestrationCliCommand
-  /** What Orca calls a sender now, snapshotted onto the message; null when it has no name. */
+  /** What Quirky calls a sender now, snapshotted onto the message; null when it has no name. */
   senderName: SenderNameResolver
   host: StructuredMailboxPointerHost
   onRetain?: (input: {

@@ -30,7 +30,7 @@ describe('loadGitLabJobLogDetails', () => {
       name: 'verify',
       status: 'completed',
       conclusion: 'failure',
-      url: 'https://github.com/acme/orca/runs/1',
+      url: 'https://github.com/acme/quirky/runs/1',
       checkRunId: 7
     }
 
@@ -67,12 +67,12 @@ describe('loadGitLabJobLogDetails', () => {
       repoPath: '/repo',
       repoId: 'repo-1',
       check: gitLabCheck,
-      projectRef: { host: 'gitlab.example.test', path: 'contributor/orca' }
+      projectRef: { host: 'gitlab.example.test', path: 'contributor/quirky' }
     })
 
     expect(jobTrace).toHaveBeenCalledWith(
       expect.objectContaining({
-        projectRef: { host: 'gitlab.example.test', path: 'contributor/orca' }
+        projectRef: { host: 'gitlab.example.test', path: 'contributor/quirky' }
       })
     )
   })

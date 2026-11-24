@@ -1,6 +1,6 @@
 import { app, clipboard, dialog, type BrowserWindow } from 'electron'
 import { createMacAppActivationHandler } from './window/macos-app-activation'
-import { isBackgroundLaunch, isOrcadSidecarLaunch } from './window/foreground-activation-policy'
+import { isBackgroundLaunch, isQuirkydSidecarLaunch } from './window/foreground-activation-policy'
 import { createDesktopHandoff, desktopHandoffArguments } from './window/macos-desktop-handoff'
 import {
   focusExistingWindow as focusExistingWindowAction,
@@ -43,12 +43,12 @@ const requestDesktopHandoff = createDesktopHandoff({
 
 function requestDesktopActivation(argv: readonly string[] = []): void {
   state.osOpenedDocuments.capture(argv, publishOsOpenedDocuments)
-  // Why: a duplicate `orca serve` must not drag a headless server into opening a desktop window (#11935).
+  // Why: a duplicate `quirky serve` must not drag a headless server into opening a desktop window (#11935).
   if (!shouldActivateDesktopForSecondInstance(argv)) {
     return
   }
   // Why: the sidecar's throwaway profile must never become the user's window.
-  if (isOrcadSidecarLaunch()) {
+  if (isQuirkydSidecarLaunch()) {
     requestDesktopHandoff()
     return
   }
@@ -109,7 +109,7 @@ if (preflightReady) {
     event.preventDefault()
     // Why gated on isReady: pre-ready the cold-start window is already on its way, and
     // activating the gate here would try to open one before Electron can. The sidecar has none.
-    if (app.isReady() || isOrcadSidecarLaunch()) {
+    if (app.isReady() || isQuirkydSidecarLaunch()) {
       requestDesktopActivation()
     }
   })
@@ -126,7 +126,7 @@ if (preflightReady) {
     } catch (error) {
       const message =
         formatProfileStateStartupFailure(error) ??
-        `Orca could not finish starting: ${error instanceof Error ? error.message : String(error)}`
+        `Quirky could not finish starting: ${error instanceof Error ? error.message : String(error)}`
       const failureClass = profileStateStartupFailureClass(error)
       if (failureClass !== undefined) {
         recordDurableCrashBreadcrumb('profile_state_startup_failed', {
@@ -157,7 +157,7 @@ if (preflightReady) {
           await presentProfileStateStartupRecoveryDialog({
             message,
             ...(failureClass === 'recovery-required' || failureClass === 'ambiguous-authority'
-              ? { recoveryCommand: 'orca profile state exports' }
+              ? { recoveryCommand: 'quirky profile state exports' }
               : {}),
             showMessageBox: (options) => dialog.showMessageBox(options),
             copyToClipboard: (text) => clipboard.writeText(text)

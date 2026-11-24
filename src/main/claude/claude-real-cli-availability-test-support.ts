@@ -3,8 +3,8 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import { runProcessSync } from '@quirky/process-host'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { CLAUDE_AUTH_ENV_VARS } from '../claude-accounts/environment'
 import { resolveClaudeCommand } from '../codex-cli/command'
@@ -37,7 +37,7 @@ export const realClaudeCliGate = resolveRealClaudeCliGate(process.env, (args) =>
 export const realClaudeAvailable = realClaudeCliGate.skipReason === null
 
 /** The CLI's own account report — the only source of truth for where it writes that
- *  is not derived from Orca's own path expressions. */
+ *  is not derived from Quirky's own path expressions. */
 export const realClaudeAuthStatus = realClaudeCliGate.authStatus
 
 export const realClaudeAuthenticated = realClaudeAuthStatus?.loggedIn === true

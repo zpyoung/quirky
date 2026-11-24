@@ -86,14 +86,14 @@ function openDialog(
       {
         id: 'repo',
         path: '/repo',
-        displayName: 'orca',
+        displayName: 'quirky',
         badgeColor: '',
         addedAt: 1,
         ...(overrides.hostId ? { executionHostId: overrides.hostId } : {}),
         gitRemoteIdentity: {
-          canonicalKey: 'github.com/acme/orca',
+          canonicalKey: 'github.com/acme/quirky',
           remoteName: 'origin',
-          remoteUrl: 'https://github.com/acme/orca.git'
+          remoteUrl: 'https://github.com/acme/quirky.git'
         }
       }
     ],
@@ -175,19 +175,19 @@ describe('workspace linked work editor', () => {
           {
             id: 'repo',
             path: '/repo',
-            displayName: 'orca',
+            displayName: 'quirky',
             badgeColor: '',
             addedAt: 1,
             gitRemoteIdentity: {
-              canonicalKey: 'gitlab.example.com/team/orca',
+              canonicalKey: 'gitlab.example.com/team/quirky',
               remoteName: 'origin',
-              remoteUrl: 'https://gitlab.example.com/team/orca.git'
+              remoteUrl: 'https://gitlab.example.com/team/quirky.git'
             }
           }
         ]
       })
     )
-    await add('https://gitlab.example.com/team/orca/-/merge_requests/12')
+    await add('https://gitlab.example.com/team/quirky/-/merge_requests/12')
     expect(screen.getByText('MR !12')).toBeTruthy()
     await save()
     expect(updateWorktreeMeta.mock.calls[0]?.[1].linkedItems).toEqual([
@@ -335,7 +335,7 @@ describe('workspace linked work editor', () => {
   it('Enter adds another link and leaves the editor open', async () => {
     openDialog()
     const field = input()
-    fireEvent.change(field, { target: { value: 'https://github.com/acme/orca/issues/4' } })
+    fireEvent.change(field, { target: { value: 'https://github.com/acme/quirky/issues/4' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(screen.queryByText('Issue #4')).toBeNull()
     const command = await screen.findByRole('option', { name: 'Add Issue #4' })
@@ -383,7 +383,7 @@ describe('workspace linked work editor', () => {
   })
   it('saves selected drafts while leaving search text unattached', async () => {
     openDialog({ linkedIssue: 1 })
-    await add('https://github.com/acme/orca/issues/4')
+    await add('https://github.com/acme/quirky/issues/4')
     fireEvent.change(input(), { target: { value: '42' } })
     expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false)
     expect(screen.getByText('Select a result to attach it.')).toBeTruthy()
@@ -452,7 +452,7 @@ describe('workspace linked work editor', () => {
           number: 71,
           title: 'Searchable issue',
           state: 'open',
-          url: 'https://github.com/acme/orca/issues/71',
+          url: 'https://github.com/acme/quirky/issues/71',
           labels: [],
           updatedAt: '2026-10-05',
           author: null
@@ -482,7 +482,7 @@ describe('workspace linked work editor', () => {
         title: 'Searchable issue',
         taskSourceContext: expect.objectContaining({
           provider: 'github',
-          providerIdentity: expect.objectContaining({ owner: 'acme', repo: 'orca' })
+          providerIdentity: expect.objectContaining({ owner: 'acme', repo: 'quirky' })
         })
       })
     ])
@@ -497,7 +497,7 @@ describe('workspace linked work editor', () => {
           number: 71,
           title: 'Old result',
           state: 'open',
-          url: 'https://github.com/acme/orca/issues/71',
+          url: 'https://github.com/acme/quirky/issues/71',
           labels: [],
           updatedAt: '2026-10-05',
           author: null
@@ -516,7 +516,7 @@ describe('workspace linked work editor', () => {
   it('stops cmdk from adding an IME-owned unmarked Enter', () => {
     openDialog()
     const field = input()
-    fireEvent.change(field, { target: { value: 'https://github.com/acme/orca/issues/71' } })
+    fireEvent.change(field, { target: { value: 'https://github.com/acme/quirky/issues/71' } })
     fireEvent.compositionStart(field)
     fireEvent.keyDown(field, { key: 'Enter', keyCode: 13, isComposing: false })
     fireEvent.compositionEnd(field)
@@ -541,7 +541,7 @@ describe('workspace linked work editor', () => {
   })
   it('clears results explicitly and preserves the selected drafts', async () => {
     openDialog()
-    await add('https://github.com/acme/orca/issues/4')
+    await add('https://github.com/acme/quirky/issues/4')
     fireEvent.change(input(), { target: { value: 'unselected' } })
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(screen.queryByRole('option')).toBeNull()
@@ -550,7 +550,7 @@ describe('workspace linked work editor', () => {
   })
   it('cancels added references without a metadata write', async () => {
     openDialog()
-    await add('https://github.com/acme/orca/issues/4')
+    await add('https://github.com/acme/quirky/issues/4')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(updateWorktreeMeta).not.toHaveBeenCalled()
     expect(useAppStore.getState().activeModal).toBe('none')
@@ -579,7 +579,7 @@ describe('workspace linked work editor', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Notes' }), {
       target: { value: 'Local draft' }
     })
-    await add('https://github.com/acme/orca/issues/3')
+    await add('https://github.com/acme/quirky/issues/3')
     act(() =>
       useAppStore.setState({
         worktreesByRepo: {

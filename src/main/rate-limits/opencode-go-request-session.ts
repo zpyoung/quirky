@@ -10,7 +10,7 @@ import {
 
 export const OPENCODE_BASE_URL = 'https://opencode.ai'
 
-const OPENCODE_SESSION_PARTITION = 'orca-opencode-go-rate-limit-fetch'
+const OPENCODE_SESSION_PARTITION = 'quirky-opencode-go-rate-limit-fetch'
 const appliedProxyKeys = new WeakMap<Session, string>()
 
 export async function clearOpenCodeSessionCookies(openCodeSession: Session): Promise<void> {
@@ -87,7 +87,7 @@ export async function createOpenCodeRequestSession(
 ): Promise<Session> {
   const openCodeSession = requirePartitionSession(OPENCODE_SESSION_PARTITION, 'OpenCode Go')
   await clearOpenCodeSessionCookies(openCodeSession)
-  // The isolated cookie jar must still honor Orca, environment, and system proxies.
+  // The isolated cookie jar must still honor Quirky, environment, and system proxies.
   await ensureProxyForOpenCodeSession(openCodeSession, networkProxySettings)
   try {
     // Sequential writes ensure cleanup cannot race an in-flight cookie write after a rejection.

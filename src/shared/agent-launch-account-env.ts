@@ -1,6 +1,6 @@
 /**
  * The account routing a desktop prepared for a terminal agent on a host with no account services
- * of its own (a WSL distro's orcad): which Claude/Codex home the agent's process starts with.
+ * of its own (a WSL distro's quirkyd): which Claude/Codex home the agent's process starts with.
  *
  * Deliberately narrow. Only the four routing variables, only absolute POSIX paths (the pointer may
  * be `~/`-relative, as the `claude` shell function expands it), and never read for a structured

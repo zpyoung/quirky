@@ -46,7 +46,7 @@ export function startCodexHookHashLookup(pathReady: Promise<unknown>): void {
 }
 
 /**
- * Codex's answer about Orca's entry from `codexPath`: what this process
+ * Codex's answer about Quirky's entry from `codexPath`: what this process
  * already knows, else asked of Codex in the app (its version first, then a
  * throwaway `hooks/list` for a new version). Never throws; one question per binary at a time.
  */
@@ -71,7 +71,7 @@ export function lookupCodexHookAnswer(
     return Promise.resolve(
       readMemoizedCodexHookAnswer(codexPath, command, fingerprint) ?? {
         kind: 'pending',
-        failure: 'Orca has not asked Codex yet'
+        failure: 'Quirky has not asked Codex yet'
       }
     )
   }
@@ -115,7 +115,7 @@ function remember(codexPath: string, known: KnownAnswer): CodexHookAnswer {
   return known.answer
 }
 
-/** Codex's answer about Orca's entry from the codex on PATH; asks Codex only in the app. Never throws. */
+/** Codex's answer about Quirky's entry from the codex on PATH; asks Codex only in the app. Never throws. */
 export async function resolveCodexHookAnswer(): Promise<CodexHookAnswer> {
   // Why wait for PATH: before it is hydrated, the codex a pane runs may not be found yet.
   await appPathReady
@@ -151,7 +151,7 @@ export const CODEX_ANSWER_AWAITED: CodexHookAnswer = {
 function codexNotFound(codexPath: string): CodexHookAnswer {
   return {
     kind: 'pending',
-    failure: `Orca could not find Codex at ${codexPath}`,
+    failure: `Quirky could not find Codex at ${codexPath}`,
     codexMissing: true
   }
 }
@@ -161,7 +161,7 @@ export function resolveCodexHookAnswerForLaunch(waitMs: number): Promise<CodexHo
   return withTimeout<CodexHookAnswer | null>(resolveCodexHookAnswer(), waitMs, null)
 }
 
-/** Every hash set this process or the memo holds, for any version: what Orca may have approved its entry with. */
+/** Every hash set this process or the memo holds, for any version: what Quirky may have approved its entry with. */
 export function readEveryKnownCodexHookHashes(): CodexHookHashes[] {
   return [
     ...[...answers.values()].flatMap(({ answer }) =>

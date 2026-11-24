@@ -41,10 +41,10 @@ All measured caller objects collect after native settlement in both versions. Bo
 `sources.cjs` reverses `fix.patch` in memory and checks exact baseline and fixed SHA-256 values. Source hashes use canonical LF; reports include effective dependency and bundle hashes. No git history, ignored notes or copied production implementation is needed to rerun the proof. Each run has a 20-second deadline; the commands below set a 192 MiB heap limit.
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/working-directory-wait-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/working-directory-wait-retention/reproduce.cjs
 ```
 
-For Electron, run its installed executable with the same flags and script path, setting `ELECTRON_RUN_AS_NODE=1` and `ORCA_BACKGROUND_LAUNCH=1`. It runs in Node mode and creates no windows.
+For Electron, run its installed executable with the same flags and script path, setting `ELECTRON_RUN_AS_NODE=1` and `QUIRKY_BACKGROUND_LAUNCH=1`. It runs in Node mode and creates no windows.
 
 ## Source compatibility and validation
 
@@ -53,7 +53,7 @@ The audited baseline module is byte-identical to main commit `291b4ddd6f1c1af480
 The fixed three-file regression run passed 31 tests. Reversing only this fix gives one expected first-caller retention failure and 30 passing controls, including the six raw-observer cases:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/working-directory-wait-retention/before.config.mjs src/main/providers/working-directory-validation-retention.test.ts src/main/providers/working-directory-validation.test.ts src/main/daemon/pty-subprocess-cwd-cancel-identity.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/working-directory-wait-retention/before.config.mjs src/main/providers/working-directory-validation-retention.test.ts src/main/providers/working-directory-validation.test.ts src/main/daemon/pty-subprocess-cwd-cancel-identity.test.ts
 ```
 
 `validation.json` records verification results. The measured retention requires a still-pending native operation; no affected-host capture, byte slope or attribution to #19831 is claimed.

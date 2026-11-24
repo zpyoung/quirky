@@ -51,7 +51,7 @@ const SHELL_HOST = {
 const HANDLE = 'pty-handle-terminal-init'
 const TAB_ID = 'tab-terminal-init'
 /** The bytes the snapshot carries, so the buffer the document opens holds this run's fixture. */
-const SCROLLBACK_MARKER = 'orca-terminal-init-marker'
+const SCROLLBACK_MARKER = 'quirky-terminal-init-marker'
 
 /** The tab snapshot the route applies, in the shape `applySessionTabs` reads off the stream. */
 const TABS_SNAPSHOT = {
@@ -112,12 +112,12 @@ beforeAll(async () => {
   bridgeVersion = await readBridgeProtocolVersion()
   faultGrant = await readBridgeFaultGrant()
   pageClientIdentity = await readBridgePageClientIdentity()
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-app-terminal-init-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-app-terminal-init-'))
   const built = await buildMobileWebAppBundle({ outDir: join(scratch, 'bundle') })
   const served = await createBundleServer({ outDir: built.outDir, cspHeader })
   server = served.server
   origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
 }, 600_000)
 
@@ -160,13 +160,13 @@ async function openSessionWithTerminalTab() {
   page.on('pageerror', (error) => errors.push(`${error.name}: ${error.message}`))
   await page.goto(`${origin}/`, { waitUntil: 'load' })
   await page.waitForFunction(
-    () => document.documentElement.dataset.orcaWebEntry === 'mounted',
+    () => document.documentElement.dataset.quirkyWebEntry === 'mounted',
     undefined,
     { timeout: 60_000, polling: 250 }
   )
   const tabs = await waitForSubscribe(page, 'session.tabs.subscribe')
   await page.evaluate(
-    ([id, event]) => globalThis.__orcaRenderCheckEmitEvent(id, event),
+    ([id, event]) => globalThis.__quirkyRenderCheckEmitEvent(id, event),
     [tabs.id, TABS_SNAPSHOT]
   )
   return { errors, page }
@@ -206,14 +206,14 @@ function readTerminalGrid() {
 async function waitForSubscribe(page, method) {
   try {
     await page.waitForFunction(
-      (name) => (globalThis.__orcaRenderCheckSubscribes ?? []).some((one) => one.method === name),
+      (name) => (globalThis.__quirkyRenderCheckSubscribes ?? []).some((one) => one.method === name),
       method,
       // Both streams open within a second of the mount they follow, so this is headroom rather
       // than a wait: what it bounds is how long a broken attach path takes to say so.
       { timeout: 30_000, polling: 100 }
     )
   } catch {
-    const opened = await page.evaluate(() => globalThis.__orcaRenderCheckSubscribes ?? [])
+    const opened = await page.evaluate(() => globalThis.__quirkyRenderCheckSubscribes ?? [])
     throw new Error(
       `the page never subscribed to ${method}; it opened: ${
         opened.map((one) => one.method).join(', ') || 'nothing'
@@ -221,7 +221,7 @@ async function waitForSubscribe(page, method) {
     )
   }
   const found = await page.evaluate(
-    (name) => (globalThis.__orcaRenderCheckSubscribes ?? []).find((one) => one.method === name),
+    (name) => (globalThis.__quirkyRenderCheckSubscribes ?? []).find((one) => one.method === name),
     method
   )
   return found
@@ -248,7 +248,7 @@ describeRender(
       const { errors, page } = await openSessionWithTerminalTab()
       const subscribe = await waitForSubscribe(page, 'terminal.subscribe')
       await page.evaluate(
-        ([id, event]) => globalThis.__orcaRenderCheckEmitEvent(id, event),
+        ([id, event]) => globalThis.__quirkyRenderCheckEmitEvent(id, event),
         [subscribe.id, SCROLLBACK_EVENT]
       )
       // The surface exists from the moment the component mounts, so its presence proves nothing.

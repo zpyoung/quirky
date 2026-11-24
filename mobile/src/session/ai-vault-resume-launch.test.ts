@@ -225,7 +225,7 @@ describe('buildMobileAiVaultResumeLaunch', () => {
       }
     })
     expect(launch.command).not.toContain('CODEX_HOME=')
-    expect(launch.envToDelete).toEqual(['CODEX_HOME', 'ORCA_CODEX_HOME'])
+    expect(launch.envToDelete).toEqual(['CODEX_HOME', 'QUIRKY_CODEX_HOME'])
   })
 
   it('names the conversation it resumes so the host can show it before the first turn', () => {
@@ -246,11 +246,11 @@ describe('buildMobileAiVaultResumeLaunch', () => {
       session: session({
         agent: 'codex',
         sessionId: 'codex-1',
-        codexHome: '/Users/ada/.orca/codex-runtime-home/home'
+        codexHome: '/Users/ada/.quirky/codex-runtime-home/home'
       }),
       hostPlatform: 'darwin'
     })
-    expect(launch.command).toContain("CODEX_HOME='/Users/ada/.orca/codex-runtime-home/home'")
+    expect(launch.command).toContain("CODEX_HOME='/Users/ada/.quirky/codex-runtime-home/home'")
     expect(launch.envToDelete).toBeUndefined()
   })
 })
@@ -338,7 +338,7 @@ describe('resumeAiVaultSessionInTerminal', () => {
       resumeAiVaultSessionInTerminal({ sendRequest }, 'worktree-1', {
         command: 'claude --resume abc',
         env: { ANTHROPIC_BASE_URL: 'http://localhost:3000' },
-        envToDelete: ['CODEX_HOME', 'ORCA_CODEX_HOME'],
+        envToDelete: ['CODEX_HOME', 'QUIRKY_CODEX_HOME'],
         launchConfig: {
           agentCommand: 'claude',
           agentArgs: '',
@@ -357,7 +357,7 @@ describe('resumeAiVaultSessionInTerminal', () => {
       {
         worktree: 'id:worktree-1',
         env: { ANTHROPIC_BASE_URL: 'http://localhost:3000' },
-        envToDelete: ['CODEX_HOME', 'ORCA_CODEX_HOME'],
+        envToDelete: ['CODEX_HOME', 'QUIRKY_CODEX_HOME'],
         launchConfig: {
           agentCommand: 'claude',
           agentArgs: '',

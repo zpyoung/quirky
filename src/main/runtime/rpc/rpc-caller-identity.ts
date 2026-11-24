@@ -10,7 +10,7 @@
 import type { RpcDispatchStreamingOptions } from './dispatcher-stream-options'
 
 export type RpcCallerIdentity =
-  /** The `orca` CLI over the runtime socket, and the in-process bridges that relay it. */
+  /** The `quirky` CLI over the runtime socket, and the in-process bridges that relay it. */
   | { kind: 'local-cli' }
   /** This host's own desktop app over IPC. One identity for every window, so a reload or an app
    *  restart still names the same caller. */

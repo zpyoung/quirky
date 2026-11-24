@@ -1,7 +1,7 @@
 import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './dispatcher'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { TERMINAL_METHODS } from './methods/terminal'
 import { createSubscriptionRegistryDouble } from './subscription-registry-test-double'
 import type { RuntimeTerminalWait } from '../../../shared/runtime-types'
@@ -25,7 +25,7 @@ describe('terminal multiplex rejected input signalling', () => {
     const processWrites: string[] = []
     const sendTerminal = vi.fn().mockRejectedValue(new Error('terminal_not_writable'))
     const harness = startDesktopMultiplexSubscribe({
-      sendTerminal: sendTerminal as unknown as OrcaRuntimeService['sendTerminal']
+      sendTerminal: sendTerminal as unknown as QuirkyRuntimeService['sendTerminal']
     })
     await vi.waitFor(() => expect(harness.handlers.has(0)).toBe(true))
     sendDesktopMultiplexSubscribe(harness.handlers, {
@@ -65,7 +65,7 @@ describe('terminal multiplex rejected input signalling', () => {
   it('does not send an unknown opcode to a legacy client', async () => {
     const sendTerminal = vi.fn().mockRejectedValue(new Error('terminal_not_writable'))
     const harness = startDesktopMultiplexSubscribe({
-      sendTerminal: sendTerminal as unknown as OrcaRuntimeService['sendTerminal']
+      sendTerminal: sendTerminal as unknown as QuirkyRuntimeService['sendTerminal']
     })
     await vi.waitFor(() => expect(harness.handlers.has(0)).toBe(true))
     sendDesktopMultiplexSubscribe(harness.handlers)
@@ -104,7 +104,7 @@ describe('terminal multiplex rejected input signalling', () => {
     )
     const sendTerminal = vi.fn(() => hostWrite)
     const harness = startDesktopMultiplexSubscribe({
-      sendTerminal: sendTerminal as unknown as OrcaRuntimeService['sendTerminal']
+      sendTerminal: sendTerminal as unknown as QuirkyRuntimeService['sendTerminal']
     })
     await vi.waitFor(() => expect(harness.handlers.has(0)).toBe(true))
     const capabilities = { ackOutput: 1 as const, writeUnavailable: 1 as const }
@@ -447,7 +447,7 @@ describe('terminal multiplex RPC', () => {
       registerOwnedSubscriptionCleanup: vi.fn(registry.registerOwnedSubscriptionCleanup),
       cleanupSubscription: vi.fn(registry.cleanupSubscription),
       waitForTerminal: vi.fn(() => new Promise<RuntimeTerminalWait>(() => {})),
-      sendTerminal: sendTerminal as unknown as OrcaRuntimeService['sendTerminal'],
+      sendTerminal: sendTerminal as unknown as QuirkyRuntimeService['sendTerminal'],
       updateDesktopViewport: vi.fn().mockResolvedValue(true)
     })
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
@@ -521,7 +521,7 @@ describe('terminal multiplex RPC', () => {
       registerOwnedSubscriptionCleanup: vi.fn(registry.registerOwnedSubscriptionCleanup),
       cleanupSubscription: vi.fn(registry.cleanupSubscription),
       waitForTerminal: vi.fn(() => new Promise<RuntimeTerminalWait>(() => {})),
-      sendTerminal: sendTerminal as unknown as OrcaRuntimeService['sendTerminal'],
+      sendTerminal: sendTerminal as unknown as QuirkyRuntimeService['sendTerminal'],
       updateDesktopViewport: vi.fn().mockResolvedValue(true),
       handleMobileSubscribe: vi.fn(),
       handleMobileUnsubscribe: vi.fn(),

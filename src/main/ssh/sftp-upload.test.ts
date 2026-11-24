@@ -40,11 +40,11 @@ describe('sftp-upload', () => {
   it('can create the first binary upload chunk without clobbering an existing temp file', async () => {
     const sftp = createSftpMock()
 
-    await uploadBuffer(sftp, Buffer.from('png'), '/remote/.logo.orca-upload', {
+    await uploadBuffer(sftp, Buffer.from('png'), '/remote/.logo.quirky-upload', {
       exclusive: true
     })
 
-    expect(sftp.createWriteStream).toHaveBeenCalledWith('/remote/.logo.orca-upload', {
+    expect(sftp.createWriteStream).toHaveBeenCalledWith('/remote/.logo.quirky-upload', {
       flags: 'wx'
     })
     const writeStream = vi.mocked(sftp.createWriteStream).mock.results[0]?.value as Writable
@@ -55,7 +55,7 @@ describe('sftp-upload', () => {
   })
 
   it('uses no-clobber writes for nested files during exclusive directory upload', async () => {
-    const localDir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
+    const localDir = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-'))
     await mkdir(join(localDir, 'nested'))
     await writeFile(join(localDir, 'nested', 'asset.txt'), 'asset')
     const sftp = createSftpMock()
@@ -77,7 +77,7 @@ describe('sftp-upload', () => {
   })
 
   it('uploads files from valid dot-dot-prefixed local directories', async () => {
-    const localDir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
+    const localDir = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-'))
     await mkdir(join(localDir, '..fixtures'))
     await writeFile(join(localDir, '..fixtures', 'asset.txt'), 'asset')
     const sftp = createSftpMock()
@@ -94,7 +94,7 @@ describe('sftp-upload', () => {
   })
 
   it('accepts a root named through a symlink or short name that realpath rewrites', async () => {
-    const realDir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
+    const realDir = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-'))
     await writeFile(join(realDir, 'asset.txt'), 'asset')
     const aliasDir = `${realDir}-alias`
     // Why a junction on Windows: directory symlinks need Developer Mode or admin there.
@@ -114,7 +114,7 @@ describe('sftp-upload', () => {
   it.skipIf(process.platform === 'win32')(
     'uploads a root reached through a symlinked parent',
     async () => {
-      const realParent = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
+      const realParent = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-'))
       await mkdir(join(realParent, 'root'))
       await writeFile(join(realParent, 'root', 'asset.txt'), 'asset')
       const linkedParent = `${realParent}-link`
@@ -137,7 +137,7 @@ describe('sftp-upload', () => {
   )
 
   it('rejects sibling directories outside the upload root', async () => {
-    const localDir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
+    const localDir = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-'))
     const escapedDir = `${localDir}-sibling`
     await mkdir(escapedDir)
     await writeFile(join(escapedDir, 'asset.txt'), 'asset')
@@ -154,7 +154,7 @@ describe('sftp-upload', () => {
   })
 
   it('does not create the remote file when the local source is a symlink', async () => {
-    const localDir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
+    const localDir = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-'))
     const targetPath = join(localDir, process.platform === 'win32' ? 'target-dir' : 'target.txt')
     const linkPath = join(localDir, process.platform === 'win32' ? 'link-dir' : 'link.txt')
     if (process.platform === 'win32') {
@@ -174,7 +174,7 @@ describe('sftp-upload', () => {
   })
 
   it('joins local file-descriptor teardown when a live upload is aborted', async () => {
-    const localDir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-abort-'))
+    const localDir = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-abort-'))
     const localPath = join(localDir, 'relay.js')
     const controller = new AbortController()
     const blockedWrite = new Writable({
@@ -208,8 +208,8 @@ describe('sftp-upload', () => {
   })
 
   it('never throws an uncaught error when a quit aborts an upload whose read already ended', async () => {
-    const localDir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-quit-'))
-    const localPath = join(localDir, 'orcad.js')
+    const localDir = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-quit-'))
+    const localPath = join(localDir, 'quirkyd.js')
     const controller = new AbortController()
     // Accepts every byte but never finishes, as a remote write still flushing at quit does.
     const flushing = new Writable({
@@ -225,7 +225,9 @@ describe('sftp-upload', () => {
     process.prependListener('uncaughtException', uncaught)
     try {
       await writeFile(localPath, Buffer.alloc(64 * 1024, 7))
-      const upload = uploadFile(sftp, localPath, '/remote/orcad.js', { signal: controller.signal })
+      const upload = uploadFile(sftp, localPath, '/remote/quirkyd.js', {
+        signal: controller.signal
+      })
       upload.catch(() => {})
       await new Promise((resolve) => setTimeout(resolve, 50))
 
@@ -241,7 +243,7 @@ describe('sftp-upload', () => {
   })
 
   it('joins the local read when the remote write fails', async () => {
-    const localDir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-failure-'))
+    const localDir = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-failure-'))
     const localPath = join(localDir, 'relay.js')
     const sftp = createSftpMock()
     vi.mocked(sftp.createWriteStream).mockReturnValue(
@@ -346,7 +348,7 @@ describe('uploadFile over a high-latency link', () => {
   }
 
   it('keeps many writes in flight instead of one chunk per round trip', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
+    const dir = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-'))
     const contents = Buffer.alloc(4 * 1024 * 1024)
     for (let i = 0; i < contents.length; i += 4096) {
       contents[i] = i % 251
@@ -367,7 +369,7 @@ describe('uploadFile over a high-latency link', () => {
   })
 
   it('fails, as contact lost, when the SSH session closes under a stalled upload', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'orca-sftp-upload-'))
+    const dir = await mkdtemp(join(tmpdir(), 'quirky-sftp-upload-'))
     await writeFile(join(dir, 'node.tar.gz'), Buffer.alloc(8 * 1024 * 1024))
     const { sftp, written } = slowSftp(1, 4)
     try {

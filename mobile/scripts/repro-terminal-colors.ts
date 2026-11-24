@@ -7,7 +7,7 @@
  * or are still present and therefore being lost during mobile WebView replay.
  *
  * Usage:
- *   ORCA_MOBILE_WS_URL=ws://127.0.0.1:6768 \
+ *   QUIRKY_MOBILE_WS_URL=ws://127.0.0.1:6768 \
  *     pnpm exec tsx scripts/repro-terminal-colors.ts <deviceToken> <serverPublicKeyB64> <worktreeSelector> [handleA] [handleB]
  */
 import nacl from 'tweetnacl'
@@ -18,7 +18,7 @@ import {
   type TerminalColorSnapshot
 } from './repro-terminal-color-output'
 
-const WS_URL = process.env.ORCA_MOBILE_WS_URL ?? 'ws://127.0.0.1:6768'
+const WS_URL = process.env.QUIRKY_MOBILE_WS_URL ?? 'ws://127.0.0.1:6768'
 const token = process.argv[2]
 const serverPublicKeyB64 = process.argv[3]
 const worktreeSelector = process.argv[4]

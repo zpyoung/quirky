@@ -1,16 +1,16 @@
 import { randomBytes } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { z } from 'zod'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import {
   forceTerminateProcessTree,
   signalProcessTree
-} from '@orca/process-host/process-tree-termination'
+} from '@quirky/process-host/process-tree-termination'
 import { withTimeout } from '../../shared/promise-timeout-fallback'
-import { createOutputSink } from '@orca/process-host/bounded-output-sink'
+import { createOutputSink } from '@quirky/process-host/bounded-output-sink'
 import { readFetchResponseJsonWithinLimit } from '../../shared/fetch-response-body'
 import { cancelUnreadResponseBody } from '../lib/unread-response-body'
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import type { ChildProcessHandle } from '@quirky/process-host/process-spec'
 import { createProviderSpawnSpec } from '../provider-process/provider-process-supervisor'
 import { stopSupervisedChildProcess } from '../provider-process/supervised-child-process-stop'
 import { guardSupervisedProviderGroup } from '../provider-process/provider-group-orphan-guard'
@@ -117,7 +117,7 @@ export async function probeOpenCodeLaunchModelContext(options: {
       OPENCODE_SERVER_PASSWORD: password
     },
     process.platform,
-    // `opencode serve` never exits on stdin end, so on POSIX only its supervisor stops it with Orca.
+    // `opencode serve` never exits on stdin end, so on POSIX only its supervisor stops it with Quirky.
     { lifetime: 'one-shot' }
   )
   const child = spawnProcess({

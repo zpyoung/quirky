@@ -58,7 +58,7 @@ export const WINDOWS_BOUNDARY_TESTS = [
   'src/main/claude-accounts/claude-profile-history-windows.test.ts',
   'src/shared/source-scan/source-tree-scan.test.ts',
   'src/main/cursor/hook-service.test.ts',
-  'src/main/orca-profiles/profile-index-store.test.ts',
+  'src/main/quirky-profiles/profile-index-store.test.ts',
   'src/main/startup/windows-app-data-path.test.ts',
   'src/main/runtime/repo-worktree-admin-fingerprint.test.ts',
   'src/main/runtime/worktree-scan-admin-fingerprint-gate.test.ts',

@@ -5,7 +5,7 @@ const { findSystemSshMock, runProcessMock } = vi.hoisted(() => ({
   runProcessMock: vi.fn()
 }))
 
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 
 vi.mock('./system-ssh-binary', () => ({ findSystemSsh: findSystemSshMock }))
 

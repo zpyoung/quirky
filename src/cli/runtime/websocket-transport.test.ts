@@ -16,7 +16,7 @@ import {
 } from '../../shared/e2ee-crypto'
 import { HEIMDALL_REMOTE_CLIENT_CAPABILITIES } from '../../shared/fork-heimdall/capability'
 import { RuntimeClient } from './client'
-import { launchOrcaApp } from './launch'
+import { launchQuirkyApp } from './launch'
 import { addEnvironmentFromPairingCode } from './environments'
 import { RuntimeClientError } from './types'
 import {
@@ -38,7 +38,7 @@ import { TERMINAL_QUICK_COMMAND_LONG_PROMPTS_RUNTIME_CAPABILITY } from '../../sh
 import { AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY } from '../../shared/agent-session-background-task-child-views-capability'
 
 vi.mock('./launch', () => ({
-  launchOrcaApp: vi.fn()
+  launchQuirkyApp: vi.fn()
 }))
 
 type TestRuntime = {
@@ -55,7 +55,7 @@ describe('CLI remote WebSocket transport', () => {
   const servers: TestRuntime[] = []
 
   afterEach(async () => {
-    vi.mocked(launchOrcaApp).mockClear()
+    vi.mocked(launchQuirkyApp).mockClear()
     await Promise.all(servers.splice(0).map((server) => server.close()))
   })
 
@@ -103,7 +103,7 @@ describe('CLI remote WebSocket transport', () => {
     )
   })
 
-  it('accepts a bare pairing payload as well as the orca URL wrapper', async () => {
+  it('accepts a bare pairing payload as well as the quirky URL wrapper', async () => {
     const runtime = await startTestRuntime('runtime-ws-2', {
       appVersion: '1.5.0',
       remoteUpdateSupport: {
@@ -162,16 +162,16 @@ describe('CLI remote WebSocket transport', () => {
       })
     )
 
-    const status = await client.openOrca()
+    const status = await client.openQuirky()
 
     expect(status.result.app.desktopWindowStatus).toBe('initializing')
-    expect(launchOrcaApp).not.toHaveBeenCalled()
+    expect(launchQuirkyApp).not.toHaveBeenCalled()
   })
 
   it('connects through a saved environment selector', async () => {
     const runtime = await startTestRuntime('runtime-env-1')
     servers.push(runtime)
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-cli-env-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-cli-env-'))
     addEnvironmentFromPairingCode(userDataPath, {
       name: 'remote-dev',
       pairingCode: encodePairingOffer({

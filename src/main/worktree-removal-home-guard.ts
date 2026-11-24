@@ -2,7 +2,7 @@
  * Deciding whether a worktree-removal path is somebody's home directory — and
  * whose home the caller is even allowed to ask about.
  *
- * `os.homedir()` answers for the process running Orca. A removal routed to an
+ * `os.homedir()` answers for the process running Quirky. A removal routed to an
  * SSH host deletes on a different machine, with a different OS and a different
  * home, so the client answer is neither necessary nor sufficient there: a
  * Windows host profile (`C:\Users\bob`) went unrecognised from a macOS desktop

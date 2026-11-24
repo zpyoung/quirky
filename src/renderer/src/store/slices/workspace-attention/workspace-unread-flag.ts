@@ -11,7 +11,7 @@ import type { AppState } from '../../types'
 import { persistPassiveWorktreeMetaForOwner } from '../worktrees/listing/worktree-owner-settings'
 import type { WorkspaceAttentionGet, WorkspaceAttentionSet } from './workspace-attention-contract'
 import { workspaceHasLiveMarker } from './workspace-live-markers'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../shared/sidebar-inputs-switch'
 import { WORKSPACE_UNREAD_HOST_RAISES_CAPABILITY } from '../../../../../shared/workspace-unread-raise-capability'
 import {
   readCachedRuntimeEnvironmentCapability,
@@ -26,7 +26,7 @@ export function markWorkspaceUnreadFlag(
   get: WorkspaceAttentionGet,
   worktreeId: string
 ): void {
-  if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+  if (!QUIRKY_SIDEBAR_INPUTS_IS_MAIN) {
     raiseWorkspaceUnreadFlag(set, get, worktreeId)
     return
   }

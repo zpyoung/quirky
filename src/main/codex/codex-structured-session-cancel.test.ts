@@ -1,7 +1,7 @@
 import { acquireReadyCodexForTest } from './codex-structured-session-adapter-fixture'
 import { describe, expect, it, vi } from 'vitest'
 
-// Every way Orca reads or kills processes, never settling: a Stop that reaches for one hangs.
+// Every way Quirky reads or kills processes, never settling: a Stop that reaches for one hangs.
 const processWork = vi.hoisted(() => {
   const never = (): Promise<never> => new Promise(() => {})
   return {

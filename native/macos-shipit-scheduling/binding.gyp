@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-      "target_name": "orca_shipit_scheduling",
+      "target_name": "quirky_shipit_scheduling",
       "sources": ["shipit-scheduling.m"],
       "xcode_settings": {
         "CLANG_ENABLE_OBJC_ARC": "YES",

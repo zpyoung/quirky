@@ -9,7 +9,7 @@ import type { InlineInput } from './file-explorer-inline-input-row'
 import { useAppStore } from '@/store'
 import {
   isWorktreeCatchUpPayload,
-  ORCA_WORKTREE_FILE_CHANGE_EVENT
+  QUIRKY_WORKTREE_FILE_CHANGE_EVENT
 } from '@/hooks/worktree-file-change-event'
 import { normalizeRuntimePathForComparison } from '../../../../shared/cross-platform-path'
 import {
@@ -228,14 +228,16 @@ export function useFileExplorerWatch({
     }
 
     const handleRuntimeChange = (
-      event: WindowEventMap[typeof ORCA_WORKTREE_FILE_CHANGE_EVENT]
+      event: WindowEventMap[typeof QUIRKY_WORKTREE_FILE_CHANGE_EVENT]
     ): void => {
       if (event.detail.runtimeEnvironmentId === activeRuntimeEnvironmentId) {
         handleFsChanged(event.detail.payload)
       }
     }
     // Why: IPC-bus trees otherwise miss the renderer-synthesized catch-up after a workspace is watched again.
-    const handleCatchUp = (event: WindowEventMap[typeof ORCA_WORKTREE_FILE_CHANGE_EVENT]): void => {
+    const handleCatchUp = (
+      event: WindowEventMap[typeof QUIRKY_WORKTREE_FILE_CHANGE_EVENT]
+    ): void => {
       if (
         event.detail.runtimeEnvironmentId === null &&
         isWorktreeCatchUpPayload(event.detail.payload)
@@ -246,16 +248,16 @@ export function useFileExplorerWatch({
     let unsubscribeListener: (() => void) | null = null
     if (activeRuntimeEnvironmentId?.trim() && activeWorktreeId) {
       // The app watcher owns recovery; a separate stream would strand this consumer after reconnect.
-      window.addEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handleRuntimeChange)
+      window.addEventListener(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, handleRuntimeChange)
     } else {
       unsubscribeListener = window.api.fs.onFsChanged(handleFsChanged)
-      window.addEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handleCatchUp)
+      window.addEventListener(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, handleCatchUp)
     }
 
     return () => {
       disposed = true
-      window.removeEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handleRuntimeChange)
-      window.removeEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handleCatchUp)
+      window.removeEventListener(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, handleRuntimeChange)
+      window.removeEventListener(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, handleCatchUp)
       unsubscribeListener?.()
       if (activeResyncByWatchKey.get(currentWatchKey) === scheduler.requestFullRefresh) {
         activeResyncByWatchKey.delete(currentWatchKey)

@@ -19,8 +19,8 @@ export function summarizeInventory(
   if (!inventory) {
     return 'loading'
   }
-  // Why: only Orca's own skills count as updates; a same-named copy from elsewhere is
-  // offered unselected under the headline, so Orca's skills can still read up to date.
+  // Why: only Quirky's own skills count as updates; a same-named copy from elsewhere is
+  // offered unselected under the headline, so Quirky's skills can still read up to date.
   if (ownedEligibleCount > 0) {
     return 'eligible'
   }
@@ -86,11 +86,11 @@ export function SummaryHeadline({
         {unselectedForeignCount === 1
           ? translate(
               'auto.components.skills.SkillFreshnessUpdateDialog.unselectedForeignOne',
-              '1 skill not installed by Orca is unselected.'
+              '1 skill not installed by Quirky is unselected.'
             )
           : translate(
               'auto.components.skills.SkillFreshnessUpdateDialog.unselectedForeignMany',
-              '{{value0}} skills not installed by Orca are unselected.',
+              '{{value0}} skills not installed by Quirky are unselected.',
               { value0: unselectedForeignCount }
             )}
       </p>
@@ -113,7 +113,7 @@ function SummaryHeadlineMain({
         <Loader2 className="size-4 animate-spin" />
         {translate(
           'auto.components.skills.SkillFreshnessUpdateDialog.checking',
-          'Checking installed Orca skills…'
+          'Checking installed Quirky skills…'
         )}
       </div>
     )
@@ -123,7 +123,7 @@ function SummaryHeadlineMain({
       <p className="text-xs text-muted-foreground">
         {translate(
           'auto.components.skills.SkillFreshnessUpdateDialog.none',
-          'No installed Orca skills found.'
+          'No installed Quirky skills found.'
         )}
       </p>
     )
@@ -134,7 +134,7 @@ function SummaryHeadlineMain({
         <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
         {translate(
           'auto.components.skills.SkillFreshnessUpdateDialog.success',
-          'All installed Orca skills are up to date.'
+          'All installed Quirky skills are up to date.'
         )}
       </div>
     )
@@ -147,7 +147,7 @@ function SummaryHeadlineMain({
         <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
         {translate(
           'auto.components.skills.SkillFreshnessUpdateDialog.attention',
-          'Some installed Orca skills were left out of the update.'
+          'Some installed Quirky skills were left out of the update.'
         )}
       </div>
     )
@@ -160,7 +160,7 @@ function SummaryHeadlineMain({
         <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
         {translate(
           'auto.components.skills.SkillFreshnessUpdateDialog.scanIncomplete',
-          'Orca could not finish checking plugin-managed skills.'
+          'Quirky could not finish checking plugin-managed skills.'
         )}
       </div>
     )

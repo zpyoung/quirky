@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { advancePartialEscapeTail } from '../../src/shared/terminal-partial-escape-tail'
 
 const require = createRequire(import.meta.url)
-const { Terminal } = require(process.env.ORCA_PARTIAL_ESCAPE_HEADLESS ?? '@xterm/headless')
+const { Terminal } = require(process.env.QUIRKY_PARTIAL_ESCAPE_HEADLESS ?? '@xterm/headless')
 const { SerializeAddon } = require('@xterm/addon-serialize')
 
 function model() {

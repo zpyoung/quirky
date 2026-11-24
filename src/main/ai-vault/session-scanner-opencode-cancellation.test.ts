@@ -72,7 +72,7 @@ function untilAborted(signal: AbortSignal | undefined): Promise<never> {
 describe.each(['opencode', 'opencode2'] as const)('%s scan cancellation', (agent) => {
   it('reports a deadline while retaining completed sessions and other agents, then retries', async () => {
     vi.useFakeTimers()
-    const root = mkdtempSync(join(tmpdir(), 'orca-scan-deadline-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-scan-deadline-'))
     try {
       const session = configure(agent)
       const blocked = { ...file, path: '/fixture/opencode.db#blocked' }

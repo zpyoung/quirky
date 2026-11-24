@@ -11,7 +11,7 @@ const { handleMock, onMock, removeHandlerMock, removeAllListenersMock } = vi.hoi
 vi.mock('electron', () => ({
   app: {
     isPackaged: true,
-    getPath: vi.fn().mockReturnValue('/tmp/orca-test-userdata')
+    getPath: vi.fn().mockReturnValue('/tmp/quirky-test-userdata')
   },
   ipcMain: {
     handle: handleMock,

@@ -21,7 +21,7 @@ function makeReview(overrides: Partial<HostedReviewInfo> = {}): HostedReviewInfo
 
 const baseOptions = {
   enabled: true,
-  repoPath: '/repo/orca',
+  repoPath: '/repo/quirky',
   repoId: 'repo-1',
   base: 'feature/parent',
   repoDefaultBase: 'main',
@@ -45,7 +45,7 @@ describe('useHostedReviewStackParent', () => {
 
     await act(async () => vi.advanceTimersByTime(1))
 
-    expect(fetchHostedReviewForBranch).toHaveBeenCalledWith('/repo/orca', 'feature/parent', {
+    expect(fetchHostedReviewForBranch).toHaveBeenCalledWith('/repo/quirky', 'feature/parent', {
       repoId: 'repo-1',
       active: true
     })

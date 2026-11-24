@@ -272,7 +272,7 @@ export default function MonacoEditor({
         key={modelUri}
         height={renderedEditorHeight === null ? '100%' : `${renderedEditorHeight}px`}
         language={language}
-        // Why: defaultValue, not controlled value — Orca owns post-mount content sync; a controlled path would double setValue.
+        // Why: defaultValue, not controlled value — Quirky owns post-mount content sync; a controlled path would double setValue.
         defaultValue={content}
         theme={isDark ? 'vs-dark' : 'vs'}
         onChange={contentSync.handleChange}
@@ -310,7 +310,7 @@ export default function MonacoEditor({
         }}
         // Why the helper: `@monaco-editor/react` calls `Uri.parse` on this, which mis-reads a Windows drive path as its own scheme.
         path={modelUri}
-        // Why: Orca owns cursor/scroll restoration, so disable @monaco-editor/react's competing view-state Map.
+        // Why: Quirky owns cursor/scroll restoration, so disable @monaco-editor/react's competing view-state Map.
         saveViewState={false}
         keepCurrentModel
       />

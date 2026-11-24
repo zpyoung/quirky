@@ -24,7 +24,7 @@ afterEach(() => {
 })
 
 function fixture(sequenced = true) {
-  const root = mkdtempSync(join(tmpdir(), 'orca-zcode-transcript-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-zcode-transcript-'))
   const dbPath = join(root, 'db.sqlite')
   const db = new Database(dbPath)
   cleanups.push(() => {

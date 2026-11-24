@@ -13,8 +13,8 @@ const WINDOWS_REPO_ID = 'a0a2b4a4-1bff-494c-b005-d77918abc6a7'
 
 function command(repoId: string): TerminalQuickCommand {
   return {
-    id: 'test-orca',
-    label: 'Test Orca',
+    id: 'test-quirky',
+    label: 'Test Quirky',
     action: 'terminal-command',
     command: 'pnpm test',
     appendEnter: true,
@@ -54,7 +54,7 @@ describe('terminalQuickCommandMatchesWorkspaceProject', () => {
     const repo = (id: string, path: string, executionHostId?: ExecutionHostId): Repo => ({
       id,
       path,
-      displayName: 'orca',
+      displayName: 'quirky',
       badgeColor: '#737373',
       addedAt: 100,
       kind: 'git',
@@ -66,8 +66,8 @@ describe('terminalQuickCommandMatchesWorkspaceProject', () => {
       ...(executionHostId ? { executionHostId } : {})
     })
     const projectHostSetups = projectHostSetupProjectionFromRepos([
-      repo(LOCAL_REPO_ID, '/Users/alice/orca'),
-      repo(WINDOWS_REPO_ID, 'C:\\Users\\alice\\orca', 'runtime:windows-2')
+      repo(LOCAL_REPO_ID, '/Users/alice/quirky'),
+      repo(WINDOWS_REPO_ID, 'C:\\Users\\alice\\quirky', 'runtime:windows-2')
     ]).setups
 
     expect(

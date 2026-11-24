@@ -160,7 +160,7 @@ export const STRUCTURED_CALLS: {
     hostMethod: 'restartContinueAll',
     result: { resumed: [], continued: [] }
   },
-  // Continue on a reply an Orca stop cut off. Clients call it only on a host advertising it.
+  // Continue on a reply an Quirky stop cut off. Clients call it only on a host advertising it.
   {
     method: 'agentSession.continueInterrupted',
     hostMethod: 'continueInterrupted',

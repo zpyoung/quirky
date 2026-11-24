@@ -7,7 +7,7 @@ import type {
 import { createLiveProfileStateStore } from './profile-state-live-store-factory'
 
 /** Runtime roots sharing the profile-state selection boundary. */
-export type ProfileStateStartupRuntime = 'desktop' | 'orcad'
+export type ProfileStateStartupRuntime = 'desktop' | 'quirkyd'
 
 export type ProfileStateStartupAuthorityOptions = Omit<
   ProfileStateStoreFactoryOptions,
@@ -20,11 +20,11 @@ export type ProfileStateStartupAuthorityOptions = Omit<
 }
 
 export class ProfileStateStartupAuthorityError extends Error {
-  readonly code = 'orcad-sqlite-authority-unsupported' as const
+  readonly code = 'quirkyd-sqlite-authority-unsupported' as const
 
   constructor() {
     super(
-      'orcad requires SQLite database and backup support. Launch it through its pinned Node runtime.'
+      'quirkyd requires SQLite database and backup support. Launch it through its pinned Node runtime.'
     )
     this.name = 'ProfileStateStartupAuthorityError'
   }
@@ -34,7 +34,7 @@ export class ProfileStateStartupAuthorityError extends Error {
 export async function createProfileStateStoreForStartup(
   options: ProfileStateStartupAuthorityOptions
 ): Promise<ProfileStateStoreFactoryResult> {
-  if (options.runtime === 'orcad' && !isProfileStateSqliteAvailable()) {
+  if (options.runtime === 'quirkyd' && !isProfileStateSqliteAvailable()) {
     throw new ProfileStateStartupAuthorityError()
   }
   return createLiveProfileStateStore(options, {
@@ -42,6 +42,6 @@ export async function createProfileStateStoreForStartup(
     onFailure:
       options.onPersistenceFailure ??
       ((error) =>
-        console.error('[persistence] Saving has stopped. Restart Orca before continuing.', error))
+        console.error('[persistence] Saving has stopped. Restart Quirky before continuing.', error))
   })
 }

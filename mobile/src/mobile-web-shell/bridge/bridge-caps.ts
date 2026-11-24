@@ -94,7 +94,7 @@ export const BRIDGE_MAX_ROUTE_HREF_CHARS = 2048
  *
  * `https:` and `http:` are what every provider's task source is, and `mailto:` is what a review
  * thread produces. Everything else — `javascript:`, `data:`, `file:`, `intent:`, the shell's own
- * `orca-mobile-web:` — is a way to reach something the page was never granted, so the list is
+ * `quirky-mobile-web:` — is a way to reach something the page was never granted, so the list is
  * closed. Broad inside it on purpose: any host and any path, because a grant that named GitHub
  * would have to grow a row per provider.
  */

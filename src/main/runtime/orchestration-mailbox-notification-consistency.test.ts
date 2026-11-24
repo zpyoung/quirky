@@ -106,7 +106,7 @@ describe('orchestration notification mailbox consistency', () => {
 
   it('reconciles the persisted production mismatch after runtime restart', async () => {
     vi.useFakeTimers()
-    const directory = mkdtempSync(join(tmpdir(), 'orca-mailbox-upgrade-restart-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-mailbox-upgrade-restart-'))
     temporaryDirectories.push(directory)
     const dbPath = join(directory, 'orchestration.db')
     const oldDb = new OrchestrationDb(dbPath)
@@ -288,7 +288,7 @@ describe('orchestration notification mailbox consistency', () => {
 
   it('does not submit or replay a pointer after ownership changes during Enter delay', async () => {
     vi.useFakeTimers()
-    const directory = mkdtempSync(join(tmpdir(), 'orca-mailbox-restart-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-mailbox-restart-'))
     temporaryDirectories.push(directory)
     const dbPath = join(directory, 'orchestration.db')
     const firstDb = new OrchestrationDb(dbPath)
@@ -321,7 +321,7 @@ describe('orchestration notification mailbox consistency', () => {
 
   it('does not replay Enter for an ambiguous staged pointer after restart', async () => {
     vi.useFakeTimers()
-    const directory = mkdtempSync(join(tmpdir(), 'orca-mailbox-staged-restart-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-mailbox-staged-restart-'))
     temporaryDirectories.push(directory)
     const dbPath = join(directory, 'orchestration.db')
     const firstDb = new OrchestrationDb(dbPath)
@@ -360,7 +360,7 @@ describe('orchestration notification mailbox consistency', () => {
 
   it('never resumes a staged Enter after the restored agent starts working', async () => {
     vi.useFakeTimers()
-    const directory = mkdtempSync(join(tmpdir(), 'orca-mailbox-working-restart-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-mailbox-working-restart-'))
     temporaryDirectories.push(directory)
     const dbPath = join(directory, 'orchestration.db')
     const firstDb = new OrchestrationDb(dbPath)
@@ -773,7 +773,7 @@ describe('orchestration notification mailbox consistency', () => {
 
   it('does not replay a successfully submitted actionable pointer after restart', async () => {
     vi.useFakeTimers()
-    const directory = mkdtempSync(join(tmpdir(), 'orca-mailbox-actionable-restart-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-mailbox-actionable-restart-'))
     temporaryDirectories.push(directory)
     const dbPath = join(directory, 'orchestration.db')
     const firstDb = new OrchestrationDb(dbPath)

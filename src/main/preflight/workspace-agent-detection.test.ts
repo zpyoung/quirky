@@ -1,7 +1,7 @@
 import '../runtime/rpc/unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../runtime/rpc/dispatcher'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { PREFLIGHT_METHODS } from '../runtime/rpc/methods/preflight'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { GlobalWindowsRuntimeDefault } from '../../shared/project-execution-runtime'
@@ -215,7 +215,7 @@ describe('preflight.detectAgents resolves the workspace on the host', () => {
       getRuntimeId: () => 'host',
       resolveAgentDetectionHost: async (worktreeId?: string) =>
         worktreeId ? resolveFor(s, worktreeId) : { kind: 'local' }
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     return new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
   }
 

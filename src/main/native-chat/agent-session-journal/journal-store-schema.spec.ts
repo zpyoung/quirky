@@ -25,7 +25,7 @@ import {
   openTestJournalHostDatabase,
   liveTestJournalRows,
   insertTestJournalRowJson,
-  SAVED_BY_NEWER_ORCA
+  SAVED_BY_NEWER_QUIRKY
 } from './journal-host-database-test-support'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 
@@ -103,7 +103,7 @@ export function registerJournalStoreSchemaTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-journal-schema-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-journal-schema-'))
     clock = 1_000
   })
 
@@ -124,17 +124,17 @@ export function registerJournalStoreSchemaTests(): void {
       await withDatabase((db) => db.pragma(`user_version = ${JOURNAL_DB_SCHEMA_VERSION + 1}`))
       const before = await digest(journalDatabasePath(root))
 
-      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
+      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
       // A chat the database never held is refused the same way rather than being founded.
       await expect(
         journals.open({ identity: { ...IDENTITY, sessionId: 'session-2' }, stateDirectory: root })
-      ).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
+      ).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
       await journals.closeAll()
       expect(await digest(journalDatabasePath(root))).toBe(before)
     })
 
     // Tables a newer schema changed read as a chat only an update opens, not as damage.
-    it("refuses as a newer Orca's a chat whose tables a newer build changed", async () => {
+    it("refuses as a newer Quirky's a chat whose tables a newer build changed", async () => {
       const journal = await open()
       await journal.appendItem(item(0), body('a'), {
         fence: 1,
@@ -146,7 +146,7 @@ export function registerJournalStoreSchemaTests(): void {
         db.pragma(`user_version = ${JOURNAL_DB_SCHEMA_VERSION + 1}`)
       })
 
-      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
+      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
     })
 
     // The only older version brought forward; 1 and 2 are refused (journal-database.spec.ts).
@@ -169,7 +169,7 @@ export function registerJournalStoreSchemaTests(): void {
   })
 
   describe('axis 2: the row body shape', () => {
-    it("refuses a journal holding a row from a newer build as a newer Orca's, and keeps that row", async () => {
+    it("refuses a journal holding a row from a newer build as a newer Quirky's, and keeps that row", async () => {
       const journal = await open()
       await journal.appendItem(item(0), body('a'), {
         fence: 1,
@@ -180,7 +180,7 @@ export function registerJournalStoreSchemaTests(): void {
       await journal.close()
       await appendRawRow(epoch, nextSeq, futureRow(epoch, nextSeq))
 
-      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
+      await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
       // Never skipped, never deleted: the row this build cannot read is still there.
       await withDatabase((db) => {
         const stored = liveTestJournalRows(db, IDENTITY.sessionId).find(

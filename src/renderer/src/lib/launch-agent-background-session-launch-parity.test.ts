@@ -74,7 +74,7 @@ async function runAutomation(c: AutomationLaunchCase) {
     title: c.title
   })
   const phone = modules.phone.buildMobileSessionTabSnapshots(store.getState(), false)
-  if (modules.switch.ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (modules.switch.QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     // Main takes the run title by tab-bar id, and its frame (not modelled here) draws it.
     const tabBarId = store.getState().unifiedTabsByWorktree[launchWorkspaceId(c.workspace)]![0]!.id
     expect(main.transport?.sentOfType('renameTab').at(-1)).toEqual(

@@ -39,7 +39,7 @@ export function notifyHandoffDelivery(
       toast.success(
         translate(
           'components.agentSessionContinuation.forkSessionHandoff.deliveryAutomaticRetrySucceeded',
-          'The initial delivery failed, then Orca resent the brief.'
+          'The initial delivery failed, then Quirky resent the brief.'
         )
       )
       return

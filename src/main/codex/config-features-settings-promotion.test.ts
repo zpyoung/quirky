@@ -26,10 +26,10 @@ let userDataDir: string
 let previousUserDataPath: string | undefined
 
 beforeEach(() => {
-  tmpHome = mkdtempSync(join(tmpdir(), 'orca-codex-features-home-'))
-  userDataDir = mkdtempSync(join(tmpdir(), 'orca-codex-features-user-data-'))
-  previousUserDataPath = process.env.ORCA_USER_DATA_PATH
-  process.env.ORCA_USER_DATA_PATH = userDataDir
+  tmpHome = mkdtempSync(join(tmpdir(), 'quirky-codex-features-home-'))
+  userDataDir = mkdtempSync(join(tmpdir(), 'quirky-codex-features-user-data-'))
+  previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
+  process.env.QUIRKY_USER_DATA_PATH = userDataDir
   homedirMock.mockReturnValue(tmpHome)
   // Why: promotion writes into homedir()/.codex; refuse to run against the real one.
   if (homedir() !== tmpHome) {
@@ -41,9 +41,9 @@ afterEach(() => {
   rmSync(tmpHome, { recursive: true, force: true })
   rmSync(userDataDir, { recursive: true, force: true })
   if (previousUserDataPath === undefined) {
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_USER_DATA_PATH
   } else {
-    process.env.ORCA_USER_DATA_PATH = previousUserDataPath
+    process.env.QUIRKY_USER_DATA_PATH = previousUserDataPath
   }
   vi.clearAllMocks()
 })
@@ -51,7 +51,7 @@ afterEach(() => {
 const systemConfigPath = (): string => join(tmpHome, '.codex', 'config.toml')
 const runtimeHomeDir = (): string => join(userDataDir, 'codex-runtime-home', 'home')
 const runtimeConfigPath = (): string => join(runtimeHomeDir(), 'config.toml')
-const baselinePath = (): string => join(runtimeHomeDir(), '.orca-config-settings-baseline.json')
+const baselinePath = (): string => join(runtimeHomeDir(), '.quirky-config-settings-baseline.json')
 const readSystemConfig = (): string => readFileSync(systemConfigPath(), 'utf-8')
 const readRuntimeConfig = (): string => readFileSync(runtimeConfigPath(), 'utf-8')
 
@@ -65,7 +65,7 @@ function setRuntimeConfig(content: string): void {
   writeFileSync(runtimeConfigPath(), content, 'utf-8')
 }
 
-// Mimics `codex features disable daemon_auto_start` run with CODEX_HOME = Orca's mirror home.
+// Mimics `codex features disable daemon_auto_start` run with CODEX_HOME = Quirky's mirror home.
 function turnOffInMirror(raw = 'false'): void {
   const existing = existsSync(runtimeConfigPath()) ? readRuntimeConfig() : ''
   setRuntimeConfig(
@@ -186,7 +186,7 @@ describe('[features].daemon_auto_start write-back promotion', () => {
     expect(readRuntimeConfig()).toContain('daemon_auto_start = false')
   })
 
-  it("never promotes Orca's own daemon socket override", () => {
+  it("never promotes Quirky's own daemon socket override", () => {
     writeSystemConfig('model = "gpt-5"\n')
     syncSystemConfigIntoManagedCodexHome()
     rmSync(systemConfigPath())

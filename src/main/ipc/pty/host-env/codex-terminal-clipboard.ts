@@ -10,7 +10,7 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 export const CODEX_REMOTE_VIEWER_SSH_CONNECTION = '127.0.0.1 0 127.0.0.1 0'
 
 /**
- * Makes an Orca-launched Codex copy through the viewer's terminal (OSC 52) when the
+ * Makes an Quirky-launched Codex copy through the viewer's terminal (OSC 52) when the
  * viewer is on another machine, so selection copy and Ctrl+C reach the user's clipboard.
  * Scoped to Codex launches: bare shells keep their real SSH posture. (#23530)
  */

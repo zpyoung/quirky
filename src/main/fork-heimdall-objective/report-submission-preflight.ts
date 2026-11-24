@@ -19,7 +19,7 @@ import {
 import { parseAndValidatePlannerRepairReport } from '../../shared/fork-heimdall-objective/plan-repair-schema'
 import { parseAndValidatePlanReviewReport } from '../../shared/fork-heimdall-objective/plan-review-schema'
 import type { ObjectivePlanAssumption } from '../../shared/fork-heimdall-objective/plan-schema'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { requireObjectiveOriginalDispatchFingerprint } from '../../shared/fork-heimdall-objective/decision-context'
 import type { ObjectiveWorkspaceTarget } from './content-identity'
 import { objectiveContractFromEnrollment } from './definition'
@@ -149,7 +149,7 @@ function deterministicWorkspaceRejection(args: {
 }
 
 export function createObjectiveSubmissionAdapter(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   objectiveStore: ObjectiveStore
 }): SubmissionAdapter<ObjectiveWorld> {
   return {

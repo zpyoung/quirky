@@ -35,7 +35,7 @@ let list: typeof listClaudeTranscriptFiles
 
 beforeEach(async () => {
   vi.resetModules()
-  state.home = await mkdtemp(join(tmpdir(), 'orca-claude-discovery-error-'))
+  state.home = await mkdtemp(join(tmpdir(), 'quirky-claude-discovery-error-'))
   state.blocked = ''
   state.code = ''
   projects = join(state.home, '.claude', 'projects')

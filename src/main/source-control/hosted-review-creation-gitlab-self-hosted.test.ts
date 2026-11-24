@@ -60,7 +60,7 @@ describe('GitLab self-hosted hosted review creation eligibility', () => {
     mockNonGitLabProviders()
     getHostedReviewForBranchMock.mockResolvedValue(null)
     gitExecFileAsyncMock.mockResolvedValue({
-      stdout: 'git@gitlab.internal:team/orca.git\n',
+      stdout: 'git@gitlab.internal:team/quirky.git\n',
       stderr: ''
     })
   })
@@ -164,7 +164,7 @@ gitlab.internal
   it('recovers provider detection after auth diagnostics discover a rejected host', async () => {
     let selfHostedAuthenticated = false
     gitExecFileAsyncMock.mockResolvedValue({
-      stdout: 'https://gitlab.example.com/team/orca.git\n',
+      stdout: 'https://gitlab.example.com/team/quirky.git\n',
       stderr: ''
     })
     glabExecFileAsyncMock.mockImplementation(async (args: string[]) => {

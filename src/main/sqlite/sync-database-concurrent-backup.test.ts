@@ -28,7 +28,7 @@ const WRITER_SOURCE = `
 `
 
 it('backs up one complete revision while another thread commits to the WAL', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-sqlite-concurrent-backup-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-sqlite-concurrent-backup-'))
   const path = join(directory, 'source.db')
   const target = join(directory, 'snapshot.db')
   const source = new SyncDatabase(path)

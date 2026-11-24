@@ -3,8 +3,8 @@ import type {
   RuntimeMobileSessionBrowserTab,
   RuntimeMobileSessionTabsSnapshot
 } from '../../shared/runtime-types'
-import { OrcaRuntimeWithCloseStructuredAgentSessionTab } from './session-tabs/structured-session-tab-close'
-import { OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs } from './session-lifecycle/projection/reconcile-headless-mobile-session-browser-tabs'
+import { QuirkyRuntimeWithCloseStructuredAgentSessionTab } from './session-tabs/structured-session-tab-close'
+import { QuirkyRuntimeWithReconcileHeadlessMobileSessionBrowserTabs } from './session-lifecycle/projection/reconcile-headless-mobile-session-browser-tabs'
 
 const rendererPage: RuntimeMobileSessionBrowserTab = {
   type: 'browser',
@@ -51,12 +51,13 @@ function reconcile(
   existing: RuntimeMobileSessionTabsSnapshot = snapshot
 ): RuntimeMobileSessionTabsSnapshot | undefined {
   const storeMobileSessionSnapshot = vi.fn()
-  const runtime = OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs.prototype as unknown as {
-    reconcileHeadlessMobileSessionBrowserTabs(
-      worktreeId: string,
-      existing: RuntimeMobileSessionTabsSnapshot
-    ): void
-  }
+  const runtime =
+    QuirkyRuntimeWithReconcileHeadlessMobileSessionBrowserTabs.prototype as unknown as {
+      reconcileHeadlessMobileSessionBrowserTabs(
+        worktreeId: string,
+        existing: RuntimeMobileSessionTabsSnapshot
+      ): void
+    }
   runtime.reconcileHeadlessMobileSessionBrowserTabs.call(
     {
       buildHeadlessMobileSessionBrowserTabs: () => host.live ?? [],
@@ -127,7 +128,7 @@ it('does not republish when a client row merely sits before a renderer row', () 
 
 it('keeps the renderer publication epoch when selecting a client-hosted browser tab', () => {
   const storeMobileSessionSnapshot = vi.fn()
-  const runtime = OrcaRuntimeWithCloseStructuredAgentSessionTab.prototype as unknown as {
+  const runtime = QuirkyRuntimeWithCloseStructuredAgentSessionTab.prototype as unknown as {
     markHeadlessBrowserSessionTabActive(
       worktreeId: string,
       browserPageId: string,

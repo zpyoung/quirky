@@ -1,13 +1,13 @@
 import type { TerminalSplitOptions } from './terminal-split-surface'
 import type { SplitPaneInMainOptions, SplitPaneSource } from './terminal-split-in-main'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
-import { OrcaRuntimeWithStopExplicitlyClosedTabPtys } from '../../session-tabs/explicit-terminal-close-stops'
+import { QuirkyRuntimeWithStopExplicitlyClosedTabPtys } from '../../session-tabs/explicit-terminal-close-stops'
 import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { Worktree } from '../../../../shared/worktree/types'
 
-export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopExplicitlyClosedTabPtys {
+export abstract class QuirkyRuntimeWithSplitTerminal extends QuirkyRuntimeWithStopExplicitlyClosedTabPtys {
   protected abstract splitPtyBackedTerminal(
     pty: RuntimePtyWorktreeRecord,
     opts?: TerminalSplitOptions,
@@ -50,7 +50,7 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
     const { leaf } = this.getLiveLeafForHandle(handle)
     const direction = opts.direction ?? 'horizontal'
     // Switch point: main writes the split and starts its terminal; the window attaches to it.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && this.ownsTabLayout(leaf.worktreeId, leaf.tabId)) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN && this.ownsTabLayout(leaf.worktreeId, leaf.tabId)) {
       const cwd = leaf.ptyId
         ? await this.ptyController?.getCwd?.(leaf.ptyId).catch(() => null)
         : null

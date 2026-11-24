@@ -231,7 +231,7 @@ function cached(id: string) {
 }
 
 beforeEach(async () => {
-  fixture.userData = mkdtempSync(join(tmpdir(), 'orca-inactive-claude-429-'))
+  fixture.userData = mkdtempSync(join(tmpdir(), 'quirky-inactive-claude-429-'))
   fixture.now = 1800000000000
   fixture.status = 200
   fixture.retryAfter = '3600'

@@ -56,11 +56,11 @@ The cutover runs in this order. Each step finishes before the next one starts.
 
 ### Identity on one Mac
 
-| | Orca Dev (fallback) | Old Quirky (removed at the flip) | New Quirky |
-|---|---|---|---|
-| Bundle id | `com.zpyoung.orca` | `dev.quirky.app` | `com.zpyoung.quirky` |
-| Data | `Application Support/orca`, `~/.orca` | `~/.quirky` | `Application Support/quirky`, `~/.quirky` |
-| CLI, URL scheme | `orca`, `orca://` | `quirky`, `quirky://` | `quirky`, `quirky://` |
+|                 | Orca Dev (fallback)                   | Old Quirky (removed at the flip) | New Quirky                                |
+| --------------- | ------------------------------------- | -------------------------------- | ----------------------------------------- |
+| Bundle id       | `com.zpyoung.orca`                    | `dev.quirky.app`                 | `com.zpyoung.quirky`                      |
+| Data            | `Application Support/orca`, `~/.orca` | `~/.quirky`                      | `Application Support/quirky`, `~/.quirky` |
+| CLI, URL scheme | `orca`, `orca://`                     | `quirky`, `quirky://`            | `quirky`, `quirky://`                     |
 
 New Quirky is signed and notarized with the same Developer ID as Orca Dev, so updates and macOS permissions work the same way. Its helper bundles, daemon socket, ports and keychain item are its own. LICENSE keeps Lovecast Inc.'s MIT notice next to the owner's, and the About window credits Orca.
 
@@ -83,12 +83,12 @@ New Quirky is signed and notarized with the same Developer ID as Orca Dev, so up
    - **Then** ✓ each cut is its own PR; ✓ CI is green and the dead-code pass is clean before the next cut opens; ✓ nothing in the "stays" list is touched
    - **Trim order:**
 
-     | Order | Cut | Notes |
-     |---|---|---|
-     | 1 | Stably endpoints | Telemetry and crash reporting are removed. The update feed and `npx skills add` point at zpyoung/quirky |
-     | 2 | Windows, Linux, WSL | WSL guest, Windows and Linux helpers in `native/`, Linux package updates, per-platform CI lanes |
-     | 3 | Hosted relay | `cloud/` and the relay deploy workflows. Mobile stays in the tree but can't connect until the direct-pairing port |
-     | 4 | Bitbucket, Gitea, Azure DevOps | GitHub and GitLab stay |
+     | Order | Cut                            | Notes                                                                                                             |
+     | ----- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+     | 1     | Stably endpoints               | Telemetry and crash reporting are removed. The update feed and `npx skills add` point at zpyoung/quirky           |
+     | 2     | Windows, Linux, WSL            | WSL guest, Windows and Linux helpers in `native/`, Linux package updates, per-platform CI lanes                   |
+     | 3     | Hosted relay                   | `cloud/` and the relay deploy workflows. Mobile stays in the tree but can't connect until the direct-pairing port |
+     | 4     | Bitbucket, Gitea, Azure DevOps | GitHub and GitLab stay                                                                                            |
 
      Stays: SSH remotes, Linear, Jira, every agent CLI, computer use, the browser, the AI vault. The cuts total roughly 75k of about 2.5M lines, so the owner still owns about 2.4M.
 
@@ -177,18 +177,21 @@ Out of scope:
 ## Decisions Locked
 
 **Intent**
+
 - Drivers: Quirky stability, upstream pace, the Bun/Electrobun bet not paying off
 - Fork model: hard fork, cloned once
 - End goal unchanged: replace VSCode and Orca, with the brain as the entry point
 - Quirky repo kept; today's main archived; the Orca-based version becomes Quirky
 
 **Starting snapshot and upstream intake**
+
 - Start from zpyoung/orca as it is (upstream v1.4.237 + fork features); the planned last sync was dropped (see Amendments)
 - Upstream intake: a release review every two weeks proposes ports; nothing lands until the owner picks it
 - Code changes anywhere; fork-sync tooling deleted
 - zpyoung/orca archived once new Quirky passes the daily-driver week; Orca Dev is the fallback until then
 
 **Rebrand and data**
+
 - Full rename, code identifiers included
 - `quirky` CLI only; the owner's scripts, skills and CLAUDE.md move at the start of the week
 - Import Orca Dev state on first launch; existing worktrees stay in place
@@ -197,6 +200,7 @@ Out of scope:
 - Re-running the import adds only what's new in Orca Dev since the last import — assumed (the recommended answer; the spec was signed off with this question open)
 
 **Trim**
+
 - macOS only
 - Hosted relay cut; mobile reconnects later over LAN or tailnet
 - Bitbucket, Gitea and Azure DevOps cut; Linear, Jira, every agent CLI and computer use kept
@@ -207,12 +211,14 @@ Out of scope:
 - No phone app needed during the week
 
 **Porting from Quirky**
+
 - First port: Quirky's native chat replaces Orca's, engine and UI
 - Worth porting later: structured sessions (part of the chat port), PTY history, view and feedback, ask extensions, the brain, mobile pairing
 - The Orca fork's version wins where both exist
 - Ports are rebuilt natively, with Quirky code and specs as reference
 
 **Success and repo**
+
 - Cutover done: seven days in a row of real work without opening Orca Dev
 - Orca's full history becomes main; old main kept as `archive/v1` and `quirky-v1-final`
 - ~300 MB memory: a goal, not a gate

@@ -1,4 +1,4 @@
-// Nested Remote Orca Server -> SSH image paste (#17679). This process serves no SSH filesystem, so
+// Nested Remote Quirky Server -> SSH image paste (#17679). This process serves no SSH filesystem, so
 // any route that resolved the runtime's SSH target locally would fail the way the report did.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
@@ -63,7 +63,7 @@ const rendererEvent = {
   sender: {
     id: 1,
     getType: () => 'window',
-    getURL: () => 'file:///orca/index.html',
+    getURL: () => 'file:///quirky/index.html',
     isDestroyed: () => false
   }
 }
@@ -190,7 +190,7 @@ describe('clipboard image paste for a runtime-owned SSH workspace', () => {
     fsWriteFileMock.mockResolvedValue(undefined)
 
     await expect(saveImageHandler()(rendererEvent, undefined)).resolves.toMatch(
-      /orca-paste-.*\.png$/
+      /quirky-paste-.*\.png$/
     )
 
     expect(fsWriteFileMock).toHaveBeenCalledTimes(1)

@@ -3,7 +3,7 @@ import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
   markWorktreeCatchUpPayload,
-  ORCA_WORKTREE_FILE_CHANGE_EVENT
+  QUIRKY_WORKTREE_FILE_CHANGE_EVENT
 } from '@/hooks/worktree-file-change-event'
 import type { FsChangedPayload } from '../../../../shared/filesystem-entry-types'
 import { useFileExplorerWatch } from './useFileExplorerWatch'
@@ -27,7 +27,9 @@ const ROOT = '/repo'
 
 function dispatch(payload: FsChangedPayload, runtimeEnvironmentId: string | null = null): void {
   window.dispatchEvent(
-    new CustomEvent(ORCA_WORKTREE_FILE_CHANGE_EVENT, { detail: { payload, runtimeEnvironmentId } })
+    new CustomEvent(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, {
+      detail: { payload, runtimeEnvironmentId }
+    })
   )
 }
 

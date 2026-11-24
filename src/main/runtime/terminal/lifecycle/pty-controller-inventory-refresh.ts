@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController } from './pty-worktree-refresh'
+import { QuirkyRuntimeWithRefreshPtyWorktreeRecordsFromController } from './pty-worktree-refresh'
 import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
 import type * as PtyControllerContract from '../../runtime-pty-controller-contract'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
@@ -11,7 +11,7 @@ import {
 import {
   PTY_CONTROLLER_LIST_PROVIDER_MARGIN_MS,
   PTY_CONTROLLER_LIST_TIMEOUT_MS
-} from '../../orca-runtime-postlude'
+} from '../../quirky-runtime-postlude'
 import { pruneOldestMapEntry } from '../../prune-oldest-map-entry'
 import { withTimeoutResult } from '../../runtime-async-boundaries'
 import { getPtyExecutionHost } from '../../../../shared/terminal-execution-host'
@@ -28,13 +28,13 @@ import {
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { indexFloatingSnapshotPtyBindings } from '../../floating-snapshot-pty-bindings'
 import { NO_OBSERVING_PROVIDER_REASON } from '../../../../shared/pty-liveness-verdict'
-import { buildControllerTerminalIdentities } from '../../orca-runtime-build-controller-terminal-identities'
+import { buildControllerTerminalIdentities } from '../../quirky-runtime-build-controller-terminal-identities'
 import { retireOrchestrationAuthorityAbsentFromInventory } from '../../runtime-restored-orchestration-authority-sweep'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { exitingPtyIdsOf } from '../adoption/unshown-live-terminal-placement'
 
-export abstract class OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory extends OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController {
+export abstract class QuirkyRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory extends QuirkyRuntimeWithRefreshPtyWorktreeRecordsFromController {
   protected async refreshPtyWorktreeRecordsWithControllerInventory(
     resolvedWorktrees: ResolvedWorktree[],
     targetWorktreeId: string | null = null,
@@ -305,7 +305,7 @@ export abstract class OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInve
       terminalIdentityByPtyId: controllerIdentityByPtyId,
       queriedHostIds,
       // Switch point: main places live terminals itself and must skip ones being killed.
-      ...(ORCA_LAYOUT_OWNER_IS_MAIN ? { exitingPtyIds: exitingPtyIdsOf(sessions) } : {})
+      ...(QUIRKY_LAYOUT_OWNER_IS_MAIN ? { exitingPtyIds: exitingPtyIdsOf(sessions) } : {})
     }
   }
 }

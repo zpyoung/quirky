@@ -18,7 +18,7 @@ import {
   validateResolvedDispatchReport,
   type ObjectiveDispatchAction
 } from './dispatch-report-validation'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { resolveObjectiveDispatchTarget } from './dispatch-worktree'
 import { findObjectiveWorkerEvidence, type ObjectiveSnapshotBinding } from './execution-context'
 import {
@@ -42,7 +42,7 @@ export async function resolveObjectiveDispatchOutcome(args: {
   ledger: WatcherLedger
   binding: ObjectiveSnapshotBinding
   objectiveStore: ObjectiveStore
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   lease: LeaseGuard
   world: ObjectiveWorld
 }): Promise<EffectCertaintyResolution> {

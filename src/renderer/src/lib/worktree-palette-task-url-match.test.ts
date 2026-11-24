@@ -31,9 +31,9 @@ function makeWorktree(overrides: Partial<Worktree> = {}): Worktree {
   }
 }
 
-const orcaRepo: Repo = {
+const quirkyRepo: Repo = {
   id: 'repo-1',
-  path: '/repo/orca',
+  path: '/repo/quirky',
   displayName: 'stablyai/orca',
   badgeColor: '#22c55e',
   addedAt: 0
@@ -41,8 +41,8 @@ const orcaRepo: Repo = {
 
 function gitLabRepo(canonicalKey: string): Repo {
   return {
-    ...orcaRepo,
-    displayName: 'orca',
+    ...quirkyRepo,
+    displayName: 'quirky',
     gitRemoteIdentity: {
       canonicalKey,
       remoteName: 'origin',
@@ -54,8 +54,8 @@ function gitLabRepo(canonicalKey: string): Repo {
 /** Basename displayName: the common non-fork case, where only the remote identifies the repo. */
 function gitHubRepo(canonicalKey: string): Repo {
   return {
-    ...orcaRepo,
-    displayName: 'orca',
+    ...quirkyRepo,
+    displayName: 'quirky',
     gitRemoteIdentity: {
       canonicalKey,
       remoteName: 'origin',
@@ -69,7 +69,7 @@ describe('parseCmdJTaskSourceUrl', () => {
     expect(parseCmdJTaskSourceUrl('https://github.com/stablyai/orca/issues/14198')).toEqual({
       provider: 'github',
       link: {
-        slug: { owner: 'stablyai', repo: 'orca', host: 'github.com' },
+        slug: { owner: 'stablyai', repo: 'quirky', host: 'github.com' },
         type: 'issue',
         number: 14198
       }
@@ -77,7 +77,7 @@ describe('parseCmdJTaskSourceUrl', () => {
     expect(parseCmdJTaskSourceUrl('https://github.com/stablyai/orca/pull/12789')).toEqual({
       provider: 'github',
       link: {
-        slug: { owner: 'stablyai', repo: 'orca', host: 'github.com' },
+        slug: { owner: 'stablyai', repo: 'quirky', host: 'github.com' },
         type: 'pr',
         number: 12789
       }
@@ -94,15 +94,15 @@ describe('parseCmdJTaskSourceUrl', () => {
       intent: { identifier: 'STA-4052', organizationUrlKey: 'stably' }
     })
     expect(
-      parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')
+      parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')
     ).toMatchObject({
       provider: 'gitlab',
       link: { type: 'mr', number: 17 }
     })
-    expect(parseCmdJTaskSourceUrl('https://company.atlassian.net/browse/ORCA-123')).toEqual({
+    expect(parseCmdJTaskSourceUrl('https://company.atlassian.net/browse/QUIRKY-123')).toEqual({
       provider: 'jira',
       parsed: {
-        issueKey: 'ORCA-123',
+        issueKey: 'QUIRKY-123',
         origin: 'https://company.atlassian.net',
         sitePath: ''
       }
@@ -146,7 +146,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedIssue: 14198 }),
         intent: intent!,
-        repo: orcaRepo
+        repo: quirkyRepo
       })
     ).toMatchObject({
       worktreeId: 'wt-1',
@@ -157,7 +157,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedIssue: 14198 }),
         intent: intent!,
-        repo: { ...orcaRepo, displayName: 'other/repo' }
+        repo: { ...quirkyRepo, displayName: 'other/repo' }
       })
     ).toBeNull()
   })
@@ -176,7 +176,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
           }
         }),
         intent: intent!,
-        repo: orcaRepo
+        repo: quirkyRepo
       })
     ).toMatchObject({ matchedFields: ['pr'] })
   })
@@ -195,7 +195,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
           }
         }),
         intent: intent!,
-        repo: { ...orcaRepo, displayName: 'Repo 1' }
+        repo: { ...quirkyRepo, displayName: 'Repo 1' }
       })
     ).toMatchObject({ matchedFields: ['pr'], supportingText: { text: 'PR #12789' } })
   })
@@ -285,7 +285,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
   })
 
   it('normalizes host case, port, and owner case before comparing GitHub identities', () => {
-    const intent = parseCmdJTaskSourceUrl('https://GHE.Example.com:8443/StablyAI/Orca/pull/12789')
+    const intent = parseCmdJTaskSourceUrl('https://GHE.Example.com:8443/StablyAI/Quirky/pull/12789')
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedPR: 12789 }),
@@ -301,7 +301,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedPR: 12789 }),
         intent: intent!,
-        repo: { ...orcaRepo, displayName: 'orca' }
+        repo: { ...quirkyRepo, displayName: 'quirky' }
       })
     ).toMatchObject({ matchedFields: ['pr'] })
     expect(
@@ -319,7 +319,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
         remoteUrl: 'git@github.com:stablyai/orca.git'
       }
     }
-    const intent = parseCmdJTaskSourceUrl('https://github.com/me/orca/pull/12789')
+    const intent = parseCmdJTaskSourceUrl('https://github.com/me/quirky/pull/12789')
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedPR: 12789 }),
@@ -370,7 +370,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
         worktree: makeWorktree({ linkedPR: 12789 }),
         intent: intent!,
         repo: {
-          ...orcaRepo,
+          ...quirkyRepo,
           gitRemoteIdentity: {
             canonicalKey: 'git-mirror.example.com/stablyai/orca',
             remoteName: 'origin',
@@ -403,7 +403,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
   })
 
   it('rejects a GitLab MR URL from a different project than the stored URL', () => {
-    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')
+    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({
@@ -423,7 +423,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
   })
 
   it('matches a GitLab MR URL for the same project', () => {
-    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')
+    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({
@@ -433,7 +433,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
             type: 'mr',
             number: 17,
             title: 'Same project MR',
-            url: 'https://gitlab.com/acme/orca/-/merge_requests/17'
+            url: 'https://gitlab.com/acme/quirky/-/merge_requests/17'
           }
         }),
         intent: intent!,
@@ -446,7 +446,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
   })
 
   it('does not match a GitLab issue URL against a stored MR of the same number', () => {
-    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')
+    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({
@@ -456,7 +456,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
             type: 'issue',
             number: 17,
             title: 'Issue',
-            url: 'https://gitlab.com/acme/orca/-/issues/17'
+            url: 'https://gitlab.com/acme/quirky/-/issues/17'
           }
         }),
         intent: intent!
@@ -465,7 +465,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
   })
 
   it('does not match a GitLab URL on a different host for the same project path', () => {
-    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')
+    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({
@@ -475,17 +475,17 @@ describe('matchWorktreePaletteTaskUrl', () => {
             type: 'mr',
             number: 17,
             title: 'Self-hosted MR',
-            url: 'https://gitlab.example.com/acme/orca/-/merge_requests/17'
+            url: 'https://gitlab.example.com/acme/quirky/-/merge_requests/17'
           }
         }),
         intent: intent!,
-        repo: gitLabRepo('gitlab.example.com/acme/orca')
+        repo: gitLabRepo('gitlab.example.com/acme/quirky')
       })
     ).toBeNull()
   })
 
   it('gates a stored GitLab number with no work item on the repo remote identity', () => {
-    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')
+    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedGitLabMR: 17 }),
@@ -497,18 +497,18 @@ describe('matchWorktreePaletteTaskUrl', () => {
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedGitLabMR: 17 }),
         intent: intent!,
-        repo: gitLabRepo('gitlab.com/acme/orca')
+        repo: gitLabRepo('gitlab.com/acme/quirky')
       })
     ).toMatchObject({ matchedFields: ['mr'] })
   })
 
   it('matches GitLab remotes whose host is an SSH alias or www form of gitlab.com', () => {
-    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')
+    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')
     for (const canonicalKey of [
       // altssh.gitlab.com is GitLab's port-443 SSH endpoint; `gitlab-work` is an ssh-config alias.
-      'altssh.gitlab.com/acme/orca',
-      'gitlab-work/acme/orca',
-      'www.gitlab.com/acme/orca'
+      'altssh.gitlab.com/acme/quirky',
+      'gitlab-work/acme/quirky',
+      'www.gitlab.com/acme/quirky'
     ]) {
       expect(
         matchWorktreePaletteTaskUrl({
@@ -522,18 +522,18 @@ describe('matchWorktreePaletteTaskUrl', () => {
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedGitLabMR: 17 }),
         intent: intent!,
-        repo: gitLabRepo('gitlab.example.com/acme/orca')
+        repo: gitLabRepo('gitlab.example.com/acme/quirky')
       })
     ).toBeNull()
   })
 
   it('stays permissive for GitLab numbers when the repo remote identity is unknown', () => {
-    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')
+    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedGitLabMR: 17 }),
         intent: intent!,
-        repo: orcaRepo
+        repo: quirkyRepo
       })
     ).toMatchObject({ matchedFields: ['mr'] })
     expect(
@@ -549,17 +549,17 @@ describe('matchWorktreePaletteTaskUrl', () => {
     // `deriveGitRemoteIdentity` prefers `upstream`, so the fork's own `origin` is not visible here;
     // an MR URL from the fork itself is the accepted false negative of gating on the known project.
     const forkRepo: Repo = {
-      ...gitLabRepo('gitlab.com/acme/orca'),
+      ...gitLabRepo('gitlab.com/acme/quirky'),
       gitRemoteIdentity: {
-        canonicalKey: 'gitlab.com/acme/orca',
+        canonicalKey: 'gitlab.com/acme/quirky',
         remoteName: 'upstream',
-        remoteUrl: 'git@gitlab.com:acme/orca.git'
+        remoteUrl: 'git@gitlab.com:acme/quirky.git'
       }
     }
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedGitLabMR: 17 }),
-        intent: parseCmdJTaskSourceUrl('https://gitlab.com/me/orca/-/merge_requests/17')!,
+        intent: parseCmdJTaskSourceUrl('https://gitlab.com/me/quirky/-/merge_requests/17')!,
         repo: forkRepo
       })
     ).toBeNull()
@@ -567,7 +567,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedGitLabMR: 17 }),
-        intent: parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')!,
+        intent: parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')!,
         repo: forkRepo
       })
     ).toMatchObject({ matchedFields: ['mr'] })
@@ -575,16 +575,16 @@ describe('matchWorktreePaletteTaskUrl', () => {
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedGitLabMR: 17 }),
-        intent: parseCmdJTaskSourceUrl('https://gitlab.com/me/orca/-/merge_requests/17')!,
-        repo: gitLabRepo('gitlab.com/acme/orca')
+        intent: parseCmdJTaskSourceUrl('https://gitlab.com/me/quirky/-/merge_requests/17')!,
+        repo: gitLabRepo('gitlab.com/acme/quirky')
       })
     ).toBeNull()
   })
 
   it('matches both GitLab issue URL forms and rejects other projects', () => {
     for (const url of [
-      'https://gitlab.com/acme/orca/-/issues/17',
-      'https://gitlab.com/acme/orca/-/work_items/17'
+      'https://gitlab.com/acme/quirky/-/issues/17',
+      'https://gitlab.com/acme/quirky/-/work_items/17'
     ]) {
       const intent = parseCmdJTaskSourceUrl(url)
       expect(intent).toMatchObject({ provider: 'gitlab', link: { type: 'issue', number: 17 } })
@@ -592,7 +592,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
         matchWorktreePaletteTaskUrl({
           worktree: makeWorktree({ linkedGitLabIssue: 17 }),
           intent: intent!,
-          repo: gitLabRepo('gitlab.com/acme/orca')
+          repo: gitLabRepo('gitlab.com/acme/quirky')
         })
       ).toMatchObject({
         matchedFields: ['issue'],
@@ -609,7 +609,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
   })
 
   it('matches a GitLab MR URL via the linked review URL', () => {
-    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')
+    const intent = parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree(),
@@ -620,7 +620,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
           number: 17,
           title: 'Fork MR',
           state: 'open',
-          url: 'https://gitlab.com/acme/orca/-/merge_requests/17',
+          url: 'https://gitlab.com/acme/quirky/-/merge_requests/17',
           status: 'pending',
           updatedAt: '2026-01-01T00:00:00Z',
           mergeable: 'UNKNOWN'
@@ -807,7 +807,7 @@ describe('getCmdJTaskUrlCreatePreview', () => {
     ).toBe('GitHub pull request')
     expect(
       getCmdJTaskUrlCreatePreview(
-        parseCmdJTaskSourceUrl('https://gitlab.com/acme/orca/-/merge_requests/17')!
+        parseCmdJTaskSourceUrl('https://gitlab.com/acme/quirky/-/merge_requests/17')!
       )
     ).toMatchObject({
       provider: 'gitlab',
@@ -816,11 +816,11 @@ describe('getCmdJTaskUrlCreatePreview', () => {
     })
     expect(
       getCmdJTaskUrlCreatePreview(
-        parseCmdJTaskSourceUrl('https://company.atlassian.net/browse/ORCA-123')!
+        parseCmdJTaskSourceUrl('https://company.atlassian.net/browse/QUIRKY-123')!
       )
     ).toMatchObject({
       provider: 'jira',
-      identifier: 'ORCA-123',
+      identifier: 'QUIRKY-123',
       kindLabel: 'Jira issue'
     })
   })

@@ -2,7 +2,7 @@ import type { LedgerRequest } from './ledger'
 
 export type LedgerUiAttestation = { timestamp: number; nonce: string; mac: string }
 
-const PROOF_DOMAIN = 'orca-ledger-ui-v1\0'
+const PROOF_DOMAIN = 'quirky-ledger-ui-v1\0'
 
 function canonical(value: unknown): string {
   if (value === null || typeof value !== 'object') {

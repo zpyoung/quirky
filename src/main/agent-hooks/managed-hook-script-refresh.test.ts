@@ -1,5 +1,5 @@
 // Why (#11549 aftermath): a CLI that falls off PATH keeps its user-wide config invoking
-// Orca's script while the presence gate skips install() forever. These tests pin the
+// Quirky's script while the presence gate skips install() forever. These tests pin the
 // repair — existing scripts come current, missing ones are never created.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as CodexHookHashLookup from '../codex/codex-hook-hash-lookup'
@@ -23,16 +23,16 @@ let isolatedUserDataDir = ''
 let previousUserDataPath: string | undefined
 
 beforeEach(() => {
-  previousUserDataPath = process.env.ORCA_USER_DATA_PATH
-  isolatedUserDataDir = mkdtempSync(join(tmpdir(), 'orca-hook-refresh-user-data-'))
-  process.env.ORCA_USER_DATA_PATH = isolatedUserDataDir
+  previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
+  isolatedUserDataDir = mkdtempSync(join(tmpdir(), 'quirky-hook-refresh-user-data-'))
+  process.env.QUIRKY_USER_DATA_PATH = isolatedUserDataDir
 })
 
 afterEach(() => {
   if (previousUserDataPath === undefined) {
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_USER_DATA_PATH
   } else {
-    process.env.ORCA_USER_DATA_PATH = previousUserDataPath
+    process.env.QUIRKY_USER_DATA_PATH = previousUserDataPath
   }
   rmSync(isolatedUserDataDir, { recursive: true, force: true })
 })
@@ -50,7 +50,7 @@ vi.mock('../codex/codex-hook-hash-lookup', async (importOriginal) => ({
 
 vi.mock('electron', () => ({
   app: {
-    getPath: () => '/tmp/orca-user-data'
+    getPath: () => '/tmp/quirky-user-data'
   }
 }))
 
@@ -84,8 +84,8 @@ async function withPlatform<T>(platform: NodeJS.Platform, run: () => T | Promise
 const STALE_WINDOWS_HOOK = [
   '@echo off',
   'setlocal',
-  'if "%ORCA_AGENT_HOOK_PORT%"=="" goto :orca_agent_hook_drain_stdin',
-  ':orca_agent_hook_drain_stdin',
+  'if "%QUIRKY_AGENT_HOOK_PORT%"=="" goto :quirky_agent_hook_drain_stdin',
+  ':quirky_agent_hook_drain_stdin',
   '"%SystemRoot%\\System32\\more.com" >nul 2>nul',
   'exit /b 0',
   ''
@@ -93,7 +93,7 @@ const STALE_WINDOWS_HOOK = [
 
 describe('refreshManagedScriptIfPresent', () => {
   it('rewrites an existing script and refuses to create a missing one', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-hook-refresh-unit-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-hook-refresh-unit-'))
     try {
       const present = join(dir, 'present.cmd')
       writeFileSync(present, 'stale')
@@ -122,20 +122,20 @@ describe('refreshManagedScriptIfPresent', () => {
 
 describe('managed hook script refresh', () => {
   it('brings a stale leaking script current without touching agent config', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'orca-hook-refresh-'))
+    const home = mkdtempSync(join(tmpdir(), 'quirky-hook-refresh-'))
     homedirMock.mockReturnValue(home)
     try {
       // Why: the bug population has a script (from a past install) but no reachable
-      // CLI — and possibly no config dir Orca may create. Seed only the script.
-      const hooksDir = join(home, '.orca', 'agent-hooks')
+      // CLI — and possibly no config dir Quirky may create. Seed only the script.
+      const hooksDir = join(home, '.quirky', 'agent-hooks')
       mkdirSync(hooksDir, { recursive: true })
       writeFileSync(join(hooksDir, 'claude-hook.cmd'), STALE_WINDOWS_HOOK)
 
       await withPlatform('win32', () => new ClaudeHookService().refreshManagedScripts())
 
       const refreshed = readFileSync(join(hooksDir, 'claude-hook.cmd'), 'utf8')
-      expect(refreshed).toContain('if "%ORCA_AGENT_HOOK_PORT%"=="" exit /b 0')
-      expect(refreshed).not.toContain('if "%ORCA_AGENT_HOOK_PORT%"=="" goto')
+      expect(refreshed).toContain('if "%QUIRKY_AGENT_HOOK_PORT%"=="" exit /b 0')
+      expect(refreshed).not.toContain('if "%QUIRKY_AGENT_HOOK_PORT%"=="" goto')
       // Why: refresh must not resurrect config for a CLI the user may have removed.
       expect(existsSync(join(home, '.claude'))).toBe(false)
       // Why: the statusline script was never installed here, so it must not appear.
@@ -147,7 +147,7 @@ describe('managed hook script refresh', () => {
   })
 
   it('covers every shared launcher script with a refresher', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'orca-hook-refresh-coverage-'))
+    const home = mkdtempSync(join(tmpdir(), 'quirky-hook-refresh-coverage-'))
     homedirMock.mockReturnValue(home)
     const previousGrokHome = process.env.GROK_HOME
     const previousKimiHome = process.env.KIMI_CODE_HOME
@@ -162,7 +162,7 @@ describe('managed hook script refresh', () => {
           await install()
         }
       })
-      const hooksDir = join(home, '.orca', 'agent-hooks')
+      const hooksDir = join(home, '.quirky', 'agent-hooks')
       const files = readdirSync(hooksDir)
       expect(files.length).toBeGreaterThan(0)
       const refresherAgents = MANAGED_AGENT_HOOK_SCRIPT_REFRESHERS.map(([agent]) => agent)
@@ -171,7 +171,7 @@ describe('managed hook script refresh', () => {
       for (const file of files) {
         expect(
           refresherAgents.some((agent) => file.startsWith(`${agent}-`)),
-          `${file} is written to ~/.orca/agent-hooks but no refresher owns it`
+          `${file} is written to ~/.quirky/agent-hooks but no refresher owns it`
         ).toBe(true)
       }
       // Why: the reverse direction — a refresher naming an agent that writes nothing is a
@@ -204,7 +204,7 @@ describe('managed hook script refresh', () => {
   })
 
   it('creates nothing anywhere when no managed scripts exist', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'orca-hook-refresh-empty-'))
+    const home = mkdtempSync(join(tmpdir(), 'quirky-hook-refresh-empty-'))
     homedirMock.mockReturnValue(home)
     try {
       await withPlatform('win32', async () => {

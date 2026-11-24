@@ -7,7 +7,7 @@ import { readSkillLockSources } from './skill-lock-sources'
 const temporaryDirectories: string[] = []
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-skill-lock-sources-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-skill-lock-sources-'))
   temporaryDirectories.push(root)
   return root
 }
@@ -49,11 +49,11 @@ describe('skills.sh lock sources', () => {
     await mkdir(join(stateHome, 'skills'), { recursive: true })
     await writeFile(
       join(stateHome, 'skills', '.skill-lock.json'),
-      JSON.stringify({ version: 3, skills: { 'orca-cli': { source: 'zpyoung/quirky' } } })
+      JSON.stringify({ version: 3, skills: { 'quirky-cli': { source: 'zpyoung/quirky' } } })
     )
 
     await expect(readSkillLockSources({ homeDir: root, stateHome })).resolves.toEqual(
-      new Map([['orca-cli', 'zpyoung/quirky']])
+      new Map([['quirky-cli', 'zpyoung/quirky']])
     )
   })
 

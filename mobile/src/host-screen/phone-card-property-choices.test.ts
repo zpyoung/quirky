@@ -12,7 +12,7 @@ import {
 const ids = (choices: readonly { id: string }[]) => choices.map((choice) => choice.id)
 
 describe('the card properties the phone offers', () => {
-  it('hides Ports and keeps Orca CLI', () => {
+  it('hides Ports and keeps Quirky CLI', () => {
     expect(ids(phoneCardPropertyChoices(WORKSPACE_CARD_PROPERTY_CHOICES))).not.toContain('ports')
     const display = ids(phoneCardPropertyChoices(WORKSPACE_CARD_DISPLAY_CHOICES))
     expect(display).not.toContain('ports')

@@ -13,7 +13,7 @@ import {
 } from './release-checkout'
 
 /**
- * Device keys add keyed rows (no token) to orca-devices.json and a key-auth shape inside E2EE v2.
+ * Device keys add keyed rows (no token) to quirky-devices.json and a key-auth shape inside E2EE v2.
  * A released build must keep keyed rows intact and inert, keep authenticating token rows, and
  * refuse key auth with bad_auth so an updated client can report "host downgraded" and keep its key.
  */
@@ -43,7 +43,7 @@ beforeAll(async () => {
 
 describe('cross-version: device keys against a released host', () => {
   it('a released registry keeps keyed rows intact and inert, and token rows working', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-xv-device-key-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-xv-device-key-'))
     const current = new DeviceRegistry(userDataPath)
     const legacy = current.addDevice('Phone', 'mobile')
     current.updateLastSeen(legacy.deviceId)
@@ -62,9 +62,9 @@ describe('cross-version: device keys against a released host', () => {
       forkedFrom: legacy.deviceId
     })
     expect(reread.lookupDeviceKey(forked.deviceId)).toMatchObject({ kind: 'found' })
-    expect(JSON.parse(readFileSync(join(userDataPath, 'orca-devices.json'), 'utf-8'))).toHaveLength(
-      2
-    )
+    expect(
+      JSON.parse(readFileSync(join(userDataPath, 'quirky-devices.json'), 'utf-8'))
+    ).toHaveLength(2)
   })
 
   it('a released host refuses key auth with bad_auth (not unauthorized)', () => {
@@ -111,11 +111,11 @@ describe('cross-version: device keys against a released host', () => {
   })
 
   it('old registry files load unchanged', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-xv-device-key-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-xv-device-key-'))
     const released = new ReleasedRegistry(userDataPath)
     expect(released.listDevices()).toHaveLength(0)
     writeFileSync(
-      join(userDataPath, 'orca-devices.json'),
+      join(userDataPath, 'quirky-devices.json'),
       JSON.stringify([
         { deviceId: 'd', name: 'n', token: 't', scope: 'mobile', pairedAt: 1, lastSeenAt: 2 }
       ])

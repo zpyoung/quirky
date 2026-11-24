@@ -4,7 +4,7 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { buildAgentPromptPasteBytes } from '../../shared/agent-prompt-injection'
 import type { RuntimeTerminalSummary } from '../../shared/runtime-terminal-contracts'
 import type { TerminalAgent } from '../../shared/terminal-agent'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { makeStore } from './runtime-rpc-worktree-store-fixtures'
 
 vi.mock('../git/worktree', () => ({
@@ -33,7 +33,7 @@ describe('manually started DeepSeek Build terminals', () => {
 
   it('publishes title-only identity from captured release PTY bytes', async () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture supplies the store subset used by terminal observations.
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    const runtime = new QuirkyRuntimeService(makeStore() as never)
     runtime.setPtyController({
       spawn: async () => ({ id: 'pty-dsb' }),
       write: () => true,
@@ -56,7 +56,7 @@ describe('manually started DeepSeek Build terminals', () => {
     'preserves Build title and identity through OSC normalization with task glyph %s',
     async (glyph) => {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture supplies the store subset used by terminal observations.
-      const runtime = new OrcaRuntimeService(makeStore() as never)
+      const runtime = new QuirkyRuntimeService(makeStore() as never)
       runtime.setPtyController({
         spawn: async () => ({ id: 'pty-dsb' }),
         write: () => true,
@@ -76,7 +76,7 @@ describe('manually started DeepSeek Build terminals', () => {
   it('publishes observed DSB identity and sends a prompt with generic input behavior', async () => {
     vi.useFakeTimers()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture supplies the store subset exercised by terminal recognition and prompt submission.
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    const runtime = new QuirkyRuntimeService(makeStore() as never)
     const writes: string[] = []
     runtime.setPtyController({
       spawn: async () => ({ id: 'pty-dsb' }),

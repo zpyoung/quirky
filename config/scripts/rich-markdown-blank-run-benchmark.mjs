@@ -16,7 +16,7 @@ const cachedProbe =
   /if \(index > fenceProbe\) \{[\s\S]*?fenceMatch = fencePrefix.exec\(normalizedContent\)\n      \}/
 assert.match(source, cachedProbe)
 const oldProbe = String.raw`fenceMatch = normalizedContent.slice(index).match(/^\s*(\x60{3,}|~{3,})/)`
-const temp = await mkdtemp(join(tmpdir(), 'orca-rich-blank-bench-'))
+const temp = await mkdtemp(join(tmpdir(), 'quirky-rich-blank-bench-'))
 try {
   const scanners = {}
   for (const arm of ['baseline', 'current']) {

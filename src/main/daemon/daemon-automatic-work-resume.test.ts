@@ -107,8 +107,8 @@ describe('daemon automatic-work resume', () => {
       new Error('Unknown request type: resumeAutomaticWork')
     )
     const adapter = new DaemonPtyAdapter({
-      socketPath: '/tmp/orca-automatic-work-old.sock',
-      tokenPath: '/tmp/orca-automatic-work-old.token'
+      socketPath: '/tmp/quirky-automatic-work-old.sock',
+      tokenPath: '/tmp/quirky-automatic-work-old.token'
     })
     try {
       await expect(adapter.resumeAutomaticWork()).resolves.toBe('terminal-host-predates-resume')
@@ -122,8 +122,8 @@ describe('daemon automatic-work resume', () => {
     vi.spyOn(DaemonClient.prototype, 'ensureConnected').mockResolvedValue()
     vi.spyOn(DaemonClient.prototype, 'request').mockRejectedValue(new Error('socket closed'))
     const adapter = new DaemonPtyAdapter({
-      socketPath: '/tmp/orca-automatic-work-broken.sock',
-      tokenPath: '/tmp/orca-automatic-work-broken.token'
+      socketPath: '/tmp/quirky-automatic-work-broken.sock',
+      tokenPath: '/tmp/quirky-automatic-work-broken.token'
     })
     try {
       await expect(adapter.resumeAutomaticWork()).rejects.toThrow('socket closed')

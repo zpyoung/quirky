@@ -50,14 +50,14 @@ export function captureRemoteCliBrowserRevocation(): (webContentsId?: number) =>
     if (active?.revoked?.aborted) {
       throw new BrowserError(
         DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_CODE,
-        'The Orca desktop stopped sharing its browser before this command ran.'
+        'The Quirky desktop stopped sharing its browser before this command ran.'
       )
     }
     // Why at execution: routing can be turned off while the command waits, remounting the page unrouted.
     if (webContentsId !== undefined && active?.admitGuest && !active.admitGuest(webContentsId)) {
       throw new BrowserError(
         DESKTOP_BROWSER_BRIDGE_UNROUTED_CODE,
-        "This page is not browsing through the SSH host, so the host's orca CLI cannot use it."
+        "This page is not browsing through the SSH host, so the host's quirky CLI cannot use it."
       )
     }
   }
@@ -139,7 +139,7 @@ export function boundRemoteCliBrowserWork<T>(
       interrupt(
         new BrowserError(
           DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_CODE,
-          'The Orca desktop stopped sharing its browser while this command ran.'
+          'The Quirky desktop stopped sharing its browser while this command ran.'
         )
       )
     timer = setTimeout(

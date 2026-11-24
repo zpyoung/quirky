@@ -89,7 +89,7 @@ export function isRuntimeOwnedSshTargetId(targetId: string | null | undefined): 
 }
 
 /**
- * Any target Orca owns as plumbing, by id because the renderer never sees `owner`: hidden from
+ * Any target Quirky owns as plumbing, by id because the renderer never sees `owner`: hidden from
  * SSH-host surfaces and never dialed by the renderer, which would dispose its owner's session.
  */
 export function isOwnedSshTargetId(targetId: string | null | undefined): boolean {

@@ -44,7 +44,7 @@ describe('getPRGroupKey', () => {
 
   it('prefers repo-scoped PR status over stale legacy path-scoped status', () => {
     const prCache = {
-      '/tmp/orca::feature/super-critical': {
+      '/tmp/quirky::feature/super-critical': {
         data: { state: 'closed' }
       },
       'repo-1::feature/super-critical': {
@@ -57,7 +57,7 @@ describe('getPRGroupKey', () => {
 
   it('falls back to legacy path-scoped PR status when no repo-scoped entry exists', () => {
     const prCache = {
-      '/tmp/orca::feature/super-critical': {
+      '/tmp/quirky::feature/super-critical': {
         data: { state: 'closed' }
       }
     }

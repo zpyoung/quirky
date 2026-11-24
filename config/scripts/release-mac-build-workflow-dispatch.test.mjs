@@ -23,7 +23,7 @@ const baseOptions = {
 describe('release mac build workflow dispatch', () => {
   it('passes the shared JavaScript commit only when the parent produced a bundle', async () => {
     const request = vi.fn(async () => ({}))
-    const api = { owner: 'stablyai', repo: 'orca', request }
+    const api = { owner: 'stablyai', repo: 'quirky', request }
     await dispatchReleaseMacBuildWorkflow(api, {
       ...baseOptions,
       javascriptSourceSha: 'a'.repeat(40)

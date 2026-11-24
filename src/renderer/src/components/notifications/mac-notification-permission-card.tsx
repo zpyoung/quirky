@@ -42,7 +42,7 @@ export function useMacNotificationPermissionState(
     useState<MacNotificationPermissionState | null>(null)
 
   useEffect(() => {
-    // Why: while Orca's own notifications setting is off, the OS permission
+    // Why: while Quirky's own notifications setting is off, the OS permission
     // is irrelevant — a green "notifications are enabled" card next to a
     // disabled toggle reads as a contradiction. Hide the card and skip the
     // readout polling entirely until the setting is back on.
@@ -158,7 +158,7 @@ export function MacNotificationPermissionCard({
               <div className="text-sm font-medium text-foreground">
                 {translate(
                   'auto.components.onboarding.NotificationStep.95d99b52fa',
-                  'Allow notifications for Orca'
+                  'Allow notifications for Quirky'
                 )}
               </div>
               <p className="max-w-[58ch] text-[13px] leading-relaxed text-muted-foreground">
@@ -197,13 +197,13 @@ export function MacNotificationPermissionCard({
               <div className="text-sm font-medium text-foreground">
                 {translate(
                   'auto.components.onboarding.NotificationStep.90b5d2e363',
-                  'macOS is not delivering Orca notifications'
+                  'macOS is not delivering Quirky notifications'
                 )}
               </div>
               <p className="max-w-[58ch] text-[13px] leading-relaxed text-muted-foreground">
                 {translate(
                   'auto.components.onboarding.mac.notification.permission.card.721d2bedb6',
-                  'Turn on Allow notifications for Orca in System Settings.'
+                  'Turn on Allow notifications for Quirky in System Settings.'
                 )}
               </p>
             </div>

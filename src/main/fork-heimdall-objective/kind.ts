@@ -31,7 +31,7 @@ import {
 import { paceObjective } from '../../shared/fork-heimdall-objective/pacing'
 import { OBJECTIVE_STOP_PREDICATES } from '../../shared/fork-heimdall-objective/stop-policy'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { JudgmentAuthority, JudgmentService } from '../fork-heimdall/judgment/service'
 import { readObjectiveJudgmentReports } from '../fork-heimdall/judgment/report-projection'
 import { createObjectiveActionExecutor } from './action-executor'
@@ -226,7 +226,7 @@ function objectiveHandoffAdapter(
 }
 
 export function createObjectiveKind(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   store: Store
   objectiveStore: ObjectiveStore
   storageAuthority?: 'desktop' | 'runtime'

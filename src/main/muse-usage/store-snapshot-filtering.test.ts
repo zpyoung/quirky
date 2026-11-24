@@ -46,7 +46,7 @@ class FixtureStore extends MuseUsageStore {
 }
 
 beforeEach(() => {
-  fake.directory = mkdtempSync(join(tmpdir(), 'orca-muse-snapshot-'))
+  fake.directory = mkdtempSync(join(tmpdir(), 'quirky-muse-snapshot-'))
   vi.useFakeTimers()
   vi.setSystemTime(new Date(2026, 8, 26, 12))
 })
@@ -60,7 +60,7 @@ it('filters each accumulated projection once per snapshot', () => {
   const store = new FixtureStore(20_000)
   const daily = vi.spyOn(filters, 'filterUsageDaily')
   const sessions = vi.spyOn(filters, 'filterUsageSessions')
-  const result = store.getSnapshot('orca', '30d')
+  const result = store.getSnapshot('quirky', '30d')
   expect(result.summary.sessions).toBeGreaterThan(0)
   expect(result.recentSessions).toHaveLength(10)
   expect(sessions.mock.calls[0]?.[0]).toHaveLength(20_000)
@@ -70,7 +70,7 @@ it('filters each accumulated projection once per snapshot', () => {
   })
 })
 
-it.each(['orca', 'all'] as const)(
+it.each(['quirky', 'all'] as const)(
   'keeps snapshot projections equal to individual %s reads',
   async (scope) => {
     const store = new FixtureStore(30)
@@ -93,14 +93,14 @@ it.each(['orca', 'all'] as const)(
 it('keeps empty snapshots and later calls independent', () => {
   const store = new FixtureStore(0)
   const first = store.getSnapshot('all', 'all')
-  const next = store.getSnapshot('orca', '7d', 0)
+  const next = store.getSnapshot('quirky', '7d', 0)
   expect(first.daily).toEqual([])
   expect(first.recentSessions).toEqual([])
   expect(next.summary).toMatchObject({
     sessions: 0,
     events: 0,
     totalTokens: 0,
-    scope: 'orca',
+    scope: 'quirky',
     range: '7d'
   })
 })

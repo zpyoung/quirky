@@ -32,7 +32,7 @@ describe('isWebClientLocation', () => {
   })
 
   it('detects the web client by its global marker', () => {
-    vi.stubGlobal('window', { __ORCA_WEB_CLIENT__: true, location: { pathname: '/' } })
+    vi.stubGlobal('window', { __QUIRKY_WEB_CLIENT__: true, location: { pathname: '/' } })
     expect(isWebClientLocation()).toBe(true)
   })
 

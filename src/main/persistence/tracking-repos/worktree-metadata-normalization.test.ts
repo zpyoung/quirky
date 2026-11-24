@@ -149,7 +149,7 @@ describe('normalizeWorktreeLinkedItemMetadata', () => {
 
 describe('gcStaleWorktreeMeta', () => {
   it('reclaims the identity rows of a collected worktree', () => {
-    const worktreeId = 'r1::/definitely/missing/orca/path'
+    const worktreeId = 'r1::/definitely/missing/quirky/path'
     const identityKey = 'wt2:local:dead'
     const remoteIdentityKey = 'wt2:ssh:live'
     const state = makeState({

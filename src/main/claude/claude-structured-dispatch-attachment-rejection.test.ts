@@ -1,4 +1,4 @@
-// What a person reads when Orca refuses a message's content before sending it.
+// What a person reads when Quirky refuses a message's content before sending it.
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -28,7 +28,7 @@ describe('Claude structured dispatch attachment rejections', () => {
   })
 
   it('rejects local images whose aggregate size exceeds twenty MiB', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'orca-claude-images-'))
+    const directory = await mkdtemp(join(tmpdir(), 'quirky-claude-images-'))
     try {
       const paths = await Promise.all(
         Array.from({ length: 5 }, async (_, index) => {
@@ -58,7 +58,7 @@ describe('Claude structured dispatch attachment rejections', () => {
   })
 
   it('rejects a local image by actual bytes read beyond the per-image cap', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'orca-claude-image-'))
+    const directory = await mkdtemp(join(tmpdir(), 'quirky-claude-image-'))
     try {
       const path = join(directory, 'oversized.png')
       await writeFile(path, Buffer.alloc(5 * 1024 * 1024 + 1))
@@ -82,7 +82,7 @@ describe('Claude structured dispatch attachment rejections', () => {
   })
 
   it('names an empty image as empty, not as too large', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'orca-claude-image-'))
+    const directory = await mkdtemp(join(tmpdir(), 'quirky-claude-image-'))
     try {
       const path = join(directory, 'empty.png')
       await writeFile(path, Buffer.alloc(0))
@@ -104,7 +104,7 @@ describe('Claude structured dispatch attachment rejections', () => {
   })
 
   it('names an unsupported image type in words a person can act on', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'orca-claude-image-'))
+    const directory = await mkdtemp(join(tmpdir(), 'quirky-claude-image-'))
     try {
       const path = join(directory, 'picture.bmp')
       await writeFile(path, Buffer.alloc(64))
@@ -126,7 +126,7 @@ describe('Claude structured dispatch attachment rejections', () => {
     }
   })
 
-  it('does not blame an attachment for a message no Orca client sends', async () => {
+  it('does not blame an attachment for a message no Quirky client sends', async () => {
     const session = sessionFor()
     await expect(
       dispatchClaudeTurn(session, {
@@ -145,7 +145,7 @@ describe('Claude structured dispatch attachment rejections', () => {
       })
     ).resolves.toEqual({
       state: 'rejected',
-      reason: "Orca ran into a problem, so this didn't go through. Try again.",
+      reason: "Quirky ran into a problem, so this didn't go through. Try again.",
       rejection: { kind: 'hostFault' }
     })
     expect(session.connection.send).not.toHaveBeenCalled()
@@ -154,7 +154,7 @@ describe('Claude structured dispatch attachment rejections', () => {
   it('rejects an attachment it cannot read with the generic sentence and no path', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const session = sessionFor()
-    const path = join(tmpdir(), 'orca-claude-image-missing', 'gone.png')
+    const path = join(tmpdir(), 'quirky-claude-image-missing', 'gone.png')
 
     await expect(
       dispatchClaudeTurn(session, {

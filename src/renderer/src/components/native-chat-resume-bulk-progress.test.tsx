@@ -330,7 +330,7 @@ it('a retry hides its old failure, then a dismissed final failure leaves Need yo
   await act(async () => requestNativeChatResumeOnRestartDialog())
   await act(async () => button('Retry').click())
   expect(runStatus('Prompt b')).toMatch(/Waiting to start/)
-  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Another Orca')
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Another Quirky')
   expect(document.querySelector('[aria-label*="Couldn’t resume"]')).toBeNull()
   await host.release('b')
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Need you1')

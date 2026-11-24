@@ -116,19 +116,19 @@ describe('parseRuntimeStoreInventory', () => {
   it('rejects a partial listing, a reference error, and an unattributable reference', () => {
     expect(parseRuntimeStoreInventory('ENTRY node-x')).toBeNull()
     expect(
-      parseRuntimeStoreInventory('__ORCA_RUNTIME_STORE__REFS_ERR\n__ORCA_RUNTIME_STORE__OK')
+      parseRuntimeStoreInventory('__QUIRKY_RUNTIME_STORE__REFS_ERR\n__QUIRKY_RUNTIME_STORE__OK')
     ).toBeNull()
-    expect(parseRuntimeStoreInventory('REF garbage\n__ORCA_RUNTIME_STORE__OK')).toBeNull()
+    expect(parseRuntimeStoreInventory('REF garbage\n__QUIRKY_RUNTIME_STORE__OK')).toBeNull()
   })
 
   it('attributes process holds by runtime path, including renamed tombstones', () => {
     const parsed = parseRuntimeStoreInventory(
       [
         'PROCESS_CHECK ps',
-        `HOLD /h/.orca-remote/runtimes/node-${sha('a')}/bin/node server.js`,
-        `HOLD /h/.orca-remote/runtimes/.gc-tombstone-node-${sha('b')}.1.2/bin/node`,
-        'HOLD grep -F -- /h/.orca-remote/runtimes/',
-        '__ORCA_RUNTIME_STORE__OK'
+        `HOLD /h/.quirky-remote/runtimes/node-${sha('a')}/bin/node server.js`,
+        `HOLD /h/.quirky-remote/runtimes/.gc-tombstone-node-${sha('b')}.1.2/bin/node`,
+        'HOLD grep -F -- /h/.quirky-remote/runtimes/',
+        '__QUIRKY_RUNTIME_STORE__OK'
       ].join('\n')
     )
     expect(parsed?.held).toEqual(new Set([sha('a'), sha('b')]))
@@ -144,7 +144,7 @@ posixOnly('gcRemoteNodeRuntimeStore (real shell)', () => {
 
   beforeEach(() => {
     home = mkdtempSync(join(tmpdir(), 'runtime-store-'))
-    root = join(home, '.orca-remote')
+    root = join(home, '.quirky-remote')
     mkdirSync(join(root, 'runtimes'), { recursive: true })
     mockExec.mockReset()
     mockExec.mockImplementation(async (_conn, command) =>
@@ -179,13 +179,13 @@ posixOnly('gcRemoteNodeRuntimeStore (real shell)', () => {
 
   it('removes only unreferenced, unpinned, idle, verified runtimes', async () => {
     runtime('a') // current pin
-    runtime('c') // referenced by an orcad slot marker
+    runtime('c') // referenced by an quirkyd slot marker
     runtime('d') // referenced by a relay ref file
     runtime('e') // unreferenced: collected
     const running_ = runtime('f') // executing
     runtime('9', false) // mid-promotion
     runtime('b') // newest other verified: the previous pin
-    writeFileSync(join(versionDir('orcad-0.1.0+aaa'), '.runtime-node'), `${sha('c')}\n`)
+    writeFileSync(join(versionDir('quirkyd-0.1.0+aaa'), '.runtime-node'), `${sha('c')}\n`)
     writeFileSync(join(versionDir('relay-0.1.0+aaa'), `${RUNTIME_REF_NODE_PREFIX}${sha('d')}`), '')
     running = spawn(join(running_, 'bin', 'node'), [], { stdio: 'ignore' })
     await once(running, 'spawn')
@@ -195,14 +195,14 @@ posixOnly('gcRemoteNodeRuntimeStore (real shell)', () => {
     expect(result).toMatchObject({
       state: 'collected',
       removed: [`node-${sha('e')}`],
-      legacyDirs: expect.arrayContaining(['orcad-0.1.0+aaa', 'relay-0.1.0+aaa'])
+      legacyDirs: expect.arrayContaining(['quirkyd-0.1.0+aaa', 'relay-0.1.0+aaa'])
     })
     for (const kept of ['a', 'b', 'c', 'd', 'f', '9']) {
       expect(existsSync(join(root, 'runtimes', `node-${sha(kept)}`))).toBe(true)
     }
     expect(existsSync(join(root, 'runtimes', `node-${sha('e')}`))).toBe(false)
     // D10 two-step: legacy dirs are reported, never deleted by this pass.
-    expect(existsSync(join(root, 'orcad-0.1.0+aaa'))).toBe(true)
+    expect(existsSync(join(root, 'quirkyd-0.1.0+aaa'))).toBe(true)
     expect(existsSync(join(root, 'relay-0.1.0+aaa'))).toBe(true)
   })
 
@@ -244,8 +244,8 @@ posixOnly('gcRemoteNodeRuntimeStore (real shell)', () => {
     runtime('e')
     let inventories = 0
     mockExec.mockImplementation(async (_conn, command) => {
-      if (command.includes('__ORCA_RUNTIME_STORE__OK') && ++inventories === 2) {
-        writeFileSync(join(versionDir('orcad-0.3.0+ddd'), '.runtime-node'), `${sha('e')}\n`)
+      if (command.includes('__QUIRKY_RUNTIME_STORE__OK') && ++inventories === 2) {
+        writeFileSync(join(versionDir('quirkyd-0.3.0+ddd'), '.runtime-node'), `${sha('e')}\n`)
       }
       return execFileSync('/bin/sh', ['-c', command], { encoding: 'utf8' })
     })
@@ -288,7 +288,7 @@ posixOnly('gcRemoteNodeRuntimeStore (real shell)', () => {
     runtime('a')
     const lost = Object.assign(new Error('lost'), { sshChannelCloseConfirmed: false })
     mockExec.mockImplementation(async (_conn, command) => {
-      if (command.includes('__ORCA_RUNTIME_STORE__OK')) {
+      if (command.includes('__QUIRKY_RUNTIME_STORE__OK')) {
         throw lost
       }
       return execFileSync('/bin/sh', ['-c', command], { encoding: 'utf8' })

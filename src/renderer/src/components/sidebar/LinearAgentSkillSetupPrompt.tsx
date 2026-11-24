@@ -8,7 +8,7 @@ import {
 } from '@/hooks/useInstalledAgentSkills'
 import {
   LINEAR_AGENT_SKILL_NAMES,
-  ORCA_LINEAR_SKILL_INSTALL_COMMAND
+  QUIRKY_LINEAR_SKILL_INSTALL_COMMAND
 } from '@/lib/agent-feature-install-commands'
 import { getLinearAgentSkillUpdateCommand } from '@/lib/linear-agent-skill-update-command'
 import { lazyWithRetry } from '@/lib/lazy-with-retry'
@@ -108,7 +108,7 @@ export function LinearAgentSkillSetupPrompt({
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
   const command = useMemo(
-    () => buildSkillCommandForRuntime(ORCA_LINEAR_SKILL_INSTALL_COMMAND, agentRuntime),
+    () => buildSkillCommandForRuntime(QUIRKY_LINEAR_SKILL_INSTALL_COMMAND, agentRuntime),
     [agentRuntime]
   )
   const installedCommand = useMemo(

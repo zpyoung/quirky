@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Link2 } from 'lucide-react'
 import {
-  getOrcadSshDeployment,
+  getQuirkydSshDeployment,
   type PublicKnownRuntimeEnvironment
 } from '../../../../shared/runtime-environments'
 import type { SshTarget } from '../../../../shared/ssh-types'
-import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
+import type { ManagedQuirkydPreloadApi } from '../../../../preload/api/managed-quirkyd-api'
 import type { RemoteServerUpdateEntry } from '@/runtime/remote-server-update-coordinator'
 import type { UpdateCheckOptions } from '../../../../shared/update-status-types'
 import { getRuntimeServerProblemLine, getRuntimeServerRoute } from './runtime-server-row-meta'
@@ -61,7 +61,7 @@ type RuntimeServerRowProps = {
   removing: boolean
   isBusy: boolean
   /** The SSH-access API and hosts; absent where managed servers aren't available (web). */
-  sshAccessApi?: Pick<ManagedOrcadPreloadApi, 'linkSshAccess' | 'unlinkSshAccess'> | null
+  sshAccessApi?: Pick<ManagedQuirkydPreloadApi, 'linkSshAccess' | 'unlinkSshAccess'> | null
   sshTargets?: SshTarget[]
   managed?: ManagedServerLifecycle | null
   onOpenUpdate: () => void
@@ -73,7 +73,7 @@ type RuntimeServerRowProps = {
   onChanged?: () => void
   /** Re-reads SSH hosts; the route dialog lists them. */
   onRefreshSshTargets?: () => void
-  /** Re-probes every server; offered when the host answered but Orca didn't. */
+  /** Re-probes every server; offered when the host answered but Quirky didn't. */
   onRecheck?: () => void
   rechecking?: boolean
 }
@@ -113,11 +113,11 @@ export function RuntimeServerRow({
   // Why: the revoked host rejects this token on every Connect; Re-pair is the only way back.
   const canConnect = !(row.accessRevoked && repairable)
   const updateActionable = remoteUpdate?.phase === 'available' || remoteUpdate?.phase === 'failed'
-  const deployment = getOrcadSshDeployment(environment)
+  const deployment = getQuirkydSshDeployment(environment)
   const sshAccess = environment.sshAccess
   const pendingSshAccess = environment.pendingSshAccessOperation
 
-  // Why: the transport is up but Orca didn't answer; only a fresh probe can tell more.
+  // Why: the transport is up but Quirky didn't answer; only a fresh probe can tell more.
   const needsRecheck =
     row.connectionState === 'runtime-unavailable' ||
     row.connectionState === 'workspace-window-closed'

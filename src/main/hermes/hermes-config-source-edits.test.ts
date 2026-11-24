@@ -14,11 +14,11 @@ describe.each(['\n', '\r\n'])('Hermes source edit boundaries (%j)', (eol) => {
       operation: 'install',
       key: 'disabled',
       updater: enablePlugin,
-      expected: { disabled: [], enabled: ['orca-status'] }
+      expected: { disabled: [], enabled: ['quirky-status'] }
     }
   ])('$operation with an emptied block list', ({ key, updater, expected }) => {
     it('replaces a minimal indentless list without a final newline', () => {
-      const input = `plugins:${eol}  ${key}:${eol}  - orca-status`
+      const input = `plugins:${eol}  ${key}:${eol}  - quirky-status`
       const result = updateConfigContent(input, updater)
       expect(result.detail).toBeUndefined()
       const document = parseDocument(result.content ?? '')
@@ -41,7 +41,7 @@ describe.each(['\n', '\r\n'])('Hermes source edit boundaries (%j)', (eol) => {
       ].join(eol)
       const custom = `${keyIndent}custom: 'off' # plugin setting${eol}`
       const suffix = ['prompt: |-', '  First', '  Second', ''].join(eol)
-      const input = `${prefix}${listIndent}- orca-status # managed choice${eol}${custom}${suffix}`
+      const input = `${prefix}${listIndent}- quirky-status # managed choice${eol}${custom}${suffix}`
       const result = updateConfigContent(input, updater)
       expect(result.detail).toBeUndefined()
       const output = result.content ?? ''
@@ -67,42 +67,42 @@ describe.each(['\n', '\r\n'])('Hermes source edit boundaries (%j)', (eol) => {
     {
       name: 'plugin trailing comma before a comment',
       input: 'plugins: {custom: keep, # retain this comment\n  }\n',
-      expected: { plugins: { custom: 'keep', enabled: ['orca-status'] } }
+      expected: { plugins: { custom: 'keep', enabled: ['quirky-status'] } }
     },
     {
       name: 'root trailing comma before a comment',
       input: '{model: "001", # retain this comment\n}\n',
-      expected: { model: '001', plugins: { enabled: ['orca-status'] } }
+      expected: { model: '001', plugins: { enabled: ['quirky-status'] } }
     },
     {
       name: 'plugin trailing comma before several comments',
       input: 'plugins: {custom: "keep # ,", # first\n  # last\n  } # outside\n',
-      expected: { plugins: { custom: 'keep # ,', enabled: ['orca-status'] } }
+      expected: { plugins: { custom: 'keep # ,', enabled: ['quirky-status'] } }
     },
     {
       name: 'root trailing comma after a nested map',
       input: '{model: {name: "001",}, # first\n # last\n}\n',
-      expected: { model: { name: '001' }, plugins: { enabled: ['orca-status'] } }
+      expected: { model: { name: '001' }, plugins: { enabled: ['quirky-status'] } }
     },
     {
       name: 'plugin comment ending in a comma without a separator',
       input: 'plugins: {custom: keep # this comma is only a comment ,\n  }\n',
-      expected: { plugins: { custom: 'keep', enabled: ['orca-status'] } }
+      expected: { plugins: { custom: 'keep', enabled: ['quirky-status'] } }
     },
     {
       name: 'root comment ending in a comma without a separator',
       input: '{model: "001" # this comma is only a comment ,\n}\n',
-      expected: { model: '001', plugins: { enabled: ['orca-status'] } }
+      expected: { model: '001', plugins: { enabled: ['quirky-status'] } }
     },
     {
       name: 'earlier plugin separator without a trailing comma',
       input: 'plugins: {custom: keep, extra: "off" # last value\n  }\n',
-      expected: { plugins: { custom: 'keep', extra: 'off', enabled: ['orca-status'] } }
+      expected: { plugins: { custom: 'keep', extra: 'off', enabled: ['quirky-status'] } }
     },
     {
       name: 'nested sequence comma without a mapping separator',
       input: 'plugins: {custom: [one, two,] # nested comma only\n  }\n',
-      expected: { plugins: { custom: ['one', 'two'], enabled: ['orca-status'] } }
+      expected: { plugins: { custom: ['one', 'two'], enabled: ['quirky-status'] } }
     }
   ])('inserts entries with $name', ({ input, expected }) => {
     const source = input.replaceAll('\n', eol)

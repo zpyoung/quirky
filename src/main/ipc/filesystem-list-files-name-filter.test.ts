@@ -93,7 +93,7 @@ describe('listQuickOpenFiles name filter', () => {
         undefined,
         nameFilter('appdelegate')
       )
-    ).rejects.toThrow("Orca's bundled search tool (ripgrep) could not start")
+    ).rejects.toThrow("Quirky's bundled search tool (ripgrep) could not start")
   })
 
   it('keeps primary matches when the ignored-file pass fails during a filtered scan', async () => {

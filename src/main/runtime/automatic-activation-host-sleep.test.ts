@@ -4,21 +4,21 @@ import { spawnWorktreeTarget } from '../../shared/worktree/host-qualified-identi
 import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   deferred,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
-} = await import('./orca-runtime-test-fixtures.spec')
+} = await import('./quirky-runtime-test-fixtures.spec')
 
 function makeRuntime(listProcesses: () => Promise<never[]> = async () => []) {
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal()
   )
-  const runtime = new OrcaRuntimeService(runtimeStore)
+  const runtime = new QuirkyRuntimeService(runtimeStore)
   const spawn = vi.fn().mockResolvedValue({ id: 'persisted-pty' })
   runtime.setPtyController({
     spawn,
@@ -36,7 +36,10 @@ function makeRuntime(listProcesses: () => Promise<never[]> = async () => []) {
   return { runtime, spawn, sleepPhases }
 }
 
-function activate(runtime: InstanceType<typeof OrcaRuntimeService>, intent: 'user' | 'automatic') {
+function activate(
+  runtime: InstanceType<typeof QuirkyRuntimeService>,
+  intent: 'user' | 'automatic'
+) {
   return runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab', HEADLESS_LEAF_ID, {
     notifyClients: false,
     navigation: 'caller',

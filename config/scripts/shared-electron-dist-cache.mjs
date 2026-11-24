@@ -8,7 +8,7 @@ import { isSharedPackageDir } from './native-build-entry.cjs'
 
 const IDENTITY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 // Sibling of path.txt, never inside dist: an install replaces dist wholesale.
-const MARKER_FILENAME = '.orca-shared-dist'
+const MARKER_FILENAME = '.quirky-shared-dist'
 
 /**
  * Where sibling worktrees of one repository keep their shared extracted Electron.
@@ -36,7 +36,7 @@ export function resolveSharedElectronDistEntry(options) {
   } catch {
     return null // Folder workspace, or no Git on PATH.
   }
-  const cacheRoot = path.join(gitCommonDir, 'orca-cache', 'electron')
+  const cacheRoot = path.join(gitCommonDir, 'quirky-cache', 'electron')
   return {
     cacheRoot,
     entryPath: path.join(cacheRoot, `${version}-${targetPlatform}-${targetArch}`),

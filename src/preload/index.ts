@@ -9,7 +9,7 @@ import type { PreloadApi } from './api-types'
 import { installBrowserFindListener } from './preload-runtime-support'
 import { appApi } from './api/app-bridge'
 import { ledgerApi } from './api/ledger-bridge'
-import { orcaProfilesApi } from './api/orca-profiles-bridge'
+import { quirkyProfilesApi } from './api/quirky-profiles-bridge'
 import { platformApi } from './api/platform-bridge'
 import { pwshApi } from './api/pwsh-bridge'
 import { gitBashApi } from './api/git-bash-bridge'
@@ -95,7 +95,7 @@ const api = {
   forkSessionInfo: buildForkSessionInfoApi(),
   ledger: ledgerApi,
   app: appApi,
-  orcaProfiles: orcaProfilesApi,
+  quirkyProfiles: quirkyProfilesApi,
   platform: platformApi,
   pwsh: pwshApi,
   gitBash: gitBashApi,

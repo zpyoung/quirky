@@ -1,5 +1,5 @@
-import { spawnProcess } from '@orca/process-host'
-import { windowsPowerShellPath } from '@orca/process-host/windows-system-binary'
+import { spawnProcess } from '@quirky/process-host'
+import { windowsPowerShellPath } from '@quirky/process-host/windows-system-binary'
 import { reportComputerDiagnostic } from './computer-sidecar-diagnostics'
 import { isReplayableTool } from './desktop-script-action'
 import type { BridgeRequest, BridgeResponse } from './desktop-script-provider-types'
@@ -72,7 +72,7 @@ export class DesktopScriptRuntimeHost {
   /**
    * Set once any helper has announced itself, which proves the script on disk
    * speaks the ready protocol. Until then a mutating request is not replayed
-   * even on a clean start failure, because ORCA_COMPUTER_DESKTOP_SCRIPT_PROVIDER_PATH
+   * even on a clean start failure, because QUIRKY_COMPUTER_DESKTOP_SCRIPT_PROVIDER_PATH
    * can point at an older runtime.ps1 that simply never announces.
    */
   private readyProtocolConfirmed = false

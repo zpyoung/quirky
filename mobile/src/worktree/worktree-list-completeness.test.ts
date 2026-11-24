@@ -11,7 +11,7 @@ import {
 // Regression guard for "host page shows lots of worktrees, repo shows only a
 // few". The removed getHostScopedWorktrees filtered the list to worktrees whose
 // repoId appeared in the repo.list result — a map keyed by repo DISPLAY NAME.
-// Same-named repos on different hosts (a local "orca" and a runtime "orca")
+// Same-named repos on different hosts (a local "quirky" and a runtime "quirky")
 // collapsed to one id, so every worktree under the other id vanished. These
 // tests assert the user-visible outcome — every worktree from worktree.ps stays
 // in the list — regardless of repo.list contents or desktop host scope, so they
@@ -25,7 +25,7 @@ function worktree(repoId: string, id: string, repo = repoId): Worktree {
     repo,
     branch: `feature/${id}`,
     displayName: id,
-    path: `/tmp/orca/${repoId}/${id}`,
+    path: `/tmp/quirky/${repoId}/${id}`,
     liveTerminalCount: 0,
     hasAttachedPty: false,
     preview: '',
@@ -69,25 +69,25 @@ describe('every worktree stays visible regardless of repo.list contents', () => 
   it('shows worktrees whose repoId is missing from repo.list', () => {
     // repo.list only echoes one of the repos the worktrees belong to.
     const worktrees = [
-      worktree('orca-local', 'a'),
-      worktree('orca-local', 'b'),
-      worktree('orca-runtime', 'c')
+      worktree('quirky-local', 'a'),
+      worktree('quirky-local', 'b'),
+      worktree('quirky-runtime', 'c')
     ]
-    const catalogRepos = [['orca-runtime', 'orca-runtime']] as const
+    const catalogRepos = [['quirky-runtime', 'quirky-runtime']] as const
 
     expect(visibleWorktreeIds(worktrees, catalogRepos)).toEqual(['a', 'b', 'c'])
   })
 
   it('shows every worktree when the same repo name maps to two host-specific ids', () => {
-    // The exact trigger: a local "orca" and a runtime "orca". repo.list returns
+    // The exact trigger: a local "quirky" and a runtime "quirky". repo.list returns
     // both under the same displayName; a name-keyed map keeps only the last id.
     const worktrees = [
-      worktree('orca-local', 'local-1', 'orca'),
-      worktree('orca-local', 'local-2', 'orca'),
-      worktree('orca-runtime', 'runtime-1', 'orca')
+      worktree('quirky-local', 'local-1', 'quirky'),
+      worktree('quirky-local', 'local-2', 'quirky'),
+      worktree('quirky-runtime', 'runtime-1', 'quirky')
     ]
-    // The catalog names only one of the two "orca" repos.
-    const catalogRepos = [['orca', 'orca-runtime']] as const
+    // The catalog names only one of the two "quirky" repos.
+    const catalogRepos = [['quirky', 'quirky-runtime']] as const
 
     expect(visibleWorktreeIds(worktrees, catalogRepos)).toEqual(['local-1', 'local-2', 'runtime-1'])
   })

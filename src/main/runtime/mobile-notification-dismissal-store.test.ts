@@ -11,7 +11,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 function fixture() {
-  const path = mkdtempSync(join(tmpdir(), 'orca-dismissals-'))
+  const path = mkdtempSync(join(tmpdir(), 'quirky-dismissals-'))
   paths.push(path)
   const store = new MobileNotificationDismissalStore(path)
   stores.push(store)

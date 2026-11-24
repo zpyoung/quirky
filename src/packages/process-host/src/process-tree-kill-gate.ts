@@ -12,8 +12,8 @@
 
 /** Blast radius, not mechanism: `win-taskkill-tree` is addressed by pid and walks
  *  whatever tree that pid has *now*, so it can land on a recycled pid that is
- *  since one of Orca's own Chromium processes. A process group can only contain
- *  processes Orca itself put there. */
+ *  since one of Quirky's own Chromium processes. A process group can only contain
+ *  processes Quirky itself put there. */
 export type ProcessTreeKillScope = 'win-taskkill-tree' | 'posix-process-group'
 
 export type ProcessTreeKill = {

@@ -1,5 +1,5 @@
 import type { RuntimeTerminalSend } from '../../../../../shared/runtime-terminal-contracts'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 
 const TERMINAL_PROMPT_REPLAY_REPLACEMENT_ERRORS = new Set([
   'terminal_handle_stale',
@@ -9,7 +9,7 @@ const TERMINAL_PROMPT_REPLAY_REPLACEMENT_ERRORS = new Set([
 ])
 
 export async function observeReplayedTerminalPrompt(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   handle: string,
   replayedMutationReceipt: unknown,
   waitSubmitMs: number | undefined,
@@ -44,7 +44,7 @@ export async function observeReplayedTerminalPrompt(
 }
 
 export function ensureUnsupportedTerminalPromptReceipt(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   handle: string,
   requestId: string,
   send: RuntimeTerminalSend

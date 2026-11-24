@@ -1,5 +1,5 @@
 import { availableParallelism } from 'node:os'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { resolvePinnedBunExecutable } from './pinned-bun-executable.mjs'
 import { describeProcessFailure } from './process-failure-message.mjs'
 import { isDirectInvocation } from './script-entry-detection.mjs'

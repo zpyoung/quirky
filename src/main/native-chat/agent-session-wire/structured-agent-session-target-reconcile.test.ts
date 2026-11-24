@@ -43,7 +43,7 @@ function reservation(sessionId: string): AgentSessionReserveRequest {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-targeted-reconcile-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-targeted-reconcile-'))
   operation = 0
   const previous = await openTestAgentSessionRecordStore(root)
   await previous.reserveOwner(reservation('session-1'))

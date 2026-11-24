@@ -1,4 +1,4 @@
-// How Orca starts each ACP agent, as data: adding an agent is one more row (plus a dialect when it
+// How Quirky starts each ACP agent, as data: adding an agent is one more row (plus a dialect when it
 // speaks protocol extensions). Nothing outside `acp-dialects/` branches on an agent's name.
 
 import { join } from 'node:path'
@@ -89,7 +89,7 @@ export type AcpModelDiscovery =
 
 /** What a new chat offers, read from a session opened in the asking chat's folder and then
  *  deleted. An agent that cannot delete one is not asked unless it can keep that session in a
- *  folder Orca removes, and with no chat folder (a prewarm) none is opened, so no conversation or
+ *  folder Quirky removes, and with no chat folder (a prewarm) none is opened, so no conversation or
  *  new project is left in its history. */
 export type AcpSessionModelDiscovery = {
   kind: 'session'
@@ -108,7 +108,7 @@ export function acpListingNeedsChatFolder(discovery: AcpModelDiscovery): boolean
 }
 
 export type AcpLaunchSpec = {
-  /** The Orca agent id, which names the agent's records, its catalog label and its settings. */
+  /** The Quirky agent id, which names the agent's records, its catalog label and its settings. */
   agent: TuiAgent
   command: string
   /** The terminal agent's Command setting may name a different program than this chat server. */
@@ -118,7 +118,7 @@ export type AcpLaunchSpec = {
   args(input: { fullAccess: boolean; pluginDir: string | null }): string[]
   /** Laid over the child's environment last, after the account and the user's own variables. */
   env: Readonly<Record<string, string>>
-  /** Rewrites what the child would inherit from Orca's own plumbing; returns the keys it must not
+  /** Rewrites what the child would inherit from Quirky's own plumbing; returns the keys it must not
    *  inherit at all. `inherited` is the environment the child process starts from. */
   scrubEnvironment?(env: Record<string, string>, inherited: NodeJS.ProcessEnv): string[]
   dialect: AcpDialect
@@ -139,12 +139,12 @@ export type AcpLaunchSpec = {
   supportsVersion?(version: string): boolean
   /** Where the agent installs its own binary, searched after PATH. */
   installDirectories(input: { env: Readonly<Record<string, string>>; homePath: string }): string[]
-  /** A pinned copy Orca installs under its data folder when the person asks; a start runs an
+  /** A pinned copy Quirky installs under its data folder when the person asks; a start runs an
    *  installed release before PATH and never installs one. A spec with one names no
    *  `supportsVersion`. */
   managedRuntime?: ManagedRuntime
   /** The agent's `mode` config option value per chat permission mode, through which it enforces
-   *  the mode itself; Orca then answers none of its permission requests for the person. */
+   *  the mode itself; Quirky then answers none of its permission requests for the person. */
   permissionModeConfig?: {
     values: { ask: string } & Partial<Record<AgentChatPermissionMode, string>>
   }
@@ -221,7 +221,7 @@ function openCodeLaunchSpec(
     ...row,
     // OpenCode has no bypass flag: full access answers each permission request yes.
     args: () => ['acp'],
-    // Applied last: the client name ACP sessions report, and no question tool, since Orca shows no
+    // Applied last: the client name ACP sessions report, and no question tool, since Quirky shows no
     // question form yet (1.x would wait on one forever; 2.x drops it).
     env: { OPENCODE_CLIENT: 'acp', OPENCODE_ENABLE_QUESTION_TOOL: 'false' },
     scrubEnvironment: scrubOpenCodeAcpEnvironment,
@@ -305,7 +305,7 @@ const ANTIGRAVITY_SESSION_HISTORY: StructuredAgentSessionHistory = {
   parseResumeArgs: () => null
 }
 
-// Google's Antigravity ACP server, which Orca installs (the `agy` CLI has no ACP mode). Its chats
+// Google's Antigravity ACP server, which Quirky installs (the `agy` CLI has no ACP mode). Its chats
 // sign in to a folder of their own on each host; an `agy` login is not theirs.
 export const ANTIGRAVITY_LAUNCH_SPEC = {
   agent: 'antigravity',

@@ -4,9 +4,9 @@ import { readFileSync, existsSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import type { ElectronApplication } from '@stablyai/playwright-test'
 import { getRepoIdFromWorktreeId } from '../../src/shared/worktree/id'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { forceQuitElectronAppForE2E } from './helpers/electron-process-shutdown'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import { execInTerminal, waitForTerminalOutput, waitForActivePanePtyId } from './helpers/terminal'
 import {
   waitForSessionReady,
@@ -106,7 +106,7 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       expect(automationLifecycle.runStatus).toBe('dispatching')
 
       const profileIndex: unknown = JSON.parse(
-        readFileSync(path.join(session.userDataDir, 'orca-profile-index.json'), 'utf8')
+        readFileSync(path.join(session.userDataDir, 'quirky-profile-index.json'), 'utf8')
       )
       if (
         typeof profileIndex !== 'object' ||
@@ -122,8 +122,8 @@ test.describe('SQLite candidate terminal restart persistence', () => {
         'profiles',
         profileIndex.activeProfileId
       )
-      const legacyProfileState = path.join(profileDirectory, 'orca-data.json')
-      const legacyRootState = path.join(session.userDataDir, 'orca-data.json')
+      const legacyProfileState = path.join(profileDirectory, 'quirky-data.json')
+      const legacyRootState = path.join(session.userDataDir, 'quirky-data.json')
       const databasePath = path.join(profileDirectory, 'profile-state.db')
       expect(existsSync(databasePath)).toBe(true)
       expect(existsSync(legacyProfileState)).toBe(true)
@@ -240,26 +240,26 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       const defaultWorktreeId = await attachRepoAndOpenTerminal(firstLaunch.page, repoPath)
       await waitForSessionReady(firstLaunch.page)
       const defaultProfileId = await firstLaunch.page.evaluate(async () => {
-        const profiles = await window.api.orcaProfiles.list()
+        const profiles = await window.api.quirkyProfiles.list()
         return profiles.activeProfileId
       })
       const targetProfileId = await firstLaunch.page.evaluate(async () => {
-        const created = await window.api.orcaProfiles.createLocal({
+        const created = await window.api.quirkyProfiles.createLocal({
           name: `SQLite switch target ${Date.now()}`
         })
         return created.profile.id
       })
 
       const defaultProfileDirectory = path.join(session.userDataDir, 'profiles', defaultProfileId)
-      const defaultJson = path.join(defaultProfileDirectory, 'orca-data.json')
-      const rootJson = path.join(session.userDataDir, 'orca-data.json')
+      const defaultJson = path.join(defaultProfileDirectory, 'quirky-data.json')
+      const rootJson = path.join(session.userDataDir, 'quirky-data.json')
       const defaultDatabase = path.join(defaultProfileDirectory, 'profile-state.db')
       expect(existsSync(defaultDatabase)).toBe(true)
 
       // The target switch must flush and publish the index before relaunching.
       await expect(
         firstLaunch.page.evaluate(
-          (profileId) => window.api.orcaProfiles.switchProfile({ profileId }),
+          (profileId) => window.api.quirkyProfiles.switchProfile({ profileId }),
           targetProfileId
         )
       ).resolves.toEqual({ status: 'relaunching' })
@@ -269,11 +269,11 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       const secondLaunch = await session.launch()
       secondApp = secondLaunch.app
       await waitForSessionReady(secondLaunch.page)
-      const targetList = await secondLaunch.page.evaluate(() => window.api.orcaProfiles.list())
+      const targetList = await secondLaunch.page.evaluate(() => window.api.quirkyProfiles.list())
       expect(targetList.activeProfileId).toBe(targetProfileId)
       const targetProfileDirectory = path.join(session.userDataDir, 'profiles', targetProfileId)
       const targetDatabase = path.join(targetProfileDirectory, 'profile-state.db')
-      const targetJson = path.join(targetProfileDirectory, 'orca-data.json')
+      const targetJson = path.join(targetProfileDirectory, 'quirky-data.json')
       expect(existsSync(targetDatabase)).toBe(true)
 
       // Seed an independent target-profile document before switching back.
@@ -282,7 +282,7 @@ test.describe('SQLite candidate terminal restart persistence', () => {
 
       await expect(
         secondLaunch.page.evaluate(
-          (profileId) => window.api.orcaProfiles.switchProfile({ profileId }),
+          (profileId) => window.api.quirkyProfiles.switchProfile({ profileId }),
           defaultProfileId
         )
       ).resolves.toEqual({ status: 'relaunching' })
@@ -297,7 +297,7 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       const thirdLaunch = await session.launch()
       thirdApp = thirdLaunch.app
       await waitForSessionReady(thirdLaunch.page)
-      const finalList = await thirdLaunch.page.evaluate(() => window.api.orcaProfiles.list())
+      const finalList = await thirdLaunch.page.evaluate(() => window.api.quirkyProfiles.list())
       expect(finalList.activeProfileId).toBe(defaultProfileId)
       expect(existsSync(defaultDatabase)).toBe(true)
       expect(existsSync(targetDatabase)).toBe(true)
@@ -336,12 +336,12 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       const worktreeId = await attachRepoAndOpenTerminal(firstLaunch.page, repoPath)
       await waitForSessionReady(firstLaunch.page)
       const profileState = await firstLaunch.page.evaluate(async (repoId) => {
-        const profiles = await window.api.orcaProfiles.list()
+        const profiles = await window.api.quirkyProfiles.list()
         const repo = window.__store?.getState().repos.find((entry) => entry.id === repoId)
         if (!repo) {
           throw new Error('SQLite profile move E2E did not find the seeded repository')
         }
-        const target = await window.api.orcaProfiles.createLocal({
+        const target = await window.api.quirkyProfiles.createLocal({
           name: `SQLite move target ${Date.now()}`
         })
         return {
@@ -363,15 +363,15 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       )
       const sourceDatabase = path.join(sourceDirectory, 'profile-state.db')
       const targetDatabase = path.join(targetDirectory, 'profile-state.db')
-      const sourceJson = path.join(sourceDirectory, 'orca-data.json')
-      const targetJson = path.join(targetDirectory, 'orca-data.json')
-      const rootJson = path.join(session.userDataDir, 'orca-data.json')
+      const sourceJson = path.join(sourceDirectory, 'quirky-data.json')
+      const targetJson = path.join(targetDirectory, 'quirky-data.json')
+      const rootJson = path.join(session.userDataDir, 'quirky-data.json')
       expect(existsSync(sourceDatabase)).toBe(true)
 
       // Visit the target once so candidate startup establishes its own database before the move.
       await expect(
         firstLaunch.page.evaluate(
-          (profileId) => window.api.orcaProfiles.switchProfile({ profileId }),
+          (profileId) => window.api.quirkyProfiles.switchProfile({ profileId }),
           profileState.targetProfileId
         )
       ).resolves.toEqual({ status: 'relaunching' })
@@ -381,14 +381,16 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       const secondLaunch = await session.launch()
       secondApp = secondLaunch.app
       await waitForSessionReady(secondLaunch.page)
-      expect(await secondLaunch.page.evaluate(() => window.api.orcaProfiles.list())).toMatchObject({
+      expect(
+        await secondLaunch.page.evaluate(() => window.api.quirkyProfiles.list())
+      ).toMatchObject({
         activeProfileId: profileState.targetProfileId
       })
       expect(existsSync(targetDatabase)).toBe(true)
 
       await expect(
         secondLaunch.page.evaluate(
-          (profileId) => window.api.orcaProfiles.switchProfile({ profileId }),
+          (profileId) => window.api.quirkyProfiles.switchProfile({ profileId }),
           profileState.sourceProfileId
         )
       ).resolves.toEqual({ status: 'relaunching' })
@@ -399,7 +401,7 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       thirdApp = thirdLaunch.app
       await waitForSessionReady(thirdLaunch.page)
       const moveResult = await thirdLaunch.page.evaluate(
-        (args) => window.api.orcaProfiles.transferProject(args),
+        (args) => window.api.quirkyProfiles.transferProject(args),
         {
           sourceProfileId: profileState.sourceProfileId,
           targetProfileId: profileState.targetProfileId,
@@ -426,7 +428,9 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       const targetLaunch = await session.launch()
       secondApp = targetLaunch.app
       await waitForSessionReady(targetLaunch.page)
-      expect(await targetLaunch.page.evaluate(() => window.api.orcaProfiles.list())).toMatchObject({
+      expect(
+        await targetLaunch.page.evaluate(() => window.api.quirkyProfiles.list())
+      ).toMatchObject({
         activeProfileId: profileState.targetProfileId
       })
       expect(
@@ -439,7 +443,7 @@ test.describe('SQLite candidate terminal restart persistence', () => {
 
       await expect(
         targetLaunch.page.evaluate(
-          (profileId) => window.api.orcaProfiles.switchProfile({ profileId }),
+          (profileId) => window.api.quirkyProfiles.switchProfile({ profileId }),
           profileState.sourceProfileId
         )
       ).resolves.toEqual({ status: 'relaunching' })
@@ -451,7 +455,9 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       const sourceLaunch = await session.launch()
       thirdApp = sourceLaunch.app
       await waitForSessionReady(sourceLaunch.page)
-      expect(await sourceLaunch.page.evaluate(() => window.api.orcaProfiles.list())).toMatchObject({
+      expect(
+        await sourceLaunch.page.evaluate(() => window.api.quirkyProfiles.list())
+      ).toMatchObject({
         activeProfileId: profileState.sourceProfileId
       })
       expect(
@@ -497,7 +503,7 @@ test.describe('SQLite candidate terminal restart persistence', () => {
       const { worktreeId, ptyId } = await bootstrapFirstLaunch(firstLaunch.page, repoPath)
 
       const profileIndex: unknown = JSON.parse(
-        readFileSync(path.join(session.userDataDir, 'orca-profile-index.json'), 'utf8')
+        readFileSync(path.join(session.userDataDir, 'quirky-profile-index.json'), 'utf8')
       )
       if (
         typeof profileIndex !== 'object' ||
@@ -513,8 +519,8 @@ test.describe('SQLite candidate terminal restart persistence', () => {
         'profiles',
         profileIndex.activeProfileId
       )
-      const legacyProfileState = path.join(profileDirectory, 'orca-data.json')
-      const legacyRootState = path.join(session.userDataDir, 'orca-data.json')
+      const legacyProfileState = path.join(profileDirectory, 'quirky-data.json')
+      const legacyRootState = path.join(session.userDataDir, 'quirky-data.json')
       const databasePath = path.join(profileDirectory, 'profile-state.db')
       expect(existsSync(databasePath)).toBe(true)
 

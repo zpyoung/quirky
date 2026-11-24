@@ -12,7 +12,7 @@ import {
   type HostedReviewWorld
 } from '../../shared/fork-hosted-review-sitter'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { HostedReviewSitterGitExecution } from './provider'
 import { resolveHostedReviewSitterOutcome } from './service-action-executor'
 import type { HostedReviewWorkerDispatch } from './agent-preparation'
@@ -83,8 +83,8 @@ function fakeStore(): Store {
   } as unknown as Store
 }
 
-// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial test double of OrcaRuntimeService; only launchAgentTerminal is reached by kind.execute in this suite.
-const runtime = { launchAgentTerminal: vi.fn() } as unknown as OrcaRuntimeService
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial test double of QuirkyRuntimeService; only launchAgentTerminal is reached by kind.execute in this suite.
+const runtime = { launchAgentTerminal: vi.fn() } as unknown as QuirkyRuntimeService
 
 function attemptLedger(
   action: HostedReviewSitterAction,
@@ -386,7 +386,7 @@ describe('hosted review kind', () => {
     await expect(kind.execute(action, context)).resolves.toMatchObject({ effect: 'landed' })
     expect(dispatchWorker).toHaveBeenCalledOnce()
     const request = dispatchWorker.mock.calls[0]![0]
-    expect(request.spec).toContain('Orca-Heimdall-Attempt:')
+    expect(request.spec).toContain('Quirky-Heimdall-Attempt:')
     expect(request.spec.toLowerCase()).toContain('local commit')
     expect(request.spec.toLowerCase()).toContain('do not push')
     expect(launchFix).not.toHaveBeenCalled()

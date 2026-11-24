@@ -137,16 +137,16 @@ export const ZH_VALUE_OVERRIDES = {
     '编辑器打开时运行一次托管评审详情生成。',
   'Show local Markdown review notes controls in rich editor mode.':
     '在富文本编辑器模式下显示本地 Markdown 评审笔记控件。',
-  'Orca IDE': 'Orca IDE',
-  'Orca first': 'Orca 优先',
-  'Orca Mobile': 'Orca Mobile',
-  'Orca logo': 'Orca 标志',
-  'Enjoying Orca?': '喜欢 Orca 吗？',
-  'Get to know Orca': '了解 Orca',
-  'Expand Orca': '展开 Orca',
-  'Support Orca': '支持 Orca',
-  'Restarting Orca…': '正在重启 Orca…',
-  'Show Orca Mobile Button': '显示 Orca Mobile 按钮',
+  'Quirky IDE': 'Quirky IDE',
+  'Quirky first': 'Quirky 优先',
+  'Quirky Mobile': 'Quirky Mobile',
+  'Quirky logo': 'Quirky 标志',
+  'Enjoying Quirky?': '喜欢 Quirky 吗？',
+  'Get to know Quirky': '了解 Quirky',
+  'Expand Quirky': '展开 Quirky',
+  'Support Quirky': '支持 Quirky',
+  'Restarting Quirky…': '正在重启 Quirky…',
+  'Show Quirky Mobile Button': '显示 Quirky Mobile 按钮',
   'Codex Accounts': 'Codex 账户',
   'Codex Account': 'Codex 账户',
   'Active Codex Account': '活跃 Codex 账户',
@@ -184,8 +184,8 @@ export const ZH_VALUE_OVERRIDES = {
   'Leave empty to use system proxy settings and inherited proxy environment variables.':
     '留空以使用系统代理设置和继承的代理环境变量。',
   'Proxy Command': '代理命令',
-  "Give agents direct access to Orca's browser so they can test pages, capture screenshots, and act on what they see.":
-    '让智能体直接访问 Orca 的浏览器，以便测试页面、捕获屏幕截图并根据所见内容执行操作。',
+  "Give agents direct access to Quirky's browser so they can test pages, capture screenshots, and act on what they see.":
+    '让智能体直接访问 Quirky 的浏览器，以便测试页面、捕获屏幕截图并根据所见内容执行操作。',
   'X finishes, send it the review task.”': 'X 完成后，把评审任务发给它。”',
   'Branch naming, base refs, and Git AI Author.': '分支命名、基础引用和 Git AI Author。',
   'You have unsaved Git AI Author changes. Leaving will discard them.':
@@ -219,7 +219,7 @@ export const ZH_VALUE_OVERRIDES = {
     '显示提示词缓存到期倒计时的计时器（Claude 智能体）。',
   'Claude caches your conversation to reduce costs. When idle too long the cache expires and the next message resends full context at higher cost. This shows a countdown so you know when to resume.':
     'Claude 会缓存对话以降低成本。空闲过久后缓存会过期，下一条消息将以更高成本重新发送完整上下文。此倒计时可帮助您了解何时继续。',
-  'from Orca. It is still on your disk.': '来自 Orca。它仍保留在您的磁盘上。',
+  'from Quirky. It is still on your disk.': '来自 Quirky。它仍保留在您的磁盘上。',
   'Pull request reopened': '拉取请求已重新打开',
   'Reopen PR': '重新打开 PR',
   'Reopened MR !{{value0}}': '已重新打开 MR !{{value0}}',

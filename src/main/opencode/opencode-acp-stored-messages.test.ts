@@ -18,7 +18,7 @@ afterEach(() => {
 
 /** An `opencode.db` under a fresh XDG data home, built by `schema`; returns that data home. */
 function dataHomeWith(schema: string): string {
-  const root = mkdtempSync(join(tmpdir(), 'orca-opencode-stored-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-opencode-stored-'))
   roots.push(root)
   mkdirSync(join(root, 'opencode'))
   const db = new Database(join(root, 'opencode', 'opencode.db'))

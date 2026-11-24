@@ -217,7 +217,7 @@ function promptObservationWarning(
   }
   if (prompt.observation === 'unsupported') {
     return prompt.provider === 'old-host'
-      ? 'this host predates durable prompt receipts. Update Orca on the execution host, and inspect the terminal before retrying an ambiguous send.'
+      ? 'this host predates durable prompt receipts. Update Quirky on the execution host, and inspect the terminal before retrying an ambiguous send.'
       : 'input was accepted, but this provider cannot report delivery. Inspect the terminal before retrying.'
   }
   return null

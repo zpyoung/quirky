@@ -31,7 +31,7 @@ jobs:
         with:
           native-runtime: electron
       - name: Download pinned old release
-        uses: ./.github/actions/download-pinned-orca-release
+        uses: ./.github/actions/download-pinned-quirky-release
         with:
           version: 1.4.188
           sha512: uGONFUDfinYggxcT9ac72wnnlofLQaqasDDeP0HWOSqarBwTi1Ax3khmzKUY3vUnvuYOpSCEmsH4InzLZ2vg6g==
@@ -47,7 +47,7 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/packaged-browser-results.json
         run: >-
           xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh
-          env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1
+          env SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1
           pnpm exec playwright test --config tests/playwright.config.ts
           tests/e2e/packaged-mixed-version-browser-placement.spec.ts
           --project=electron-headless --workers=1 --retries=0 --repeat-each=3 --reporter=list,json
@@ -74,7 +74,7 @@ jobs:
         with:
           native-runtime: electron
       - name: Download pinned old release
-        uses: ./.github/actions/download-pinned-orca-release
+        uses: ./.github/actions/download-pinned-quirky-release
         with:
           version: 1.4.224
           sha512: +/VyaYSgqSAuSSWe1ySrCKRjHHJ6REXqmz58g69bxvoUdV41iH9vlobM18xdxWTkgJF2kbu/tSKFvH0jMnZ0+Q==
@@ -89,10 +89,10 @@ jobs:
       # The two specs without a released build ride along, so one dispatch reruns every baseline.
       - name: Run the layout baselines
         env:
-          ORCA_LAYOUT_COMPAT_REPORT_DIR: test-results/layout-compat
+          QUIRKY_LAYOUT_COMPAT_REPORT_DIR: test-results/layout-compat
         run: >-
           xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh
-          env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1
+          env SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1
           pnpm exec playwright test --config tests/playwright.config.ts
           tests/e2e/layout-compat-old-desktop-on-new-server.spec.ts
           tests/e2e/layout-compat-new-desktop-on-old-server.spec.ts

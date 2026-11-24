@@ -109,7 +109,7 @@ describe('CodexHookService user-hook trust spellings', () => {
   })
 
   it.each(HOOK_STATE_SPELLINGS)(
-    'applies ~/.codex enabled=false over a %s runtime copy Codex wrote inside Orca',
+    'applies ~/.codex enabled=false over a %s runtime copy Codex wrote inside Quirky',
     async (_name, spell) => {
       const { trustedHash } = seedTrustedSystemUserHook(HOOK_STATE_SPELLINGS[0][1], false)
       const managedCodexHome = join(homes.userDataDir, 'codex-runtime-home', 'home')

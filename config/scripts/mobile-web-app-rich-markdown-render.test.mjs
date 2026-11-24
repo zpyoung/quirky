@@ -93,7 +93,7 @@ const ENGINES = [
     // CI runs this against the runner's Google Chrome rather than paying for a download, the same
     // override shape as every other render check here.
     launch: () => {
-      const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+      const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
       return chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
     }
   },
@@ -137,7 +137,7 @@ function Harness() {
   })
   const handle = useRef(null)
   useEffect(() => {
-    globalThis.__orcaEditor = {
+    globalThis.__quirkyEditor = {
       set: (next) => setState((previous) => ({ ...previous, ...next })),
       changes: [],
       secondChanges: [],
@@ -156,8 +156,8 @@ function Harness() {
       content,
       editable: state.editable,
       onChange: onChanged,
-      onOpenLink: (url) => globalThis.__orcaEditor.links.push(url),
-      onKeyboardInsetChange: (bottom) => globalThis.__orcaEditor.insets.push(bottom)
+      onOpenLink: (url) => globalThis.__quirkyEditor.links.push(url),
+      onKeyboardInsetChange: (bottom) => globalThis.__quirkyEditor.insets.push(bottom)
     })
   return createElement(
     SafeAreaProvider,
@@ -170,7 +170,7 @@ function Harness() {
             'div',
             { id: 'first-surface', style: { flex: 1, display: 'flex', minHeight: 0 } },
             editor('first-' + state.generation, true, state.content, (next) => {
-              globalThis.__orcaEditor.changes.push(next)
+              globalThis.__quirkyEditor.changes.push(next)
               setState((previous) => ({ ...previous, content: next }))
             })
           )
@@ -180,7 +180,7 @@ function Harness() {
             'div',
             { id: 'second-surface', style: { flex: 1, display: 'flex', minHeight: 0 } },
             editor('second', false, state.secondContent, (next) => {
-              globalThis.__orcaEditor.secondChanges.push(next)
+              globalThis.__quirkyEditor.secondChanges.push(next)
               setState((previous) => ({ ...previous, secondContent: next }))
             })
           )
@@ -201,14 +201,14 @@ createRoot(document.getElementById('root')).render(createElement(Harness))
  * is measured against something that would have answered.
  */
 function installBridgeObjectRecorder() {
-  globalThis.__orcaBridgeReads = []
+  globalThis.__quirkyBridgeReads = []
   const bridge = {
-    postMessage: (message) => globalThis.__orcaBridgeReads.push(`post ${String(message)}`)
+    postMessage: (message) => globalThis.__quirkyBridgeReads.push(`post ${String(message)}`)
   }
   Object.defineProperty(globalThis, 'ReactNativeWebView', {
     configurable: true,
     get: () => {
-      globalThis.__orcaBridgeReads.push('read')
+      globalThis.__quirkyBridgeReads.push('read')
       return bridge
     }
   })
@@ -333,7 +333,7 @@ async function openPage(browser) {
  * `IndexSizeError` in chromium and the fifteen-command loop timed out in webkit.
  */
 async function setContent(page, markdown, html) {
-  await page.evaluate((next) => globalThis.__orcaEditor.set({ content: next }), markdown)
+  await page.evaluate((next) => globalThis.__quirkyEditor.set({ content: next }), markdown)
   await page.waitForFunction(
     (expected) => document.querySelector('#first-surface #editor')?.innerHTML === expected,
     html,
@@ -348,7 +348,7 @@ async function setContent(page, markdown, html) {
  * wait names the element the case is about to act on instead.
  */
 async function setContentWithin(page, markdown, selector) {
-  await page.evaluate((next) => globalThis.__orcaEditor.set({ content: next }), markdown)
+  await page.evaluate((next) => globalThis.__quirkyEditor.set({ content: next }), markdown)
   await page.waitForFunction(
     (expected) =>
       document.querySelector('#first-surface #editor')?.querySelector(expected) !== null,
@@ -420,12 +420,12 @@ describeEditor(
             expect(await readSurface(page)).toBe('<h1>Title</h1>')
             // The document's `ready` is what made the controller push that content, so the markup
             // above is the seam working end to end.
-            expect(await page.evaluate(() => globalThis.__orcaBridgeReads)).toEqual([])
-            expect(await page.evaluate(() => globalThis.__orcaCspViolations)).toEqual([])
+            expect(await page.evaluate(() => globalThis.__quirkyBridgeReads)).toEqual([])
+            expect(await page.evaluate(() => globalThis.__quirkyCspViolations)).toEqual([])
             expect(consoleErrors).toEqual([])
             // Never: the screen's own `keyboard-occlusion.web.ts` measures the same viewport with
             // the same formula, and a report here would lift its bar twice.
-            expect(await page.evaluate(() => globalThis.__orcaEditor.insets)).toEqual([])
+            expect(await page.evaluate(() => globalThis.__quirkyEditor.insets)).toEqual([])
           } finally {
             await page.close()
           }
@@ -450,7 +450,9 @@ describeEditor(
               onRoot: getComputedStyle(document.documentElement)
                 .getPropertyValue('--editor-surface')
                 .trim(),
-              onHost: getComputedStyle(document.querySelector('.orca-rich-markdown-document-host'))
+              onHost: getComputedStyle(
+                document.querySelector('.quirky-rich-markdown-document-host')
+              )
                 .getPropertyValue('--editor-surface')
                 .trim()
             }))
@@ -502,7 +504,7 @@ describeEditor(
               { timeout: 15_000 }
             )
 
-            expect(await page.evaluate(() => globalThis.__orcaCspViolations)).toEqual([])
+            expect(await page.evaluate(() => globalThis.__quirkyCspViolations)).toEqual([])
             expect(consoleErrors).toEqual([])
           } finally {
             await page.close()
@@ -546,7 +548,7 @@ describeEditor(
             await setContent(page, body, `<p>${body}</p>`)
             await select(page, 'all')
             await page.evaluate(() => {
-              globalThis.__orcaEditor.changes.length = 0
+              globalThis.__quirkyEditor.changes.length = 0
             })
             await press(page, 'Bullet list')
             await page.waitForFunction(
@@ -554,7 +556,7 @@ describeEditor(
               null,
               { timeout: 15_000 }
             )
-            await page.waitForFunction(() => globalThis.__orcaEditor.changes.length > 0, null, {
+            await page.waitForFunction(() => globalThis.__quirkyEditor.changes.length > 0, null, {
               timeout: 15_000
             })
             // The precondition: the engine really did nest the list inside the paragraph. An engine
@@ -568,7 +570,7 @@ describeEditor(
               )
             ).toBe('P')
             // What the host would save.
-            expect(await page.evaluate(() => globalThis.__orcaEditor.changes.at(-1))).toBe(
+            expect(await page.evaluate(() => globalThis.__quirkyEditor.changes.at(-1))).toBe(
               `- ${body}`
             )
 
@@ -578,7 +580,7 @@ describeEditor(
             await setContent(page, 'plain again', '<p>plain again</p>')
             await setContent(page, `- ${body}`, `<ul><li><p>${body}</p></li></ul>`)
 
-            expect(await page.evaluate(() => globalThis.__orcaCspViolations)).toEqual([])
+            expect(await page.evaluate(() => globalThis.__quirkyCspViolations)).toEqual([])
             expect(consoleErrors).toEqual([])
           } finally {
             await page.close()
@@ -620,7 +622,7 @@ describeEditor(
                 { timeout: 15_000 }
               )
               .toBeGreaterThan(0)
-            expect(await page.evaluate(() => globalThis.__orcaCspViolations)).toEqual([])
+            expect(await page.evaluate(() => globalThis.__quirkyCspViolations)).toEqual([])
             expect(consoleErrors).toEqual([])
           } finally {
             await page.close()
@@ -632,22 +634,22 @@ describeEditor(
           try {
             await setContentWithin(page, '- [ ] one', 'input[type="checkbox"]')
             await page.evaluate(() => {
-              globalThis.__orcaEditor.changes.length = 0
+              globalThis.__quirkyEditor.changes.length = 0
             })
             await page.locator('#first-surface #editor input[type="checkbox"]').first().click()
-            await page.waitForFunction(() => globalThis.__orcaEditor.changes.length > 0)
+            await page.waitForFunction(() => globalThis.__quirkyEditor.changes.length > 0)
             // One tap raises click, input and change, and each of the three used to report.
-            expect(await page.evaluate(() => globalThis.__orcaEditor.changes)).toHaveLength(1)
-            expect(await page.evaluate(() => globalThis.__orcaEditor.changes[0])).toContain('[x]')
+            expect(await page.evaluate(() => globalThis.__quirkyEditor.changes)).toHaveLength(1)
+            expect(await page.evaluate(() => globalThis.__quirkyEditor.changes[0])).toContain('[x]')
 
             await setContent(page, bodyFor(0), `<p>${bodyFor(0)}</p>`)
             await select(page, 'word')
             await page.evaluate(() => {
-              globalThis.__orcaEditor.changes.length = 0
+              globalThis.__quirkyEditor.changes.length = 0
             })
             await press(page, 'Inline code')
-            await page.waitForFunction(() => globalThis.__orcaEditor.changes.length > 0)
-            expect(await page.evaluate(() => globalThis.__orcaEditor.changes)).toHaveLength(1)
+            await page.waitForFunction(() => globalThis.__quirkyEditor.changes.length > 0)
+            expect(await page.evaluate(() => globalThis.__quirkyEditor.changes)).toHaveLength(1)
           } finally {
             await page.close()
           }
@@ -658,8 +660,8 @@ describeEditor(
           try {
             await setContentWithin(page, '[a](https://example.com/a)', 'a[href]')
             await page.locator('#first-surface #editor a').first().click()
-            await page.waitForFunction(() => globalThis.__orcaEditor.links.length > 0)
-            expect(await page.evaluate(() => globalThis.__orcaEditor.links)).toEqual([
+            await page.waitForFunction(() => globalThis.__quirkyEditor.links.length > 0)
+            expect(await page.evaluate(() => globalThis.__quirkyEditor.links)).toEqual([
               'https://example.com/a'
             ])
             expect(page.url()).toBe(`${origin}/`)
@@ -670,14 +672,14 @@ describeEditor(
 
         it('leaves no listener, timer or frame of the first mount in the second', async () => {
           const { page, consoleErrors } = await openPage(browser)
-          const listeners = () => page.evaluate(() => globalThis.__orcaListeners.snapshot())
+          const listeners = () => page.evaluate(() => globalThis.__quirkyListeners.snapshot())
           try {
             await setContent(page, 'first document', '<p>first document</p>')
 
             // A first mount installs listeners no dispose can take off — react-native-web's
             // responder system arms itself on the first `View` the page renders — so the baseline a
             // per-mount leak would move is the snapshot after one whole cycle, not before it.
-            await page.evaluate(() => globalThis.__orcaEditor.set({ mounted: false }))
+            await page.evaluate(() => globalThis.__quirkyEditor.set({ mounted: false }))
             await page.waitForFunction(() => document.querySelector('#first-surface') === null)
             const afterOneCycle = await listeners()
             // The precondition that makes the comparison below non-vacuous: the recorder is reading
@@ -685,8 +687,8 @@ describeEditor(
             expect(Object.keys(afterOneCycle).length).toBeGreaterThan(0)
 
             await page.evaluate(() => {
-              globalThis.__orcaScheduler.watching = true
-              globalThis.__orcaEditor.set({ mounted: true, generation: 1 })
+              globalThis.__quirkyScheduler.watching = true
+              globalThis.__quirkyEditor.set({ mounted: true, generation: 1 })
             })
             await page.waitForSelector('#first-surface #editor')
             await setContent(page, 'second document', '<p>second document</p>')
@@ -700,13 +702,13 @@ describeEditor(
             // The second mount is live, and the page is listening to exactly what it was after the
             // first cycle. A mount that registered anything of its own would show up here.
             expect(await listeners()).toEqual(afterOneCycle)
-            expect(await page.evaluate(() => globalThis.__orcaScheduler.leaked)).toEqual([])
-            expect(await page.evaluate(() => globalThis.__orcaCspViolations)).toEqual([])
+            expect(await page.evaluate(() => globalThis.__quirkyScheduler.leaked)).toEqual([])
+            expect(await page.evaluate(() => globalThis.__quirkyCspViolations)).toEqual([])
             expect(consoleErrors).toEqual([])
             // The sheet stays in the head across mounts, and there is one of it.
             expect(
               await page.evaluate(
-                () => document.querySelectorAll('#orca-rich-markdown-document-style').length
+                () => document.querySelectorAll('#quirky-rich-markdown-document-style').length
               )
             ).toBe(1)
           } finally {
@@ -719,7 +721,7 @@ describeEditor(
           try {
             await setContent(page, 'first only', '<p>first only</p>')
             await page.evaluate(() =>
-              globalThis.__orcaEditor.set({ both: true, secondContent: 'second only' })
+              globalThis.__quirkyEditor.set({ both: true, secondContent: 'second only' })
             )
             await page.waitForSelector('#second-surface #editor')
             // The markup's id is the same in both hosts, so a page-wide read would have handed the
@@ -739,11 +741,11 @@ describeEditor(
               editor.dispatchEvent(new Event('input', { bubbles: true }))
             })
             await page.waitForFunction(() =>
-              globalThis.__orcaEditor.secondChanges.includes('typed in the second')
+              globalThis.__quirkyEditor.secondChanges.includes('typed in the second')
             )
             // The edit reached the second editor's own host, and the first document neither
             // reported it nor lost its content.
-            expect(await page.evaluate(() => globalThis.__orcaEditor.changes)).not.toContain(
+            expect(await page.evaluate(() => globalThis.__quirkyEditor.changes)).not.toContain(
               'typed in the second'
             )
             expect(await readSurface(page, '#first-surface')).toContain('first only')

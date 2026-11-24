@@ -129,8 +129,8 @@ describe('buildProjectHostSetupOptions', () => {
       projectHostSetups: [
         setup('local', 'project-1', 'local', 'local-repo'),
         setup('vm', 'project-1', ephemeralHostId, 'vm-repo', {
-          path: '/vercel/sandbox/orca',
-          displayName: 'orca'
+          path: '/vercel/sandbox/quirky',
+          displayName: 'quirky'
         })
       ]
     })
@@ -143,7 +143,7 @@ describe('buildProjectHostSetupOptions', () => {
   it('omits runtime-owned SSH (per-workspace-env) setups even when their host is filtered out', () => {
     // The execution-host registry filters runtime-owned targets, so the setup's host is absent
     // here — guard on the hostId so the hidden target never becomes a selectable run-target.
-    const runtimeSshHostId = 'ssh:runtime-ssh-orca-e37aa3a9' as ExecutionHostId
+    const runtimeSshHostId = 'ssh:runtime-ssh-quirky-e37aa3a9' as ExecutionHostId
     const options = buildProjectHostSetupOptions({
       projectId: 'project-1',
       eligibleRepos: [repo('local-repo'), repo('vm-repo')],
@@ -151,8 +151,8 @@ describe('buildProjectHostSetupOptions', () => {
       projectHostSetups: [
         setup('local', 'project-1', 'local', 'local-repo'),
         setup('vm', 'project-1', runtimeSshHostId, 'vm-repo', {
-          path: '/workspace/orca',
-          displayName: 'orca'
+          path: '/workspace/quirky',
+          displayName: 'quirky'
         })
       ]
     })
@@ -164,7 +164,7 @@ describe('buildProjectHostSetupOptions', () => {
   })
 
   it('omits hidden host categories from setup-needed choices', () => {
-    const runtimeSshHostId = 'ssh:runtime-ssh-orca-e37aa3a9' as ExecutionHostId
+    const runtimeSshHostId = 'ssh:runtime-ssh-quirky-e37aa3a9' as ExecutionHostId
     const ephemeralHostId = 'runtime:90d880b2-de1b-44be-b7b8-8e15274e184e' as ExecutionHostId
 
     const options = buildProjectHostSetupOptions({
@@ -228,7 +228,9 @@ describe('buildProjectHostSetupOptions', () => {
       eligibleRepos: [repo('main-checkout'), repo('worktree-a'), repo('worktree-b')],
       hosts: [host('local')],
       projectHostSetups: [
-        setup('main', 'project-1', 'local', 'main-checkout', { path: '/Users/dev/projects/orca' }),
+        setup('main', 'project-1', 'local', 'main-checkout', {
+          path: '/Users/dev/projects/quirky'
+        }),
         setup('dup-a', 'project-1', 'local', 'worktree-a', {
           path: '/Users/dev/worktrees/pr-1908'
         }),
@@ -528,7 +530,7 @@ describe('buildProjectHostSetupOptions', () => {
         id: 'needs-setup:runtime:gpu',
         kind: 'needs-setup',
         label: 'GPU VM',
-        detail: 'Orca server version is incompatible',
+        detail: 'Quirky server version is incompatible',
         isAvailable: false
       })
     ])
@@ -545,7 +547,7 @@ describe('buildProjectHostSetupOptions', () => {
     expect(options.at(-1)).toMatchObject({
       id: 'needs-setup:runtime:gpu',
       kind: 'needs-setup',
-      detail: 'Update Orca on this host to set up projects',
+      detail: 'Update Quirky on this host to set up projects',
       isAvailable: false
     })
   })
@@ -567,7 +569,7 @@ describe('buildProjectHostSetupOptions', () => {
     expect(options.at(-1)).toMatchObject({
       id: 'needs-setup:runtime:gpu',
       kind: 'needs-setup',
-      detail: 'Update Orca on this host to set up projects',
+      detail: 'Update Quirky on this host to set up projects',
       isAvailable: false
     })
   })
@@ -601,7 +603,7 @@ describe('buildProjectHostSetupOptions', () => {
           {
             id: 'omarchy-server',
             name: 'Omarchy',
-            orcadDeployment: { sshTargetId: 'omarchy-target' }
+            quirkydDeployment: { sshTargetId: 'omarchy-target' }
           }
         ]
       }),
@@ -623,14 +625,14 @@ describe('buildProjectHostSetupOptions', () => {
         {
           id: 'openclaw-server',
           name: 'openclaw',
-          orcadDeployment: { sshTargetId: 'openclaw-target' }
+          quirkydDeployment: { sshTargetId: 'openclaw-target' }
         }
       ]
     })
   }
 
   it('shows one row when an SSH host and its managed server report the same checkout', () => {
-    const checkout = { path: '/home/neil/projects/orca' }
+    const checkout = { path: '/home/neil/projects/quirky' }
     const options = buildProjectHostSetupOptions({
       projectId: 'project-1',
       eligibleRepos: [repo('local-repo'), repo('ssh-repo'), repo('server-repo')],

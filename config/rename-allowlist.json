@@ -7,6 +7,7 @@
     "src/main/import-from-orca/**",
     "src/shared/repo-config-paths.ts",
     "mobile/src/app-update/fixtures/**",
+    "config/ipc-channel-parity-baseline.json",
     "config/rename-allowlist.json",
     "config/scripts/rename-to-quirky/**",
     "config/scripts/check-no-orca-strings.mjs",
@@ -15,9 +16,25 @@
     "pnpm-lock.yaml",
     "mobile/pnpm-lock.yaml"
   ],
-  "keepTokens": ["stablyai/orca", "Lovecast Inc.", "Claude Code-credentials"],
+  "keepTokens": [
+    "stablyai/orca",
+    "Lovecast Inc.",
+    "Claude Code-credentials",
+    "onorca.dev",
+    "onOrca.dev",
+    "onorca-cloud",
+    "apps.apple.com/us/app/orca-ide",
+    "no-orca-strings",
+    "Based on Orca"
+  ],
   "creditLines": [
-    { "path": "README.md", "match": "Based on Orca" },
-    { "path": "src/main/startup/gpu-lifecycle.ts", "match": "Based on Orca" }
+    {
+      "path": "README.md",
+      "match": "Based on Orca"
+    },
+    {
+      "path": "src/main/startup/gpu-lifecycle.ts",
+      "match": "Based on Orca"
+    }
   ]
 }

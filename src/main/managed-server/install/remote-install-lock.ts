@@ -62,7 +62,7 @@ export async function isRelayInstallLockStale(
   lockDir: string,
   host: RemoteHostPlatform = DEFAULT_REMOTE_HOST
 ): Promise<boolean> {
-  // Why: remote time avoids clock skew between Orca clients making a live
+  // Why: remote time avoids clock skew between Quirky clients making a live
   // repair lock look old enough for GC or another installer to recover.
   const out = await unlessUnconfirmed(
     execHostCommand(conn, host, lockAgeSecondsCommand(host, lockDir)),
@@ -75,7 +75,7 @@ export async function isRelayInstallLockStale(
 /**
  * Acquire the per-version install lock via a host-native exclusive create.
  * Why: POSIX mkdir and a Windows directory plus atomic owner file each give
- * one winner while keeping the marker visible to older Windows Orca clients.
+ * one winner while keeping the marker visible to older Windows Quirky clients.
  */
 export async function acquireInstallLock(
   conn: RemoteInstallTransport,

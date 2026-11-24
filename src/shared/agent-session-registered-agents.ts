@@ -18,7 +18,7 @@ export const AGENT_SESSION_AGENTS_METHOD = 'agentSession.agents'
 export type AgentSessionRegisteredAgent = {
   agent: string
   capabilities: AgentSessionCapabilities
-  /** Orca provides this chat's program on this host, so it needs no installed CLI. Absent from
+  /** Quirky provides this chat's program on this host, so it needs no installed CLI. Absent from
    *  older hosts, whose chats are offered only where the agent's CLI was detected. */
   managedRuntime?: true
 }
@@ -45,10 +45,10 @@ const registeredAgentSchema = z.object({
     steering: openEnum(['inject', 'queue'] as const, 'queue')
       .optional()
       .default('queue'),
-    // `orca` claims only that Orca answers the agent's requests, never that it confines the agent.
-    approvalEnforcement: openEnum(['provider', 'orca'] as const, 'orca')
+    // `quirky` claims only that Quirky answers the agent's requests, never that it confines the agent.
+    approvalEnforcement: openEnum(['provider', 'quirky'] as const, 'quirky')
       .optional()
-      .default('orca')
+      .default('quirky')
   }),
   // A false from a host reads as absent, so the row keeps the detection-based offer.
   managedRuntime: z.literal(true).optional().catch(undefined)

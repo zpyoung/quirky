@@ -1,10 +1,10 @@
 import { isPlainObject } from './installer-utils'
 
 /**
- * Which of `events` an Orca-owned `{ hooks: { <event>: [{ hooks: [{ command }] }] } }` file
+ * Which of `events` an Quirky-owned `{ hooks: { <event>: [{ hooks: [{ command }] }] } }` file
  * still registers under a managed command.
  *
- * Shared by every agent whose managed hooks file Orca generates wholesale (Muse, DSH), so
+ * Shared by every agent whose managed hooks file Quirky generates wholesale (Muse, DSH), so
  * "installed", "partial" and "not_installed" cannot drift between them.
  *
  * Why every lookup is guarded: the file is on disk and hand-editable, so any node can be

@@ -8,7 +8,7 @@ import type { RuntimeBrowserCommands } from './browser/browser-commands'
 import { closeBrowserPageWithoutEngine } from './browser/browser-client-page-close'
 
 /**
- * How `OrcaRuntimeService` obtains its browser-automation commands.
+ * How `QuirkyRuntimeService` obtains its browser-automation commands.
  *
  * Why a factory rather than a direct import: `browser/browser-commands.ts` reaches the
  * whole Chromium cluster — `BrowserWindow`, `session`, `webContents`, cookie jars —

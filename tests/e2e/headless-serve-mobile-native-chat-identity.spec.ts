@@ -1,7 +1,7 @@
 /**
- * #10923: a phone paired straight to a headless `orca serve` must learn each terminal agent's
+ * #10923: a phone paired straight to a headless `quirky serve` must learn each terminal agent's
  * provider session from `session.tabs.list`, or native chat has no transcript to read and stays
- * empty. The agents are fakes that pipe hook JSON through Orca's own managed hook scripts from
+ * empty. The agents are fakes that pipe hook JSON through Quirky's own managed hook scripts from
  * inside the serve's PTY, so the hook endpoint, pane key and tab-list projection are all real.
  * Real Codex 0.162 behaves the same way: a typed session reports its identity on its first turn,
  * and `codex resume` reports nothing until the user sends a message.
@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   launchHeadlessPairedRuntimeHost,
   type HeadlessPairedRuntimeHost
@@ -202,7 +202,7 @@ test('a phone paired to headless serve gets each terminal agent its provider ses
   testRepoPath
 }) => {
   test.setTimeout(240_000)
-  const fakeDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-10923-'))
+  const fakeDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-10923-'))
   const host = await launchHeadlessPairedRuntimeHost({ pairingScope: 'mobile' })
   const phone = pairMobileClient(host.offer)
   try {
@@ -250,7 +250,7 @@ test('a phone can read a resumed Codex chat before its first new turn', async ({
   testRepoPath
 }) => {
   test.setTimeout(240_000)
-  const fakeDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-10923-'))
+  const fakeDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-10923-'))
   const host = await launchHeadlessPairedRuntimeHost({ pairingScope: 'mobile' })
   const phone = pairMobileClient(host.offer)
   try {
@@ -291,7 +291,7 @@ test('a phone can read a Codex chat it resumed from Session History before its f
   testRepoPath
 }) => {
   test.setTimeout(240_000)
-  const fakeDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-10923-'))
+  const fakeDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-10923-'))
   const host = await launchHeadlessPairedRuntimeHost({ pairingScope: 'mobile' })
   const phone = pairMobileClient(host.offer)
   try {

@@ -1,6 +1,6 @@
 import { recordRendererCrashBreadcrumb } from '@/lib/crash-breadcrumb-recorder'
 
-export const TERMINAL_STARTUP_TIMING_KEY = 'orca:terminal-startup-timing'
+export const TERMINAL_STARTUP_TIMING_KEY = 'quirky:terminal-startup-timing'
 type Disposable = { dispose(): void }
 type Phase = 'connected' | 'liveData' | 'submitted' | 'writeStarted' | 'parsed' | 'renderEvent'
 type Finish = 'observed' | 'timeout' | 'disposed' | 'replaced' | 'error'

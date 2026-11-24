@@ -1,6 +1,6 @@
 /**
  * Shared per-PTY terminal title side-effect tracking — the parser core behind both the renderer
- * transport (`createPtyOutputProcessor`) and main's per-PTY tracker (`OrcaRuntimeService.onPtyData`).
+ * transport (`createPtyOutputProcessor`) and main's per-PTY tracker (`QuirkyRuntimeService.onPtyData`).
  * Title semantics must not drift between the two paths.
  */
 
@@ -174,7 +174,7 @@ export function createTerminalTitleTracker(
   }
 
   function applyObservedTitle(rawTitle: string): void {
-    // Why: cursor-agent re-emits its bare native title mid-turn; passing it through would stomp Orca's synthesized spinner state.
+    // Why: cursor-agent re-emits its bare native title mid-turn; passing it through would stomp Quirky's synthesized spinner state.
     if (isCursorNativeAgentTitle(rawTitle)) {
       if (shouldSuppressCursorNativeTitle(lastEmittedTitle)) {
         return

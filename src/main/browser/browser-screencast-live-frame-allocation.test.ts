@@ -139,7 +139,7 @@ describe('live screencast image allocation', () => {
 
   it('owns pooled and offset images through refused sends and keeps encoded bytes independent', async () => {
     vi.useFakeTimers()
-    const bytes = readFileSync(resolve('resources/tray/orca-menu-barTemplate.png'))
+    const bytes = readFileSync(resolve('resources/tray/quirky-menu-barTemplate.png'))
     const data = bytes.toString('base64')
     const expectedDigest = digest(bytes)
     const pooled = Buffer.from(data, 'base64')

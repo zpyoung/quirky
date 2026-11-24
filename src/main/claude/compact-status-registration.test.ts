@@ -65,7 +65,7 @@ function startTurn(state: HookListenerState) {
   deliverIfRegistered(state, hook('UserPromptSubmit', TURN_PROMPT_ID, { prompt: 'do the thing' }))
 }
 
-/** The row AgentHookServer.hydrate() rebuilds for a pane that was stuck `working` when Orca last
+/** The row AgentHookServer.hydrate() rebuilds for a pane that was stuck `working` when Quirky last
  *  exited: the previous session's connectionId, the unconfirmed flag, and — when the turn had
  *  spawned one — a child that exists only as a disk snapshot. */
 function hydrateStuckRow(
@@ -109,14 +109,14 @@ describe('Claude compact hook registration', () => {
   it('writes PostCompact, and no PreCompact, into the settings Claude actually reads', () => {
     const written = applyManagedHooks(
       { hooks: {} },
-      () => ({ type: 'command', command: 'orca-claude-hook' }),
+      () => ({ type: 'command', command: 'quirky-claude-hook' }),
       'claude-hook.sh',
       getClaudeManagedHookPlan(CLAUDE_HOOK_EVENT_FIRST_VERSIONS.PostCompact)
     )
     const postCompact = written.hooks?.PostCompact ?? []
     expect(
       postCompact.some((definition) =>
-        (definition.hooks ?? []).some((entry) => entry.command === 'orca-claude-hook')
+        (definition.hooks ?? []).some((entry) => entry.command === 'quirky-claude-hook')
       )
     ).toBe(true)
     expect(written.hooks?.PreCompact).toBeUndefined()

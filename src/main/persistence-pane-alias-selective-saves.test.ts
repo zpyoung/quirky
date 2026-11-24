@@ -77,7 +77,7 @@ async function runBackgroundSave(store: Awaited<ReturnType<typeof createStore>>)
 
 describe('pane alias and migration listeners save only their sections', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-alias-saves-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-alias-saves-'))
   })
 
   afterEach(async () => {

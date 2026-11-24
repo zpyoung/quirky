@@ -5,13 +5,13 @@ import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Locator, Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { waitForActivePaneHookDescriptor, waitForActiveTerminalManager } from './helpers/terminal'
 
 /** 30 user turns, so the rail is well past its 20-tick sampling cap. */
 const TRANSCRIPT_ROWS = 60
-const SHOT_DIR = path.join(os.tmpdir(), 'orca-rail-validation-larvacean', 'shots')
+const SHOT_DIR = path.join(os.tmpdir(), 'quirky-rail-validation-larvacean', 'shots')
 
 async function enableNativeChatSetting(page: Page): Promise<void> {
   await page.evaluate(async () => {
@@ -90,43 +90,43 @@ function claudeTranscript(rowCount: number, sessionId: string): string {
 }
 
 test.describe('Native chat message rail', () => {
-  test('previews prompts and jumps without following later output', async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
-    await waitForActiveTerminalManager(orcaPage, 30_000)
+  test('previews prompts and jumps without following later output', async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
+    await waitForActiveTerminalManager(quirkyPage, 30_000)
 
-    const descriptor = await waitForActivePaneHookDescriptor(orcaPage)
+    const descriptor = await waitForActivePaneHookDescriptor(quirkyPage)
     const [tabId] = descriptor.paneKey.split(':')
     const sessionId = `e2e-message-rail-${randomUUID()}`
-    const scratchDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-native-chat-rail-'))
+    const scratchDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-native-chat-rail-'))
     const transcriptPath = path.join(scratchDir, `${sessionId}.jsonl`)
     writeFileSync(transcriptPath, claudeTranscript(TRANSCRIPT_ROWS, sessionId))
     mkdirSync(SHOT_DIR, { recursive: true })
 
-    await enableNativeChatSetting(orcaPage)
-    await seedClaudeProviderSession(orcaPage, {
+    await enableNativeChatSetting(quirkyPage)
+    await seedClaudeProviderSession(quirkyPage, {
       paneKey: descriptor.paneKey,
       worktreeId: descriptor.worktreeId,
       sessionId,
       transcriptPath
     })
-    await toggleTerminalTabToChatView(orcaPage, { tabId, worktreeId: descriptor.worktreeId })
+    await toggleTerminalTabToChatView(quirkyPage, { tabId, worktreeId: descriptor.worktreeId })
 
-    await expect(orcaPage.locator('[data-native-chat-root="true"]')).toBeVisible({
+    await expect(quirkyPage.locator('[data-native-chat-root="true"]')).toBeVisible({
       timeout: 15_000
     })
-    const transcriptWindow = orcaPage.locator('[data-native-chat-window]')
+    const transcriptWindow = quirkyPage.locator('[data-native-chat-window]')
     await expect(transcriptWindow).toBeVisible({ timeout: 30_000 })
 
-    const rail = orcaPage.locator('[data-native-chat-rail]')
+    const rail = quirkyPage.locator('[data-native-chat-rail]')
     await expect(rail).toBeVisible({ timeout: 30_000 })
 
     // Every user turn has a tick while the rail fits: a tick is the only way to its message.
     const ticks = rail.getByRole('button')
     await expect(ticks).toHaveCount(TRANSCRIPT_ROWS / 2)
 
-    await orcaPage.screenshot({
+    await quirkyPage.screenshot({
       path: path.join(SHOT_DIR, 'rail-01-app.png'),
       animations: 'disabled'
     })
@@ -134,18 +134,18 @@ test.describe('Native chat message rail', () => {
     // Hovering one tick previews that message and the reply to it, not the whole thread.
     const tick = rail.getByRole('button', { name: 'Question 5:', exact: false })
     await tick.hover()
-    const preview = orcaPage.locator('[data-slot="hover-card-content"]')
+    const preview = quirkyPage.locator('[data-slot="hover-card-content"]')
     await expect(preview).toBeVisible({ timeout: 10_000 })
     await expect(preview).toContainText('Question 5:')
     await expect(preview).not.toContainText('Question 6:')
     await expect(preview).toContainText('Answer for turn 5')
     await expect(preview.locator('p')).toHaveCount(2)
-    await orcaPage.screenshot({
+    await quirkyPage.screenshot({
       path: path.join(SHOT_DIR, 'rail-02-preview.png'),
       animations: 'disabled'
     })
 
-    const scroller = orcaPage.locator('[data-native-chat-scroll]')
+    const scroller = quirkyPage.locator('[data-native-chat-scroll]')
     const offsetOf = (row: Locator) => async (): Promise<number> => {
       const [box, viewport] = await Promise.all([row.boundingBox(), scroller.boundingBox()])
       return box && viewport ? Math.abs(box.y - viewport.y) : Number.POSITIVE_INFINITY
@@ -154,7 +154,7 @@ test.describe('Native chat message rail', () => {
     // message near it, then across the thread, with rows resizing under each jump.
     // Animated and instant jumps take different paths through the list.
     for (const reducedMotion of ['reduce', 'no-preference'] as const) {
-      await orcaPage.emulateMedia({ reducedMotion })
+      await quirkyPage.emulateMedia({ reducedMotion })
       for (const turn of [22, 12, 5]) {
         const jumped = rail.getByRole('button', { name: `Question ${turn}:`, exact: false })
         await jumped.click()

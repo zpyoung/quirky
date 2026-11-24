@@ -125,7 +125,7 @@ describe('devinSessionsDbPath', () => {
 
 describe('devinSessionsDbDependencyPath', () => {
   it('points at sessions.db until a wal file appears beside it', async () => {
-    const dir = await tempDir('orca-devin-db-')
+    const dir = await tempDir('quirky-devin-db-')
     const cliDir = join(dir, 'cli')
     const transcriptPath = join(cliDir, 'transcripts', 'apricot.json')
     const dbPath = join(cliDir, 'sessions.db')
@@ -138,12 +138,12 @@ describe('devinSessionsDbDependencyPath', () => {
 
 describe('devinSessionsIndexForSidecar', () => {
   it('reads rows keyed by session id with unix seconds as ISO strings', async () => {
-    const dir = await tempDir('orca-devin-db-')
+    const dir = await tempDir('quirky-devin-db-')
     const dbPath = join(dir, 'sessions.db')
     writeDevinSessionsDb(dbPath, [
       {
         id: 'apricot-houseboat',
-        working_directory: 'D:\\work\\orca',
+        working_directory: 'D:\\work\\quirky',
         model: 'swe-1-6-fast',
         title: 'Fix the vault',
         created_at: DEVIN_CREATED_S,
@@ -157,7 +157,7 @@ describe('devinSessionsIndexForSidecar', () => {
     expect(unreadable).toBe(false)
     const row = index?.get('apricot-houseboat')
     expect(row).toEqual({
-      workingDirectory: 'D:\\work\\orca',
+      workingDirectory: 'D:\\work\\quirky',
       model: 'swe-1-6-fast',
       title: 'Fix the vault',
       createdAt: new Date(DEVIN_CREATED_S * 1000).toISOString(),
@@ -179,7 +179,7 @@ describe('devinSessionsIndexForSidecar', () => {
   })
 
   it('yields an empty index when the sessions table is absent', async () => {
-    const dir = await tempDir('orca-devin-db-')
+    const dir = await tempDir('quirky-devin-db-')
     const dbPath = join(dir, 'sessions.db')
     const db = new SyncDatabase(dbPath)
     try {
@@ -193,7 +193,7 @@ describe('devinSessionsIndexForSidecar', () => {
   })
 
   it('tolerates an older schema missing optional columns', async () => {
-    const dir = await tempDir('orca-devin-db-')
+    const dir = await tempDir('quirky-devin-db-')
     const dbPath = join(dir, 'sessions.db')
     const db = new SyncDatabase(dbPath)
     try {
@@ -218,7 +218,7 @@ describe('devinSessionsIndexForSidecar', () => {
   })
 
   it('reports a corrupt db as unreadable rather than throwing', async () => {
-    const dir = await tempDir('orca-devin-db-')
+    const dir = await tempDir('quirky-devin-db-')
     const dbPath = join(dir, 'sessions.db')
     await writeFile(dbPath, 'this is not sqlite')
     const { index, unreadable } = devinSessionsIndexForSidecar(await sidecarOf(dbPath))
@@ -227,7 +227,7 @@ describe('devinSessionsIndexForSidecar', () => {
   })
 
   it('invalidates when the observed file changes from db to wal with identical stats', async () => {
-    const dir = await tempDir('orca-devin-db-')
+    const dir = await tempDir('quirky-devin-db-')
     const dbPath = join(dir, 'sessions.db')
     writeDevinSessionsDb(dbPath, [{ id: 'apricot', title: 'old' }])
     const observation = await sidecarOf(dbPath)
@@ -238,7 +238,7 @@ describe('devinSessionsIndexForSidecar', () => {
   })
 
   it('opens the db for a wal observation and re-reads when the wal stat moves', async () => {
-    const dir = await tempDir('orca-devin-db-')
+    const dir = await tempDir('quirky-devin-db-')
     const dbPath = join(dir, 'sessions.db')
     const walPath = `${dbPath}-wal`
     writeDevinSessionsDb(dbPath, [{ id: 'apricot', title: 'old' }])
@@ -263,7 +263,7 @@ describe('devinSessionsIndexForSidecar', () => {
 
 describe('enrichSessionFromSidecar for devin', () => {
   it('fills cwd, generated title, model and timestamps from the db row', async () => {
-    const dir = await tempDir('orca-devin-db-')
+    const dir = await tempDir('quirky-devin-db-')
     const cliDir = join(dir, 'cli')
     const transcriptsDir = join(cliDir, 'transcripts')
     await mkdir(transcriptsDir, { recursive: true })
@@ -300,7 +300,7 @@ describe('enrichSessionFromSidecar for devin', () => {
   })
 
   it('keeps transcript-derived fields over the db row', async () => {
-    const dir = await tempDir('orca-devin-db-')
+    const dir = await tempDir('quirky-devin-db-')
     const cliDir = join(dir, 'cli')
     const transcriptsDir = join(cliDir, 'transcripts')
     await mkdir(transcriptsDir, { recursive: true })
@@ -342,7 +342,7 @@ describe('enrichSessionFromSidecar for devin', () => {
   })
 
   it('drops a session the user hid in Devin', async () => {
-    const dir = await tempDir('orca-devin-db-')
+    const dir = await tempDir('quirky-devin-db-')
     const cliDir = join(dir, 'cli')
     const transcriptsDir = join(cliDir, 'transcripts')
     await mkdir(transcriptsDir, { recursive: true })
@@ -398,7 +398,7 @@ describe('devin sessions.db through the scan', () => {
   it.each(['transcripts', 'agent_logs'])(
     'enriches %s sessions by session_id and excludes hidden ones',
     async (directory) => {
-      const root = await tempDir('orca-devin-scan-')
+      const root = await tempDir('quirky-devin-scan-')
       const { transcriptsDir } = await writeDevinVault(root, directory)
       const result = await scanAiVaultSessions({
         ...isolatedScanRoots(root),
@@ -414,7 +414,7 @@ describe('devin sessions.db through the scan', () => {
   )
 
   it('still lists sessions when sessions.db is absent', async () => {
-    const root = await tempDir('orca-devin-scan-')
+    const root = await tempDir('quirky-devin-scan-')
     const transcriptsDir = join(root, 'devin-cli', 'transcripts')
     await mkdir(transcriptsDir, { recursive: true })
     await writeFile(
@@ -435,7 +435,7 @@ describe('devin sessions.db through the scan', () => {
   })
 
   it('picks up db-only changes on a rescan without the transcript moving', async () => {
-    const root = await tempDir('orca-devin-scan-')
+    const root = await tempDir('quirky-devin-scan-')
     const { transcriptsDir, dbPath } = await writeDevinVault(root)
     const options = {
       ...isolatedScanRoots(root),

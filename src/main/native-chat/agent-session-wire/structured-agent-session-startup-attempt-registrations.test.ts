@@ -59,7 +59,7 @@ async function hostFor(definition: StructuredAgentDefinition): Promise<{
   dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
   ready: () => void
 }> {
-  root = await mkdtemp(join(tmpdir(), 'orca-startup-registrations-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-startup-registrations-'))
   resetHostTestOperationIds()
   const store = await openTestAgentSessionRecordStore(root)
   const acquire: Mock<StructuredAgentSessionAdapter['acquire']> = vi.fn(

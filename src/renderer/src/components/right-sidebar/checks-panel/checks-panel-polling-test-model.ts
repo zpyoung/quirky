@@ -19,7 +19,7 @@ export function createModel(overrides: Partial<PollingInput> = {}): PollingInput
     pr: {
       number: 42,
       headSha: 'head-1',
-      prRepo: { owner: 'orca', repo: 'app', host: 'github.com' },
+      prRepo: { owner: 'quirky', repo: 'app', host: 'github.com' },
       title: 'Review',
       state: 'open',
       url: '',

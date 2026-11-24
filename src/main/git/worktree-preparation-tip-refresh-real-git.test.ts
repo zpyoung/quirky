@@ -30,7 +30,7 @@ async function git(cwd: string, args: string[]): Promise<string> {
 }
 
 async function fixture() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'orca-fetched-preparation-')))
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-fetched-preparation-')))
   roots.push(root)
   const repo = join(root, 'repo')
   const prepared = join(root, 'prepared')

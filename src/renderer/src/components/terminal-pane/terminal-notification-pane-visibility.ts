@@ -1,4 +1,4 @@
-export function isOrcaWindowForegroundFocused(): boolean {
+export function isQuirkyWindowForegroundFocused(): boolean {
   if (typeof document === 'undefined') {
     return true
   }

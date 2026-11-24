@@ -198,7 +198,7 @@ export function useMobileSourceControlLoaders(params: Params): MobileSourceContr
             if (isMobileGitUnavailableReply(reply)) {
               setScreenState({
                 kind: 'unavailable',
-                message: 'Update Orca desktop to use Source Control on mobile.'
+                message: 'Update Quirky desktop to use Source Control on mobile.'
               })
               return false
             }

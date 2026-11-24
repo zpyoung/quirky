@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { resolveCommandOnLocalPath } from '../ipc/command-path-resolver'
 import { createHash } from 'node:crypto'
 import { realpath, stat } from 'node:fs/promises'

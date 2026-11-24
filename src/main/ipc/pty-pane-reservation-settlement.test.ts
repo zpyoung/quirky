@@ -27,7 +27,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -115,9 +115,9 @@ describe('registerPtyHandlers', () => {
         tabId,
         leafId,
         env: {
-          ORCA_PANE_KEY: paneKey,
-          ORCA_TAB_ID: tabId,
-          ORCA_WORKTREE_ID: worktreeId
+          QUIRKY_PANE_KEY: paneKey,
+          QUIRKY_TAB_ID: tabId,
+          QUIRKY_WORKTREE_ID: worktreeId
         }
       })
     ).rejects.toThrow('terminal_pane_owner_conflict')
@@ -160,9 +160,9 @@ describe('registerPtyHandlers', () => {
         tabId: 'tab-host-scope',
         leafId,
         env: {
-          ORCA_PANE_KEY: paneKey,
-          ORCA_TAB_ID: 'tab-host-scope',
-          ORCA_WORKTREE_ID: worktreeId
+          QUIRKY_PANE_KEY: paneKey,
+          QUIRKY_TAB_ID: 'tab-host-scope',
+          QUIRKY_WORKTREE_ID: worktreeId
         }
       })
 
@@ -274,7 +274,7 @@ describe('registerPtyHandlers', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-runtime-reservation',
       leafId,
-      env: { ORCA_PANE_KEY: paneKey },
+      env: { QUIRKY_PANE_KEY: paneKey },
       persistHostSessionBinding: true
     }
 

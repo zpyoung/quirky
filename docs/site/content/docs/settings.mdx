@@ -6,7 +6,7 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 
 ## General
 
-- **Orca CLI** — register the bundled command-line tool for shells and agents.
+- **Quirky CLI** — register the bundled command-line tool for shells and agents.
 - **Updates** — check for and install updates. Modifier clicks on **Check for Updates**:
 
 | Modifier                                               | Effect                                                                                                                                         |
@@ -35,7 +35,7 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 - Default base ref resolver.
 - Commit signing options.
 - Editor for external git tools.
-- Auto-Rename Branch From Work — rename Orca-generated creature branches after an agent starts work.
+- Auto-Rename Branch From Work — rename Quirky-generated creature branches after an agent starts work.
 - **GitHub API Budget** — remaining REST (core), Search, and GraphQL quota from the local `gh` CLI. Useful when PR checks or Tasks stop refreshing; see [Troubleshooting GitHub errors](/docs/github-errors) if the numbers look fine but GitHub still rate-limits live calls.
 
 ## Terminal
@@ -52,7 +52,7 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 
 - Saved terminal commands and agent-prompt presets, scoped globally or to a project. Each row has a copy control for the command body.
 - Scope filters for reviewing and editing the command list. The same list syncs to the [mobile companion](/docs/mobile).
-- With remote or multi-host setups, commands are grouped by the Orca host that owns them (**Saved on**). Host ownership is separate from Global/Project scope and from where the command runs — see [Terminal → Quick Commands](/docs/terminal#quick-commands).
+- With remote or multi-host setups, commands are grouped by the Quirky host that owns them (**Saved on**). Host ownership is separate from Global/Project scope and from where the command runs — see [Terminal → Quick Commands](/docs/terminal#quick-commands).
 
 ## Agents
 
@@ -61,9 +61,9 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 - Agent Permissions — choose **Yolo** for fewer CLI permission prompts, or **Manual** to keep each agent's own approval flow for agents you haven't customized.
 - Claude and Codex account lists.
 - Startup hooks per agent.
-- **Agent status hooks** — show working / waiting / done states in Orca. Toggle takes effect without restarting the app (including the Windows WSL hook relay). CLI: `orca agent hooks on|off|status`.
+- **Agent status hooks** — show working / waiting / done states in Quirky. Toggle takes effect without restarting the app (including the Windows WSL hook relay). CLI: `quirky agent hooks on|off|status`.
 - **Keep computer awake** — **On** (stay awake continuously), **Agent** (stay awake while an agent is working), or **Off**. The same control lives on the desktop status bar as **Caffeinate** (coffee icon). Hidden on paired web clients.
-- **Skill freshness** — the Agents pane and skill cards still show full status. Sidebar navigation only badges skills that need action (**Update available**, **Needs attention** / review); healthy, loading, and optional not-installed rows stay quiet. Use **Update** in the dialog to refresh global skills in the background (no terminal). Progress appears on the status bar; closing the dialog does not cancel the run. See [Orca skills](/docs/cli/skills#keep-skills-up-to-date).
+- **Skill freshness** — the Agents pane and skill cards still show full status. Sidebar navigation only badges skills that need action (**Update available**, **Needs attention** / review); healthy, loading, and optional not-installed rows stay quiet. Use **Update** in the dialog to refresh global skills in the background (no terminal). Progress appears on the status bar; closing the dialog does not cancel the run. See [Quirky skills](/docs/cli/skills#keep-skills-up-to-date).
 
 ## Browser
 
@@ -73,7 +73,7 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 - Devtools opt-in.
 - **Remote server workspaces** — choose **This device** to render new paired-runtime browser pages on this desktop, or **Server (streamed)** to render them on the server. Traffic always goes through the remote server, and the choice applies to new pages only. See [Per-worktree browser → Remote workspaces](/docs/browser/overview#remote-workspaces).
 - **Browse through SSH workspace hosts** — send browser traffic and DNS through each workspace's SSH host. Turn it off to browse from this device instead.
-- **Link Routing** — open http(s) links from the terminal, markdown, and editor in Orca's browser or the system browser. Nested **Hold Shift…** inverts that default for one click (`⇧⌘-click` / `Shift+Ctrl+click`). See [Per-worktree browser](/docs/browser/overview#link-routing).
+- **Link Routing** — open http(s) links from the terminal, markdown, and editor in Quirky's browser or the system browser. Nested **Hold Shift…** inverts that default for one click (`⇧⌘-click` / `Shift+Ctrl+click`). See [Per-worktree browser](/docs/browser/overview#link-routing).
 - **Show terminal link actions** — **on by default**. A plain click on a terminal link opens a compact action popover. Turn off to require `⌘`-click / `Ctrl`-click. See [Terminal → Link actions](/docs/terminal#link-actions).
 - **Default Search Engine** — used when you type non-URL text in the browser address bar or the [new-tab omnibox](/docs/model/quick-open#new-tab-omnibox).
 
@@ -95,7 +95,7 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 ## Voice
 
 - **Enable Voice Dictation** — requires microphone permission (macOS may open Privacy & Security).
-- **Microphone** — pick which input device dictation uses. Defaults to the system mic; choose a specific device (for example a headset) when you do not want the OS default. If the chosen mic is unplugged or missing, Orca falls back to the system default and shows a non-blocking notice.
+- **Microphone** — pick which input device dictation uses. Defaults to the system mic; choose a specific device (for example a headset) when you do not want the OS default. If the chosen mic is unplugged or missing, Quirky falls back to the system default and shows a non-blocking notice.
 - **Dictation mode** — **Toggle** (press shortcut to start/stop) or **Hold** (hold shortcut to talk).
 - **Speech Model** — download/select an on-device model, or use cloud OpenAI models after pasting an API key:
   - **Parakeet TDT v3** (recommended) — multilingual European languages, offline.
@@ -114,9 +114,9 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 - Advanced: proxy / jump host; **Reuse SSH connection for faster setup** (system OpenSSH multiplexing; default on).
 - Kerberos hosts: `GSSAPIAuthentication` from OpenSSH config drives system OpenSSH auth (see [SSH worktrees](/docs/ssh)).
 
-## Remote Orca Servers
+## Remote Quirky Servers
 
-- Pair and connect to remote Orca runtimes.
+- Pair and connect to remote Quirky runtimes.
 - Advertise this desktop app as a server and create revocable access links.
 - Advanced default runtime selection for server-routed projects, terminals, and provider checks.
 
@@ -127,10 +127,10 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 - **Toggle Child Workspaces** ships unbound; assign it here to show or hide a parent worktree's nested children, the same as clicking its **N children** chip. It targets the hovered worktree, or the active one when nothing is hovered.
 - **Toggle Workspace Board** ships unbound; assign it here to open or close the Workspace Board with one shortcut. Existing bindings for `workspace.openBoard` continue to work.
 - Close all editor tabs defaults to `Cmd+Option+W` on macOS and `Ctrl+Alt+W` on Windows / Linux.
-- **Tab navigation defaults (new installs):** next/previous tab **across all types** is `Cmd+Shift+]` / `Cmd+Shift+[` (Ctrl on Linux/Windows). Same-type next/previous is `Cmd+Option+]` / `Cmd+Option+[`. Previous recent tab is `Ctrl+Tab`. Existing installs keep customized overrides under `~/.orca/keybindings.json`.
+- **Tab navigation defaults (new installs):** next/previous tab **across all types** is `Cmd+Shift+]` / `Cmd+Shift+[` (Ctrl on Linux/Windows). Same-type next/previous is `Cmd+Option+]` / `Cmd+Option+[`. Previous recent tab is `Ctrl+Tab`. Existing installs keep customized overrides under `~/.quirky/keybindings.json`.
 - **Add Review Note** defaults to `Cmd+Shift+A` (macOS) / `Ctrl+Shift+A` (Windows / Linux); remappable.
 - **Send Review Notes to Agent** ships unbound; assign it here to open the send-notes menu for the active worktree's diff notes without using the mouse.
-- **Delete workspace** defaults to `Cmd+Shift+Backspace` on macOS and `Ctrl+Shift+Backspace` on Windows / Linux. Hover the sidebar workspace you mean to delete; Orca still asks for confirmation.
+- **Delete workspace** defaults to `Cmd+Shift+Backspace` on macOS and `Ctrl+Shift+Backspace` on Windows / Linux. Hover the sidebar workspace you mean to delete; Quirky still asks for confirmation.
 
 ## Repository
 
@@ -138,7 +138,7 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 - Auto-run commands on worktree create.
 - Repo icons for the sidebar: choose an icon, full searchable emoji picker, uploaded image, website favicon, or GitHub avatar, then pick a preset or custom hex badge color.
 - Source Control AI overrides for commit messages, pull request details, and branch names.
-- **Worktree Shared Paths** — gitignored paths to materialize from the primary checkout into each new worktree (APFS clone-copy on macOS when possible, otherwise symlink). Complements repo-checked-in `worktree.sharedDirectories` in `orca.yaml` and `.worktreeinclude` (see [Worktrees](/docs/model/worktrees)).
+- **Worktree Shared Paths** — gitignored paths to materialize from the primary checkout into each new worktree (APFS clone-copy on macOS when possible, otherwise symlink). Complements repo-checked-in `worktree.sharedDirectories` in `quirky.yaml` and `.worktreeinclude` (see [Worktrees](/docs/model/worktrees)).
 
 ## Floating Workspace
 
@@ -150,7 +150,7 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 
 - **Plugin system** — Settings → Plugins. Turn the system on, then review and enable each plugin individually. Nothing runs until you consent.
 - **Marketplaces** — add a git marketplace source, browse plugins, preview capabilities (panels, commands, language packs, VM recipes), install, update, or roll back.
-- Plugin workers always run on this computer; SSH workspace actions still route through Orca.
+- Plugin workers always run on this computer; SSH workspace actions still route through Quirky.
 - Capability and API shapes may change; treat third-party plugins as untrusted software.
 
 ## Experimental
@@ -160,5 +160,5 @@ Settings are grouped into panes. Everything here is searchable with `Cmd-,` then
 - [Agent hibernation](/docs/agents/hibernation) — pause idle background agents and auto-resume them on reopen.
 - **Agent Dashboard** — kanban of Needs You / Working / Done agents (optional Idle), with search and project/workspace/PR filters; open in-window or as a pop-out. **Show idle agents** lives on the dashboard board settings control, not here. See [Agents & sessions](/docs/model/agents-sessions#agent-dashboard).
 - **Chat UI** — optional chat surface on supported agent terminals. See [Chat UI](/docs/agents/native-chat).
-- **Cloud VM** — show setup controls and workspace **Run on** targets for repo-owned, on-demand environments (cloud sandboxes, VMs, or local Docker). Setup guide and recipe install live under this experimental toggle. See [Ways to run Orca](/docs/ways-to-run#4-cloud-vms-per-workspace-environments).
+- **Cloud VM** — show setup controls and workspace **Run on** targets for repo-owned, on-demand environments (cloud sandboxes, VMs, or local Docker). Setup guide and recipe install live under this experimental toggle. See [Ways to run Quirky](/docs/ways-to-run#4-cloud-vms-per-workspace-environments).
 - Features not yet stable — behavior may change.

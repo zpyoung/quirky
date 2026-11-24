@@ -140,9 +140,9 @@ describe('web repos preload API', () => {
   })
 
   it.each([
-    ['/home/alice', '/home/alice/orca/projects'],
-    ['/', '/orca/projects'],
-    ['C:\\', 'C:\\orca\\projects']
+    ['/home/alice', '/home/alice/quirky/projects'],
+    ['/', '/quirky/projects'],
+    ['C:\\', 'C:\\quirky\\projects']
   ])(
     'resolves the default create-project parent from runtime host home %s',
     async (resolvedPath, expectedParent) => {
@@ -336,7 +336,7 @@ describe('web worktree preload API', () => {
     })
 
     await expect(serverAList).rejects.toThrow(
-      'The paired Orca server changed while the request was in progress.'
+      'The paired Quirky server changed while the request was in progress.'
     )
     await expect(globals.window.api.worktrees.listAll()).resolves.toMatchObject([
       { id: 'worktree-b', runtimeOwnerEnvironmentId: paired.environment.id }
@@ -494,7 +494,7 @@ describe('web worktree preload API', () => {
         {
           id: worktree.id,
           runtimeOwnerEnvironmentId: 'web-env-1',
-          ownership: 'orca-managed',
+          ownership: 'quirky-managed',
           visible: true
         }
       ]
@@ -540,7 +540,7 @@ describe('web worktree preload API', () => {
     })
 
     await expect(detected).rejects.toThrow(
-      'The paired Orca server changed while the request was in progress.'
+      'The paired Quirky server changed while the request was in progress.'
     )
     expect(runtimeCalls).toEqual(['worktree.detectedList'])
   })
@@ -600,11 +600,11 @@ describe('web worktree preload API', () => {
       displayNameKind: 'user',
       startup: {
         command: "codex 'summarize repo'",
-        env: { ORCA_AGENT_MODE: 'direct' },
+        env: { QUIRKY_AGENT_MODE: 'direct' },
         launchConfig: {
           agentCommand: 'codex',
           agentArgs: '--model gpt-5',
-          agentEnv: { ORCA_AGENT_MODE: 'direct' }
+          agentEnv: { QUIRKY_AGENT_MODE: 'direct' }
         },
         startupCommandDelivery: 'shell-ready'
       }
@@ -641,11 +641,11 @@ describe('web worktree preload API', () => {
           displayName: 'Review label',
           displayNameKind: 'user',
           startupCommand: "codex 'summarize repo'",
-          startupEnv: { ORCA_AGENT_MODE: 'direct' },
+          startupEnv: { QUIRKY_AGENT_MODE: 'direct' },
           startupLaunchConfig: {
             agentCommand: 'codex',
             agentArgs: '--model gpt-5',
-            agentEnv: { ORCA_AGENT_MODE: 'direct' }
+            agentEnv: { QUIRKY_AGENT_MODE: 'direct' }
           },
           startupCommandDelivery: 'shell-ready',
           activate: true

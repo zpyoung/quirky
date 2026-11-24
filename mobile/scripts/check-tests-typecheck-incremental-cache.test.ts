@@ -11,10 +11,10 @@ it.each([
 ])(
   'rechecks changed types, diagnostics and test membership with $compiler',
   ({ compiler, incremental }) => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-mobile-typecheck-')))
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-mobile-typecheck-')))
     const cache = join(root, '.cache')
-    vi.stubEnv('ORCA_MOBILE_TYPECHECK_CACHE_DIR', cache)
-    vi.stubEnv('ORCA_MOBILE_TYPECHECK_COMPILER', compiler)
+    vi.stubEnv('QUIRKY_MOBILE_TYPECHECK_CACHE_DIR', cache)
+    vi.stubEnv('QUIRKY_MOBILE_TYPECHECK_COMPILER', compiler)
     try {
       writeFileSync(
         join(root, 'tsconfig.test.json'),

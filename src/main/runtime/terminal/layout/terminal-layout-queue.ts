@@ -1,7 +1,7 @@
-import { OrcaRuntimeWithReclaimTerminalForDesktop } from './terminal-desktop-reclaim'
-import type { ApplyLayoutResult, PtyLayoutState, PtyLayoutTarget } from '../../orca-runtime-core'
+import { QuirkyRuntimeWithReclaimTerminalForDesktop } from './terminal-desktop-reclaim'
+import type { ApplyLayoutResult, PtyLayoutState, PtyLayoutTarget } from '../../quirky-runtime-core'
 
-export abstract class OrcaRuntimeWithPickMostRecentActor extends OrcaRuntimeWithReclaimTerminalForDesktop {
+export abstract class QuirkyRuntimeWithPickMostRecentActor extends QuirkyRuntimeWithReclaimTerminalForDesktop {
   protected abstract applyLayout(ptyId: string, target: PtyLayoutTarget): Promise<ApplyLayoutResult>
 
   // Why: with multiple subscribers, the active phone-fit dims follow the

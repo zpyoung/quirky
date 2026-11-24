@@ -3,7 +3,7 @@ import { once } from 'node:events'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { expect, it, vi } from 'vitest'
-import { runProcess, spawnProcess } from '@orca/process-host'
+import { runProcess, spawnProcess } from '@quirky/process-host'
 import { getMacUpdateRunningInstances } from './macos-update-running-instances'
 
 const APPLICATION_SOURCE = `
@@ -23,9 +23,9 @@ int main(int argc, const char *argv[]) {
 it.runIf(process.platform === 'darwin')(
   'matches ShipIt with registered sibling apps, excluding same-executable workers and other bundle copies',
   async () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'orca-update-instances-'))
-    const bundle = path.join(root, 'Orca Test.app')
-    const executable = path.join(bundle, 'Contents', 'MacOS', 'Orca Test')
+    const root = mkdtempSync(path.join(tmpdir(), 'quirky-update-instances-'))
+    const bundle = path.join(root, 'Quirky Test.app')
+    const executable = path.join(bundle, 'Contents', 'MacOS', 'Quirky Test')
     mkdirSync(path.dirname(executable), { recursive: true })
     const sourcePath = path.join(root, 'application.m')
     writeFileSync(sourcePath, APPLICATION_SOURCE)
@@ -33,7 +33,7 @@ it.runIf(process.platform === 'darwin')(
       path.join(bundle, 'Contents', 'Info.plist'),
       `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>
         <key>CFBundleIdentifier</key><string>com.stablyai.${path.basename(root)}</string>
-        <key>CFBundleExecutable</key><string>Orca Test</string>
+        <key>CFBundleExecutable</key><string>Quirky Test</string>
         <key>CFBundlePackageType</key><string>APPL</string>
       </dict></plist>`
     )
@@ -46,18 +46,18 @@ it.runIf(process.platform === 'darwin')(
         timeoutMs: 15_000
       })
       expect(compilation.code, compilation.stderr).toBe(0)
-      const otherBundle = path.join(root, 'Other Orca.app')
+      const otherBundle = path.join(root, 'Other Quirky.app')
       cpSync(bundle, otherBundle, { recursive: true })
       for (const [program, args] of [
         [executable, []],
         [executable, []],
         [executable, ['--worker']],
-        [path.join(otherBundle, 'Contents', 'MacOS', 'Orca Test'), []]
+        [path.join(otherBundle, 'Contents', 'MacOS', 'Quirky Test'), []]
       ] satisfies [string, string[]][]) {
         const child = spawnProcess({
           program,
           args,
-          env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+          env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
         })
         children.push(child)
         closed.push(once(child, 'close'))
@@ -70,7 +70,7 @@ it.runIf(process.platform === 'darwin')(
           expect(await getMacUpdateRunningInstances(executable, self.pid)).toEqual([sibling.pid])
           expect(
             await getMacUpdateRunningInstances(
-              path.join(otherBundle, 'Contents', 'MacOS', 'Orca Test'),
+              path.join(otherBundle, 'Contents', 'MacOS', 'Quirky Test'),
               0
             )
           ).toEqual([otherCopy.pid])

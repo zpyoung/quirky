@@ -170,7 +170,7 @@ describe('OMP recordings through the adapter', () => {
     await waitFor(async () =>
       expect(await turns(rig)).toMatchObject([{ state: 'interrupted', outcome: 'cancellation' }])
     )
-    // OMP sends nothing more for the stopped command; Orca settles its row with the turn.
+    // OMP sends nothing more for the stopped command; Quirky settles its row with the turn.
     const tool = await toolRow(rig)
     expect(tool).toMatchObject({
       endedAs: 'interrupted',

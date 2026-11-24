@@ -192,7 +192,7 @@ describe('NativeChatStructuredSession', () => {
     act(() => useAppStore.getState().clearNativeChatLaunchDraft(draft.tabId))
     const composer = screen.getByTestId('structured-composer')
     composer.focus()
-    window.dispatchEvent(new Event('orca-app-menu-paste', { cancelable: true }))
+    window.dispatchEvent(new Event('quirky-app-menu-paste', { cancelable: true }))
 
     expect(mocks.pasteFromClipboard).toHaveBeenCalledOnce()
   })

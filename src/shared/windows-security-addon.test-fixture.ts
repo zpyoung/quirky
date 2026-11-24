@@ -8,7 +8,7 @@ import type {
 
 export const FAKE_USER_SID = 'S-1-5-21-1-2-3-1001'
 
-/** What an untouched path reads back as: inherited from a relocated root like `C:\orca-data`. */
+/** What an untouched path reads back as: inherited from a relocated root like `C:\quirky-data`. */
 export const INHERITED_SDDL = `D:AI(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;FA;;;${FAKE_USER_SID})(A;ID;0x1301bf;;;AU)`
 
 const SID_ALIASES: Record<string, string> = {

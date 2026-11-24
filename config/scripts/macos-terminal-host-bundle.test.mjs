@@ -33,8 +33,8 @@ const { macCommandPrefixForArch } = require('./verify-packaged-daemon-entry.cjs'
 const electronBuilderConfig = require('../electron-builder.config.cjs')
 
 const usageDescriptions = electronBuilderConfig.mac.extendInfo
-const appInfo = { CFBundleIdentifier: 'com.stablyai.orca', CFBundleShortVersionString: '1.4.300' }
-const expectations = { appId: 'com.stablyai.orca', usageDescriptions, minimumOs: '13.5' }
+const appInfo = { CFBundleIdentifier: 'com.zpyoung.quirky', CFBundleShortVersionString: '1.4.300' }
+const expectations = { appId: 'com.zpyoung.quirky', usageDescriptions, minimumOs: '13.5' }
 
 describe('terminal host Info.plist', () => {
   const info = buildMacTerminalHostInfo({ appInfo, usageDescriptions, minimumOs: '13.5' })
@@ -42,10 +42,10 @@ describe('terminal host Info.plist', () => {
   it("carries the app's identifier, every purpose string and the Node floor", () => {
     expect(info).toMatchObject({
       ...usageDescriptions,
-      CFBundleIdentifier: 'com.stablyai.orca',
-      CFBundleName: 'Orca',
-      CFBundleDisplayName: 'Orca',
-      CFBundleExecutable: 'orca-terminal-host',
+      CFBundleIdentifier: 'com.zpyoung.quirky',
+      CFBundleName: 'Quirky',
+      CFBundleDisplayName: 'Quirky',
+      CFBundleExecutable: 'quirky-terminal-host',
       CFBundleVersion: '0',
       LSMinimumSystemVersion: '13.5',
       LSUIElement: true
@@ -59,7 +59,7 @@ describe('terminal host Info.plist', () => {
       findMacTerminalHostInfoProblems(
         {
           ...info,
-          CFBundleIdentifier: 'com.stablyai.orca.helper',
+          CFBundleIdentifier: 'com.zpyoung.quirky.helper',
           CFBundleURLTypes: [],
           CFBundleDocumentTypes: [],
           UTExportedTypeDeclarations: [],
@@ -69,7 +69,7 @@ describe('terminal host Info.plist', () => {
         expectations
       )
     ).toEqual([
-      'CFBundleIdentifier is com.stablyai.orca.helper, expected com.stablyai.orca',
+      'CFBundleIdentifier is com.zpyoung.quirky.helper, expected com.zpyoung.quirky',
       'declares CFBundleURLTypes',
       'declares CFBundleDocumentTypes',
       'declares UTExportedTypeDeclarations',
@@ -126,18 +126,20 @@ describe('terminal host packaging config', () => {
     expect(electronBuilderConfig.mac.signIgnore).toEqual(
       expect.arrayContaining(macTerminalHostSignIgnore)
     )
-    const helper = '/out/mac-arm64/Orca.app/Contents/Helpers/Orca Terminal Host.app'
+    const helper = '/out/mac-arm64/Quirky.app/Contents/Helpers/Quirky Terminal Host.app'
     expect(pattern.test(helper)).toBe(true)
-    expect(pattern.test(`${helper}/Contents/MacOS/orca-terminal-host`)).toBe(true)
-    expect(pattern.test('/out/mac-arm64/Orca.app/Contents/Helpers/Orca Terminal Host.bundle')).toBe(
+    expect(pattern.test(`${helper}/Contents/MacOS/quirky-terminal-host`)).toBe(true)
+    expect(
+      pattern.test('/out/mac-arm64/Quirky.app/Contents/Helpers/Quirky Terminal Host.bundle')
+    ).toBe(false)
+    expect(pattern.test('/out/mac-arm64/Quirky.app/Contents/Frameworks/Quirky Helper.app')).toBe(
       false
     )
-    expect(pattern.test('/out/mac-arm64/Orca.app/Contents/Frameworks/Orca Helper.app')).toBe(false)
   })
 
   it('packages the helper where the desktop looks for it', () => {
-    const paths = macTerminalHostPaths('/Orca.app')
-    expect(paths.bundle).toBe(join('/Orca.app', 'Contents', 'Helpers', MAC_TERMINAL_HOST_BUNDLE))
+    const paths = macTerminalHostPaths('/Quirky.app')
+    expect(paths.bundle).toBe(join('/Quirky.app', 'Contents', 'Helpers', MAC_TERMINAL_HOST_BUNDLE))
     expect(basename(paths.executable)).toBe(MAC_TERMINAL_HOST_EXECUTABLE)
   })
 })
@@ -147,8 +149,8 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
   let appPath
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'orca-terminal-host-'))
-    appPath = join(root, 'Orca.app')
+    root = mkdtempSync(join(tmpdir(), 'quirky-terminal-host-'))
+    appPath = join(root, 'Quirky.app')
     const resources = join(appPath, 'Contents', 'Resources')
     const out = join(resources, 'app.asar.unpacked', 'out')
     mkdirSync(join(out, 'main', 'chunks'), { recursive: true })
@@ -182,7 +184,7 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
       info
     })
     expect(paths).toEqual(macTerminalHostPaths(appPath))
-    expect(paths.bundle).toBe(join(appPath, 'Contents', 'Helpers', 'Orca Terminal Host.app'))
+    expect(paths.bundle).toBe(join(appPath, 'Contents', 'Helpers', 'Quirky Terminal Host.app'))
     expect(readFileSync(paths.executable, 'utf8')).toBe('pinned-node')
     expect(statSync(paths.executable).mode & 0o777).toBe(0o755)
     expect(statSync(paths.spawnHelper).mode & 0o777).toBe(0o755)
@@ -204,14 +206,14 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
     writeFileSync(join(main, 'daemon-entry.js'), "require('./chunks/kill.js')")
     writeFileSync(
       join(main, 'chunks', 'kill.js'),
-      "require(`node:fs`);require('os');require(`@orca/process-host/gate`)"
+      "require(`node:fs`);require('os');require(`@quirky/process-host/gate`)"
     )
     // Main-process code shipped alongside is not part of the daemon.
     writeFileSync(join(main, 'index.js'), "require('unused');require(`electron`)")
     const modules = join(resources, 'node_modules')
-    mkdirSync(join(modules, '@orca', 'process-host', 'dist'), { recursive: true })
+    mkdirSync(join(modules, '@quirky', 'process-host', 'dist'), { recursive: true })
     writeFileSync(
-      join(modules, '@orca', 'process-host', 'package.json'),
+      join(modules, '@quirky', 'process-host', 'package.json'),
       '{"dependencies":{"retry":"1"}}'
     )
     mkdirSync(join(modules, 'retry'), { recursive: true })
@@ -226,9 +228,9 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
     })
     const helperModules = join(paths.daemon, 'node_modules')
     expect(daemonBareRequires(join(paths.daemon, 'out', 'main'))).toEqual([
-      '@orca/process-host/gate'
+      '@quirky/process-host/gate'
     ])
-    expect(existsSync(join(helperModules, '@orca', 'process-host', 'package.json'))).toBe(true)
+    expect(existsSync(join(helperModules, '@quirky', 'process-host', 'package.json'))).toBe(true)
     expect(existsSync(join(helperModules, 'retry', 'package.json'))).toBe(true)
     expect(existsSync(join(helperModules, 'unused'))).toBe(false)
     expect(existsSync(join(helperModules, 'electron'))).toBe(false)

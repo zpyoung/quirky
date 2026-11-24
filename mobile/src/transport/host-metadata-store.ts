@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { StoredHostProfileSchema, type HostProfile, type StoredHostProfile } from './types'
 import { classifyLegacyHostName } from './host-name-identity'
 
-const STORAGE_KEY = 'orca:hosts'
+const STORAGE_KEY = 'quirky:hosts'
 
 export async function loadStoredHostProfiles(): Promise<StoredHostProfile[] | null> {
   return parseStoredHostProfiles(await AsyncStorage.getItem(STORAGE_KEY))

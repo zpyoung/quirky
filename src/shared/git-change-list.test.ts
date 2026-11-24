@@ -71,7 +71,7 @@ describe('Git change lists', () => {
   })
 
   it('reads root, branch and parent comparisons from a real repository', async () => {
-    const repo = await mkdtemp(join(tmpdir(), 'orca-change-list-'))
+    const repo = await mkdtemp(join(tmpdir(), 'quirky-change-list-'))
     const git = async (args: string[]): Promise<string> => {
       const { stdout } = await execFileAsync('git', args, { cwd: repo })
       return stdout

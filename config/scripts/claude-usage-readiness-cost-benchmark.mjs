@@ -96,7 +96,7 @@ const ORDERS = [
   ['main', 'current', 'published']
 ]
 
-const home = await mkdtemp(join(tmpdir(), 'orca-claude-readiness-cost-'))
+const home = await mkdtemp(join(tmpdir(), 'quirky-claude-readiness-cost-'))
 const workers = []
 try {
   const project = join(home, '.claude', 'projects', 'benchmark')

@@ -1,6 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RuntimeSubscriptionRegistry } from '../../runtime-subscription-registry'
 import { RpcDispatcher } from '../dispatcher'
 import { SESSION_TAB_METHODS } from './session-tabs'
@@ -74,7 +74,7 @@ describe('session tab unsubscribe RPC methods', () => {
       getRuntimeId: () => 'test-runtime',
       cleanupSubscription,
       cleanupSubscriptionsByPrefix
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
 
     await dispatcher.dispatchStreaming(
@@ -158,7 +158,7 @@ async function subscribeTwiceToOneWorktree(selector = 'id:wt-1', resolvedWorktre
     registerSubscriptionCleanup: registry.register.bind(registry),
     getSubscriptionRegistrationVersion: registry.getRegistrationVersion.bind(registry),
     onMobileSessionTabsChanged: () => () => {}
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
   const ends: Record<string, number> = { 'sub-old': 0, 'sub-new': 0 }
   for (const id of ['sub-old', 'sub-new']) {
@@ -178,7 +178,7 @@ async function subscribeTwiceToOneWorktree(selector = 'id:wt-1', resolvedWorktre
 function runtimeWithCleanup(
   cleanupSubscription: (id: string) => void,
   cleanupSubscriptionsByPrefix: (prefix: string, throughVersion?: number) => void = vi.fn()
-): OrcaRuntimeService {
+): QuirkyRuntimeService {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the unsubscribe methods reach only these members; a missing one throws and fails the test.
   return {
     getRuntimeId: () => 'test-runtime',
@@ -194,7 +194,7 @@ function runtimeWithCleanup(
     cleanupSubscription,
     cleanupSubscriptionsByPrefix,
     getSubscriptionRegistrationVersion: () => 0
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 }
 
 function request(method: string, params: unknown) {

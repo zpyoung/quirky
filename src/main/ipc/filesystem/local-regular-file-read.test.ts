@@ -13,7 +13,7 @@ import {
 let base: string
 
 beforeEach(async () => {
-  base = await mkdtemp(join(await realpath(tmpdir()), 'orca-regular-file-read-'))
+  base = await mkdtemp(join(await realpath(tmpdir()), 'quirky-regular-file-read-'))
 })
 
 afterEach(async () => {

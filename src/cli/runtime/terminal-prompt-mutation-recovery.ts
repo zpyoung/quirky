@@ -36,7 +36,7 @@ export function attachLegacyTerminalPromptRecovery(error: unknown): unknown {
     'The legacy host cannot prove whether the prompt was delivered',
     [
       INSPECT_STEP,
-      'Update Orca on the execution host before future prompt sends that need durable retry.'
+      'Update Quirky on the execution host before future prompt sends that need durable retry.'
     ]
   )
 }
@@ -51,10 +51,10 @@ export function attachUnverifiedTerminalPromptRecovery(error: unknown): RuntimeC
         )
   return attachUnknownTerminalPromptRecovery(
     normalized,
-    'Orca cannot prove whether the prompt was delivered by the prompt-delivery-capable runtime from the preflight',
+    'Quirky cannot prove whether the prompt was delivered by the prompt-delivery-capable runtime from the preflight',
     [
       INSPECT_STEP,
-      'A different Orca runtime answered than the one whose prompt-delivery support was verified; confirm which runtime serves this host before sending again.'
+      'A different Quirky runtime answered than the one whose prompt-delivery support was verified; confirm which runtime serves this host before sending again.'
     ]
   )
 }

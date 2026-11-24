@@ -32,7 +32,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -228,7 +228,7 @@ describe('pty:spawn replacing a pane owner', () => {
     registerWithFakes(mainWindow, runtime, store)
     await expect(
       handlers.get('pty:spawn')!(null, restartSpawnArgs({ replacesPtyId: 'pty-old' }))
-    ).rejects.toThrow('ORCA_TERMINAL_SESSION_STATE_SAVE_FAILED')
+    ).rejects.toThrow('QUIRKY_TERMINAL_SESSION_STATE_SAVE_FAILED')
     expect(provider.shutdown).toHaveBeenCalledWith(
       'pty-new',
       expect.objectContaining({ immediate: true })

@@ -61,7 +61,7 @@ function adoptKeptPane(session: WorkspaceSessionState) {
     request,
     workspace: {
       id: GIT_KEY,
-      path: '/Users/dev/orca',
+      path: '/Users/dev/quirky',
       connectionId: null,
       repo: null,
       folderWorkspace: null

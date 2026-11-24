@@ -16,7 +16,7 @@ vi.mock('../claude-accounts/claude-profile-installed-router', () => ({
     profileRouter.userConfigDir ? { userConfigDir: () => profileRouter.userConfigDir } : undefined
 }))
 vi.mock('./claude-oauth-usage-request', () => ({ fetchClaudeOAuthUsage: calls.usage }))
-vi.mock('@orca/process-host', () => ({
+vi.mock('@quirky/process-host', () => ({
   spawnProcess: () => {
     throw new Error('Usage must not launch a process')
   },

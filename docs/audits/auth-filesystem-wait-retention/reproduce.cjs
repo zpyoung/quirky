@@ -8,7 +8,7 @@ const { build } = require('esbuild')
 const { root, before, after, hashes } = require('./sources.cjs')()
 const settlementOrder = require('./settlement-order.cjs')
 
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function')
 const sourcePath = 'src/main/rate-limits/auth-filesystem-operation.ts'
 const entry = resolve(root, sourcePath)

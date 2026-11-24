@@ -5,7 +5,7 @@
  */
 import { ORCHESTRATION_ASK_MAX_TIMEOUT_MS } from '../../../shared/orchestration-ask-timeout'
 import { isDurableMutation } from '../../../shared/orchestration-rpc-contract'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { ALL_RPC_METHODS } from '../../runtime/rpc/methods'
 import {
   hashCanonical,
@@ -37,7 +37,7 @@ export function cappedInboxLimit(limit: number | undefined): number | undefined 
 }
 
 export const LEGACY_RELAY_CLI_BUSY =
-  'This host already has too many older-terminal orca commands waiting on this desktop. ' +
+  'This host already has too many older-terminal quirky commands waiting on this desktop. ' +
   'Let some finish, then try again.'
 
 /**
@@ -86,7 +86,7 @@ export async function runLegacyRelayCliCall<T>(
  * registered, since the hash reads the caller's pane through the runtime.
  */
 export function isExactLegacyRelayCliReplay(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   fingerprint: string,
   requestId: string,
   call: LegacyRelayCliCall

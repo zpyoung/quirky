@@ -36,7 +36,7 @@ function informational(
 let root = ''
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-informational-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-informational-'))
 })
 
 afterEach(async () => {
@@ -54,7 +54,7 @@ async function itemsFor(frames: Record<string, unknown>[]) {
   deferred.bind({ journal, fence: 1, publish: vi.fn() })
   const translator = createClaudeJournalTranslator({ sink: deferred.sink, fallbackIdPrefix: '1' })
   for (const frame of frames) {
-    translator.handle({ type: 'message', sessionId: 'orca-session', message: frame })
+    translator.handle({ type: 'message', sessionId: 'quirky-session', message: frame })
     await deferred.drained()
   }
   return journal.snapshot().items.map((item) => item.body)

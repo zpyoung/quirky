@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { GitWorktreeInfo } from '../shared/worktree/types'
 import { verifyProvisionedRootCheckout } from './provisioned-root-checkout'
 
-const projectRoot = '/workspace/orca'
+const projectRoot = '/workspace/quirky'
 
 function gitWorktree(path: string, overrides: Partial<GitWorktreeInfo> = {}): GitWorktreeInfo {
   return {
@@ -33,7 +33,7 @@ describe('verifyProvisionedRootCheckout', () => {
     expect(verify(gitWorktree(projectRoot)).path).toBe(projectRoot)
   })
 
-  it('rejects a checkout on a branch Orca did not request', () => {
+  it('rejects a checkout on a branch Quirky did not request', () => {
     expect(() => verify(gitWorktree(projectRoot, { branch: 'refs/heads/wrong' }))).toThrow(
       'requested branch'
     )
@@ -80,11 +80,11 @@ describe('verifyProvisionedRootCheckout', () => {
   it('compares Windows checkout roots using runtime path semantics', () => {
     expect(
       verifyProvisionedRootCheckout({
-        worktrees: [gitWorktree('c:/workspace/orca/')],
+        worktrees: [gitWorktree('c:/workspace/quirky/')],
         sparseCheckoutEnabled: false,
-        projectRoot: 'C:\\Workspace\\Orca',
+        projectRoot: 'C:\\Workspace\\Quirky',
         request: { name: 'fix-sandbox' }
       }).path
-    ).toBe('c:/workspace/orca/')
+    ).toBe('c:/workspace/quirky/')
   })
 })

@@ -27,7 +27,7 @@ function entries(watcherId = 'watcher-1'): LedgerEntry[] {
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(0)
-  root = mkdtempSync(join(tmpdir(), 'orca-heimdall-budget-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-heimdall-budget-'))
   database = new HeimdallDatabase(root)
   ledger = new HeimdallLedgerStore(database)
   eventSequence = 0

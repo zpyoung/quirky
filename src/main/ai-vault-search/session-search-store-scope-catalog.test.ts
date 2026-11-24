@@ -33,7 +33,7 @@ function store() {
       'local-repo::/work/one': meta('local'),
       'ssh-repo::/srv/one': meta('ssh:box')
     }),
-    getSettings: () => ({ workspaceDir: '/home/me/orca/workspaces', nestWorkspaces: true })
+    getSettings: () => ({ workspaceDir: '/home/me/quirky/workspaces', nestWorkspaces: true })
   }
 }
 
@@ -53,7 +53,7 @@ describe('scope catalog from the profile store', () => {
 
   it('carries the placement settings a managed worktree directory is derived from', () => {
     expect(sessionSearchScopeCatalogFromStore(store(), 'local').settings).toEqual({
-      workspaceDir: '/home/me/orca/workspaces',
+      workspaceDir: '/home/me/quirky/workspaces',
       nestWorkspaces: true
     })
   })

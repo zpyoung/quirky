@@ -1,5 +1,5 @@
-import type { OrcadDeploymentLink } from './runtime-environments'
-import type { OrcadWslDeploymentLink } from './wsl-host-deployment-link'
+import type { QuirkydDeploymentLink } from './runtime-environments'
+import type { QuirkydWslDeploymentLink } from './wsl-host-deployment-link'
 
 /**
  * What kind of host serves a runtime environment. Switch on `kind` (lint requires the switch to be
@@ -9,12 +9,12 @@ import type { OrcadWslDeploymentLink } from './wsl-host-deployment-link'
  */
 export type RuntimeEnvironmentHost<T> =
   | { kind: 'network'; environment: T }
-  | { kind: 'wsl'; environment: T; deployment: OrcadWslDeploymentLink }
+  | { kind: 'wsl'; environment: T; deployment: QuirkydWslDeploymentLink }
 
 export function classifyRuntimeEnvironmentHost<
-  T extends { orcadDeployment?: OrcadDeploymentLink | null }
+  T extends { quirkydDeployment?: QuirkydDeploymentLink | null }
 >(environment: T): RuntimeEnvironmentHost<T> {
-  const deployment = environment.orcadDeployment
+  const deployment = environment.quirkydDeployment
   if (!deployment) {
     return { kind: 'network', environment }
   }

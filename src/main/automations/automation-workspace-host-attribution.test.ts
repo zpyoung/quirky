@@ -107,7 +107,7 @@ async function createStore(
 ) {
   mkdirSync(testState.dir, { recursive: true })
   writeFileSync(
-    join(testState.dir, 'orca-data.json'),
+    join(testState.dir, 'quirky-data.json'),
     JSON.stringify({
       ...getDefaultPersistedState(testState.dir),
       repos,
@@ -128,7 +128,7 @@ async function createStore(
   installFakeAppEnvironment({ getPath: () => testState.dir })
   const { Store, initDataPath } = await import('../persistence')
   initDataPath()
-  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
+  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'quirky-data.json') })
 }
 
 beforeEach(() => {
@@ -181,7 +181,7 @@ describe('folder-workspace host attribution', () => {
 })
 
 const AMBIGUOUS_REFUSAL =
-  'The automation workspace spans more than one host, so Orca cannot tell which one to run it on.'
+  'The automation workspace spans more than one host, so Quirky cannot tell which one to run it on.'
 
 /**
  * Built through the store rather than seeded: load-time projection replaces any

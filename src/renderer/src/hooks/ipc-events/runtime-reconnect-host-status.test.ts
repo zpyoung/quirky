@@ -59,7 +59,7 @@ async function settle(): Promise<void> {
   }
 }
 
-describe('remote Orca server reconnect', () => {
+describe('remote Quirky server reconnect', () => {
   let unsubs: (() => void)[] = []
   let stopBridge: (() => void) | null = null
   let subscriptionResponders: {

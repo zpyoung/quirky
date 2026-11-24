@@ -9,7 +9,7 @@ const pluginPath = path.resolve('config/oxlint-plugins/mobile-pairing-qrcode-imp
 const oxlint = resolveOxlintInvocation()
 
 function lintSource(source) {
-  const directory = mkdtempSync(path.join(tmpdir(), 'orca-qrcode-import-lint-'))
+  const directory = mkdtempSync(path.join(tmpdir(), 'quirky-qrcode-import-lint-'))
   const sourcePath = path.join(directory, 'sample.ts')
   const configPath = path.join(directory, 'oxlint.json')
   writeFileSync(sourcePath, source)

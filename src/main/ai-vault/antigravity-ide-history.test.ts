@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { mkdtemp, mkdir, rm, writeFile, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -23,7 +23,7 @@ function records(prompt = 'Continue this verified example') {
   ]
 }
 async function temporaryHome(): Promise<string> {
-  const home = await mkdtemp(join(tmpdir(), 'orca-agy-ide-'))
+  const home = await mkdtemp(join(tmpdir(), 'quirky-agy-ide-'))
   temporaryDirectories.push(home)
   return home
 }

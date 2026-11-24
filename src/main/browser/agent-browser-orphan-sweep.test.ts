@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const runProcessMock = vi.fn()
-vi.mock('@orca/process-host', () => ({
+vi.mock('@quirky/process-host', () => ({
   runProcess: (spec: unknown) => runProcessMock(spec)
 }))
 
@@ -9,9 +9,9 @@ import { sweepOrphanedAgentBrowserSessions } from './agent-browser-orphan-sweep'
 
 type Spec = { args?: readonly string[] }
 
-const BIN = '/opt/orca/agent-browser'
+const BIN = '/opt/quirky/agent-browser'
 const SCOPED = {
-  env: { AGENT_BROWSER_SOCKET_DIR: '/tmp/orca-ab-0123456789abcdef' },
+  env: { AGENT_BROWSER_SOCKET_DIR: '/tmp/quirky-ab-0123456789abcdef' },
   ownsSocketDirectory: true
 }
 
@@ -42,44 +42,44 @@ describe('agent-browser orphan sweep', () => {
   })
 
   it('closes tab daemons left by a previous run', async () => {
-    respond(['orca-tab-aaa', 'orca-tab-bbb'])
+    respond(['quirky-tab-aaa', 'quirky-tab-bbb'])
 
     const closed = await sweepOrphanedAgentBrowserSessions({ binaryPath: BIN, ...SCOPED })
 
-    expect(closed).toEqual(['orca-tab-aaa', 'orca-tab-bbb'])
+    expect(closed).toEqual(['quirky-tab-aaa', 'quirky-tab-bbb'])
     expect(closedArgs()).toEqual([
-      ['--session', 'orca-tab-aaa', 'close'],
-      ['--session', 'orca-tab-bbb', 'close']
+      ['--session', 'quirky-tab-aaa', 'close'],
+      ['--session', 'quirky-tab-bbb', 'close']
     ])
   })
 
-  it('never closes a daemon outside Orca tab naming', async () => {
-    respond(['default', 'agent1', 'orca-orcad-deadbeef', 'orca-tab-aaa'])
+  it('never closes a daemon outside Quirky tab naming', async () => {
+    respond(['default', 'agent1', 'quirky-quirkyd-deadbeef', 'quirky-tab-aaa'])
 
     await sweepOrphanedAgentBrowserSessions({ binaryPath: BIN, ...SCOPED })
 
-    expect(closedArgs()).toEqual([['--session', 'orca-tab-aaa', 'close']])
+    expect(closedArgs()).toEqual([['--session', 'quirky-tab-aaa', 'close']])
   })
 
   it('leaves sessions this run already owns alone', async () => {
-    respond(['orca-tab-live', 'orca-tab-orphan'])
+    respond(['quirky-tab-live', 'quirky-tab-orphan'])
 
     await sweepOrphanedAgentBrowserSessions({
       binaryPath: BIN,
       ...SCOPED,
-      isSessionLive: (name) => name === 'orca-tab-live'
+      isSessionLive: (name) => name === 'quirky-tab-live'
     })
 
-    expect(closedArgs()).toEqual([['--session', 'orca-tab-orphan', 'close']])
+    expect(closedArgs()).toEqual([['--session', 'quirky-tab-orphan', 'close']])
   })
 
-  // Why: without a socket dir Orca derived itself, `session list` can reach daemons another Orca
+  // Why: without a socket dir Quirky derived itself, `session list` can reach daemons another Quirky
   // profile owns (Windows named pipes, or an inherited AGENT_BROWSER_SOCKET_DIR). Idle timeout bounds those.
   it.each([
     ['no socket directory at all', { PATH: 'C:\\Windows' }],
-    ['a socket directory Orca inherited', { AGENT_BROWSER_SOCKET_DIR: '/tmp/shared-ab' }]
+    ['a socket directory Quirky inherited', { AGENT_BROWSER_SOCKET_DIR: '/tmp/shared-ab' }]
   ])('does not enumerate with %s', async (_label, env) => {
-    respond(['orca-tab-aaa'])
+    respond(['quirky-tab-aaa'])
 
     const closed = await sweepOrphanedAgentBrowserSessions({
       binaryPath: BIN,
@@ -120,12 +120,12 @@ describe('agent-browser orphan sweep', () => {
         return Promise.resolve({
           code: 0,
           signal: null,
-          stdout: JSON.stringify({ data: { sessions: ['orca-tab-aaa', 'orca-tab-bbb'] } }),
+          stdout: JSON.stringify({ data: { sessions: ['quirky-tab-aaa', 'quirky-tab-bbb'] } }),
           stderr: '',
           timedOut: false
         })
       }
-      if (spec.args?.[1] === 'orca-tab-aaa') {
+      if (spec.args?.[1] === 'quirky-tab-aaa') {
         return Promise.reject(new Error('spawn failed'))
       }
       return Promise.resolve({ code: 0, signal: null, stdout: '', stderr: '', timedOut: false })
@@ -133,11 +133,11 @@ describe('agent-browser orphan sweep', () => {
 
     const closed = await sweepOrphanedAgentBrowserSessions({ binaryPath: BIN, ...SCOPED })
 
-    expect(closed).toEqual(['orca-tab-bbb'])
+    expect(closed).toEqual(['quirky-tab-bbb'])
   })
 
   it('bounds every child it starts', async () => {
-    respond(['orca-tab-aaa'])
+    respond(['quirky-tab-aaa'])
 
     await sweepOrphanedAgentBrowserSessions({ binaryPath: BIN, ...SCOPED })
 
@@ -148,20 +148,20 @@ describe('agent-browser orphan sweep', () => {
 })
 
 describe('sweep kill switch', () => {
-  const previous = process.env.ORCA_DISABLE_AGENT_BROWSER_SWEEP
+  const previous = process.env.QUIRKY_DISABLE_AGENT_BROWSER_SWEEP
 
   afterEach(() => {
     if (previous === undefined) {
-      delete process.env.ORCA_DISABLE_AGENT_BROWSER_SWEEP
+      delete process.env.QUIRKY_DISABLE_AGENT_BROWSER_SWEEP
     } else {
-      process.env.ORCA_DISABLE_AGENT_BROWSER_SWEEP = previous
+      process.env.QUIRKY_DISABLE_AGENT_BROWSER_SWEEP = previous
     }
   })
 
   // Why: the idle bound is an env passthrough an operator can raise and the quit close is
   // self-bounded, so the sweep is the only new behaviour whose failure would need a revert.
-  it('enumerates nothing when disabled, even when Orca owns the socket directory', async () => {
-    process.env.ORCA_DISABLE_AGENT_BROWSER_SWEEP = '1'
+  it('enumerates nothing when disabled, even when Quirky owns the socket directory', async () => {
+    process.env.QUIRKY_DISABLE_AGENT_BROWSER_SWEEP = '1'
     runProcessMock.mockClear()
 
     const closed = await sweepOrphanedAgentBrowserSessions({
@@ -175,7 +175,7 @@ describe('sweep kill switch', () => {
   })
 
   it('still sweeps when the flag holds any other value', async () => {
-    process.env.ORCA_DISABLE_AGENT_BROWSER_SWEEP = '0'
+    process.env.QUIRKY_DISABLE_AGENT_BROWSER_SWEEP = '0'
     runProcessMock.mockClear()
     runProcessMock.mockResolvedValue({ code: 0, stdout: '{"data":{"sessions":[]}}', stderr: '' })
 

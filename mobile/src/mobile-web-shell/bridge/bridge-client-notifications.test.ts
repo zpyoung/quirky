@@ -87,7 +87,7 @@ describe('the notify guard before init', () => {
     expect(page.client.notifyNavigate('/h/host-1')).toBe(false)
     expect(page.client.notifyNavigateBack()).toBe(false)
     expect(page.client.notifyExternalLink('https://example.com')).toBe(false)
-    expect(page.client.notifyStorageWrite('orca:last-visited-worktree', 'value')).toBe(false)
+    expect(page.client.notifyStorageWrite('quirky:last-visited-worktree', 'value')).toBe(false)
     expect(page.sent).toHaveLength(beforeNotifies)
   })
 

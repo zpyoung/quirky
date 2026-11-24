@@ -6,7 +6,7 @@ import type { HostedReviewInfo } from '../../shared/hosted-review'
 import { authorizeKindEnrollment } from '../fork-heimdall/kernel-enrollment'
 import { WatcherKindRegistry, type RegisteredWatcherKind } from '../fork-heimdall/registry'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { createHostedReviewKind } from './kind'
 import {
   authorizeHostedReviewSitterDefinition,
@@ -49,7 +49,7 @@ describe('hosted review enrollment authorization', () => {
       number: 84,
       title: 'Actual review',
       state: 'open',
-      url: 'https://github.com/acme/orca/pull/84',
+      url: 'https://github.com/acme/quirky/pull/84',
       status: 'pending',
       updatedAt: '2026-09-28T00:00:00.000Z',
       mergeable: 'UNKNOWN'
@@ -69,7 +69,7 @@ describe('hosted review enrollment authorization', () => {
       }))
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Authorization only calls showManagedWorktree.
-    const runtime = runtimeDouble as unknown as OrcaRuntimeService
+    const runtime = runtimeDouble as unknown as QuirkyRuntimeService
     const storeDouble = {
       getRepo: () => ({ id: 'repo-1', path: '/actual/repo' }),
       getWorktreeMeta: () => ({ linkedPR: 12, linkedGitLabMR: 19 })
@@ -176,7 +176,7 @@ function authorizationStore(executionHostId?: string): Store {
   } as unknown as Store
 }
 
-function authorizationRuntime(): OrcaRuntimeService {
+function authorizationRuntime(): QuirkyRuntimeService {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This partial runtime double supplies only the worktree lookup exercised by authorization.
   return {
     showManagedWorktree: async () => ({
@@ -190,7 +190,7 @@ function authorizationRuntime(): OrcaRuntimeService {
         head: 'head-1'
       }
     })
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 }
 
 function authorizationInput(kindPayload: unknown): EnrollInput {

@@ -8,7 +8,7 @@ import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import type { SshConnection } from '../connection/ssh-connection'
 import { getRemoteHostPlatform } from '../ssh-remote-platform'
 import type { PtyRuntimeControllerDeps } from '../../ipc/pty/runtime/controller-deps'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { LEGACY_RELAY_BRIDGE_CHANNELS } from '../../../shared/legacy-relay-bridge-contract'
 
 const TARGET = 'ssh-box'
@@ -39,7 +39,7 @@ vi.mock('./legacy-relay-endpoints', () => ({
     exhaustive: true,
     endpoints: [
       {
-        endpoint: '/home/me/.orca-remote/relay-x.sock',
+        endpoint: '/home/me/.quirky-remote/relay-x.sock',
         connectCommand: 'node relay.js --connect',
         wrapCommand: true,
         host: getRemoteHostPlatform('linux-x64'),
@@ -106,7 +106,7 @@ async function startBridge(): Promise<void> {
     getMainWindow: () => null,
     connection: () => connection,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the bridge reads only these runtime methods.
-    runtime: () => runtime as unknown as OrcaRuntimeService
+    runtime: () => runtime as unknown as QuirkyRuntimeService
   })
   await registry.startLegacyRelayBridge(TARGET)
 }

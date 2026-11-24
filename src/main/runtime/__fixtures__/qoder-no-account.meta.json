@@ -4,9 +4,9 @@
   "command": [
     "qodercli",
     "--config-dir",
-    "/tmp/orca-qoder-probe/config",
+    "/tmp/quirky-qoder-probe/config",
     "--cwd",
-    "/tmp/orca-qoder-probe/workspace",
+    "/tmp/quirky-qoder-probe/workspace",
     "--prompt-interactive",
     "Reply with hello."
   ],

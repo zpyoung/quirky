@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { Store } from '../../persistence'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type {
@@ -11,7 +11,7 @@ import { registerPtyHandlers } from './register-handlers'
 import { hydrateLocalPtyRegistryAtBoot } from '../../memory/hydrate-local-pty-registry'
 
 export function registerHeadlessPtyRuntime(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   getSelectedCodexHomePath?: GetSelectedCodexHomePath,
   getSettings?: () => GlobalSettings,
   prepareClaudeAuth?: PrepareClaudeAuth,

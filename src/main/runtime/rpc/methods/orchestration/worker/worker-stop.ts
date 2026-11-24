@@ -3,7 +3,7 @@ import { defineMethod } from '../../../core'
 import { describeUnconfirmedAgentStop } from '../../../../../../shared/pty-liveness-verdict'
 import { ORCHESTRATION_WORKER_STOP_VERDICT_RUNTIME_CAPABILITY } from '../../../../../../shared/protocol-version'
 import type { RuntimeStatus } from '../../../../../../shared/runtime-types'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { inspectWorkerTerminal, resolvePinnedFederatedServer } from './worker-observation'
 import {
   resolveStructuredWorkerForDispatch,
@@ -248,13 +248,13 @@ export const ORCHESTRATION_WORKER_STOP_METHODS = [
   })
 ]
 
-const activeStopByRuntime = new WeakMap<OrcaRuntimeService, Map<string, Promise<unknown>>>()
+const activeStopByRuntime = new WeakMap<QuirkyRuntimeService, Map<string, Promise<unknown>>>()
 
 /** Two callers stopping one Dispatch: coalesced so only one of them closes the terminal. Both are
  *  in this runtime and so carry one epoch, which `beginWorkerStop` refuses a second time anyway;
  *  the epoch it does accept belongs to a row a dead runtime stranded, and no caller here holds one. */
 function dedupeWorkerStop(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   dispatchId: string,
   stop: () => Promise<unknown>
 ): Promise<unknown> {

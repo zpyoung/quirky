@@ -48,7 +48,7 @@ beforeEach(() => {
     configurable: true,
     value: { fs: { authorizeExternalPath: vi.fn(() => Promise.resolve()) } }
   })
-  loadLocalImageAbsolutePath.mockResolvedValue('blob:orca/shot')
+  loadLocalImageAbsolutePath.mockResolvedValue('blob:quirky/shot')
 })
 
 afterEach(() => {
@@ -104,15 +104,15 @@ describe('agent composer attachment chip', () => {
     renderFieldWithAttachments([{ id: 'a', path: '/local/shot.png' }])
 
     const thumbnail = await screen.findByAltText('shot.png')
-    expect(thumbnail).toHaveAttribute('src', 'blob:orca/shot')
+    expect(thumbnail).toHaveAttribute('src', 'blob:quirky/shot')
     expect(screen.getByText('shot.png')).toBeInTheDocument()
   })
 
   it('labels a pasted image thumbnail with the friendly label, not its temp filename', async () => {
-    renderFieldWithAttachments([{ id: 'a', path: '/tmp/orca-paste-1700000000000-abc.png' }])
+    renderFieldWithAttachments([{ id: 'a', path: '/tmp/quirky-paste-1700000000000-abc.png' }])
 
     expect(await screen.findByAltText('Pasted image')).toBeInTheDocument()
-    expect(screen.queryByText(/orca-paste-/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/quirky-paste-/)).not.toBeInTheDocument()
   })
 
   it('reads each attachment once, from its own path', async () => {

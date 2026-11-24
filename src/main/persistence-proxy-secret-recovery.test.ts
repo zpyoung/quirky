@@ -62,11 +62,11 @@ async function createStore() {
   const { Store, initDataPath } = await import('./persistence')
   installFakeAppEnvironment({ getPath: () => testState.dir })
   initDataPath()
-  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
+  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'quirky-data.json') })
 }
 
 function dataFile(): string {
-  return join(testState.dir, 'orca-data.json')
+  return join(testState.dir, 'quirky-data.json')
 }
 
 const PROXY_URL = 'http://127.0.0.1:8080'
@@ -74,7 +74,7 @@ const BYPASS_RULES = '<local>'
 
 describe('httpProxyUrl secret recovery (STA-3442)', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
     cipherState.encryptionAvailable = true
     cipherState.availabilityThrows = false
     cipherState.decryptAlwaysThrows = false

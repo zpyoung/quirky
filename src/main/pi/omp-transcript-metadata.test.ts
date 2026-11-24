@@ -15,7 +15,7 @@ vi.mock('../ai-vault/session-scanner-discovery', async (importOriginal) => {
 
 let root: string
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-omp-metadata-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-omp-metadata-'))
   vi.mocked(walkSessionFiles).mockClear()
 })
 afterEach(async () => {

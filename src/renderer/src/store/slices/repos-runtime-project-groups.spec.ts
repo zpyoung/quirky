@@ -29,44 +29,44 @@ export function registerReposRuntimeProjectGroupTests(): void {
         remoteName: 'origin',
         remoteUrl: 'https://github.com/stablyai/orca.git'
       }
-      const localOrca: Repo = {
-        id: 'local-orca',
-        path: '/Users/alice/stably/orca',
-        displayName: 'orca',
+      const localQuirky: Repo = {
+        id: 'local-quirky',
+        path: '/Users/alice/stably/quirky',
+        displayName: 'quirky',
         badgeColor: '#000',
         addedAt: 1,
         executionHostId: 'local',
         gitRemoteIdentity,
-        projectGroupId: 'group-orca'
+        projectGroupId: 'group-quirky'
       }
-      const runtimeOrca: Repo = {
-        id: 'runtime-orca',
-        path: '/vercel/sandbox/orca',
-        displayName: 'orca',
+      const runtimeQuirky: Repo = {
+        id: 'runtime-quirky',
+        path: '/vercel/sandbox/quirky',
+        displayName: 'quirky',
         badgeColor: '#111',
         addedAt: 2,
         gitRemoteIdentity
       }
       runtimeEnvironmentCall.mockResolvedValue({
-        id: 'rpc-runtime-orca',
+        id: 'rpc-runtime-quirky',
         ok: true,
-        result: { repos: [runtimeOrca] },
+        result: { repos: [runtimeQuirky] },
         _meta: { runtimeId: 'runtime-remote' }
       })
       const store = createTestStore()
       store.setState({
         settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
-        repos: [localOrca]
+        repos: [localQuirky]
       })
 
       await store.getState().fetchRepos(catalogOwner(store))
 
       expect(store.getState().repos).toEqual([
-        localOrca,
+        localQuirky,
         {
-          ...runtimeOrca,
+          ...runtimeQuirky,
           executionHostId: 'runtime:env-1',
-          projectGroupId: 'group-orca'
+          projectGroupId: 'group-quirky'
         }
       ])
     })

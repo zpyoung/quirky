@@ -23,9 +23,9 @@ import { configuredNodeDistMirror } from '../../node-runtime/node-dist-mirror-se
 import { DesktopDownloadUnreachableError } from '../../node-runtime/pinned-runtime-materializer'
 import { remoteSha256Command } from './remote-sha256-command'
 
-export const HOST_NODE_DOWNLOAD_OK = 'ORCA_NODE_HOST_DOWNLOAD_OK'
-export const HOST_NODE_DOWNLOAD_FAILED = 'ORCA_NODE_HOST_DOWNLOAD_FAILED'
-export const HOST_NODE_DOWNLOAD_NO_TOOL = 'ORCA_NODE_HOST_DOWNLOAD_NO_TOOL'
+export const HOST_NODE_DOWNLOAD_OK = 'QUIRKY_NODE_HOST_DOWNLOAD_OK'
+export const HOST_NODE_DOWNLOAD_FAILED = 'QUIRKY_NODE_HOST_DOWNLOAD_FAILED'
+export const HOST_NODE_DOWNLOAD_NO_TOOL = 'QUIRKY_NODE_HOST_DOWNLOAD_NO_TOOL'
 /** One wall-clock budget for every source: ~70 KB/s still fetches the ~58 MB archive. */
 const HOST_DOWNLOAD_BUDGET_SECONDS = 840
 /** Below this an attempt can't finish, so the source is reported as not tried. */
@@ -45,7 +45,7 @@ export function hostNodeRuntimeUrl(target: NodeRuntimeTarget): string {
 
 /**
  * Downloads into the installer's stage from this computer's mirror, then the release URL, with
- * curl or else wget. Only URLs Orca validated are used, so no host secret can reach the report.
+ * curl or else wget. Only URLs Quirky validated are used, so no host secret can reach the report.
  * Keeps the file only if it hashes to the pin, and always exits 0 with a marker.
  */
 export function hostDownloadNodeRuntimeCommand(
@@ -62,9 +62,9 @@ export function hostDownloadNodeRuntimeCommand(
       : null
   const sources = [
     desktopMirror
-      ? `orca_dl_get 'the mirror set on this computer' ${quotePosixShell(desktopMirror)}`
+      ? `quirky_dl_get 'the mirror set on this computer' ${quotePosixShell(desktopMirror)}`
       : null,
-    `orca_dl_get ${quotePosixShell(new URL(hostNodeRuntimeUrl(args.target)).host)} ${quotePosixShell(hostNodeRuntimeUrl(args.target))}`
+    `quirky_dl_get ${quotePosixShell(new URL(hostNodeRuntimeUrl(args.target)).host)} ${quotePosixShell(hostNodeRuntimeUrl(args.target))}`
   ].filter((line): line is string => line !== null)
   const min = HOST_DOWNLOAD_MIN_ATTEMPT_SECONDS
   // Why ulimit: a proxy or mirror serving endless bytes would otherwise fill the host's disk.
@@ -72,35 +72,35 @@ export function hostDownloadNodeRuntimeCommand(
   // wget has no total-time limit, and `timeout` varies by host, so a backgrounded sleep bounds it.
   // The watchdog's output goes to /dev/null so it never holds the capture or the SSH channel open.
   const wget =
-    `wget -q -T 20 -t 1 -O ${file} "$2" & orca_dl_pid=$!; ` +
+    `wget -q -T 20 -t 1 -O ${file} "$2" & quirky_dl_pid=$!; ` +
     // The trap takes the sleep down with the watchdog, so nothing lingers once wget is done.
-    `(trap 'kill "$orca_dl_z" 2>/dev/null; exit 0' TERM; sleep "$orca_dl_t" & orca_dl_z=$!; ` +
-    'wait "$orca_dl_z" && kill "$orca_dl_pid") </dev/null >/dev/null 2>&1 & orca_dl_dog=$!; ' +
-    'wait "$orca_dl_pid"; orca_dl_s=$?; kill "$orca_dl_dog" 2>/dev/null; exit "$orca_dl_s"'
-  const curl = `curl -fsSLg --connect-timeout 20 --max-time "$orca_dl_t" -o ${file} "$2"`
+    `(trap 'kill "$quirky_dl_z" 2>/dev/null; exit 0' TERM; sleep "$quirky_dl_t" & quirky_dl_z=$!; ` +
+    'wait "$quirky_dl_z" && kill "$quirky_dl_pid") </dev/null >/dev/null 2>&1 & quirky_dl_dog=$!; ' +
+    'wait "$quirky_dl_pid"; quirky_dl_s=$?; kill "$quirky_dl_dog" 2>/dev/null; exit "$quirky_dl_s"'
+  const curl = `curl -fsSLg --connect-timeout 20 --max-time "$quirky_dl_t" -o ${file} "$2"`
   return [
-    'orca_dl_ok=; orca_dl_out=; orca_dl_tool=',
-    'if command -v curl >/dev/null 2>&1; then orca_dl_tool=curl; elif command -v wget >/dev/null 2>&1; then orca_dl_tool=wget; fi',
-    `orca_dl_n=${sources.length}`,
-    'orca_dl_end=$(date +%s 2>/dev/null)',
-    `case "$orca_dl_end" in ''|*[!0-9]*) orca_dl_end= ;; *) orca_dl_end=$((orca_dl_end + ${HOST_DOWNLOAD_BUDGET_SECONDS})) ;; esac`,
+    'quirky_dl_ok=; quirky_dl_out=; quirky_dl_tool=',
+    'if command -v curl >/dev/null 2>&1; then quirky_dl_tool=curl; elif command -v wget >/dev/null 2>&1; then quirky_dl_tool=wget; fi',
+    `quirky_dl_n=${sources.length}`,
+    'quirky_dl_end=$(date +%s 2>/dev/null)',
+    `case "$quirky_dl_end" in ''|*[!0-9]*) quirky_dl_end= ;; *) quirky_dl_end=$((quirky_dl_end + ${HOST_DOWNLOAD_BUDGET_SECONDS})) ;; esac`,
     // Each source gets an even share of what is left, so a stalled mirror can't starve the release
     // URL, and the last source inherits whatever the others didn't use.
-    'orca_dl_get() {',
-    '  [ -z "$orca_dl_ok" ] || return 0',
-    `  if [ -n "$orca_dl_end" ]; then orca_dl_t=$(((orca_dl_end - $(date +%s)) / orca_dl_n)); else orca_dl_t=${Math.floor(HOST_DOWNLOAD_BUDGET_SECONDS / sources.length)}; fi`,
-    '  orca_dl_n=$((orca_dl_n - 1))',
-    `  if [ "$orca_dl_t" -lt ${min} ]; then orca_dl_out="$orca_dl_out\${orca_dl_out:+; }$1: not tried, out of time"; return 0; fi`,
-    `  if [ "$orca_dl_tool" = curl ]; then orca_dl_said=$( (${sizeCap}; ${curl}) 2>&1 ); orca_dl_try=$?`,
-    `  else orca_dl_said=$( (${sizeCap}; ${wget}) 2>&1 ); orca_dl_try=$?; fi`,
-    `  if [ "$orca_dl_try" = 0 ] && [ "$(${remoteSha256Command(file)})" = ${quotePosixShell(asset.archiveSha256)} ]; then orca_dl_ok=1; return 0; fi`,
+    'quirky_dl_get() {',
+    '  [ -z "$quirky_dl_ok" ] || return 0',
+    `  if [ -n "$quirky_dl_end" ]; then quirky_dl_t=$(((quirky_dl_end - $(date +%s)) / quirky_dl_n)); else quirky_dl_t=${Math.floor(HOST_DOWNLOAD_BUDGET_SECONDS / sources.length)}; fi`,
+    '  quirky_dl_n=$((quirky_dl_n - 1))',
+    `  if [ "$quirky_dl_t" -lt ${min} ]; then quirky_dl_out="$quirky_dl_out\${quirky_dl_out:+; }$1: not tried, out of time"; return 0; fi`,
+    `  if [ "$quirky_dl_tool" = curl ]; then quirky_dl_said=$( (${sizeCap}; ${curl}) 2>&1 ); quirky_dl_try=$?`,
+    `  else quirky_dl_said=$( (${sizeCap}; ${wget}) 2>&1 ); quirky_dl_try=$?; fi`,
+    `  if [ "$quirky_dl_try" = 0 ] && [ "$(${remoteSha256Command(file)})" = ${quotePosixShell(asset.archiveSha256)} ]; then quirky_dl_ok=1; return 0; fi`,
     `  rm -f ${file}`,
-    `  [ "$orca_dl_try" = 0 ] && orca_dl_said='${HOST_NODE_DOWNLOAD_NOT_PINNED}'`,
-    '  orca_dl_out="$orca_dl_out${orca_dl_out:+; }$1: $orca_dl_tool exit $orca_dl_try${orca_dl_said:+, $orca_dl_said}"',
+    `  [ "$quirky_dl_try" = 0 ] && quirky_dl_said='${HOST_NODE_DOWNLOAD_NOT_PINNED}'`,
+    '  quirky_dl_out="$quirky_dl_out${quirky_dl_out:+; }$1: $quirky_dl_tool exit $quirky_dl_try${quirky_dl_said:+, $quirky_dl_said}"',
     '}',
-    `if [ -z "$orca_dl_tool" ]; then echo ${HOST_NODE_DOWNLOAD_NO_TOOL}; else`,
+    `if [ -z "$quirky_dl_tool" ]; then echo ${HOST_NODE_DOWNLOAD_NO_TOOL}; else`,
     ...sources,
-    `if [ -n "$orca_dl_ok" ]; then echo ${HOST_NODE_DOWNLOAD_OK}; else echo ${HOST_NODE_DOWNLOAD_FAILED}; printf '%s\\n' "$orca_dl_out" | head -c 3000; fi`,
+    `if [ -n "$quirky_dl_ok" ]; then echo ${HOST_NODE_DOWNLOAD_OK}; else echo ${HOST_NODE_DOWNLOAD_FAILED}; printf '%s\\n' "$quirky_dl_out" | head -c 3000; fi`,
     'fi'
   ].join('\n')
 }
@@ -197,7 +197,7 @@ export async function downloadNodeRuntimeOnHost(args: {
     )
   }
   console.warn(
-    `[orcad] This computer couldn't download Node, so the host downloaded it: ${String(args.desktopError)}`
+    `[quirkyd] This computer couldn't download Node, so the host downloaded it: ${String(args.desktopError)}`
   )
   return pinnedNodeRuntimeAsset(args.target).archive
 }

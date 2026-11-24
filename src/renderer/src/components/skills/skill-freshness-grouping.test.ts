@@ -27,36 +27,36 @@ function placement(
 
 describe('groupSkillFreshness', () => {
   it('marks an eligible outdated skill as update-available with one location', () => {
-    const groups = groupSkillFreshness([placement('orca-cli')], ['orca-cli'])
+    const groups = groupSkillFreshness([placement('quirky-cli')], ['quirky-cli'])
     expect(groups).toHaveLength(1)
     expect(groups[0]).toMatchObject({
-      name: 'orca-cli',
+      name: 'quirky-cli',
       status: 'update-available',
-      orcaOwned: true,
+      quirkyOwned: true,
       lockSource: 'zpyoung/quirky'
     })
     expect(groups[0]?.locations).toEqual([
       {
         id: expect.any(String),
-        path: '/home/.agents/skills/orca-cli',
+        path: '/home/.agents/skills/quirky-cli',
         chip: null,
         participatesInGlobalFreshness: true
       }
     ])
   })
 
-  it('sorts Orca-owned skills first, then by name', () => {
+  it('sorts Quirky-owned skills first, then by name', () => {
     const groups = groupSkillFreshness(
       [
         placement('computer-use', { lockSource: 'acme/agent-skills' }),
         placement('linear-tickets', { lockSource: null }),
         placement('orchestration'),
-        placement('orca-cli', { lockSource: 'https://github.com/zpyoung/quirky.git' })
+        placement('quirky-cli', { lockSource: 'https://github.com/zpyoung/quirky.git' })
       ],
-      ['computer-use', 'linear-tickets', 'orca-cli', 'orchestration']
+      ['computer-use', 'linear-tickets', 'quirky-cli', 'orchestration']
     )
-    expect(groups.map((group) => [group.name, group.orcaOwned])).toEqual([
-      ['orca-cli', true],
+    expect(groups.map((group) => [group.name, group.quirkyOwned])).toEqual([
+      ['quirky-cli', true],
       ['orchestration', true],
       ['computer-use', false],
       ['linear-tickets', false]
@@ -69,8 +69,8 @@ describe('groupSkillFreshness', () => {
   it('hides skills whose every copy is current', () => {
     const groups = groupSkillFreshness(
       [
-        placement('orca-cli', { status: 'current' }),
-        placement('orca-cli', { status: 'current', topology: 'provider-alias' })
+        placement('quirky-cli', { status: 'current' }),
+        placement('quirky-cli', { status: 'current', topology: 'provider-alias' })
       ],
       []
     )
@@ -79,7 +79,7 @@ describe('groupSkillFreshness', () => {
 
   it('keeps a plugin-managed copy of a same-named skill out of the list', () => {
     // Why: without a list of past releases a differing plugin copy cannot be told from
-    // another vendor's skill, and Orca never writes there.
+    // another vendor's skill, and Quirky never writes there.
     const groups = groupSkillFreshness(
       [placement('dataviz', { status: 'outdated', topology: 'plugin-cache' })],
       []
@@ -99,7 +99,7 @@ describe('groupSkillFreshness', () => {
       {
         name: 'dataviz',
         status: 'cannot-update',
-        orcaOwned: true,
+        quirkyOwned: true,
         lockSource: 'zpyoung/quirky',
         locations: [
           {
@@ -113,7 +113,7 @@ describe('groupSkillFreshness', () => {
       {
         name: 'linear-tickets',
         status: 'cannot-update',
-        orcaOwned: true,
+        quirkyOwned: true,
         lockSource: 'zpyoung/quirky',
         locations: [
           {

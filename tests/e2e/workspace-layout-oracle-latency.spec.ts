@@ -16,8 +16,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ElectronApplication, Page, TestInfo } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
-import { createRestartSession } from './helpers/orca-restart'
+import { expect, test } from './helpers/quirky-app'
+import { createRestartSession } from './helpers/quirky-restart'
 import { bootstrapFirstLaunch, seededRepoPathOrSkip } from './helpers/terminal-restart-persistence'
 import {
   focusActiveTerminalInput,
@@ -51,13 +51,13 @@ import type {
 import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-session-contracts'
 
 // The baseline is taken with 100; routine runs keep 10, since a Linux CI sample waits ~1 s per frame.
-const SAMPLES = Number(process.env.ORCA_LAYOUT_ORACLE_LATENCY_SAMPLES ?? 10)
-const STARTUP_SAMPLES = Number(process.env.ORCA_LAYOUT_ORACLE_STARTUP_SAMPLES ?? 10)
-const FLOOD_COMMAND = 'yes orca-latency-flood'
+const SAMPLES = Number(process.env.QUIRKY_LAYOUT_ORACLE_LATENCY_SAMPLES ?? 10)
+const STARTUP_SAMPLES = Number(process.env.QUIRKY_LAYOUT_ORACLE_STARTUP_SAMPLES ?? 10)
+const FLOOD_COMMAND = 'yes quirky-latency-flood'
 // About 50 titles a second, each different, so none is folded away as a spinner frame: a busy
 // agent's title burst. The echo proves the loop runs.
 const TITLE_FLOOD_COMMAND =
-  'i=0; while :; do i=$((i+1)); printf "\\033]0;orca-title-flood %d\\007" $i; [ $((i % 50)) = 0 ] && echo orca-latency-flood; sleep 0.02; done'
+  'i=0; while :; do i=$((i+1)); printf "\\033]0;quirky-title-flood %d\\007" $i; [ $((i % 50)) = 0 ] && echo quirky-latency-flood; sleep 0.02; done'
 const CLOSE_CONFIRM = 'Stop and Close'
 const LARGE_PROFILE = { hiddenWorktrees: 12, tabsPerWorktree: 3, activePanes: 4 }
 
@@ -265,7 +265,7 @@ async function expectFlooding(client: RuntimeClient, handle: string): Promise<vo
       },
       { timeout: 30_000, message: `flooding terminal ${handle} never produced output` }
     )
-    .toContain('orca-latency-flood')
+    .toContain('quirky-latency-flood')
 }
 
 /** A worktree of the seeded repo that is never activated, removed by the returned cleanup. */

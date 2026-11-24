@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MobileWebShellFailureReason } from '../../modules/orca-mobile-web-shell/src/load-state'
+import type { MobileWebShellFailureReason } from '../../modules/quirky-mobile-web-shell/src/load-state'
 import { useHostProtocolGates } from '../components/host-protocol-gates-context'
 import { useHostClient } from '../transport/host-client-hooks'
 import type { GenerationStore } from './generation-store'

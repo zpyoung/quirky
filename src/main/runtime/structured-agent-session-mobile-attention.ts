@@ -1,7 +1,7 @@
 // The execution host's own delivery of structured-chat attention to the phones paired with it.
 //
 // WHY THE HOST: a structured session runs here and its attention edges are derived here, so a phone
-// paired to this host (a headless `orca serve` or `orcad` included) must not depend on some desktop
+// paired to this host (a headless `quirky serve` or `quirkyd` included) must not depend on some desktop
 // keeping a chat tab open to relay them. Desktops keep presentation only: unread, focus suppression
 // and their own OS banner. A local desktop marks its request so main does not push the phone twice.
 //

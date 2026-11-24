@@ -11,9 +11,9 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { disableMsbuildFileTrackingOnWindows } from './msbuild-file-tracking.mjs'
-import { stageNodeAddonApi } from './orcad-prebuild-node-gyp.mjs'
+import { stageNodeAddonApi } from './quirkyd-prebuild-node-gyp.mjs'
 import { describeProcessFailure } from './process-failure-message.mjs'
 import { publishSharedTree, sharedTreeStagingPath } from './shared-tree-publish.mjs'
 import { nativeBuildEntryDir } from './native-build-entry.cjs'
@@ -33,7 +33,7 @@ const PROBE_SCRIPT = join(import.meta.dirname, 'native-build-entry-probe.cjs')
 const SCRATCH_SKIPPED_TOP_LEVEL = new Set(['build', 'bin', 'node_modules'])
 const NODE_PTY_CONPTY_RUNTIME_FILES = ['conpty.dll', 'OpenConsole.exe']
 
-/** The compiler environment every Orca node-gyp build of these addons uses. */
+/** The compiler environment every Quirky node-gyp build of these addons uses. */
 export function nativeBuildEnvironment(env = process.env, platform = process.platform) {
   return platform === 'linux'
     ? { ...env, CXXFLAGS: `${env.CXXFLAGS ?? ''} -std=gnu++2a`.trim() }
@@ -119,7 +119,7 @@ export function ensureSharedNativeBuild({
     )
   }
 
-  const workDir = mkdtempSync(join(tmpdir(), 'orca-native-build-'))
+  const workDir = mkdtempSync(join(tmpdir(), 'quirky-native-build-'))
   try {
     const releaseDir = compileInScratchCopy({
       moduleName,

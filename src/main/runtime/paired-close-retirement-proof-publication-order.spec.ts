@@ -6,7 +6,7 @@ import type {
   RuntimeMobileSessionTabsSnapshot
 } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 export function registerPairedCloseRetirementProofPublicationOrderTests(): void {
   /**
@@ -84,13 +84,13 @@ export function registerPairedCloseRetirementProofPublicationOrderTests(): void 
   }
 
   function createHost(): {
-    runtime: OrcaRuntimeService
+    runtime: QuirkyRuntimeService
     handle: string
     retirePersistedSurface: () => void
   } {
     let session = makePersistedSession()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the store stub carries the four members this publication-order suite drives; the rest of Store is unreached.
-    const runtime = new OrcaRuntimeService(
+    const runtime = new QuirkyRuntimeService(
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This runtime fixture supplies the persistence and graph methods exercised by the test.
       withDurableRuntimeStore({
         getRepos: () => [LIVE_REPO],
@@ -142,7 +142,7 @@ export function registerPairedCloseRetirementProofPublicationOrderTests(): void 
   }
 
   /** What the host renderer publishes once it has retired the tab it was told to close. */
-  function republishWithoutTheSurface(runtime: OrcaRuntimeService): void {
+  function republishWithoutTheSurface(runtime: QuirkyRuntimeService): void {
     runtime.syncWindowGraph(1, {
       tabs: [],
       leaves: [],

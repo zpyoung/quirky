@@ -1,7 +1,7 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { JIRA_ATTACHMENT_IMAGE_METHODS } from './jira-attachment-image'
 import {
   registerAttachmentImageGrant,
@@ -19,7 +19,7 @@ const transferId = '12345678-1234-4234-8234-123456789012'
 const runtime = { getRuntimeId: () => 'runtime' }
 const dispatcher = new RpcDispatcher({
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The image handler never calls runtime; this fixture implements the dispatcher's metadata read.
-  runtime: runtime as unknown as OrcaRuntimeService,
+  runtime: runtime as unknown as QuirkyRuntimeService,
   methods: JIRA_ATTACHMENT_IMAGE_METHODS
 })
 function request() {

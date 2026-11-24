@@ -1,10 +1,10 @@
-import type { PipedChildProcess } from '@orca/process-host/process-spec'
+import type { PipedChildProcess } from '@quirky/process-host/process-spec'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import type { ClientChannel } from 'ssh2'
-import { runProcess, spawnProcess } from '@orca/process-host'
+import { runProcess, spawnProcess } from '@quirky/process-host'
 import type { SshConnection } from '../../ssh/connection/ssh-connection'
 import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 import { execCommand } from '../../ssh/remote-exec/remote-exec-command'
@@ -92,7 +92,7 @@ export function createRelayGcListingFixture(): {
   fillValidEntryBoundary: () => void
   dispose: () => void
 } {
-  const workspace = mkdtempSync(join(tmpdir(), 'orca-relay-gc-scale-'))
+  const workspace = mkdtempSync(join(tmpdir(), 'quirky-relay-gc-scale-'))
   let root = workspace
   try {
     // Long Unicode paths cross the SSH character cap with fewer real directories.
@@ -113,7 +113,7 @@ export function createRelayGcListingFixture(): {
     }
     mkdirSync(join(root, 'relay-0.1.0+abc.upload-000000000000'))
     mkdirSync(join(root, 'relay-0.1.0+ggg'))
-    mkdirSync(join(root, 'orcad-0.1.0+aaa'))
+    mkdirSync(join(root, 'quirkyd-0.1.0+aaa'))
     mkdirSync(join(root, stageName(0), 'relay-0.1.0+ccc'))
     writeFileSync(join(root, 'relay-0.1.0+ddd'), '')
     symlinkSync(join(root, validNames[0]), join(root, 'relay-0.1.0+eee'), 'dir')

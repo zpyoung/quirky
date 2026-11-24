@@ -21,12 +21,17 @@ vi.mock('./lease-host-filesystem', async (importOriginal) => {
   const original = await importOriginal<typeof LeaseHostFilesystemModule>()
   return {
     ...original,
-    createLocalLeaseFilesystem: () => filesystemState.active ?? original.createLocalLeaseFilesystem()
+    createLocalLeaseFilesystem: () =>
+      filesystemState.active ?? original.createLocalLeaseFilesystem()
   }
 })
 
 class MemoryFilesystem {
-  readonly directories = new Set(['/workspace', '/workspace/.orca', '/workspace/.orca/heimdall'])
+  readonly directories = new Set([
+    '/workspace',
+    '/workspace/.quirky',
+    '/workspace/.quirky/heimdall'
+  ])
   readonly directoryMtimes = new Map<string, number>()
   readonly files = new Map<string, { content: string; mtime: number }>()
   now = 1_000
@@ -233,7 +238,7 @@ describe('host-routed epoch lease', () => {
 
   it('holds an incomplete epoch fail-closed until its host-directory mtime expires', async () => {
     const fs = new MemoryFilesystem()
-    const leaseDirectory = '/workspace/.orca/heimdall/lease'
+    const leaseDirectory = '/workspace/.quirky/heimdall/lease'
     await fs.createDir(leaseDirectory)
     await fs.createDirNoClobber(`${leaseDirectory}/epoch-1`)
     const key = makeWorkspaceKey('local', '/workspace')
@@ -258,7 +263,7 @@ describe('host-routed epoch lease', () => {
     'expires an $crashKind highest holder from its file mtime, not the older directory mtime',
     async ({ content }) => {
       const fs = new MemoryFilesystem()
-      const leaseDirectory = '/workspace/.orca/heimdall/lease'
+      const leaseDirectory = '/workspace/.quirky/heimdall/lease'
       const epochDirectory = `${leaseDirectory}/epoch-1`
       const holderPath = `${epochDirectory}/holder.json`
       await fs.createDir(leaseDirectory)
@@ -289,7 +294,7 @@ describe('host-routed epoch lease', () => {
     const secondStore = new HostRoutedLeaseStore({ resolveTarget: async () => memoryTarget(fs) })
     await firstStore.acquireOrRenew(key, 'owner-a', 90_000)
     const barrier = createOperationBarrier()
-    const holderPath = '/workspace/.orca/heimdall/lease/epoch-1/holder.json'
+    const holderPath = '/workspace/.quirky/heimdall/lease/epoch-1/holder.json'
     fs.beforePublish = async (path) => {
       if (path === holderPath) {
         await barrier.wait()
@@ -320,7 +325,7 @@ describe('host-routed epoch lease', () => {
       resolveTarget: async () => memoryTarget(fs)
     })
     const barrier = createOperationBarrier()
-    const holderPath = '/workspace/.orca/heimdall/lease/epoch-1/holder.json'
+    const holderPath = '/workspace/.quirky/heimdall/lease/epoch-1/holder.json'
     fs.beforePublish = async (path) => {
       if (path === holderPath) {
         await barrier.wait()
@@ -371,7 +376,7 @@ describe('host-routed epoch lease', () => {
       if (first.status !== 'held') {
         throw new Error('expected lease')
       }
-      const holderPath = '/workspace/.orca/heimdall/lease/epoch-1/holder.json'
+      const holderPath = '/workspace/.quirky/heimdall/lease/epoch-1/holder.json'
       const barrier = createOperationBarrier()
       let renewalBlocked = false
       fs.beforePublish = async (path, content) => {
@@ -421,7 +426,7 @@ describe('host-routed epoch lease', () => {
       throw new Error('expected lease')
     }
     const barrier = createOperationBarrier()
-    const holderPath = '/workspace/.orca/heimdall/lease/epoch-1/holder.json'
+    const holderPath = '/workspace/.quirky/heimdall/lease/epoch-1/holder.json'
     let renewalBlocked = false
     fs.beforePublish = async (path, content) => {
       if (path === holderPath && !renewalBlocked && releasedState(content) === false) {
@@ -459,7 +464,7 @@ describe('host-routed epoch lease', () => {
       throw new Error('expected lease')
     }
     const barrier = createOperationBarrier()
-    const holderPath = '/workspace/.orca/heimdall/lease/epoch-1/holder.json'
+    const holderPath = '/workspace/.quirky/heimdall/lease/epoch-1/holder.json'
     let statBlocked = false
     fs.beforeStat = async (path) => {
       if (path === holderPath && !statBlocked) {
@@ -494,7 +499,7 @@ describe('host-routed epoch lease', () => {
       throw new Error('expected lease')
     }
     const barrier = createOperationBarrier()
-    const holderPath = '/workspace/.orca/heimdall/lease/epoch-1/holder.json'
+    const holderPath = '/workspace/.quirky/heimdall/lease/epoch-1/holder.json'
     let releaseBlocked = false
     fs.beforePublish = async (path, content) => {
       if (path === holderPath && !releaseBlocked && releasedState(content) === true) {
@@ -606,11 +611,11 @@ describe('host-routed epoch lease', () => {
   it.each([
     {
       workspacePath: '//server/share/repo',
-      leaseDirectory: '\\\\server\\share\\repo\\.orca\\heimdall\\lease'
+      leaseDirectory: '\\\\server\\share\\repo\\.quirky\\heimdall\\lease'
     },
     {
       workspacePath: '//wsl.localhost/Ubuntu/repo',
-      leaseDirectory: '\\\\wsl.localhost\\Ubuntu\\repo\\.orca\\heimdall\\lease'
+      leaseDirectory: '\\\\wsl.localhost\\Ubuntu\\repo\\.quirky\\heimdall\\lease'
     }
   ])(
     'preserves local forward-UNC spelling for $workspacePath',
@@ -641,7 +646,7 @@ describe('host-routed epoch lease', () => {
     await store.acquireOrRenew(key, 'owner', 90_000)
     expect(store.describeLocation(key)).toEqual({
       executionHostId: 'local',
-      leaseDirectory: '/workspace/.orca/heimdall/lease',
+      leaseDirectory: '/workspace/.quirky/heimdall/lease',
       pathSeparator: '/'
     })
     expect(resolveTarget).toHaveBeenCalledOnce()

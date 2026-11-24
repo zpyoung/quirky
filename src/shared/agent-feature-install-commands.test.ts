@@ -4,46 +4,44 @@ import {
   buildAgentFeatureSkillInstallCommand,
   SKILLS_CLI_VERSION
 } from './agent-feature-install-commands'
-import { ORCA_SKILLS_REPOSITORY_URL } from './fork-skills-repository/skills-repository-url'
+import { QUIRKY_SKILLS_REPOSITORY_URL } from './fork-skills-repository/skills-repository-url'
 
 const sourceCommit = '0123456789abcdef0123456789abcdef01234567'
-const source = `${ORCA_SKILLS_REPOSITORY_URL}/tree/${sourceCommit}`
+const source = `${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${sourceCommit}`
 
 describe('agent feature skill commands', () => {
   it('pins the skills CLI and the source to the build commit', () => {
-    expect(buildAgentFeatureSkillInstallArgs(['orca-cli'], { sourceCommit }).slice(0, 3)).toEqual([
-      `skills@${SKILLS_CLI_VERSION}`,
-      'add',
-      source
-    ])
+    expect(buildAgentFeatureSkillInstallArgs(['quirky-cli'], { sourceCommit }).slice(0, 3)).toEqual(
+      [`skills@${SKILLS_CLI_VERSION}`, 'add', source]
+    )
   })
 
   it('builds a global install command by default', () => {
-    expect(buildAgentFeatureSkillInstallCommand(['orca-cli'], { sourceCommit })).toBe(
-      `npx skills@${SKILLS_CLI_VERSION} add ${source} --skill orca-cli --global`
+    expect(buildAgentFeatureSkillInstallCommand(['quirky-cli'], { sourceCommit })).toBe(
+      `npx skills@${SKILLS_CLI_VERSION} add ${source} --skill quirky-cli --global`
     )
   })
 
   it('drops --global when installing locally', () => {
     expect(
-      buildAgentFeatureSkillInstallCommand(['orca-cli'], { sourceCommit, global: false })
-    ).toBe(`npx skills@${SKILLS_CLI_VERSION} add ${source} --skill orca-cli`)
+      buildAgentFeatureSkillInstallCommand(['quirky-cli'], { sourceCommit, global: false })
+    ).toBe(`npx skills@${SKILLS_CLI_VERSION} add ${source} --skill quirky-cli`)
   })
 
   it('repeats --skill per name for multi-skill installs', () => {
     expect(
-      buildAgentFeatureSkillInstallCommand(['orca-cli', 'orchestration'], { sourceCommit })
+      buildAgentFeatureSkillInstallCommand(['quirky-cli', 'orchestration'], { sourceCommit })
     ).toBe(
-      `npx skills@${SKILLS_CLI_VERSION} add ${source} --skill orca-cli --skill orchestration --global`
+      `npx skills@${SKILLS_CLI_VERSION} add ${source} --skill quirky-cli --skill orchestration --global`
     )
     expect(
-      buildAgentFeatureSkillInstallArgs(['orca-cli', 'orchestration'], { sourceCommit })
+      buildAgentFeatureSkillInstallArgs(['quirky-cli', 'orchestration'], { sourceCommit })
     ).toEqual([
       `skills@${SKILLS_CLI_VERSION}`,
       'add',
       source,
       '--skill',
-      'orca-cli',
+      'quirky-cli',
       '--skill',
       'orchestration',
       '--global'
@@ -59,14 +57,16 @@ describe('agent feature skill commands', () => {
   it('keeps the copyable Settings commands interactive by default', () => {
     // Why: -y skips the agent picker. A human pasting from Settings should still
     // get it; only an unattended spawn opts in.
-    expect(buildAgentFeatureSkillInstallCommand(['orca-cli'], { sourceCommit })).not.toContain('-y')
+    expect(buildAgentFeatureSkillInstallCommand(['quirky-cli'], { sourceCommit })).not.toContain(
+      '-y'
+    )
   })
 
   it('refuses to skip prompts without an install target', () => {
     // Why: -y with no --agent is the one combination that makes `skills add`
     // install into every agent it knows (~75). No caller may express it.
     expect(() =>
-      buildAgentFeatureSkillInstallCommand(['orca-cli'], { sourceCommit, yes: true })
+      buildAgentFeatureSkillInstallCommand(['quirky-cli'], { sourceCommit, yes: true })
     ).toThrow('An install target is required when skipping prompts.')
   })
 
@@ -75,14 +75,14 @@ describe('agent feature skill commands', () => {
     // drops a `-`-leading --agent value, which empties its target list and
     // installs into every agent it knows.
     expect(() =>
-      buildAgentFeatureSkillInstallCommand(['orca-cli'], {
+      buildAgentFeatureSkillInstallCommand(['quirky-cli'], {
         sourceCommit,
         yes: true,
         agents: ['-y']
       })
     ).toThrow('"-y" is not a usable install target.')
     expect(() =>
-      buildAgentFeatureSkillInstallArgs(['orca-cli'], {
+      buildAgentFeatureSkillInstallArgs(['quirky-cli'], {
         sourceCommit,
         yes: true,
         agents: ['universal', 'a b']
@@ -92,13 +92,13 @@ describe('agent feature skill commands', () => {
 
   it('appends -y and the targets for an unattended run', () => {
     expect(
-      buildAgentFeatureSkillInstallCommand(['orca-cli'], {
+      buildAgentFeatureSkillInstallCommand(['quirky-cli'], {
         sourceCommit,
         yes: true,
         agents: ['universal']
       })
     ).toBe(
-      `npx skills@${SKILLS_CLI_VERSION} add ${source} --skill orca-cli --global --agent universal -y`
+      `npx skills@${SKILLS_CLI_VERSION} add ${source} --skill quirky-cli --global --agent universal -y`
     )
   })
 })

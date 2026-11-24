@@ -56,7 +56,7 @@ async function load(phase) {
   // Measurement only reads cardinalities; it never changes stream ownership or contents.
   const measured = source.replace(
     marker,
-    `  globalThis.__orcaEmptyDeltaReaders.push(() => ({
+    `  globalThis.__quirkyEmptyDeltaReaders.push(() => ({
     streams: streams.size,
     slots: [...streams.values()].reduce((count, stream) => count + stream.chunks.length, 0),
     retainedBytes: totalRetainedBytes,

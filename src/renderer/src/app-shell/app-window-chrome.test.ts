@@ -18,7 +18,7 @@ describe('macOS traffic-light inset', () => {
 
   // #19299: a browser tab has no native window controls to make room for.
   it('reserves nothing in a paired web client on a Mac browser', async () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     const chrome = await loadChromeOnMac()
     expect(chrome.isMac).toBe(true)
     expect(chrome.hasMacTrafficLights).toBe(false)

@@ -6,8 +6,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Requires ORCA_BACKGROUND_LAUNCH=1')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Requires QUIRKY_BACKGROUND_LAUNCH=1')
 }
 const root = fileURLToPath(new URL('../../../', import.meta.url))
 const parent = path.join(root, '.bench-fixtures')
@@ -32,7 +32,7 @@ await buildRenderer({
   build: { outDir: path.join(output, 'renderer'), emptyOutDir: true }
 })
 const { ELECTRON_RUN_AS_NODE: _runAsNode, ...env } = process.env
-const app = await electron.launch({ args: [main], env: { ...env, ORCA_BACKGROUND_LAUNCH: '1' } })
+const app = await electron.launch({ args: [main], env: { ...env, QUIRKY_BACKGROUND_LAUNCH: '1' } })
 const report = {
   scope:
     'Production virtual history list and nested rows with injected records; hidden Electron/CDP layout and action targeting, not full launch UI.'

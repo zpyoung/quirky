@@ -35,7 +35,7 @@ afterEach(async () => {
 })
 
 async function tempDatabasePath(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-session-search-schema-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-session-search-schema-'))
   roots.push(root)
   return join(root, 'index.sqlite')
 }
@@ -204,7 +204,7 @@ it('surfaces the unlink failure itself when a stale index cannot be removed', as
 })
 
 it('creates the directory the index lives in', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-session-search-mkdir-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-session-search-mkdir-'))
   roots.push(root)
   // The real layout: `<userData>/ai-vault-search/index.sqlite`, where nothing
   // has made that folder yet. SQLite would fail with `unable to open database

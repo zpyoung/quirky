@@ -22,7 +22,7 @@ import { registerDaemonManagementHandlers } from '../ipc/pty-management'
 import { registerSshHandlers } from '../ipc/ssh/ssh'
 import { browserManager } from '../browser/browser-manager'
 import { hasSystemMediaAccess, requestSystemMediaAccess } from '../browser/browser-media-access'
-import type { OrcaRuntimeService, RuntimeWorktreeLifecycleEvent } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService, RuntimeWorktreeLifecycleEvent } from '../runtime/quirky-runtime'
 import type { PreQuitCleanupFailureMode, UpdateInstallMode } from '../updater'
 import { scheduleHistoryGc } from '../terminal-history-gc'
 import { openCodeHookService, openCode2HookService } from '../opencode/hook-service'
@@ -52,7 +52,7 @@ let activeTccPromptHandlerToken: number | null = null
 export function attachMainWindowServices(
   mainWindow: BrowserWindow,
   store: Store,
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   getSelectedCodexHomePath?: GetSelectedCodexHomePath,
   prepareClaudeAuth?: (
     target?: ClaudeAccountSelectionTarget

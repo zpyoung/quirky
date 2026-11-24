@@ -16,7 +16,7 @@ afterEach(async () => {
 
 /** A real checkout whose origin is `remoteUrl`, registered with no remote probed yet. */
 async function clonedRepo(remoteUrl: string): Promise<Repo> {
-  const path = await mkdtemp(join(tmpdir(), 'orca-git-remote-link-'))
+  const path = await mkdtemp(join(tmpdir(), 'quirky-git-remote-link-'))
   roots.push(path)
   execFileSync('git', ['init', '-q'], { cwd: path })
   execFileSync('git', ['remote', 'add', 'origin', remoteUrl], { cwd: path })

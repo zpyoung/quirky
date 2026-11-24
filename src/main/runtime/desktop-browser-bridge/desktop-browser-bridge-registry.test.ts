@@ -22,7 +22,7 @@ describe('DesktopBrowserBridgeRegistry', () => {
     expect(MAX_PENDING_PER_ATTACHMENT).toBeLessThan(32)
   })
 
-  it('gives the desktop a deadline that ends before orcad stops waiting', () => {
+  it('gives the desktop a deadline that ends before quirkyd stops waiting', () => {
     const registry = new DesktopBrowserBridgeRegistry()
     const events: DesktopBrowserBridgeEvent[] = []
     registry.attach({ connectionId: 'c', pairedDeviceId: 'd', emit: (event) => events.push(event) })
@@ -74,7 +74,7 @@ describe('DesktopBrowserBridgeRegistry', () => {
     expect(events.map((event) => event.type)).toEqual(['request'])
   })
 
-  it('cancels on the desktop when orcad stops waiting at its deadline', async () => {
+  it('cancels on the desktop when quirkyd stops waiting at its deadline', async () => {
     vi.useFakeTimers()
     try {
       const registry = new DesktopBrowserBridgeRegistry()

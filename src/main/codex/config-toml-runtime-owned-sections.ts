@@ -114,7 +114,7 @@ export function classifyHookTrustKey(key: string, homeDir: string): 'home-scoped
     return 'home-scoped'
   }
   const homeFiles = ['hooks.json', 'config.toml'].flatMap((file) => {
-    // Why: not path.join; a WSL home is a Linux path even when Orca runs on Windows.
+    // Why: not path.join; a WSL home is a Linux path even when Quirky runs on Windows.
     const logicalPath = `${homeDir.replace(/[\\/]+$/, '')}/${file}`
     return [logicalPath, getCodexExplicitHomeHookSourcePath(logicalPath)]
   })
@@ -231,6 +231,6 @@ export function extractOrdinaryCodexSettings(config: string): string {
       .filter((section) => isRuntimeProjectTomlSection(section.header))
       .map((section) => getTomlSectionHeaderKey(section.header))
   )
-  // Why: the daemon override exists only because Orca's home path is long; ~/.codex is not.
+  // Why: the daemon override exists only because Quirky's home path is long; ~/.codex is not.
   return stripCodexDaemonOverride(stripRuntimeOwnedTomlSections(config, projectHeaders)).trimEnd()
 }

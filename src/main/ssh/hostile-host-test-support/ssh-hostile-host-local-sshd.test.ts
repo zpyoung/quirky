@@ -8,11 +8,11 @@ import {
 
 const input = {
   port: 42022,
-  hostKey: '/tmp/orca-hh-a/host_key',
-  pidFile: '/tmp/orca-hh-a/sshd.pid',
-  authorizedKeys: '/tmp/orca-hh-a/authorized_keys',
-  shimDir: '/tmp/orca-hh-a/bin',
-  home: '/tmp/orca-hh-a/home'
+  hostKey: '/tmp/quirky-hh-a/host_key',
+  pidFile: '/tmp/quirky-hh-a/sshd.pid',
+  authorizedKeys: '/tmp/quirky-hh-a/authorized_keys',
+  shimDir: '/tmp/quirky-hh-a/bin',
+  home: '/tmp/quirky-hh-a/home'
 }
 
 describe('local sshd hostile host', () => {
@@ -23,7 +23,7 @@ describe('local sshd hostile host', () => {
     expect(config).toContain('PasswordAuthentication no')
     expect(config).toContain('Subsystem sftp internal-sftp')
     expect(config).toContain(
-      'SetEnv PATH=/tmp/orca-hh-a/bin:/usr/bin:/bin:/usr/sbin:/sbin HOME=/tmp/orca-hh-a/home'
+      'SetEnv PATH=/tmp/quirky-hh-a/bin:/usr/bin:/bin:/usr/sbin:/sbin HOME=/tmp/quirky-hh-a/home'
     )
     expect(config.join('\n')).not.toMatch(/homebrew|\/usr\/local/)
   })
@@ -36,10 +36,10 @@ describe('local sshd hostile host', () => {
 
   it('reports every tool that escapes the shims, and any host Node', () => {
     const resolved = parseSshSidePathProbe(
-      'npm=/tmp/orca-hh-a/bin/npm\ncc=/usr/bin/cc\nmake=\nnode=/opt/homebrew/bin/node\n'
+      'npm=/tmp/quirky-hh-a/bin/npm\ncc=/usr/bin/cc\nmake=\nnode=/opt/homebrew/bin/node\n'
     )
     expect(resolved).toEqual({
-      npm: '/tmp/orca-hh-a/bin/npm',
+      npm: '/tmp/quirky-hh-a/bin/npm',
       cc: '/usr/bin/cc',
       make: null,
       node: '/opt/homebrew/bin/node'
@@ -49,9 +49,9 @@ describe('local sshd hostile host', () => {
       'make resolves to nothing',
       'node resolves to /opt/homebrew/bin/node'
     ])
-    expect(sshSidePathLeaks({ npm: '/tmp/orca-hh-a/bin/npm', node: null }, input.shimDir)).toEqual(
-      []
-    )
+    expect(
+      sshSidePathLeaks({ npm: '/tmp/quirky-hh-a/bin/npm', node: null }, input.shimDir)
+    ).toEqual([])
   })
 
   it('probes each tool with command -v in one exec', () => {

@@ -33,7 +33,7 @@ describe('pty transcript secret scan', () => {
 
   it('flags this machine’s own username, which a prompt line leaks', () => {
     const username = os.userInfo().username
-    const findings = scanTranscriptForSecrets(`~/Users/${username}/orca/repo\n> `)
+    const findings = scanTranscriptForSecrets(`~/Users/${username}/quirky/repo\n> `)
     expect(findings.some((finding) => finding.kind === 'local-username')).toBe(true)
   })
 

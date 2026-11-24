@@ -35,7 +35,7 @@ vi.mock('../codex/codex-hook-trust-derivation', async (importOriginal) => ({
   deriveCodexHookHashes: mocks.deriveCodexHookHashes
 }))
 
-// Why this file (#13746): a status-hook problem costs only Orca's status. The
+// Why this file (#13746): a status-hook problem costs only Quirky's status. The
 // system default must keep launching on ~/.codex, so its own login is used.
 
 const hooksPath = (): string => join(getSystemCodexHomePath(), 'hooks.json')
@@ -45,7 +45,7 @@ const HOOK_PROBLEMS: readonly [string, () => void][] = [
   [
     'Codex is too old to approve hooks',
     () => {
-      const failure = 'Codex 0.120.0 is too old for Orca status; update Codex'
+      const failure = 'Codex 0.120.0 is too old for Quirky status; update Codex'
       mocks.deriveCodexHookHashes.mockResolvedValue({
         kind: 'refused',
         codexVersion: 'codex-cli 0.120.0',

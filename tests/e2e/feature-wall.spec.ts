@@ -1,4 +1,4 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { getStoreState, waitForSessionReady } from './helpers/store'
 import type { ElectronApplication } from '@stablyai/playwright-test'
 
@@ -6,10 +6,10 @@ async function openFeatureTourFromMenu(electronApp: ElectronApplication): Promis
   await electronApp.evaluate(({ BrowserWindow, Menu }) => {
     const featureTourItem = Menu.getApplicationMenu()
       ?.items.find((item) => item.label === 'Help')
-      ?.submenu?.items.find((item) => item.label === 'Explore Orca')
+      ?.submenu?.items.find((item) => item.label === 'Explore Quirky')
 
     if (!featureTourItem) {
-      throw new Error('Explore Orca menu item was not registered')
+      throw new Error('Explore Quirky menu item was not registered')
     }
 
     const window = BrowserWindow.getAllWindows()[0]
@@ -24,36 +24,36 @@ async function openFeatureTourFromMenu(electronApp: ElectronApplication): Promis
 }
 
 test.describe('Feature tour modal', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
   })
 
   test('opens from the Help menu and renders the workflow rail', async ({
     electronApp,
-    orcaPage
+    quirkyPage
   }) => {
     await openFeatureTourFromMenu(electronApp)
 
-    await expect(orcaPage.getByRole('dialog', { name: 'Get to know Orca' })).toBeVisible({
+    await expect(quirkyPage.getByRole('dialog', { name: 'Get to know Quirky' })).toBeVisible({
       timeout: 10_000
     })
-    await expect(orcaPage.getByText('Reopen any time from Help > Explore Orca.')).toBeVisible()
+    await expect(quirkyPage.getByText('Reopen any time from Help > Explore Quirky.')).toBeVisible()
 
     // Five workflow rows in the rail.
-    const rail = orcaPage.getByRole('navigation', { name: 'Workflows' })
+    const rail = quirkyPage.getByRole('navigation', { name: 'Workflows' })
     await expect(rail.getByRole('tab')).toHaveCount(5)
     await expect(rail.getByRole('tab', { name: /Workspaces/i })).toHaveAttribute(
       'aria-selected',
       'true'
     )
 
-    await expect(orcaPage.locator('[data-ws-id]')).toHaveCount(3)
+    await expect(quirkyPage.locator('[data-ws-id]')).toHaveCount(3)
 
     // ArrowDown moves selection through the rail.
     await rail.getByRole('tab', { name: /Workspaces/i }).focus()
-    await orcaPage.keyboard.press('ArrowDown')
+    await quirkyPage.keyboard.press('ArrowDown')
     await expect(rail.getByRole('tab', { name: /Tasks/i })).toHaveAttribute('aria-selected', 'true')
-    await orcaPage.keyboard.press('ArrowDown')
+    await quirkyPage.keyboard.press('ArrowDown')
     await expect(rail.getByRole('tab', { name: /Agents/i })).toHaveAttribute(
       'aria-selected',
       'true'
@@ -62,20 +62,20 @@ test.describe('Feature tour modal', () => {
     await rail.getByRole('tab', { name: /Workbench/i }).click()
     await rail.getByRole('button', { name: /Browser/i }).click()
     await expect(
-      orcaPage.getByText(
-        "Run your app in Orca's browser, send selected UI elements to agents, and let your agents interact with your webpage."
+      quirkyPage.getByText(
+        "Run your app in Quirky's browser, send selected UI elements to agents, and let your agents interact with your webpage."
       )
     ).toBeVisible()
-    await expect(orcaPage.getByRole('heading', { name: 'Browser Use skill' })).toBeVisible()
+    await expect(quirkyPage.getByRole('heading', { name: 'Browser Use skill' })).toBeVisible()
     await expect(
-      orcaPage.getByText("Enables agents to navigate and verify pages in Orca's browser.")
+      quirkyPage.getByText("Enables agents to navigate and verify pages in Quirky's browser.")
     ).toBeVisible()
-    await expect(orcaPage.getByRole('heading', { name: 'CLI skill' })).toHaveCount(0)
-    await expect(orcaPage.getByText('With the Orca CLI skill', { exact: false })).toHaveCount(0)
+    await expect(quirkyPage.getByRole('heading', { name: 'CLI skill' })).toHaveCount(0)
+    await expect(quirkyPage.getByText('With the Quirky CLI skill', { exact: false })).toHaveCount(0)
   })
 
-  test('shows unified task copy without leaving the walkthrough', async ({ orcaPage }) => {
-    await orcaPage.evaluate(() => {
+  test('shows unified task copy without leaving the walkthrough', async ({ quirkyPage }) => {
+    await quirkyPage.evaluate(() => {
       const store = window.__store
       if (!store) {
         throw new Error('window.__store is not available')
@@ -94,25 +94,25 @@ test.describe('Feature tour modal', () => {
       store.getState().openModal('feature-wall', { source: 'help_menu' })
     })
 
-    await expect(orcaPage.getByRole('dialog', { name: 'Get to know Orca' })).toBeVisible({
+    await expect(quirkyPage.getByRole('dialog', { name: 'Get to know Quirky' })).toBeVisible({
       timeout: 10_000
     })
-    await orcaPage
+    await quirkyPage
       .getByRole('navigation', { name: 'Workflows' })
       .getByRole('tab', { name: /Tasks/i })
       .click()
-    await expect(orcaPage.getByText('Start work directly from GitHub or Linear.')).toBeVisible()
-    await expect(orcaPage.getByText('Connect GitHub or Linear once')).toHaveCount(0)
-    await expect(orcaPage.getByRole('dialog', { name: 'Get to know Orca' })).toBeVisible()
+    await expect(quirkyPage.getByText('Start work directly from GitHub or Linear.')).toBeVisible()
+    await expect(quirkyPage.getByText('Connect GitHub or Linear once')).toHaveCount(0)
+    await expect(quirkyPage.getByRole('dialog', { name: 'Get to know Quirky' })).toBeVisible()
     await expect
-      .poll(async () => getStoreState<string>(orcaPage, 'activeView'))
+      .poll(async () => getStoreState<string>(quirkyPage, 'activeView'))
       .not.toBe('settings')
   })
 
   test('continue advances through workflow substeps before the next workflow', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await orcaPage.evaluate(() => {
+    await quirkyPage.evaluate(() => {
       const store = window.__store
       if (!store) {
         throw new Error('window.__store is not available')
@@ -120,8 +120,8 @@ test.describe('Feature tour modal', () => {
       store.getState().openModal('feature-wall', { source: 'help_menu' })
     })
 
-    const rail = orcaPage.getByRole('navigation', { name: 'Workflows' })
-    const continueButton = orcaPage.getByRole('button', { name: /^Continue/ })
+    const rail = quirkyPage.getByRole('navigation', { name: 'Workflows' })
+    const continueButton = quirkyPage.getByRole('button', { name: /^Continue/ })
 
     await continueButton.click()
     await expect(rail.getByRole('tab', { name: /Tasks/i })).toHaveAttribute('aria-selected', 'true')
@@ -164,7 +164,7 @@ test.describe('Feature tour modal', () => {
   })
 
   test('does not pre-check configured workflows until the user visits them', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     await electronApp.evaluate(
@@ -182,16 +182,16 @@ test.describe('Feature tour modal', () => {
         glab: { installed: false, authenticated: false }
       }
     )
-    await orcaPage.evaluate(async () => {
+    await quirkyPage.evaluate(async () => {
       for (const key of [
-        'orca.featureWall.visitedWorkflows.v1',
-        'orca.featureWall.visitedAgentSteps.v1',
-        'orca.featureWall.visitedWorkbenchSteps.v1',
-        'orca.featureWall.visitedReviewSteps.v1',
-        'orca.featureWall.completedWorkflows.v1',
-        'orca.featureWall.completedAgentSteps.v1',
-        'orca.featureWall.completedWorkbenchSteps.v1',
-        'orca.featureWall.completedReviewSteps.v1'
+        'quirky.featureWall.visitedWorkflows.v1',
+        'quirky.featureWall.visitedAgentSteps.v1',
+        'quirky.featureWall.visitedWorkbenchSteps.v1',
+        'quirky.featureWall.visitedReviewSteps.v1',
+        'quirky.featureWall.completedWorkflows.v1',
+        'quirky.featureWall.completedAgentSteps.v1',
+        'quirky.featureWall.completedWorkbenchSteps.v1',
+        'quirky.featureWall.completedReviewSteps.v1'
       ]) {
         localStorage.removeItem(key)
       }
@@ -208,7 +208,7 @@ test.describe('Feature tour modal', () => {
       store.getState().openModal('feature-wall', { source: 'help_menu' })
     })
 
-    const rail = orcaPage.getByRole('navigation', { name: 'Workflows' })
+    const rail = quirkyPage.getByRole('navigation', { name: 'Workflows' })
     const workspacesTab = rail.locator('[data-feature-wall-workflow-id="workspaces"]')
     const tasksTab = rail.locator('[data-feature-wall-workflow-id="tasks"]')
     await expect(workspacesTab.locator('[aria-label="Completed"]')).toHaveCount(1)
@@ -219,15 +219,15 @@ test.describe('Feature tour modal', () => {
   })
 
   test('keeps persisted completed setup-backed substeps checked when reopened', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await orcaPage.evaluate(() => {
+    await quirkyPage.evaluate(() => {
       localStorage.setItem(
-        'orca.featureWall.completedAgentSteps.v1',
+        'quirky.featureWall.completedAgentSteps.v1',
         JSON.stringify(['orchestration'])
       )
       localStorage.setItem(
-        'orca.featureWall.completedWorkbenchSteps.v1',
+        'quirky.featureWall.completedWorkbenchSteps.v1',
         JSON.stringify(['browser'])
       )
       const store = window.__store
@@ -237,7 +237,7 @@ test.describe('Feature tour modal', () => {
       store.getState().openModal('feature-wall', { source: 'help_menu' })
     })
 
-    const rail = orcaPage.getByRole('navigation', { name: 'Workflows' })
+    const rail = quirkyPage.getByRole('navigation', { name: 'Workflows' })
 
     await rail.getByRole('tab', { name: /Agents/i }).click()
     await expect(

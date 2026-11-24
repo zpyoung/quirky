@@ -127,7 +127,7 @@ export function WorktreeCardHeader({
             <TooltipTrigger asChild>
               <span className="shrink-0 inline-flex items-center">
                 {isRuntimeDisconnected ? (
-                  // Passive by design: runtime ("Orca server") hosts have no
+                  // Passive by design: runtime ("Quirky server") hosts have no
                   // renderer-reachable connect API, unlike the SSH glyph above which is
                   // now a control. Don't "fix" the inconsistency by wiring one up.
                   <ServerOff className="size-3 text-destructive" />
@@ -156,7 +156,7 @@ export function WorktreeCardHeader({
                     )
                   : translate(
                       'auto.components.sidebar.WorktreeCard.runtimeHostProject',
-                      'Project on Orca server'
+                      'Project on Quirky server'
                     )}
             </TooltipContent>
           </Tooltip>

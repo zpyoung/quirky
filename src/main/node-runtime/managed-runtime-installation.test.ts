@@ -19,7 +19,7 @@ const roots: string[] = []
 afterEach(() => Promise.all(roots.splice(0).map((r) => rm(r, { recursive: true, force: true }))))
 
 async function rig(bodies: ('hang' | 'whole')[]) {
-  const dataDirectory = await mkdtemp(join(tmpdir(), 'orca-runtime-install-'))
+  const dataDirectory = await mkdtemp(join(tmpdir(), 'quirky-runtime-install-'))
   roots.push(dataDirectory)
   const root = join(dataDirectory, 'agent-runtimes', 'agent')
   const pin = {

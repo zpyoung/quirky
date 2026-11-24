@@ -27,7 +27,7 @@ async function answerThroughOwner(
   if (!conversion.ok) {
     return deny(
       options.toolUseID,
-      `Orca could not relay this question to the watcher owner (${conversion.reason}). ${NO_OWNER_ANSWER}`
+      `Quirky could not relay this question to the watcher owner (${conversion.reason}). ${NO_OWNER_ANSWER}`
     )
   }
   try {

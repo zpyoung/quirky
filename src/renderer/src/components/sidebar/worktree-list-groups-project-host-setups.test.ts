@@ -46,7 +46,7 @@ describe('buildRows with pinned worktrees', () => {
     )
 
     expect(rows).toMatchObject([
-      { type: 'header', key: 'project:github:stablyai/orca', label: 'Orca', count: 2 },
+      { type: 'header', key: 'project:github:stablyai/orca', label: 'Quirky', count: 2 },
       { type: 'item', worktree: { id: worktree.id }, hostContextLabel: LOCAL_HOST_LABEL },
       { type: 'item', worktree: { id: remoteWorktree.id }, hostContextLabel: 'gpu-vm' }
     ])
@@ -99,10 +99,10 @@ describe('buildRows with pinned worktrees', () => {
     }
 
     expect(buildHeaders([], [])).toMatchObject([
-      { key: 'project:github:stablyai/orca', label: 'Orca' }
+      { key: 'project:github:stablyai/orca', label: 'Quirky' }
     ])
     expect(buildHeaders([otherWorktree], [otherRepo])).toMatchObject([
-      { key: 'project:github:stablyai/orca', label: 'Orca' },
+      { key: 'project:github:stablyai/orca', label: 'Quirky' },
       { key: 'repo:repo-other', label: 'design-assets' }
     ])
   })
@@ -374,12 +374,12 @@ describe('buildRows with pinned worktrees', () => {
   })
 
   it('splits same-host checkouts of one project into separate per-setup groups', () => {
-    const repoB: Repo = { ...repo, id: 'repo-2', path: '/tmp/orca-2', displayName: 'orca-2' }
+    const repoB: Repo = { ...repo, id: 'repo-2', path: '/tmp/quirky-2', displayName: 'quirky-2' }
     const worktreeB: Worktree = {
       ...worktree,
       id: 'wt-2',
       repoId: repoB.id,
-      path: '/tmp/orca-2-feature',
+      path: '/tmp/quirky-2-feature',
       displayName: 'feature-b'
     }
     const localSetupB: ProjectHostSetup = {
@@ -425,11 +425,11 @@ describe('buildRows with pinned worktrees', () => {
       expect.arrayContaining([
         expect.objectContaining({
           key: 'project:github:stablyai/orca::setup:repo-1',
-          label: 'orca'
+          label: 'quirky'
         }),
         expect.objectContaining({
           key: 'project:github:stablyai/orca::setup:repo-2',
-          label: 'orca-2'
+          label: 'quirky-2'
         })
       ])
     )
@@ -439,14 +439,14 @@ describe('buildRows with pinned worktrees', () => {
     const localRepoB: Repo = {
       ...repo,
       id: 'repo-local-b',
-      path: '/tmp/orca-b',
-      displayName: 'orca-b'
+      path: '/tmp/quirky-b',
+      displayName: 'quirky-b'
     }
     const localWorktreeB: Worktree = {
       ...worktree,
       id: 'wt-local-b',
       repoId: localRepoB.id,
-      path: '/tmp/orca-b-feature',
+      path: '/tmp/quirky-b-feature',
       displayName: 'feature-b'
     }
     const localSetupB: ProjectHostSetup = {
@@ -501,7 +501,7 @@ describe('buildRows with pinned worktrees', () => {
     const runtimeRepo: Repo = {
       ...remoteRepo,
       id: 'repo-runtime',
-      path: '/home/alice/orca-runtime',
+      path: '/home/alice/quirky-runtime',
       connectionId: undefined,
       executionHostId: runtimeHostId
     }
@@ -509,7 +509,7 @@ describe('buildRows with pinned worktrees', () => {
       ...remoteWorktree,
       id: 'wt-runtime',
       repoId: runtimeRepo.id,
-      path: '/home/alice/orca-runtime-feature'
+      path: '/home/alice/quirky-runtime-feature'
     }
     const runtimeSetup: ProjectHostSetup = {
       ...projectHostSetups[1]!,
@@ -562,7 +562,7 @@ describe('buildRows with pinned worktrees', () => {
     const windowsRepo: Repo = {
       ...repo,
       id: 'repo-windows',
-      path: 'C:\\Users\\neil\\orca\\orca',
+      path: 'C:\\Users\\neil\\quirky\\quirky',
       executionHostId: windowsHostId
     }
     const folderRepoA: Repo = {
@@ -630,14 +630,14 @@ describe('buildRows with pinned worktrees', () => {
     const runtimeRepoB: Repo = {
       ...repo,
       id: 'repo-runtime-b',
-      path: '/tmp/orca-runtime-b',
-      displayName: 'orca-runtime-b'
+      path: '/tmp/quirky-runtime-b',
+      displayName: 'quirky-runtime-b'
     }
     const runtimeWorktreeB: Worktree = {
       ...worktree,
       id: 'wt-runtime-b',
       repoId: runtimeRepoB.id,
-      path: '/tmp/orca-runtime-b-feature',
+      path: '/tmp/quirky-runtime-b-feature',
       displayName: 'feature-runtime-b'
     }
     // Why: a `provisioned` (recipe-created ephemeral) copy shares the project's
@@ -685,7 +685,7 @@ describe('buildRows with pinned worktrees', () => {
     expect(headers).toHaveLength(1)
     expect(headers[0]).toMatchObject({
       key: 'project:github:stablyai/orca',
-      label: 'Orca',
+      label: 'Quirky',
       count: 2
     })
   })
@@ -698,14 +698,14 @@ describe('buildRows with pinned worktrees', () => {
     const localRepoB: Repo = {
       ...repo,
       id: 'repo-local-b',
-      path: '/tmp/orca-b',
-      displayName: 'orca-b'
+      path: '/tmp/quirky-b',
+      displayName: 'quirky-b'
     }
     const localWorktreeB: Worktree = {
       ...worktree,
       id: 'wt-local-b',
       repoId: localRepoB.id,
-      path: '/tmp/orca-b-feature',
+      path: '/tmp/quirky-b-feature',
       displayName: 'feature-b'
     }
     const localSetupB: ProjectHostSetup = {
@@ -718,14 +718,14 @@ describe('buildRows with pinned worktrees', () => {
     const runtimeRepoB: Repo = {
       ...repo,
       id: 'repo-runtime-b',
-      path: '/tmp/orca-runtime-b',
-      displayName: 'orca-runtime-b'
+      path: '/tmp/quirky-runtime-b',
+      displayName: 'quirky-runtime-b'
     }
     const runtimeWorktreeB: Worktree = {
       ...worktree,
       id: 'wt-runtime-b',
       repoId: runtimeRepoB.id,
-      path: '/tmp/orca-runtime-b-feature',
+      path: '/tmp/quirky-runtime-b-feature',
       displayName: 'feature-runtime-b'
     }
     const runtimeSetupB: ProjectHostSetup = {
@@ -781,7 +781,7 @@ describe('buildRows with pinned worktrees', () => {
       headers.some((row) => row.key === 'project:github:stablyai/orca::setup:repo-runtime-b')
     ).toBe(false)
     expect(headers.find((row) => row.key === 'project:github:stablyai/orca')).toMatchObject({
-      label: 'Orca',
+      label: 'Quirky',
       count: 1
     })
   })

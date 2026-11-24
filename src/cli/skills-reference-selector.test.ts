@@ -35,8 +35,8 @@ vi.mock('./runtime-client', async () => {
     RuntimeClient,
     RuntimeClientError,
     RuntimeRpcFailureError,
-    serveOrcaApp: vi.fn(),
-    getDefaultUserDataPath: vi.fn(() => '/tmp/orca-user-data')
+    serveQuirkyApp: vi.fn(),
+    getDefaultUserDataPath: vi.fn(() => '/tmp/quirky-user-data')
   }
 })
 
@@ -46,7 +46,7 @@ function stdoutText(spy: ReturnType<typeof vi.spyOn>): string {
   return spy.mock.calls.map((call) => String(call[0])).join('')
 }
 
-describe('orca skills get --reference', () => {
+describe('quirky skills get --reference', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     process.exitCode = undefined

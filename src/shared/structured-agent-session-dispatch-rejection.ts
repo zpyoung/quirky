@@ -16,7 +16,7 @@ import {
 } from './agent-session-failure'
 import type { AgentJournalSubmission } from './agent-session-journal-types'
 
-/** Orca could not hand the message over. Written bare: released clients hide it, and the error
+/** Quirky could not hand the message over. Written bare: released clients hide it, and the error
  *  that once followed it belongs in the log. Rows from older hosts carry `: <error>` after it. */
 export const DISPATCH_REJECTED_WRITE_FAILED = 'provider_write_failed'
 
@@ -53,11 +53,11 @@ function dispatchRejectionWasTransportWriteFailure(reason: string | null | undef
 /**
  * What a rejection means for the chat, whatever wrote it:
  * - `withdrawn`: the user's Stop took it back; nothing failed.
- * - `undelivered`: accepted, then never handed over (Orca restarted, the chat closed, the provider
+ * - `undelivered`: accepted, then never handed over (Quirky restarted, the chat closed, the provider
  *   never took it or stopped first).
  * - `startFailed`: the agent it waited on did not start.
- * - `content`: the provider, or Orca's check of the message, refused this payload.
- * - `transport`: Orca could not hand it over.
+ * - `content`: the provider, or Quirky's check of the message, refused this payload.
+ * - `transport`: Quirky could not hand it over.
  */
 export type DispatchRejectionCategory =
   | 'withdrawn'
@@ -140,7 +140,7 @@ const KIND_VERDICT = {
   queueFull: 'failure',
   writeFailed: 'failure',
   hostFault: 'failure',
-  // Orca stopped a start that hung: the agent failed.
+  // Quirky stopped a start that hung: the agent failed.
   hostStopped: 'failure'
 } satisfies Record<SubmissionRejectionKind, 'failure' | null>
 
@@ -166,7 +166,7 @@ function legacyMarkerKind(reason: string | null): SubmissionRejectionKind | unde
  * The one reader of why a submission was rejected. The typed fact decides when the row carries
  * one; a fact this build cannot place says only that the message was not sent. A row with no
  * fact, from an older host, is read by its legacy marker, and any other reason is a sentence — a
- * provider's, or Orca's before rows were typed — which reads as a content failure.
+ * provider's, or Quirky's before rows were typed — which reads as a content failure.
  */
 export function classifyDispatchRejection(
   submission: Pick<AgentJournalSubmission, 'reason'> & { rejection?: unknown }
@@ -194,7 +194,7 @@ export function dispatchWasWithdrawn(
   )
 }
 
-/** A submission that says Orca never handed it over, in any dispatch state: journals written
+/** A submission that says Quirky never handed it over, in any dispatch state: journals written
  *  before this state moved hold it as `unknown` carrying the marker. */
 export function isWriteFailureSubmission(
   submission: Pick<AgentJournalSubmission, 'reason' | 'rejection'>

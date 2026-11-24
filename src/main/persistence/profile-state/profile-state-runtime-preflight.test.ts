@@ -10,7 +10,7 @@ let workerPath: string
 let backupWorkerPath: string
 
 beforeAll(async () => {
-  directory = mkdtempSync(join(tmpdir(), 'orca-preflight-test-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-preflight-test-'))
   workerPath = join(directory, 'profile-state-writer-worker-entry.js')
   backupWorkerPath = join(directory, 'profile-state-backup-worker-entry.js')
   await build({

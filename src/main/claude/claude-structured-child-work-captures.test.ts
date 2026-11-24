@@ -85,8 +85,8 @@ describe('Claude child work from captured frame orders', () => {
     })
   })
 
-  // A close Orca proves is still loss of contact: no Stop was accepted, so no outcome is claimed.
-  it('leaves how they ended unknown when Orca ends the session, and keeps every record', async () => {
+  // A close Quirky proves is still loss of contact: no Stop was accepted, so no outcome is claimed.
+  it('leaves how they ended unknown when Quirky ends the session, and keeps every record', async () => {
     const run = await producer(hostWithParent())
     const [running] = until(MOVED_TO_BACKGROUND, 51_275)
     run.replay(running)
@@ -107,7 +107,7 @@ describe('Claude child work from captured frame orders', () => {
     const run = await producer(hostWithParent())
     const [running] = until(MOVED_TO_BACKGROUND, 51_275)
     run.replay(running)
-    // The root exited, but Orca's own tree check saw a process of the session's still running.
+    // The root exited, but Quirky's own tree check saw a process of the session's still running.
     const connection = run.claude.connections[0]!
     connection.exitVerdict = { root: 'exited', tree: 'live' }
     connection.close = async () => false

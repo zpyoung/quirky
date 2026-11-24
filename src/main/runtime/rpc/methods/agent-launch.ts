@@ -33,7 +33,7 @@ import {
   trackTerminalSpawnDispatch,
   type TerminalSpawnDispatch
 } from '../../../agent-launch/agent-launch-not-started'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { defineMethod, type RpcContext } from '../core'
 import { admitAgentLaunchOperation, agentLaunchOperationCallerKey } from './agent-launch-replay'
 import {
@@ -72,7 +72,7 @@ import {
  * Advertising `agent.launch.v2` is a client's statement that it understands EITHER outcome — a
  * structured session it can open, or a terminal agent. A client that can only render one of the
  * two must keep using the surface-specific methods instead. The `clientKind === undefined` branch
- * is not "whatever ships in this build": it is the `orca` CLI over the runtime socket and the
+ * is not "whatever ships in this build": it is the `quirky` CLI over the runtime socket and the
  * SSH-remote CLI bridges, which carry no capability list at all. The desktop renderer ships in
  * this build and still arrives as `clientKind: 'runtime'`, so it advertises like any other client.
  */
@@ -182,11 +182,11 @@ type ActiveAgentLaunch = {
 }
 
 const activeAgentLaunchesByRuntime = new WeakMap<
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   Map<string, ActiveAgentLaunch>
 >()
 
-function activeAgentLaunchesFor(runtime: OrcaRuntimeService): Map<string, ActiveAgentLaunch> {
+function activeAgentLaunchesFor(runtime: QuirkyRuntimeService): Map<string, ActiveAgentLaunch> {
   let active = activeAgentLaunchesByRuntime.get(runtime)
   if (!active) {
     active = new Map()

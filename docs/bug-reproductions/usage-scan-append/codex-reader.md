@@ -19,8 +19,8 @@ This removes intermediate event arrays while preserving all history and results.
 ## Reproduce and verify
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/codex-usage src/main/usage
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/codex-usage-parser-memory-benchmark.mjs --baseline-ref 51e7181850b022bae2d41091fe1229accef4bd50 --events 100000 --pairs 2 --sample-ms 35 --output docs/bug-reproductions/usage-scan-append/codex-parser-memory.json
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/main/codex-usage src/main/usage
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/codex-usage-parser-memory-benchmark.mjs --baseline-ref 51e7181850b022bae2d41091fe1229accef4bd50 --events 100000 --pairs 2 --sample-ms 35 --output docs/bug-reproductions/usage-scan-append/codex-parser-memory.json
 ```
 
 The original [memory comparison](./codex-parser-memory.json) bundles the full parser

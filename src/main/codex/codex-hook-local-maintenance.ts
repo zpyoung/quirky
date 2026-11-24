@@ -20,7 +20,7 @@ import {
   applyMirroredRuntimeUserHookTrustStates,
   getRuntimeHooksWithSystemUserHooks
 } from './codex-hook-user-mirroring'
-import { getOrcaManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
+import { getQuirkyManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
 import {
   promoteCodexRuntimeHookApprovalsToSystem,
   snapshotCodexRuntimeHookTrustProvenance
@@ -31,7 +31,7 @@ export async function refreshCodexRuntimeUserHooksExclusively(
   getStatus: (runtimeHomePath: string) => AgentHookInstallStatus
 ): Promise<AgentHookInstallStatus> {
   const configPath = getConfigPath(runtimeHomePath)
-  // Why: same as install() — capture in-Orca approvals before this refresh
+  // Why: same as install() — capture in-Quirky approvals before this refresh
   // rewrites the runtime files they are keyed against.
   promoteCodexRuntimeHookApprovalsToSystem(runtimeHomePath)
   const config = readHooksJson(configPath)
@@ -68,8 +68,8 @@ export async function refreshCodexRuntimeUserHooksExclusively(
       runtimeHomePath,
       systemHomePath: getSystemCodexHomePath()
     })
-    // Why: this path is used when Orca status hooks are off or Codex's hash is
-    // unknown. The runtime CODEX_HOME keeps user hooks, but not Orca-managed trust.
+    // Why: this path is used when Quirky status hooks are off or Codex's hash is
+    // unknown. The runtime CODEX_HOME keeps user hooks, but not Quirky-managed trust.
     // Write current mirrored user trust first so stale cleanup compares
     // against current hashes while deleting old managed hook keys.
     upsertHookTrustEntries(tomlPath, trustEntries)
@@ -96,8 +96,8 @@ export async function removeCodexHooksExclusively(
 ): Promise<AgentHookInstallStatus> {
   const configPath = getConfigPath()
   if (existsSync(configPath)) {
-    // Why rebuild first: it also moves mirrored user approvals back from the slots Orca's group shifted.
-    await refreshCodexRuntimeUserHooksExclusively(getOrcaManagedCodexHomePath(), getStatus)
+    // Why rebuild first: it also moves mirrored user approvals back from the slots Quirky's group shifted.
+    await refreshCodexRuntimeUserHooksExclusively(getQuirkyManagedCodexHomePath(), getStatus)
   }
   const configExists = existsSync(configPath)
   const config = readHooksJson(configPath)
@@ -138,7 +138,7 @@ export async function removeCodexHooksExclusively(
   // Why: drop trust entries so config.toml doesn't accumulate dead [hooks.state] blocks across install/remove cycles.
   removeRuntimeManagedHookTrustEntries(configPath, codexHashes)
 
-  // Why here and nowhere automatic: the real-home entry is shared by every Orca
+  // Why here and nowhere automatic: the real-home entry is shared by every Quirky
   // on this HOME, so only the user's explicit opt-out may strip it.
   await removeRealHomeCodexHookForOptOut(codexHashes)
   await cleanupLegacyManagedHookRepresentations()

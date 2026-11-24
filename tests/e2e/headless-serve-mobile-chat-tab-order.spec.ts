@@ -1,9 +1,9 @@
 /**
- * #29968: a phone paired straight to a headless `orca serve` keeps a Claude chat tab, in its place
+ * #29968: a phone paired straight to a headless `quirky serve` keeps a Claude chat tab, in its place
  * in the tab order, while the phone closes and opens terminals around it.
  */
 import { randomUUID } from 'node:crypto'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { pairMobileClient } from './helpers/paired-mobile-client'
 import {

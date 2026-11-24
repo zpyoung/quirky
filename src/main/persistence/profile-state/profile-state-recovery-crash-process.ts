@@ -2,7 +2,7 @@ import { once } from 'node:events'
 import { writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { buildSync, type Metafile } from 'esbuild'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { createWorkspaceSourceResolver } from '../../../../config/scripts/workspace-source-exports.mjs'
 
 export type RecoveryCrashOptions = {
@@ -83,7 +83,7 @@ fs.rmSync = (target, ...rest) => {
 let clone = 0
 const link = fs.linkSync
 fs.linkSync = (from, to) => {
-  const isClone = from.includes('.orca-recovery-clone-')
+  const isClone = from.includes('.quirky-recovery-clone-')
   if (isClone) barrier('clone:' + (++clone) + ':before')
   link(from, to)
   if (isClone) barrier('clone:' + clone + ':after')
@@ -121,7 +121,7 @@ export async function killRecoveryAt(
   writeFileSync(childScript, CHILD_SOURCE, 'utf8')
   writeFileSync(payloadPath, payload, 'utf8')
   const childEnv = {
-    ORCA_BACKGROUND_LAUNCH: '1',
+    QUIRKY_BACKGROUND_LAUNCH: '1',
     ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
     ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
     ...(process.env.TEMP ? { TEMP: process.env.TEMP } : {}),

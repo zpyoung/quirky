@@ -14,7 +14,7 @@ import { computeAgentLaunchFingerprint } from '../../../../shared/agent-launch-o
 import { AGENT_LAUNCH_SURFACE_UNAVAILABLE_CODE } from '../../../../shared/agent-launch-surface'
 import type { AgentSessionRecordStore } from '../../agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../agent-session-record-store-test-harness'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RpcDispatcher } from '../dispatcher'
 import {
   methodNamed,
@@ -69,7 +69,7 @@ describe('a launch whose terminal fails', () => {
   let store: AgentSessionRecordStore
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'orca-agent-launch-prestart-'))
+    directory = await mkdtemp(join(tmpdir(), 'quirky-agent-launch-prestart-'))
     store = await openTestAgentSessionRecordStore(directory)
     setAgentLaunchRecordStore(store)
   })
@@ -90,7 +90,7 @@ describe('a launch whose terminal fails', () => {
   ) {
     const dispatcher = new RpcDispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture implements every runtime method reached by agent.launch and dispatcher metadata.
-      runtime: { ...runtime, getRuntimeId: () => 'runtime-1' } as unknown as OrcaRuntimeService,
+      runtime: { ...runtime, getRuntimeId: () => 'runtime-1' } as unknown as QuirkyRuntimeService,
       methods: AGENT_LAUNCH_METHODS
     })
     return dispatcher.dispatch({

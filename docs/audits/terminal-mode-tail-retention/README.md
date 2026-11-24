@@ -17,11 +17,11 @@ content are unchanged. These are additional boundaries in
 ## Reproduce
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/terminal-mode-tail-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/terminal-mode-tail-retention/reproduce.cjs
 ```
 
 Run the same script with the installed Electron executable, setting
-`ELECTRON_RUN_AS_NODE=1` and `ORCA_BACKGROUND_LAUNCH=1`, and passing the same
+`ELECTRON_RUN_AS_NODE=1` and `QUIRKY_BACKGROUND_LAUNCH=1`, and passing the same
 Node flags. This launches no app window or native PTY. Each run has a 30-second
 deadline and writes either [Node results](./node-results.json) or
 [Electron results](./electron-results.json).
@@ -83,10 +83,10 @@ and renderer TypeScript checks pass.
   `terminal-pane-pane-closed.ts:69` deletes the map entry. Dashboard previews
   own another tracker per effect (`AgentTerminalPreview.tsx:116`); cleanup
   removes its listeners and disposes its terminal.
-- Main's `orca-runtime-capture-provider-terminal-buffer.ts:23` registers
+- Main's `quirky-runtime-capture-provider-terminal-buffer.ts:23` registers
   temporary live scanners during provider snapshot acquisition and removes
   them in `finally`. It creates a persistent tracker only after observing an
-  alternate-screen transition (`:48–57`). `orca-runtime-on-pty-data.ts:30`
+  alternate-screen transition (`:48–57`). `quirky-runtime-on-pty-data.ts:30`
   feeds those trackers before later output processing. Exit, floating PTY
   liveness cleanup, and provider generation reset delete the persistent entry.
 - The daemon does not directly instantiate the kitty tracker, despite its

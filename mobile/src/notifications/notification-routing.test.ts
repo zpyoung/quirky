@@ -10,13 +10,13 @@ describe('notification routing', () => {
     expect(
       getNotificationNavigationTarget({
         hostId: 'host-1',
-        worktreeId: 'repo::/Users/me/orca/workspaces/feature'
+        worktreeId: 'repo::/Users/me/quirky/workspaces/feature'
       })
     ).toEqual({
       hostId: 'host-1',
       sessionTarget: {
         name: '[hostId]/session/[worktreeId]',
-        params: { hostId: 'host-1', worktreeId: 'repo::/Users/me/orca/workspaces/feature' }
+        params: { hostId: 'host-1', worktreeId: 'repo::/Users/me/quirky/workspaces/feature' }
       }
     })
   })

@@ -10,7 +10,7 @@ function row(overrides: Partial<Worktree> = {}): Worktree {
   return {
     worktreeId: 'repo::/src/app',
     repoId: 'repo',
-    repo: 'orca',
+    repo: 'quirky',
     branch: 'feat/x',
     displayName: 'x',
     path: '/src/app',
@@ -28,7 +28,7 @@ describe('buildWorkspaceDetailLinks', () => {
     const links = buildWorkspaceDetailLinks(
       row({
         linkedItems: [
-          { provider: 'jira', type: 'issue', number: 0, identifier: 'ORCA-4', title: 'Jira one' },
+          { provider: 'jira', type: 'issue', number: 0, identifier: 'QUIRKY-4', title: 'Jira one' },
           { provider: 'linear', type: 'issue', number: 0, identifier: 'ENG-7' },
           { provider: 'github', type: 'issue', number: 3, title: 'Bug', url: 'https://x/3' }
         ],
@@ -36,7 +36,7 @@ describe('buildWorkspaceDetailLinks', () => {
       })
     )
 
-    expect(links.map((link) => link.label)).toEqual(['PR #12', 'ORCA-4', 'ENG-7', 'Issue #3'])
+    expect(links.map((link) => link.label)).toEqual(['PR #12', 'QUIRKY-4', 'ENG-7', 'Issue #3'])
     expect(links[0]).toMatchObject({ state: 'open' })
     expect(links[3]).toMatchObject({ title: 'Bug', url: 'https://x/3' })
   })

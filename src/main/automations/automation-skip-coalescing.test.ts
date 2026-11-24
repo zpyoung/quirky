@@ -43,7 +43,7 @@ const makeRepo = (): Repo => ({
 
 const SETUP_GONE = 'Project is not set up on the selected automation host anymore.'
 
-const NO_WINDOW = 'No Orca window was available to launch the automation.'
+const NO_WINDOW = 'No Quirky window was available to launch the automation.'
 
 /**
  * Daily at 09:00, pointed at a project host setup that does not exist. The
@@ -65,7 +65,7 @@ async function seedUnresolvableAutomation(): Promise<{ store: Store; automation:
   })
   seed.flushOrThrow()
   await seed.freezeWritesAsync()
-  const file = join(testState.dir, 'orca-data.json')
+  const file = join(testState.dir, 'quirky-data.json')
   const state = JSON.parse(readPersistedStateJson(file))
   state.automations[0].runContext = {
     kind: 'workspace-run',
@@ -127,7 +127,7 @@ function seedSkip(store: Store, automation: Automation, scheduledFor: number, er
 
 describe('repeated skipped_unavailable coalescing', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-skip-coalescing-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-skip-coalescing-test-'))
     vi.useFakeTimers()
   })
 

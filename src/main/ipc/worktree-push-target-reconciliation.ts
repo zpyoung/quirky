@@ -1,9 +1,9 @@
-// Why: `pr-*` remotes Orca adds for fork-PR review are only ever pruned by
+// Why: `pr-*` remotes Quirky adds for fork-PR review are only ever pruned by
 // `worktree-push-target-cleanup.ts`, and only when a *single* worktree removal
 // triggers it. Three things escape that: (1) legacy/reused metadata missing the
 // `remoteCreated` flag, (2) a "preserve branch on delete" pinning its remote via
 // `branch.*.remote` config long after the worktree is gone, and (3) a worktree
-// removed outside Orca entirely (no removal event ever fires). This sweep
+// removed outside Quirky entirely (no removal event ever fires). This sweep
 // inverts the same safety predicates over every `pr-*` remote in the repo
 // instead of one removal, so all three eventually get reclaimed. It never adds
 // new safety logic — see `worktree-push-target-cleanup.ts` for the predicates.
@@ -20,15 +20,15 @@ import {
   type WorktreePushTargetStore
 } from './worktree-push-target-cleanup'
 
-// Orca only ever mints `pr-head` or `pr-<owner>-<repo>` (see `sanitizeRemoteName`), optionally
+// Quirky only ever mints `pr-head` or `pr-<owner>-<repo>` (see `sanitizeRemoteName`), optionally
 // disambiguated with `-2`..`-99` (see `ensureUniqueRemoteName`). The naming convention alone is
 // not proof of provenance -- a user could name a remote `pr-foo` -- so this only narrows which
-// remotes are even considered; `hasOrcaCreatedProvenance` below is the actual safety gate.
-const ORCA_PR_REMOTE_NAME_PATTERN =
+// remotes are even considered; `hasQuirkyCreatedProvenance` below is the actual safety gate.
+const QUIRKY_PR_REMOTE_NAME_PATTERN =
   /^pr-(?:head|[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)(?:-[0-9]{1,2})?$/
 
-export function isOrcaGeneratedPrRemoteName(name: string): boolean {
-  return ORCA_PR_REMOTE_NAME_PATTERN.test(name)
+export function isQuirkyGeneratedPrRemoteName(name: string): boolean {
+  return QUIRKY_PR_REMOTE_NAME_PATTERN.test(name)
 }
 
 type PrRemoteCandidate = { name: string; url: string }
@@ -44,7 +44,7 @@ async function listPrRemoteCandidates(
     return []
   }
   return [...parseGitRemoteFetchUrls(stdout)]
-    .filter(([name]) => isOrcaGeneratedPrRemoteName(name))
+    .filter(([name]) => isQuirkyGeneratedPrRemoteName(name))
     .map(([name, url]) => ({ name, url }))
 }
 
@@ -62,7 +62,7 @@ async function shouldReclaimPrRemote(
   }
   const referencingEntries = findWorktreeMetaReferencingRemote(store, repoId, target)
   // Provenance gate: only touch a remote some worktree's persisted pushTarget explicitly
-  // recorded Orca creating. Naming and URL shape are necessary but not sufficient proof.
+  // recorded Quirky creating. Naming and URL shape are necessary but not sufficient proof.
   if (!referencingEntries.some(({ meta }) => meta.pushTarget?.remoteCreated === true)) {
     return false
   }

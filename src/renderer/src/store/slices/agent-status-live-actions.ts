@@ -25,8 +25,8 @@ import {
 } from './agent-status-pane-key-tab-binding'
 import {
   getAgentRowGeneratedTitleText,
-  getOrcaDispatchTaskId,
-  isOrcaDispatchPrompt,
+  getQuirkyDispatchTaskId,
+  isQuirkyDispatchPrompt,
   orchestrationLabelsMatchLiveDispatch
 } from '@/lib/agent-row-primary-text'
 
@@ -147,8 +147,8 @@ export function createAgentStatusLiveActions(
       (entry.orchestration?.displayName?.trim() || entry.orchestration?.taskTitle?.trim()) &&
       orchestrationLabelsMatchLiveDispatch(entry)
     )
-    const liveIsDispatchPrompt = isOrcaDispatchPrompt(entry.prompt)
-    const liveDispatchTaskId = liveIsDispatchPrompt ? getOrcaDispatchTaskId(entry.prompt) : null
+    const liveIsDispatchPrompt = isQuirkyDispatchPrompt(entry.prompt)
+    const liveDispatchTaskId = liveIsDispatchPrompt ? getQuirkyDispatchTaskId(entry.prompt) : null
     const stickyOrchestrationTaskId = entry.orchestration?.taskId?.trim() || null
     const isNewDispatchAgainstStickyOrchestration = Boolean(
       liveDispatchTaskId &&

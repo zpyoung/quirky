@@ -2,10 +2,10 @@ import React, { useEffect, useRef } from 'react'
 import type { OpenFile } from '@/store/slices/editor'
 import type { GitStatusEntry } from '../../../../../../shared/git-status-types'
 import {
-  ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
+  QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
   type EditorPathMutationTarget
 } from '../../editor-autosave'
-import { ORCA_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
+import { QUIRKY_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
 import { normalizeRuntimePathForComparison } from '../../../../../../shared/cross-platform-path'
 import { buildCombinedGitStatusSignature } from '../resolve-changes/combined-diff-git-status-signature'
 import {
@@ -96,9 +96,9 @@ export function useCombinedDiffSectionRevalidation({
         }
       }
     }
-    window.addEventListener(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, handler as EventListener)
+    window.addEventListener(QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, handler as EventListener)
     return () =>
-      window.removeEventListener(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, handler as EventListener)
+      window.removeEventListener(QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, handler as EventListener)
   }, [
     file.runtimeEnvironmentId,
     file.worktreeId,
@@ -114,7 +114,7 @@ export function useCombinedDiffSectionRevalidation({
     // Why: a resync (the watch was down) names no paths, and snapshot-backed reviews skip
     // status-driven reloads, so re-read every loaded working-tree section of this workspace.
     // A storm overflow only refreshes git status, so it never re-reads every section.
-    const handler = (event: WindowEventMap[typeof ORCA_WORKTREE_FILE_CHANGE_EVENT]): void => {
+    const handler = (event: WindowEventMap[typeof QUIRKY_WORKTREE_FILE_CHANGE_EVENT]): void => {
       const { payload, runtimeEnvironmentId } = event.detail
       if (
         (runtimeEnvironmentId?.trim() || null) !== (file.runtimeEnvironmentId?.trim() || null) ||
@@ -129,8 +129,8 @@ export function useCombinedDiffSectionRevalidation({
         requestSectionReload(index)
       }
     }
-    window.addEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handler)
-    return () => window.removeEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handler)
+    window.addEventListener(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, handler)
+    return () => window.removeEventListener(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, handler)
   }, [
     file.filePath,
     file.runtimeEnvironmentId,

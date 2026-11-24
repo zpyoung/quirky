@@ -38,7 +38,7 @@ export abstract class CliInstallLocation {
       // Why: development builds must not claim the production shell command.
       return DEV_COMMAND_NAME
     }
-    return 'orca'
+    return 'quirky'
   }
 
   constructor(options: CliInstallerOptions = {}) {
@@ -51,12 +51,12 @@ export abstract class CliInstallLocation {
     this.homePath = options.homePath ?? homedir()
     this.processPathEnv = options.processPathEnv ?? process.env.PATH ?? process.env.Path ?? null
     this.commandPathOverride =
-      options.commandPathOverride ?? process.env.ORCA_CLI_INSTALL_PATH ?? null
+      options.commandPathOverride ?? process.env.QUIRKY_CLI_INSTALL_PATH ?? null
     // Why: resolved once here (getStatus is hot); /usr/local/bin is absent on Apple Silicon, so fall back to user-writable ~/.local/bin.
     const candidateMacPath = options.defaultMacCommandPath ?? DEFAULT_MAC_COMMAND_PATH
     this.macCommandPath = existsSync(dirname(candidateMacPath))
       ? candidateMacPath
-      : join(this.homePath, '.local', 'bin', 'orca')
+      : join(this.homePath, '.local', 'bin', 'quirky')
     this.privilegedRunner = options.privilegedRunner ?? runMacPrivilegedCommand
   }
 
@@ -116,7 +116,7 @@ export abstract class CliInstallLocation {
       const status = await this.inspectSymlink(commandPath, launcherPath)
       if (status.state !== 'not_installed') {
         if (reachedDefaultCommandPath && !isDefaultCommandPath && status.state === 'conflict') {
-          // Why: a non-Orca command after an empty default slot can be shadowed by installing there; no user file replaced.
+          // Why: a non-Quirky command after an empty default slot can be shadowed by installing there; no user file replaced.
           continue
         }
         // Why: PATH lookup is first-match-wins; return the command the shell will actually run, preserving shadowing conflicts.

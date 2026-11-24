@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { JIRA_METHODS } from './jira'
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -19,7 +19,7 @@ describe('jira RPC methods', () => {
       jiraConnect: vi.fn().mockResolvedValue({ ok: true, viewer: { displayName: 'Ada' } }),
       jiraSelectSite: vi.fn().mockResolvedValue({ connected: true, viewer: null }),
       jiraDisconnect: vi.fn().mockResolvedValue({ ok: true })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
 
     await dispatcher.dispatch(makeRequest('jira.status'))
@@ -58,7 +58,7 @@ describe('jira RPC methods', () => {
       jiraUpdateIssue: vi.fn().mockResolvedValue({ ok: true }),
       jiraAddIssueComment: vi.fn().mockResolvedValue({ ok: true, id: 'comment-1' }),
       jiraIssueComments: vi.fn().mockResolvedValue([{ id: 'comment-2' }])
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
     const summaryController = new AbortController()
 
@@ -154,7 +154,7 @@ describe('jira RPC methods', () => {
     }
     const dispatcher = new RpcDispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This dispatcher test only invokes the three methods implemented by the fixture.
-      runtime: runtime as unknown as OrcaRuntimeService,
+      runtime: runtime as unknown as QuirkyRuntimeService,
       methods: JIRA_METHODS
     })
     await dispatcher.dispatch(
@@ -201,7 +201,7 @@ describe('jira RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       jiraLookupIssueSummary: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
 
     await expect(
@@ -215,7 +215,7 @@ describe('jira RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       jiraGetIssue: vi.fn().mockResolvedValue({ key: 'ABC-3', description })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
     const replies: string[] = []
 
@@ -246,7 +246,7 @@ describe('jira RPC methods', () => {
       jiraGetProjectStatusOrder: vi.fn().mockResolvedValue({
         statusIdsByColumn: [['status-1']]
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
 
     await dispatcher.dispatch(makeRequest('jira.listProjects', { siteId: 'all' }))
@@ -300,7 +300,10 @@ describe('jira RPC methods', () => {
 it('forwards strict reads and optional status filters while accepting older requests', async () => {
   const jiraListIssues = vi.fn().mockResolvedValue([])
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only the runtime identity and list method are invoked by these requests.
-  const runtime = { getRuntimeId: () => 'host-a', jiraListIssues } as unknown as OrcaRuntimeService
+  const runtime = {
+    getRuntimeId: () => 'host-a',
+    jiraListIssues
+  } as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
   expect(
     await dispatcher.dispatch(
@@ -329,7 +332,7 @@ describe('Jira title generation RPC', () => {
       jiraCancelGenerateIssueSummary: cancel
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these methods only use the three supplied runtime operations.
-    const runtime = stub as unknown as OrcaRuntimeService
+    const runtime = stub as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
     const args = { siteId: 'site-1', requestId: 'req-1', draftId: 'draft-1', description: 'Draft' }
     const abort = new AbortController()
@@ -361,7 +364,7 @@ describe('Jira title generation RPC', () => {
     const generate = vi.fn()
     const stub = { getRuntimeId: () => 'test-runtime', jiraGenerateIssueSummary: generate }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: schema rejection never accesses other runtime operations.
-    const runtime = stub as unknown as OrcaRuntimeService
+    const runtime = stub as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
     const reply = await dispatcher.dispatch(
       makeRequest('jira.generateIssueSummary', { description: 'Draft' })

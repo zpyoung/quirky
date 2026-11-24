@@ -148,7 +148,7 @@ export function registerHostCatalogHandlers(context: WorktreeIpcContext): void {
         )
         // Why here too: a scan the host answered is positive evidence of removal, and this is the only
         // path that ever retires an off-host row — so it owes the status store the same drop the
-        // in-Orca delete does, or the SSH rows stay stranded in `last-status.json`.
+        // in-Quirky delete does, or the SSH rows stay stranded in `last-status.json`.
         agentHookServer.dropStatusEntriesForRemovedWorktree(worktreeId, parsedHost.id)
         forgottenWorktreeIds.push(worktreeId)
       }

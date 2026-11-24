@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 // Why: once a host has completed a v2 handshake on any path, a later legacy
 // handshake to it can only be a downgrade, so the phone refuses to fall back.
 // Keyed by the pinned host public key, which is not a secret.
-const STORAGE_KEY = 'orca:e2ee-v2-hosts'
+const STORAGE_KEY = 'quirky:e2ee-v2-hosts'
 const MAX_LATCHED_HOSTS = 128
 
 let latched: Set<string> | null = null

@@ -76,7 +76,7 @@ describe('Claude Stop that names no turn', () => {
     const claude = fakeClaude({ replayUuid: null })
     const adapter = await written(claude)
     const connection = claude.connections[0]!
-    // The echo that opens the turn arrives after Orca wrote the interrupt, before Claude answers it.
+    // The echo that opens the turn arrives after Quirky wrote the interrupt, before Claude answers it.
     claude.routes.interrupt = () => {
       connection.handlers.onMessage?.({ ...connection.sent[0]!, uuid: 'turn-late' })
       return undefined

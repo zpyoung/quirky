@@ -2,7 +2,7 @@ import type { AgentJournalRenderItem } from '../../../shared/agent-session-journ
 import type { AgentSessionSubscribeEvent } from '../../../shared/agent-session-wire'
 // What a Stop's row says when Codex took the interrupt, against the real host, journal and Codex
 // adapter. Codex answers a turn's interrupt as the turn aborts and sends the turn's end right after
-// the answer, so the end reaches Orca a moment after the Stop has its answer.
+// the answer, so the end reaches Quirky a moment after the Stop has its answer.
 
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -46,7 +46,7 @@ let launch: { resumeThreadId?: string | null }
 let adapter: CodexStructuredSessionAdapter
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-stop-row-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-stop-row-'))
   resetHostTestOperationIds()
   events = []
   unconfirmedNote = undefined

@@ -14,8 +14,8 @@ import { createRequire } from 'node:module'
 const { loadSources } = createRequire(import.meta.url)('./sources.cjs')
 const sourceInfo = loadSources()
 const gates = new Map()
-const candidate = process.env.ORCA_SSH_READER_VARIANT !== 'before'
-const graph = process.env.ORCA_SSH_READER_GRAPH ?? 'worktree'
+const candidate = process.env.QUIRKY_SSH_READER_VARIANT !== 'before'
+const graph = process.env.QUIRKY_SSH_READER_GRAPH ?? 'worktree'
 const artifactNames = [
   'sources.cjs',
   'relay-fixture.mjs',
@@ -174,8 +174,8 @@ async function successfulRead(mux, payload) {
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(payload.hash)
 }
 beforeEach(async () => {
-  expect(process.env.ORCA_BACKGROUND_LAUNCH).toBe('1')
-  directory = await mkdtemp(join(tmpdir(), 'orca-ssh-reader-'))
+  expect(process.env.QUIRKY_BACKGROUND_LAUNCH).toBe('1')
+  directory = await mkdtemp(join(tmpdir(), 'quirky-ssh-reader-'))
   fixtures = []
   heldPaths = []
   globalThis.__sshPendingReaders = new Map()
@@ -202,7 +202,7 @@ afterEach(async () => {
     ])
   )
   writeFileSync(
-    process.env.ORCA_SSH_READER_OUTPUT ??
+    process.env.QUIRKY_SSH_READER_OUTPUT ??
       new URL(
         `./${graph}-${report.variant}-${process.versions.electron ? 'electron' : 'node'}-results.json`,
         import.meta.url

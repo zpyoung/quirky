@@ -4,7 +4,7 @@ import { splitWebRuntimeTerminal } from '@/runtime/web-runtime-terminal-actions'
 import type { PtyTransport } from './pty-transport-types'
 import { resolveSplitCwd, type PaneCwdMap } from './resolve-split-cwd'
 import { recordCreatedTerminalPaneSplit } from './terminal-pane-split-completion'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { splitPaneFirstSize, splitPaneInMain } from './terminal-pane-split-in-main'
 
 type SplitArgs = {
@@ -32,7 +32,7 @@ export function splitTerminalPaneWithInheritedCwd(args: SplitArgs): void {
     return
   }
   // Switch point: main writes the split and starts its terminal; main's frame draws the pane.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     const cwd = splitCwd(args, ptyId)
     const asToday = (): void => splitLocally(args, () => cwd)
     if (

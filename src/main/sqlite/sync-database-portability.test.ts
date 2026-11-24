@@ -9,7 +9,7 @@ const directories: string[] = []
 const databases: SyncDatabase[] = []
 
 function fixture(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-sqlite-runtime-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-sqlite-runtime-'))
   directories.push(directory)
   return directory
 }

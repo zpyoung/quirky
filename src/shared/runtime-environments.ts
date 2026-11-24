@@ -7,8 +7,8 @@ import {
 import { classifyRemotePairingHostname } from './remote-pairing-address'
 import { RuntimeEnvironmentReconciliationRecordSchema } from './runtime-environment-reconciliation-record'
 import {
-  OrcadWslDeploymentLinkSchema,
-  type OrcadWslDeploymentLink
+  QuirkydWslDeploymentLinkSchema,
+  type QuirkydWslDeploymentLink
 } from './wsl-host-deployment-link'
 
 export const RuntimeAccessEndpointSchema = z.object({
@@ -39,25 +39,25 @@ export const RuntimeSshTunnelLinkSchema = z.object({
 
 export type RuntimeSshTunnelLink = z.infer<typeof RuntimeSshTunnelLinkSchema>
 
-/** A server Orca deployed and owns over SSH; unlike sshAccess, it grants lifecycle ownership. */
-export const OrcadSshDeploymentLinkSchema = RuntimeSshTunnelLinkSchema.extend({
+/** A server Quirky deployed and owns over SSH; unlike sshAccess, it grants lifecycle ownership. */
+export const QuirkydSshDeploymentLinkSchema = RuntimeSshTunnelLinkSchema.extend({
   // Absent on disk: the sidecar persists SSH links without it, so older builds read them unchanged.
   kind: z.literal('ssh').optional()
 })
-export type OrcadSshDeploymentLink = z.infer<typeof OrcadSshDeploymentLinkSchema>
+export type QuirkydSshDeploymentLink = z.infer<typeof QuirkydSshDeploymentLinkSchema>
 
-/** A server Orca deployed and owns; the WSL kind is persisted only in wsl-host-deployment-store. */
-export const OrcadDeploymentLinkSchema = z.union([
-  OrcadSshDeploymentLinkSchema,
-  OrcadWslDeploymentLinkSchema
+/** A server Quirky deployed and owns; the WSL kind is persisted only in wsl-host-deployment-store. */
+export const QuirkydDeploymentLinkSchema = z.union([
+  QuirkydSshDeploymentLinkSchema,
+  QuirkydWslDeploymentLinkSchema
 ])
-export type OrcadDeploymentLink = z.infer<typeof OrcadDeploymentLinkSchema>
+export type QuirkydDeploymentLink = z.infer<typeof QuirkydDeploymentLinkSchema>
 
-/** The managed deployment Orca owns over SSH; undefined for none or a WSL one. */
-export function getOrcadSshDeployment(environment: {
-  orcadDeployment?: OrcadDeploymentLink | null
-}): OrcadSshDeploymentLink | undefined {
-  const deployment = environment.orcadDeployment
+/** The managed deployment Quirky owns over SSH; undefined for none or a WSL one. */
+export function getQuirkydSshDeployment(environment: {
+  quirkydDeployment?: QuirkydDeploymentLink | null
+}): QuirkydSshDeploymentLink | undefined {
+  const deployment = environment.quirkydDeployment
   return deployment && deployment.kind !== 'wsl' ? deployment : undefined
 }
 
@@ -82,7 +82,7 @@ export const RuntimeSshAccessOperationSchema = RuntimeSshTunnelLinkSchema.omit({
 
 export type RuntimeSshAccessOperation = z.infer<typeof RuntimeSshAccessOperationSchema>
 
-/** The fields shipped builds read and rewrite in orca-environments.json. */
+/** The fields shipped builds read and rewrite in quirky-environments.json. */
 export const PersistedRuntimeEnvironmentSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -102,19 +102,19 @@ export type PersistedRuntimeEnvironment = z.infer<typeof PersistedRuntimeEnviron
 
 /**
  * A persisted environment with its sidecar state overlaid (runtime-environment-sidecar). These
- * fields never enter orca-environments.json: shipped builds strip unknown keys when they rewrite it.
+ * fields never enter quirky-environments.json: shipped builds strip unknown keys when they rewrite it.
  */
 export const KnownRuntimeEnvironmentSchema = PersistedRuntimeEnvironmentSchema.extend({
   sshAccess: RuntimeSshAccessLinkSchema.optional(),
   pendingSshAccessOperation: RuntimeSshAccessOperationSchema.optional(),
-  orcadDeployment: OrcadDeploymentLinkSchema.optional(),
+  quirkydDeployment: QuirkydDeploymentLinkSchema.optional(),
   /** When a migration into this managed server began committing; older snapshots predate it. */
-  orcadMigratedAt: z.string().datetime().optional(),
+  quirkydMigratedAt: z.string().datetime().optional(),
   reconciliation: RuntimeEnvironmentReconciliationRecordSchema.optional()
 })
   .refine(
-    ({ pendingSshAccessOperation, sshAccess, orcadDeployment, connectionDependency }) =>
-      !pendingSshAccessOperation || (!sshAccess && !orcadDeployment && !connectionDependency),
+    ({ pendingSshAccessOperation, sshAccess, quirkydDeployment, connectionDependency }) =>
+      !pendingSshAccessOperation || (!sshAccess && !quirkydDeployment && !connectionDependency),
     {
       message: 'Pending SSH access operations cannot coexist with active SSH access.',
       path: ['pendingSshAccessOperation']
@@ -142,8 +142,8 @@ export const KnownRuntimeEnvironmentSchema = PersistedRuntimeEnvironmentSchema.e
   )
   .refine(
     (environment) => {
-      const deployment = environment.orcadDeployment
-      // Why no WSL dependency value: older builds reject any other value in orca-environments.json;
+      const deployment = environment.quirkydDeployment
+      // Why no WSL dependency value: older builds reject any other value in quirky-environments.json;
       // a WSL link's kind, kept in its own file, is the bridge dependency.
       const dependency = deployment?.kind === 'wsl' ? undefined : 'ssh-tunnel'
       return (
@@ -156,7 +156,7 @@ export const KnownRuntimeEnvironmentSchema = PersistedRuntimeEnvironmentSchema.e
     {
       message:
         'A managed deployment must prefer its own tunnel and exclude independent SSH access.',
-      path: ['orcadDeployment']
+      path: ['quirkydDeployment']
     }
   )
 
@@ -235,20 +235,20 @@ export function isUserManagedRuntimeEnvironment(
   return !isEphemeralVmRuntimeEnvironment(environment)
 }
 
-/** Only the user re-pairs these, with an access link; Orca pairs managed and cloud servers itself. */
+/** Only the user re-pairs these, with an access link; Quirky pairs managed and cloud servers itself. */
 export function isRepairableWithAccessLink(
-  environment: Pick<PublicKnownRuntimeEnvironment, 'source' | 'orcadDeployment'>
+  environment: Pick<PublicKnownRuntimeEnvironment, 'source' | 'quirkydDeployment'>
 ): boolean {
-  return !environment.orcadDeployment && isUserManagedRuntimeEnvironment(environment)
+  return !environment.quirkydDeployment && isUserManagedRuntimeEnvironment(environment)
 }
 
-/** Who pairs a server that refused this desktop: the user with a link, Orca over SSH, or Orca on Connect. */
+/** Who pairs a server that refused this desktop: the user with a link, Quirky over SSH, or Quirky on Connect. */
 export type RuntimePairingRepairRoute = 'access-link' | 'ssh' | 'connect'
 
 export function runtimePairingRepairRoute(
-  environment: Pick<PublicKnownRuntimeEnvironment, 'source' | 'orcadDeployment'>
+  environment: Pick<PublicKnownRuntimeEnvironment, 'source' | 'quirkydDeployment'>
 ): RuntimePairingRepairRoute {
-  if (getOrcadSshDeployment(environment)) {
+  if (getQuirkydSshDeployment(environment)) {
     return 'ssh'
   }
   return isRepairableWithAccessLink(environment) ? 'access-link' : 'connect'
@@ -256,9 +256,9 @@ export function runtimePairingRepairRoute(
 
 /** A WSL distro added as a host; keyed by its deployment record's kind, never by its name. */
 export function isWslHostRuntimeEnvironment<
-  T extends { orcadDeployment?: OrcadDeploymentLink | null }
->(environment: T): environment is T & { orcadDeployment: OrcadWslDeploymentLink } {
-  return environment.orcadDeployment?.kind === 'wsl'
+  T extends { quirkydDeployment?: QuirkydDeploymentLink | null }
+>(environment: T): environment is T & { quirkydDeployment: QuirkydWslDeploymentLink } {
+  return environment.quirkydDeployment?.kind === 'wsl'
 }
 
 /**
@@ -266,7 +266,7 @@ export function isWslHostRuntimeEnvironment<
  * neither a recipe VM nor a WSL host, which each have their own place.
  */
 export function isListedRemoteServer(
-  environment: Pick<PublicKnownRuntimeEnvironment, 'source' | 'orcadDeployment'>
+  environment: Pick<PublicKnownRuntimeEnvironment, 'source' | 'quirkydDeployment'>
 ): boolean {
   return isUserManagedRuntimeEnvironment(environment) && !isWslHostRuntimeEnvironment(environment)
 }
@@ -309,11 +309,11 @@ export function getPreferredPairingOffer(environment: PreferredEndpointSource): 
   }
 }
 
-/** The SSH tunnel a server is reached through; only orcadDeployment also grants lifecycle ownership. */
+/** The SSH tunnel a server is reached through; only quirkydDeployment also grants lifecycle ownership. */
 export function getRuntimeSshAccess(
-  environment: Pick<KnownRuntimeEnvironment, 'orcadDeployment' | 'sshAccess'>
+  environment: Pick<KnownRuntimeEnvironment, 'quirkydDeployment' | 'sshAccess'>
 ): RuntimeSshTunnelLink | undefined {
-  return getOrcadSshDeployment(environment) ?? environment.sshAccess
+  return getQuirkydSshDeployment(environment) ?? environment.sshAccess
 }
 
 export function getPreferredLoopbackRuntimePort(environment: {

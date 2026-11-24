@@ -6,7 +6,7 @@ import {
   makeHookTestRepo,
   TEST_GITIGNORE_PATH,
   TEST_ISSUE_COMMAND_PATH,
-  TEST_REPO_ORCA_YAML_PATH,
+  TEST_REPO_QUIRKY_YAML_PATH,
   TEST_REPO_PATH
 } from './hooks-test-fixtures'
 
@@ -42,16 +42,16 @@ vi.mock('./git/check-ignored-paths', () => ({
 }))
 
 describe('readIssueCommand', () => {
-  it('prefers the local override over the shared orca.yaml command', async () => {
+  it('prefers the local override over the shared quirky.yaml command', async () => {
     const fs = await import('node:fs')
     vi.mocked(fs.existsSync).mockImplementation(
-      (path) => path === TEST_ISSUE_COMMAND_PATH || path === TEST_REPO_ORCA_YAML_PATH
+      (path) => path === TEST_ISSUE_COMMAND_PATH || path === TEST_REPO_QUIRKY_YAML_PATH
     )
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
       if (path === TEST_ISSUE_COMMAND_PATH) {
         return 'local command\n'
       }
-      if (path === TEST_REPO_ORCA_YAML_PATH) {
+      if (path === TEST_REPO_QUIRKY_YAML_PATH) {
         return 'issueCommand: |\n  shared command\n'
       }
       return ''
@@ -67,11 +67,11 @@ describe('readIssueCommand', () => {
     })
   })
 
-  it('falls back to the shared orca.yaml command when no local override exists', async () => {
+  it('falls back to the shared quirky.yaml command when no local override exists', async () => {
     const fs = await import('node:fs')
-    vi.mocked(fs.existsSync).mockImplementation((path) => path === TEST_REPO_ORCA_YAML_PATH)
+    vi.mocked(fs.existsSync).mockImplementation((path) => path === TEST_REPO_QUIRKY_YAML_PATH)
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
-      if (path === TEST_REPO_ORCA_YAML_PATH) {
+      if (path === TEST_REPO_QUIRKY_YAML_PATH) {
         return 'issueCommand: |\n  shared command\n'
       }
       return ''
@@ -93,12 +93,12 @@ describe('writeIssueCommand', () => {
     const { writeIssueCommand } = await import('./issue-command-file')
     const { checkIgnoredPaths } = await import('./git/check-ignored-paths')
     const fs = await import('node:fs')
-    vi.mocked(checkIgnoredPaths).mockResolvedValueOnce(['.orca/issue-command'])
+    vi.mocked(checkIgnoredPaths).mockResolvedValueOnce(['.quirky/issue-command'])
     vi.mocked(fs.writeFileSync).mockClear()
 
     await writeIssueCommand(TEST_REPO_PATH, 'local command', { wslDistro: 'Ubuntu' })
 
-    expect(checkIgnoredPaths).toHaveBeenLastCalledWith(TEST_REPO_PATH, ['.orca/issue-command'], {
+    expect(checkIgnoredPaths).toHaveBeenLastCalledWith(TEST_REPO_PATH, ['.quirky/issue-command'], {
       wslDistro: 'Ubuntu'
     })
     expect(fs.writeFileSync).toHaveBeenCalledExactlyOnceWith(
@@ -108,10 +108,10 @@ describe('writeIssueCommand', () => {
     )
   })
 
-  it('writes only the local override file and keeps .orca ignored locally', async () => {
+  it('writes only the local override file and keeps .quirky ignored locally', async () => {
     const fs = await import('node:fs')
     vi.mocked(fs.existsSync).mockImplementation(
-      (path) => path === TEST_GITIGNORE_PATH || path === join(TEST_REPO_PATH, '.orca')
+      (path) => path === TEST_GITIGNORE_PATH || path === join(TEST_REPO_PATH, '.quirky')
     )
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
       if (path === TEST_GITIGNORE_PATH) {
@@ -125,7 +125,7 @@ describe('writeIssueCommand', () => {
 
     expect(vi.mocked(fs.writeFileSync)).toHaveBeenCalledWith(
       TEST_GITIGNORE_PATH,
-      'node_modules/\n.orca\n',
+      'node_modules/\n.quirky\n',
       'utf-8'
     )
     expect(vi.mocked(fs.writeFileSync)).toHaveBeenCalledWith(
@@ -151,7 +151,7 @@ describe('createIssueCommandRunnerScript', () => {
 
   it('writes a POSIX issue-command runner when a shebang declares bash and setup resolves to Git Bash', async () => {
     gitExecFileSyncMock.mockReset()
-    gitExecFileSyncMock.mockReturnValue('C:\\repo\\.git\\orca\\issue-command-runner.sh\n')
+    gitExecFileSyncMock.mockReturnValue('C:\\repo\\.git\\quirky\\issue-command-runner.sh\n')
     const fs = await import('node:fs')
     const writeFileSyncMock = vi.mocked(fs.writeFileSync)
     writeFileSyncMock.mockClear()
@@ -169,11 +169,11 @@ describe('createIssueCommandRunnerScript', () => {
       )
 
       expect(gitExecFileSyncMock).toHaveBeenCalledWith(
-        ['rev-parse', '--git-path', 'orca/issue-command-runner.sh'],
+        ['rev-parse', '--git-path', 'quirky/issue-command-runner.sh'],
         { cwd: 'C:\\repo-worktree' }
       )
       expect(writeFileSyncMock).toHaveBeenCalledWith(
-        'C:\\repo\\.git\\orca\\issue-command-runner.sh',
+        'C:\\repo\\.git\\quirky\\issue-command-runner.sh',
         '#!/usr/bin/env bash\nset -e\ngh issue view 42\n',
         'utf-8'
       )
@@ -185,7 +185,7 @@ describe('createIssueCommandRunnerScript', () => {
 
   it('keeps a plain issue command on the cmd runner under a Git Bash terminal', async () => {
     gitExecFileSyncMock.mockReset()
-    gitExecFileSyncMock.mockReturnValue('C:\\repo\\.git\\orca\\issue-command-runner.cmd\n')
+    gitExecFileSyncMock.mockReturnValue('C:\\repo\\.git\\quirky\\issue-command-runner.cmd\n')
     const originalPlatform = process.platform
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
 
@@ -200,7 +200,7 @@ describe('createIssueCommandRunnerScript', () => {
       )
 
       expect(gitExecFileSyncMock).toHaveBeenCalledWith(
-        ['rev-parse', '--git-path', 'orca/issue-command-runner.cmd'],
+        ['rev-parse', '--git-path', 'quirky/issue-command-runner.cmd'],
         { cwd: 'C:\\repo-worktree' }
       )
       // Why: the runner file is batch (.cmd) while the pane that launches it is still Git Bash.
@@ -212,7 +212,7 @@ describe('createIssueCommandRunnerScript', () => {
 
   it('keeps the cmd issue-command runner when no setup shell is resolved', async () => {
     gitExecFileSyncMock.mockReset()
-    gitExecFileSyncMock.mockReturnValue('C:\\repo\\.git\\orca\\issue-command-runner.cmd\n')
+    gitExecFileSyncMock.mockReturnValue('C:\\repo\\.git\\quirky\\issue-command-runner.cmd\n')
     const originalPlatform = process.platform
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
 
@@ -225,7 +225,7 @@ describe('createIssueCommandRunnerScript', () => {
       )
 
       expect(gitExecFileSyncMock).toHaveBeenCalledWith(
-        ['rev-parse', '--git-path', 'orca/issue-command-runner.cmd'],
+        ['rev-parse', '--git-path', 'quirky/issue-command-runner.cmd'],
         { cwd: 'C:\\repo-worktree' }
       )
       expect(result.shell).toEqual({ family: 'cmd' })

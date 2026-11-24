@@ -1,7 +1,7 @@
 /**
  * Shared oracle for "a host-created terminal stays the live terminal".
  *
- * Every retention spec (paired desktop host, windowless `orca serve`, local
+ * Every retention spec (paired desktop host, windowless `quirky serve`, local
  * unpaired CLI) imports this file unchanged, so the topologies are judged by
  * identical code and none can be claimed to prove another by accident.
  *
@@ -59,7 +59,7 @@ function isDaemonPtyIdForm(ptyId: string, worktreeId: string): boolean {
 }
 
 export function createRetentionFixtureDirectory(): string {
-  return mkdtempSync(path.join(os.tmpdir(), 'orca-host-terminal-retention-'))
+  return mkdtempSync(path.join(os.tmpdir(), 'quirky-host-terminal-retention-'))
 }
 
 /** Long-lived stand-in for the agent a CLI dispatch spawns: it never exits, so
@@ -118,7 +118,7 @@ function readySignatures(sinkPath: string): string[] {
 }
 
 /**
- * `orca terminal create`: the host-initiated background create. Sibling paths
+ * `quirky terminal create`: the host-initiated background create. Sibling paths
  * are deliberately NOT used — `session.tabs.createTerminal` routes through
  * createRuntimeOwnedMobileSessionTerminal, which persists its binding on every
  * revision and would pass without exercising this seam at all.

@@ -35,7 +35,7 @@ const verifiedPairing = { ...pairing, endpoint: 'ws://127.0.0.1:41000/runtime' }
 describe('independent paired runtime SSH access persistence', () => {
   let userDataPath: string
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-ssh-access-store-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-ssh-access-store-'))
   })
   afterEach(() => {
     rmSync(userDataPath, { recursive: true, force: true })
@@ -121,7 +121,7 @@ describe('independent paired runtime SSH access persistence', () => {
     expect(link(original).lastUsedAt).toBe(200)
   })
 
-  it('keeps orca-environments.json in the shape shipped builds read while SSH access is linked', () => {
+  it('keeps quirky-environments.json in the shape shipped builds read while SSH access is linked', () => {
     const original = seed()
     const shippedEnvelope = z
       .object({

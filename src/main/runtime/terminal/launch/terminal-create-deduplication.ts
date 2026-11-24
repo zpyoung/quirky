@@ -1,9 +1,9 @@
-import { OrcaRuntimeWithCreateAgentSession } from '../../orca-runtime-create-agent-session'
+import { QuirkyRuntimeWithCreateAgentSession } from '../../quirky-runtime-create-agent-session'
 import type { RuntimeTerminalCreate } from '../../../../shared/runtime-types'
-import { WORKTREE_CREATE_RESULT_TTL_MS } from '../../orca-runtime-core'
+import { WORKTREE_CREATE_RESULT_TTL_MS } from '../../quirky-runtime-core'
 import { deriveRemoteRuntimeTerminalCreateHandle } from '../../remote-runtime-terminal-create-identity'
 import { withTimeoutResult } from '../../runtime-async-boundaries'
-import { PTY_CONTROLLER_LIST_TIMEOUT_MS } from '../../orca-runtime-postlude'
+import { PTY_CONTROLLER_LIST_TIMEOUT_MS } from '../../quirky-runtime-postlude'
 import { inferWorktreeIdFromPtyId } from '../../runtime-worktree-path-identity'
 import { getRegisteredSshState } from '../../../ssh/targets/ssh-target-registry'
 import {
@@ -16,7 +16,7 @@ import { resolveWorktreeLaunchHost } from '../../worktree-launch-host-repo'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { AgentLaunchOverrides } from '../../../../shared/fork-automation-launch-settings/agent-launch-overrides'
 
-export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRuntimeWithCreateAgentSession {
+export abstract class QuirkyRuntimeWithTerminalCreateDeduplication extends QuirkyRuntimeWithCreateAgentSession {
   async dedupeTerminalCreate(
     clientIdentity: string,
     worktreeSelector: string | undefined,

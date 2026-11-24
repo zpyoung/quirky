@@ -2,7 +2,7 @@ import type { WorktreeSlice } from '../../worktree-helpers'
 import { tryRuntimeTargetForWorktreeOwner } from '../listing/worktree-owner-target'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { parseWorkspaceKey } from '../../../../../../shared/workspace-scope'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../../shared/sidebar-inputs-switch'
 import { applyWorktreeUpdates, getRepoIdFromWorktreeId } from '../../worktree-helpers'
 import {
   applyDetectedWorktreeUpdates,
@@ -19,7 +19,7 @@ export function createBumpWorktreeActivity(
 ): WorktreeSlice['bumpWorktreeActivity'] {
   return (worktreeId) => {
     // Switch point: the owning host writes Recent stamps; terminal start and exit are not events.
-    if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+    if (QUIRKY_SIDEBAR_INPUTS_IS_MAIN) {
       return
     }
     const now = Date.now()

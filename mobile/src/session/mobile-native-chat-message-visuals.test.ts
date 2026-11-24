@@ -103,9 +103,9 @@ describe('MobileNativeChatMessage visuals', () => {
   }
 
   it("renders a finished assistant reply's directives through the transcript renderer", () => {
-    const props = markdownProps(message('a1', 'assistant', '::orca-visual{file="a.html"}'))
+    const props = markdownProps(message('a1', 'assistant', '::quirky-visual{file="a.html"}'))
     expect(props.renderVisual).toBe(renderVisual)
-    expect(props.content).toBe('::orca-visual{file="a.html"}')
+    expect(props.content).toBe('::quirky-visual{file="a.html"}')
   })
 
   it('hides a directive still being typed while its turn works, and mounts finished lines', () => {
@@ -113,16 +113,16 @@ describe('MobileNativeChatMessage visuals', () => {
       message(
         'a1',
         'assistant',
-        '::orca-visual{file="done.html"}\nChart below.\n::orca-visual{file="usage"}'
+        '::quirky-visual{file="done.html"}\nChart below.\n::quirky-visual{file="usage"}'
       ),
       { activeTurnIsWorking: true }
     )
     expect(props.renderVisual).toBe(renderVisual)
-    expect(props.content).toBe('::orca-visual{file="done.html"}\nChart below.\n')
+    expect(props.content).toBe('::quirky-visual{file="done.html"}\nChart below.\n')
   })
 
   it('shows an earlier finished row of a working turn in full', () => {
-    const text = 'Pick one:\n::orca-visual{file="options.html"}'
+    const text = 'Pick one:\n::quirky-visual{file="options.html"}'
     expect(
       markdownProps(message('a0', 'assistant', text), {
         activeTurnIsWorking: true,
@@ -132,7 +132,7 @@ describe('MobileNativeChatMessage visuals', () => {
   })
 
   it('holds back only the last block of the row: text followed by a tool call is finished', () => {
-    const text = 'Options:\n::orca-visual{file="options'
+    const text = 'Options:\n::quirky-visual{file="options'
     const row: NativeChatMessage = {
       id: 'a1',
       role: 'assistant',
@@ -147,17 +147,17 @@ describe('MobileNativeChatMessage visuals', () => {
   })
 
   it('shows the whole reply once its turn settles', () => {
-    const text = 'Chart below.\n::orca-visual{file="usage'
+    const text = 'Chart below.\n::quirky-visual{file="usage'
     expect(markdownProps(message('a1', 'assistant', text)).content).toBe(text)
   })
 
   it('leaves directives as text where the chat has no visual source', () => {
-    const props = markdownProps(message('a1', 'assistant', '::orca-visual{file="a.html"}'), {
+    const props = markdownProps(message('a1', 'assistant', '::quirky-visual{file="a.html"}'), {
       visuals: null,
       activeTurnIsWorking: true
     })
     expect(props.renderVisual).toBeUndefined()
-    expect(props.content).toBe('::orca-visual{file="a.html"}')
+    expect(props.content).toBe('::quirky-visual{file="a.html"}')
   })
 
   it('never renders visuals in system rows', () => {
@@ -167,7 +167,7 @@ describe('MobileNativeChatMessage visuals', () => {
           MobileNativeChatVisualContext.Provider,
           { value: renderVisual },
           createElement(MobileNativeChatMessage, {
-            message: message('s1', 'system', '::orca-visual{file="a.html"}')
+            message: message('s1', 'system', '::quirky-visual{file="a.html"}')
           })
         )
       )
@@ -175,6 +175,6 @@ describe('MobileNativeChatMessage visuals', () => {
     expect(renderer!.root.findAll((node) => String(node.type) === 'MobileMarkdown')).toEqual([])
     expect(
       renderer!.root.findAll((node) => String(node.type) === 'Text').map((node) => node.children)
-    ).toContainEqual(['::orca-visual{file="a.html"}'])
+    ).toContainEqual(['::quirky-visual{file="a.html"}'])
   })
 })

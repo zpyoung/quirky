@@ -449,9 +449,9 @@ describe('visible hosted review refresh targets', () => {
       ...repo,
       executionHostId: 'runtime:first',
       gitRemoteIdentity: {
-        canonicalKey: 'github.com/acme/orca',
+        canonicalKey: 'github.com/acme/quirky',
         remoteName: 'origin',
-        remoteUrl: 'https://github.com/acme/orca.git'
+        remoteUrl: 'https://github.com/acme/quirky.git'
       }
     }
     const second: Repo = { ...first, executionHostId: 'runtime:second' }

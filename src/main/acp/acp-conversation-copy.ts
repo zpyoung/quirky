@@ -64,7 +64,7 @@ export async function copyAcpConversation(
         env: launch.env,
         envToDelete: launch.envToDelete
       },
-      { clientInfo: { name: 'orca', version: '1' } }
+      { clientInfo: { name: 'quirky', version: '1' } }
     )
     options.track(connection)
     const sessionId = await waitForPromiseWithSignal(

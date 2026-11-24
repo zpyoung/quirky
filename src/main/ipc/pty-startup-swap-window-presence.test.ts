@@ -25,7 +25,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -188,7 +188,7 @@ describe('registerPtyHandlers daemon-swap-window presence', () => {
   })
 
   it('keeps the in-process provider authoritative when no startup barrier is configured', async () => {
-    // Headless/orcad installs the daemon before registerPtyHandlers and passes
+    // Headless/quirkyd installs the daemon before registerPtyHandlers and passes
     // no barrier; the installed provider is then the sole owner (#12393) and
     // its false stays an observed absence.
     let controller: { hasPty: (ptyId: string) => boolean | null } | undefined

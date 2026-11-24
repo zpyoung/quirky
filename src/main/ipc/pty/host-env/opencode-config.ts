@@ -58,18 +58,18 @@ export function applyOpenCodeStatusPluginEnv(
     env,
     {
       primary: 'OPENCODE_CONFIG_DIR',
-      overlay: 'ORCA_OPENCODE_CONFIG_DIR',
-      source: 'ORCA_OPENCODE_SOURCE_CONFIG_DIR',
+      overlay: 'QUIRKY_OPENCODE_CONFIG_DIR',
+      source: 'QUIRKY_OPENCODE_SOURCE_CONFIG_DIR',
       preserveExplicitPrimary: true
     },
     config.inheritedEnv
   )
-  delete env.ORCA_OPENCODE_AGENT
+  delete env.QUIRKY_OPENCODE_AGENT
   if (!agent) {
     return null
   }
   const service = agent === 'opencode2' ? openCode2HookService : openCodeHookService
-  env.ORCA_OPENCODE_AGENT = agent
+  env.QUIRKY_OPENCODE_AGENT = agent
   // WSL owns its config writes; only the guest overlay may enter a WSL pane.
   if (!options.isWsl) {
     const executionEnv = { ...process.env, ...env }
@@ -82,11 +82,11 @@ export function applyOpenCodeStatusPluginEnv(
   }
   if (env.OPENCODE_CONFIG_DIR) {
     // Shell startup can re-export the default; preserve this pane's overlay and original source.
-    env.ORCA_OPENCODE_CONFIG_DIR = env.OPENCODE_CONFIG_DIR
+    env.QUIRKY_OPENCODE_CONFIG_DIR = env.OPENCODE_CONFIG_DIR
     if (config.directory) {
-      env.ORCA_OPENCODE_SOURCE_CONFIG_DIR = config.directory
+      env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR = config.directory
     } else {
-      delete env.ORCA_OPENCODE_SOURCE_CONFIG_DIR
+      delete env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR
     }
   }
   return agent

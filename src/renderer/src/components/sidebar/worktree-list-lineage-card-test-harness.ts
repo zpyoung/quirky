@@ -69,7 +69,7 @@ export function createReactVirtualModuleMock(): Record<string, unknown> {
 
 export function createVirtualizedScrollAnchorModuleMock(): Record<string, unknown> {
   return {
-    VIRTUALIZED_SCROLL_ANCHOR_RECORD_EVENT: 'orca:test-record-scroll-anchor',
+    VIRTUALIZED_SCROLL_ANCHOR_RECORD_EVENT: 'quirky:test-record-scroll-anchor',
     useVirtualizedScrollAnchor: vi.fn()
   }
 }
@@ -214,7 +214,7 @@ export function createWorktreeContextMenuModuleMock(): Record<string, unknown> {
   return {
     default: ({ children }: { children: React.ReactNode }) =>
       React.createElement(React.Fragment, null, children),
-    WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-orca-context-menu-scope'
+    WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-quirky-context-menu-scope'
   }
 }
 

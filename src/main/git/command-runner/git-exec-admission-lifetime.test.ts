@@ -25,7 +25,7 @@ vi.mock('node:child_process', async (importOriginal) => ({
 vi.mock('./spawned-command-tree-kill', () => ({
   killSpawnedCommandTree: killSpawnedCommandTreeMock
 }))
-vi.mock('@orca/process-host/process-tree-termination', () => ({
+vi.mock('@quirky/process-host/process-tree-termination', () => ({
   signalProcessTree: signalProcessTreeMock,
   forceTerminateProcessTree: forceTerminateProcessTreeMock
 }))

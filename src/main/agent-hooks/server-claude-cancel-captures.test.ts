@@ -5,7 +5,7 @@
 // kills only the foreground tool, and that every later Stop inventory matched the process table;
 // the rules below are written against those payloads, not a remembered screen.
 //
-// The driver cancelled with Esc. Orca treats a bare Esc on a Claude pane as navigation (it also
+// The driver cancelled with Esc. Quirky treats a bare Esc on a Claude pane as navigation (it also
 // closes the /btw composer) and infers a cancel only from Ctrl+C, so each `cancel` record is
 // replayed as the Ctrl+C inference the renderer would have sent.
 beforeEach(() => {

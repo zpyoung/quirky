@@ -37,7 +37,7 @@ let worktreePath = ''
 
 /** realpath: the witness canonicalizes, and macOS `tmpdir()` is a symlink (`/var` -> `/private/var`). */
 beforeEach(() => {
-  scratchDir = realpathSync(mkdtempSync(join(tmpdir(), 'orca-created-witness-')))
+  scratchDir = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-created-witness-')))
   repoPath = join(scratchDir, 'repo')
   worktreePath = join(scratchDir, 'workspaces', 'feature')
   mkdirSync(repoPath, { recursive: true })

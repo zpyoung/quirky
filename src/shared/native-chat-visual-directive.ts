@@ -1,7 +1,7 @@
 // The one grammar for a native-chat visual: an assistant reply line naming an HTML file in that
 // chat's scratch folder. Desktop/web (a markdown syntax extension) and mobile both parse with it.
 //
-//   ::orca-visual{file="usage-chart-3f2a.html" title="Usage by day"}
+//   ::quirky-visual{file="usage-chart-3f2a.html" title="Usage by day"}
 //
 // - The line may carry up to 3 leading spaces and any trailing spaces/tabs; a trailing CR is
 //   ignored. Nothing else may share the line.
@@ -11,7 +11,7 @@
 //   ignored, so a newer agent's extra attribute still renders on this viewer.
 // - The name is case-sensitive.
 
-export const NATIVE_CHAT_VISUAL_DIRECTIVE_MARKER = '::orca-visual{'
+export const NATIVE_CHAT_VISUAL_DIRECTIVE_MARKER = '::quirky-visual{'
 
 /** Longest line the grammar considers. Bounds parsing and the streaming-tail check. */
 export const NATIVE_CHAT_VISUAL_DIRECTIVE_MAX_LINE_LENGTH = 512

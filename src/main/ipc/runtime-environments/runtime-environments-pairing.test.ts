@@ -109,7 +109,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
   }
 
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-ipc-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-ipc-'))
     activeRuntimeEnvironmentId = null
     store = {
       getSettings: () => ({ activeRuntimeEnvironmentId }),
@@ -144,7 +144,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
   })
 
   it('replaces stale registrations and keeps one binary listener when registered again', async () => {
-    const channels = new Set(['runtimeEnvironments:list', 'runtimeEnvironments:restartOrcad'])
+    const channels = new Set(['runtimeEnvironments:list', 'runtimeEnvironments:restartQuirkyd'])
     const listeners = new EventEmitter()
     listeners.on('runtimeEnvironments:subscriptionBinary', vi.fn())
     handleMock.mockImplementation((channel: string) => {
@@ -169,7 +169,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
       registerRuntimeEnvironmentHandlers(store as never)
 
       expect(listeners.listenerCount('runtimeEnvironments:subscriptionBinary')).toBe(1)
-      expect(channels.has('runtimeEnvironments:restartOrcad')).toBe(true)
+      expect(channels.has('runtimeEnvironments:restartQuirkyd')).toBe(true)
       const list = handler<undefined, unknown[]>('runtimeEnvironments:list')
       expect(await list(null, undefined)).toEqual([])
     } finally {
@@ -614,7 +614,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
     // on the environment record (ephemeral-vm.ts), so the public list reads it
     // straight from the record rather than cross-referencing the VM runtime store.
     const added = environmentStore.addEnvironmentFromPairingCode(userDataPath, {
-      name: 'orca VM abc12345',
+      name: 'quirky VM abc12345',
       pairingCode: pairingCode(),
       source: 'ephemeral-vm'
     })
@@ -624,7 +624,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
     )
 
     expect(await list(null, undefined)).toMatchObject([
-      { id: added.id, name: 'orca VM abc12345', source: 'ephemeral-vm' }
+      { id: added.id, name: 'quirky VM abc12345', source: 'ephemeral-vm' }
     ])
   })
 })

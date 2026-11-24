@@ -7,10 +7,10 @@ import { parseExecutionHostId } from '../../../shared/execution-host'
 import { addWorkspaceSessionWorktreeOwners } from '../restoring-sessions/session-worktree-ownership'
 import { splitWorktreeId } from '../../../shared/worktree/id'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
-import { SESSION_FIELDS_PRUNED_BY_OWNER_KEY } from '../../orca-profiles/profile-project-session-field-disposition'
-import { ownerKeyWorktreeIds } from '../../orca-profiles/profile-project-worktree-identity'
+import { SESSION_FIELDS_PRUNED_BY_OWNER_KEY } from '../../quirky-profiles/profile-project-session-field-disposition'
+import { ownerKeyWorktreeIds } from '../../quirky-profiles/profile-project-worktree-identity'
 
-/** A `runtime:*` host addresses a paired Orca desktop's rows, whose catalog lives on that host. */
+/** A `runtime:*` host addresses a paired Quirky desktop's rows, whose catalog lives on that host. */
 const isPairedHost = (hostId: string | null | undefined): boolean =>
   parseExecutionHostId(hostId)?.kind === 'runtime'
 
@@ -57,7 +57,7 @@ export function collectDeregisteredRepoIds(state: PersistedState): Set<string> {
     }
   }
   // A staged catalog owns recovery rows before its repositories become registered.
-  for (const staged of state.orcadMigrationStagedCatalogs ?? []) {
+  for (const staged of state.quirkydMigrationStagedCatalogs ?? []) {
     for (const repo of staged.manifest.payload.repositories) {
       liveRepoIds.add(repo.id)
     }

@@ -30,16 +30,16 @@ function cloneProcessEnv(): Record<string, string> {
 }
 
 // Why: with system-default real-home routing, the headless Codex commit run
-// must use the user's own ~/.codex. If Orca itself was launched from a nested
-// Orca terminal it can inherit an Orca-owned CODEX_HOME override; strip only
-// that (CODEX_HOME matching the private ORCA_CODEX_HOME marker), preserving a
+// must use the user's own ~/.codex. If Quirky itself was launched from a nested
+// Quirky terminal it can inherit an Quirky-owned CODEX_HOME override; strip only
+// that (CODEX_HOME matching the private QUIRKY_CODEX_HOME marker), preserving a
 // user-set CODEX_HOME.
-function withoutOrcaCodexHomeOverride(base: Record<string, string>): Record<string, string> {
+function withoutQuirkyCodexHomeOverride(base: Record<string, string>): Record<string, string> {
   const env = { ...base }
-  if (env.ORCA_CODEX_HOME && env.CODEX_HOME === env.ORCA_CODEX_HOME) {
+  if (env.QUIRKY_CODEX_HOME && env.CODEX_HOME === env.QUIRKY_CODEX_HOME) {
     delete env.CODEX_HOME
   }
-  delete env.ORCA_CODEX_HOME
+  delete env.QUIRKY_CODEX_HOME
   return env
 }
 
@@ -48,7 +48,7 @@ function readInheritedOrShellEnvVar(
   sourceName: string | undefined,
   base: Record<string, string> | undefined
 ): string | undefined {
-  // Why: the login-shell base is what chats use, so it beats Orca's own inherited value.
+  // Why: the login-shell base is what chats use, so it beats Quirky's own inherited value.
   return (
     (sourceName ? process.env[sourceName] : undefined) ??
     base?.[name] ??
@@ -72,17 +72,17 @@ function prepareShellConfigDirEnv(
   if (!configVar) {
     return null
   }
-  // Why: each kind owns a distinct ORCA_*_SOURCE_* shadow so a headless commit
+  // Why: each kind owns a distinct QUIRKY_*_SOURCE_* shadow so a headless commit
   // run from inside a legacy OMP overlay restores the OMP source dir, never
   // the Pi one (and vice versa). PI_CODING_AGENT_DIR is the binary-facing var
   // both kinds consume — see src/main/pi/titlebar-extension-service.ts.
   const sourceVar =
     agentId === 'opencode' || agentId === 'opencode2'
-      ? 'ORCA_OPENCODE_SOURCE_CONFIG_DIR'
+      ? 'QUIRKY_OPENCODE_SOURCE_CONFIG_DIR'
       : agentId === 'pi'
-        ? 'ORCA_PI_SOURCE_AGENT_DIR'
+        ? 'QUIRKY_PI_SOURCE_AGENT_DIR'
         : agentId === 'omp'
-          ? 'ORCA_OMP_SOURCE_AGENT_DIR'
+          ? 'QUIRKY_OMP_SOURCE_AGENT_DIR'
           : undefined
 
   const value = readInheritedOrShellEnvVar(configVar, sourceVar, base)
@@ -90,9 +90,9 @@ function prepareShellConfigDirEnv(
     return base ? { ok: true, env: base } : { ok: true }
   }
 
-  // Why: GUI-launched Orca may not inherit shell startup exports, but these
-  // vars point the headless CLI at the user's auth/config root. Nested Orca
-  // launches inherit PTY overlays, so prefer ORCA_*_SOURCE_* when present.
+  // Why: GUI-launched Quirky may not inherit shell startup exports, but these
+  // vars point the headless CLI at the user's auth/config root. Nested Quirky
+  // launches inherit PTY overlays, so prefer QUIRKY_*_SOURCE_* when present.
   return { ok: true, env: { ...(base ?? cloneProcessEnv()), [configVar]: value } }
 }
 
@@ -115,8 +115,8 @@ export async function prepareLocalCommitMessageAgentEnv(
   resolvers: CommitMessageAgentEnvironmentResolvers | undefined,
   target?: CommitMessageAgentRuntimeTarget
 ): Promise<{ ok: true; env?: NodeJS.ProcessEnv } | { ok: false; error: string }> {
-  // Why: a Dock-launched Orca lacks the user's shell exports (proxy URLs, tokens); WSL
-  // resolves env in the guest, so it keeps Orca's own env.
+  // Why: a Dock-launched Quirky lacks the user's shell exports (proxy URLs, tokens); WSL
+  // resolves env in the guest, so it keeps Quirky's own env.
   const hostBase = target?.runtime === 'wsl' ? undefined : await resolveHostBaseEnv(resolvers)
   // Why: a non-null result short-circuits the resolvers below, so any agent added
   // to prepareShellConfigDirEnv must not also need a Codex/Claude-style resolver.
@@ -136,13 +136,13 @@ export async function prepareLocalCommitMessageAgentEnv(
       const wslCodexHome = codexHomePath ? parseWslUncPath(codexHomePath) : null
       if (target?.runtime === 'wsl') {
         const codexHomeForTarget = wslCodexHome?.linuxPath ?? null
-        // Why: the fallback must still strip Orca-owned overrides, or a
+        // Why: the fallback must still strip Quirky-owned overrides, or a
         // system-default WSL run inherits the managed CODEX_HOME.
         return {
           ok: true,
           env: codexHomeForTarget
-            ? { ...withoutOrcaCodexHomeOverride(base), CODEX_HOME: codexHomeForTarget }
-            : withoutOrcaCodexHomeOverride(base)
+            ? { ...withoutQuirkyCodexHomeOverride(base), CODEX_HOME: codexHomeForTarget }
+            : withoutQuirkyCodexHomeOverride(base)
         }
       }
       if (codexHomePath && wslCodexHome) {
@@ -154,7 +154,7 @@ export async function prepareLocalCommitMessageAgentEnv(
         ok: true,
         env: codexHomePath
           ? { ...base, CODEX_HOME: codexHomePath }
-          : withoutOrcaCodexHomeOverride(base)
+          : withoutQuirkyCodexHomeOverride(base)
       }
     }
 

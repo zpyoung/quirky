@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { isTuiAgent } from '../../../../../../shared/tui-agent-config'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { prepareFederationAttachmentWorkerStart } from './worker-start-validation'
@@ -6,7 +6,7 @@ import { prepareFederationAttachmentWorkerStart } from './worker-start-validatio
 type WorkerAgentTarget = { repo?: string; worktree?: string }
 
 export async function resolveWorkerConfiguredAgentParams<T extends { agent?: string }>(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   params: T,
   resolveTarget: () => Promise<WorkerAgentTarget>
 ): Promise<T> {

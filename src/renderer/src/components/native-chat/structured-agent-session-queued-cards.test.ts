@@ -292,7 +292,7 @@ describe("another agent's card", () => {
       kind: 'agent' as const,
       senders: [
         {
-          party: { address: 'term_a', terminalHandle: 'term_a', orcaSessionId: null },
+          party: { address: 'term_a', terminalHandle: 'term_a', quirkySessionId: null },
           name: 'Coder'
         }
       ],

@@ -31,30 +31,30 @@ function placement(
 
 describe('skillUpdateFailedNames', () => {
   it('treats a convergent copy that is now current as landed', () => {
-    expect(skillUpdateFailedNames(['orca-cli'], [placement('orca-cli', 'current')])).toEqual([])
+    expect(skillUpdateFailedNames(['quirky-cli'], [placement('quirky-cli', 'current')])).toEqual([])
   })
 
   it('reports a copy the run left outdated', () => {
-    expect(skillUpdateFailedNames(['orca-cli'], [placement('orca-cli', 'outdated')])).toEqual([
-      'orca-cli'
+    expect(skillUpdateFailedNames(['quirky-cli'], [placement('quirky-cli', 'outdated')])).toEqual([
+      'quirky-cli'
     ])
   })
 
   it('reports an unreadable copy', () => {
-    expect(skillUpdateFailedNames(['orca-cli'], [placement('orca-cli', 'inaccessible')])).toEqual([
-      'orca-cli'
-    ])
+    expect(
+      skillUpdateFailedNames(['quirky-cli'], [placement('quirky-cli', 'inaccessible')])
+    ).toEqual(['quirky-cli'])
   })
 
   it('reports a skill the run removed outright', () => {
-    expect(skillUpdateFailedNames(['orca-cli'], [])).toEqual(['orca-cli'])
+    expect(skillUpdateFailedNames(['quirky-cli'], [])).toEqual(['quirky-cli'])
   })
 
   it('ignores placements the update command never writes to', () => {
     expect(
       skillUpdateFailedNames(
-        ['orca-cli'],
-        [placement('orca-cli', 'current'), placement('orca-cli', 'outdated', 'plugin-cache')]
+        ['quirky-cli'],
+        [placement('quirky-cli', 'current'), placement('quirky-cli', 'outdated', 'plugin-cache')]
       )
     ).toEqual([])
   })
@@ -62,26 +62,26 @@ describe('skillUpdateFailedNames', () => {
   it('fails the name when the run leaves a broken link behind', () => {
     expect(
       skillUpdateFailedNames(
-        ['orca-cli'],
-        [placement('orca-cli', 'current'), placement('orca-cli', 'inaccessible', 'broken-link')]
+        ['quirky-cli'],
+        [placement('quirky-cli', 'current'), placement('quirky-cli', 'inaccessible', 'broken-link')]
       )
-    ).toEqual(['orca-cli'])
+    ).toEqual(['quirky-cli'])
   })
 
   it('fails the name when any convergent alias was left behind', () => {
     expect(
       skillUpdateFailedNames(
-        ['orca-cli'],
-        [placement('orca-cli', 'current'), placement('orca-cli', 'outdated', 'provider-alias')]
+        ['quirky-cli'],
+        [placement('quirky-cli', 'current'), placement('quirky-cli', 'outdated', 'provider-alias')]
       )
-    ).toEqual(['orca-cli'])
+    ).toEqual(['quirky-cli'])
   })
 
   it('judges each requested name independently', () => {
     expect(
       skillUpdateFailedNames(
-        ['orca-cli', 'orchestration'],
-        [placement('orca-cli', 'current'), placement('orchestration', 'outdated')]
+        ['quirky-cli', 'orchestration'],
+        [placement('quirky-cli', 'current'), placement('orchestration', 'outdated')]
       )
     ).toEqual(['orchestration'])
   })

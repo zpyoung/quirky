@@ -5,7 +5,7 @@
  */
 
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 import {
   buildSshConfigBody,
@@ -19,7 +19,7 @@ import {
   removeSshTargetsByPrefix,
   returnToAppShell,
   seedIsolatedSshConfig,
-  seedOrcaSshTargetMatchingAlias,
+  seedQuirkySshTargetMatchingAlias,
   type SeededSshConfigHost
 } from './helpers/ssh-config-host-picker'
 
@@ -64,9 +64,9 @@ async function importPairThenDeleteAlias(
 ): Promise<{ alpha: SeededSshConfigHost; bravo: SeededSshConfigHost }> {
   const hosts = await seedPairConfig(electronApp, prefix)
   const picker = await openSshConfigHostPicker(page)
-  await expect(picker.getByRole('button', { name: 'Add all 2 to Orca' })).toBeEnabled()
-  await picker.getByRole('button', { name: 'Add all 2 to Orca' }).click()
-  await expect(page.getByText('Added 2 hosts to Orca.')).toBeVisible({ timeout: 15_000 })
+  await expect(picker.getByRole('button', { name: 'Add all 2 to Quirky' })).toBeEnabled()
+  await picker.getByRole('button', { name: 'Add all 2 to Quirky' }).click()
+  await expect(page.getByText('Added 2 hosts to Quirky.')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByRole('dialog', { name: 'Choose from ~/.ssh/config' })).toBeHidden({
     timeout: 10_000
   })
@@ -78,77 +78,77 @@ async function importPairThenDeleteAlias(
 }
 
 test.describe('SSH config host import (bulk + settings re-adopt)', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
   })
 
-  test.afterEach(async ({ orcaPage }) => {
-    await removeSshTargetsByPrefix(orcaPage, HOST_PREFIX).catch(() => undefined)
+  test.afterEach(async ({ quirkyPage }) => {
+    await removeSshTargetsByPrefix(quirkyPage, HOST_PREFIX).catch(() => undefined)
   })
 
   // ── P5 ─────────────────────────────────────────────────────────────
-  test('P5: already-in-Orca badge, disabled row, and Add all counts only new hosts', async ({
+  test('P5: already-in-Quirky badge, disabled row, and Add all counts only new hosts', async ({
     electronApp,
-    orcaPage
+    quirkyPage
   }) => {
     const hosts = await seedPairConfig(electronApp, HOST_PREFIX)
-    await seedOrcaSshTargetMatchingAlias(orcaPage, {
+    await seedQuirkySshTargetMatchingAlias(quirkyPage, {
       alias: hosts.alpha.alias,
       hostname: hosts.alpha.hostname,
       username: hosts.alpha.user,
       port: hosts.alpha.port
     })
 
-    const picker = await openSshConfigHostPicker(orcaPage)
+    const picker = await openSshConfigHostPicker(quirkyPage)
     const alphaRow = configHostRow(picker, hosts.alpha)
     const bravoRow = configHostRow(picker, hosts.bravo)
 
     await expect(alphaRow).toBeVisible()
     await expect(alphaRow).toBeDisabled()
-    await expect(alphaRow.getByText('In Orca', { exact: true })).toBeVisible()
+    await expect(alphaRow.getByText('In Quirky', { exact: true })).toBeVisible()
 
     await expect(bravoRow).toBeVisible()
     await expect(bravoRow).toBeEnabled()
-    await expect(bravoRow.getByText('In Orca', { exact: true })).toHaveCount(0)
+    await expect(bravoRow.getByText('In Quirky', { exact: true })).toHaveCount(0)
 
-    await expect(picker.getByRole('button', { name: 'Add all 1 to Orca' })).toBeEnabled()
-    await expect(picker.getByRole('button', { name: 'Add all 2 to Orca' })).toHaveCount(0)
+    await expect(picker.getByRole('button', { name: 'Add all 1 to Quirky' })).toBeEnabled()
+    await expect(picker.getByRole('button', { name: 'Add all 2 to Quirky' })).toHaveCount(0)
   })
 
   // ── P6 ─────────────────────────────────────────────────────────────
-  test('P6: Add all N to Orca imports new hosts; re-open shows all in Orca', async ({
+  test('P6: Add all N to Quirky imports new hosts; re-open shows all in Quirky', async ({
     electronApp,
-    orcaPage
+    quirkyPage
   }) => {
     const hosts = await seedPairConfig(electronApp, HOST_PREFIX)
-    const picker = await openSshConfigHostPicker(orcaPage)
+    const picker = await openSshConfigHostPicker(quirkyPage)
 
     await expect(configHostRow(picker, hosts.alpha)).toBeVisible()
     await expect(configHostRow(picker, hosts.bravo)).toBeVisible()
-    await expect(picker.getByRole('button', { name: 'Add all 2 to Orca' })).toBeEnabled()
+    await expect(picker.getByRole('button', { name: 'Add all 2 to Quirky' })).toBeEnabled()
 
-    await picker.getByRole('button', { name: 'Add all 2 to Orca' }).click()
-    await expect(orcaPage.getByText('Added 2 hosts to Orca.')).toBeVisible({ timeout: 15_000 })
-    await expect(orcaPage.getByRole('dialog', { name: 'Choose from ~/.ssh/config' })).toBeHidden({
+    await picker.getByRole('button', { name: 'Add all 2 to Quirky' }).click()
+    await expect(quirkyPage.getByText('Added 2 hosts to Quirky.')).toBeVisible({ timeout: 15_000 })
+    await expect(quirkyPage.getByRole('dialog', { name: 'Choose from ~/.ssh/config' })).toBeHidden({
       timeout: 10_000
     })
-    await expect(orcaPage.getByRole('dialog', { name: 'Add SSH host' })).toBeHidden({
+    await expect(quirkyPage.getByRole('dialog', { name: 'Add SSH host' })).toBeHidden({
       timeout: 10_000
     })
 
-    const sshSection = await openSshHostSettings(orcaPage)
+    const sshSection = await openSshHostSettings(quirkyPage)
     await expectSshHostListedInSettings(sshSection, hosts.alpha)
     await expectSshHostListedInSettings(sshSection, hosts.bravo)
 
-    await returnToAppShell(orcaPage)
-    const reopened = await openSshConfigHostPicker(orcaPage)
+    await returnToAppShell(quirkyPage)
+    const reopened = await openSshConfigHostPicker(quirkyPage)
     await expect(configHostRow(reopened, hosts.alpha)).toBeDisabled()
     await expect(
-      configHostRow(reopened, hosts.alpha).getByText('In Orca', { exact: true })
+      configHostRow(reopened, hosts.alpha).getByText('In Quirky', { exact: true })
     ).toBeVisible()
     await expect(configHostRow(reopened, hosts.bravo)).toBeDisabled()
     await expect(
-      configHostRow(reopened, hosts.bravo).getByText('In Orca', { exact: true })
+      configHostRow(reopened, hosts.bravo).getByText('In Quirky', { exact: true })
     ).toBeVisible()
     await expect(reopened.getByRole('button', { name: 'No new hosts to add' })).toBeDisabled()
   })
@@ -156,31 +156,31 @@ test.describe('SSH config host import (bulk + settings re-adopt)', () => {
   // ── P7 ─────────────────────────────────────────────────────────────
   test('P7: Add all does not re-adopt deleted config hosts (suppress tombstones)', async ({
     electronApp,
-    orcaPage
+    quirkyPage
   }) => {
     const hosts = await importPairThenDeleteAlias(
-      orcaPage,
+      quirkyPage,
       electronApp,
       HOST_PREFIX,
       `${HOST_PREFIX}-alpha`
     )
 
-    const picker = await openSshConfigHostPicker(orcaPage)
+    const picker = await openSshConfigHostPicker(quirkyPage)
     // Suppressed aliases stay listed (re-pickable) but never count as new.
     const alphaRow = configHostRow(picker, hosts.alpha)
     await expect(alphaRow).toBeVisible()
     await expect(alphaRow).toBeEnabled()
-    await expect(alphaRow.getByText('Removed from Orca', { exact: true })).toBeVisible()
-    await expect(alphaRow.getByText('In Orca', { exact: true })).toHaveCount(0)
+    await expect(alphaRow.getByText('Removed from Quirky', { exact: true })).toBeVisible()
+    await expect(alphaRow.getByText('In Quirky', { exact: true })).toHaveCount(0)
     await expect(configHostRow(picker, hosts.bravo)).toBeVisible()
     await expect(
-      configHostRow(picker, hosts.bravo).getByText('In Orca', { exact: true })
+      configHostRow(picker, hosts.bravo).getByText('In Quirky', { exact: true })
     ).toBeVisible()
     await expect(picker.getByRole('button', { name: 'No new hosts to add' })).toBeDisabled()
-    await expect(picker.getByRole('button', { name: /Add all \d+ to Orca/ })).toHaveCount(0)
+    await expect(picker.getByRole('button', { name: /Add all \d+ to Quirky/ })).toHaveCount(0)
 
-    await returnToAppShell(orcaPage)
-    const sshSection = await openSshHostSettings(orcaPage)
+    await returnToAppShell(quirkyPage)
+    const sshSection = await openSshHostSettings(quirkyPage)
     // Pane auto-syncs without reAdopt — deleted alpha must stay gone.
     await expectSshHostListedInSettings(sshSection, hosts.bravo)
     await expectSshHostAbsentFromSettings(sshSection, hosts.alpha)
@@ -189,33 +189,33 @@ test.describe('SSH config host import (bulk + settings re-adopt)', () => {
   // ── P9 ─────────────────────────────────────────────────────────────
   test('P9: Sync keeps deleted config hosts; Restore removed hosts re-adopts them', async ({
     electronApp,
-    orcaPage
+    quirkyPage
   }) => {
     const hosts = await importPairThenDeleteAlias(
-      orcaPage,
+      quirkyPage,
       electronApp,
       HOST_PREFIX,
       `${HOST_PREFIX}-alpha`
     )
 
-    const sshSection = await openSshHostSettings(orcaPage)
+    const sshSection = await openSshHostSettings(quirkyPage)
     await expectSshHostListedInSettings(sshSection, hosts.bravo)
     await expectSshHostAbsentFromSettings(sshSection, hosts.alpha)
 
     // Sync never lifts a removal, so bulk removal sticks.
     await sshSection.getByRole('button', { name: 'Sync ~/.ssh/config' }).click()
-    await expect(orcaPage.getByText(/already in sync|Synced \d+ servers?/i).first()).toBeVisible({
+    await expect(quirkyPage.getByText(/already in sync|Synced \d+ servers?/i).first()).toBeVisible({
       timeout: 15_000
     })
     await expectSshHostAbsentFromSettings(sshSection, hosts.alpha)
 
     await sshSection.getByRole('button', { name: 'More SSH host actions' }).click()
     // The label carries the removed count once ~/.ssh/config is read; click waits for it to enable.
-    await orcaPage.getByRole('menuitem', { name: /^Restore removed hosts \(\d+\)…$/ }).click()
-    const restoreDialog = orcaPage.getByRole('dialog', { name: 'Restore removed hosts?' })
+    await quirkyPage.getByRole('menuitem', { name: /^Restore removed hosts \(\d+\)…$/ }).click()
+    const restoreDialog = quirkyPage.getByRole('dialog', { name: 'Restore removed hosts?' })
     await expect(restoreDialog.getByText(hosts.alpha.alias)).toBeVisible({ timeout: 15_000 })
     await restoreDialog.getByRole('button', { name: 'Restore' }).click()
-    await expect(orcaPage.getByText(/Synced \d+ servers?/i)).toBeVisible({ timeout: 15_000 })
+    await expect(quirkyPage.getByText(/Synced \d+ servers?/i)).toBeVisible({ timeout: 15_000 })
 
     await expectSshHostListedInSettings(sshSection, hosts.alpha)
     await expectSshHostListedInSettings(sshSection, hosts.bravo)

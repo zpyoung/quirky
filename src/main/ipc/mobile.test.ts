@@ -38,7 +38,7 @@ import { join } from 'node:path'
 import { registerMobileHandlers } from './mobile'
 import { NETWORK_EXPOSURE_FAILED_GUIDANCE } from '../runtime/network-exposure-guidance'
 import { createMobileRpcSurfaceRuntime } from '../runtime/runtime-rpc-mobile-method-allowlist-fixtures'
-import { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
+import { QuirkyRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { WebSocketTransport } from '../runtime/rpc/ws-transport'
 
 describe('registerMobileHandlers', () => {
@@ -93,7 +93,7 @@ describe('registerMobileHandlers', () => {
     })
     const createMobilePairingOffer = vi.fn().mockResolvedValue({
       available: true,
-      pairingUrl: 'orca://pair#lan',
+      pairingUrl: 'quirky://pair#lan',
       endpoint: 'ws://192.168.50.238:6768',
       deviceId: 'mobile-lan'
     })
@@ -179,7 +179,7 @@ describe('registerMobileHandlers', () => {
     )
     const createMobilePairingOffer = vi.fn().mockResolvedValue({
       available: true,
-      pairingUrl: 'orca://pair#external-switch',
+      pairingUrl: 'quirky://pair#external-switch',
       endpoint: 'ws://192.168.50.24:6768',
       deviceId: 'mobile-external-switch'
     })
@@ -256,7 +256,7 @@ describe('registerMobileHandlers', () => {
     })
     const createMobilePairingOffer = vi.fn().mockResolvedValue({
       available: true,
-      pairingUrl: 'orca://pair#bridge',
+      pairingUrl: 'quirky://pair#bridge',
       endpoint: 'ws://172.17.0.1:6768',
       deviceId: 'mobile-bridge-pick'
     })
@@ -293,7 +293,7 @@ describe('registerMobileHandlers', () => {
     })
     const createMobilePairingOffer = vi.fn().mockResolvedValue({
       available: true,
-      pairingUrl: 'orca://pair#mobile',
+      pairingUrl: 'quirky://pair#mobile',
       endpoint: 'ws://100.102.47.57:6768',
       deviceId: 'mobile-1'
     })
@@ -304,7 +304,7 @@ describe('registerMobileHandlers', () => {
     await expect(handlers.get('mobile:getPairingQR')?.(null, {})).resolves.toMatchObject({
       available: true,
       qrSize: 58,
-      pairingUrl: 'orca://pair#mobile',
+      pairingUrl: 'quirky://pair#mobile',
       endpoint: 'ws://100.102.47.57:6768',
       deviceId: 'mobile-1'
     })
@@ -319,7 +319,7 @@ describe('registerMobileHandlers', () => {
   it('preserves a copyable pairing URL when QR encoding fails', async () => {
     const createMobilePairingOffer = vi.fn().mockResolvedValue({
       available: true,
-      pairingUrl: 'orca://pair?code=copy-me',
+      pairingUrl: 'quirky://pair?code=copy-me',
       endpoint: 'wss://pair.example/oversized',
       deviceId: 'mobile-large'
     })
@@ -335,7 +335,7 @@ describe('registerMobileHandlers', () => {
       qrDataUrl: null,
       qrSize: null,
       qrError: 'encoding_failed',
-      pairingUrl: 'orca://pair?code=copy-me',
+      pairingUrl: 'quirky://pair?code=copy-me',
       endpoint: 'wss://pair.example/oversized',
       deviceId: 'mobile-large'
     })
@@ -387,7 +387,7 @@ describe('registerMobileHandlers', () => {
   it('generates runtime-scoped pairing urls for web and desktop clients', async () => {
     const createPairingOffer = vi.fn().mockReturnValue({
       available: true,
-      pairingUrl: 'orca://pair#runtime',
+      pairingUrl: 'quirky://pair#runtime',
       webClientUrl: 'http://100.64.1.20:6768/web-index.html?pairing=runtime',
       endpoint: 'ws://100.64.1.20:6768',
       deviceId: 'runtime-1'
@@ -404,7 +404,7 @@ describe('registerMobileHandlers', () => {
       })
     ).resolves.toEqual({
       available: true,
-      pairingUrl: 'orca://pair#runtime',
+      pairingUrl: 'quirky://pair#runtime',
       webClientUrl: 'http://100.64.1.20:6768/web-index.html?pairing=runtime',
       endpoint: 'ws://100.64.1.20:6768',
       deviceId: 'runtime-1'
@@ -431,7 +431,7 @@ describe('registerMobileHandlers', () => {
   ): { createPairingOffer: Mock; ensureNetworkExposure: Mock } => ({
     createPairingOffer: vi.fn().mockReturnValue({
       available: true,
-      pairingUrl: 'orca://pair#runtime',
+      pairingUrl: 'quirky://pair#runtime',
       webClientUrl: `http://${address}/web-index.html?pairing=runtime`,
       endpoint: `ws://${address}`,
       deviceId: 'runtime-local'
@@ -684,7 +684,7 @@ describe('registerMobileHandlers', () => {
       firewallEnvironment: {
         platform: 'win32',
         isPackaged: true,
-        executablePath: 'C:\\Program Files\\Orca\\Orca.exe',
+        executablePath: 'C:\\Program Files\\Quirky\\Quirky.exe',
         runPowerShell
       }
     })
@@ -706,7 +706,7 @@ describe('registerMobileHandlers', () => {
       firewallEnvironment: {
         platform: 'win32',
         isPackaged: true,
-        executablePath: 'C:\\Program Files\\Orca\\Orca.exe',
+        executablePath: 'C:\\Program Files\\Quirky\\Quirky.exe',
         runPowerShell
       }
     })
@@ -723,7 +723,7 @@ describe('registerMobileHandlers', () => {
 describe('runtime pairing bind host', () => {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
 
-  const wsTransportOf = (server: OrcaRuntimeRpcServer): WebSocketTransport | undefined =>
+  const wsTransportOf = (server: QuirkyRuntimeRpcServer): WebSocketTransport | undefined =>
     (server['activeTransports'] as unknown[]).find(
       (transport): transport is WebSocketTransport => transport instanceof WebSocketTransport
     )
@@ -737,8 +737,8 @@ describe('runtime pairing bind host', () => {
     })
   })
 
-  const startServer = async (userDataPath: string): Promise<OrcaRuntimeRpcServer> => {
-    const server = new OrcaRuntimeRpcServer({
+  const startServer = async (userDataPath: string): Promise<QuirkyRuntimeRpcServer> => {
+    const server = new QuirkyRuntimeRpcServer({
       methods: [],
       runtime: createMobileRpcSurfaceRuntime().runtime,
       userDataPath,
@@ -750,7 +750,7 @@ describe('runtime pairing bind host', () => {
   }
 
   it('keeps a real listener on loopback for a local link and widens it only for an off-host one', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-mobile-ipc-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-mobile-ipc-'))
     const server = await startServer(userDataPath)
 
     try {
@@ -785,7 +785,7 @@ describe('runtime pairing bind host', () => {
   // Why: the whole guarantee is worthless if it lasts one process — the local web client authenticating
   // marks its grant lastSeenAt > 0, which used to make the NEXT launch bind every interface.
   it('still binds loopback on the next launch after the local link has been used', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-mobile-ipc-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-mobile-ipc-'))
     const server = await startServer(userDataPath)
     let deviceId: string
     try {
@@ -818,7 +818,7 @@ describe('runtime pairing bind host', () => {
   })
 
   it('binds all interfaces on the next launch after a network link has been used', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-mobile-ipc-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-mobile-ipc-'))
     const server = await startServer(userDataPath)
     try {
       registerMobileHandlers(server)

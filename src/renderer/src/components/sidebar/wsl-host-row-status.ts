@@ -72,11 +72,11 @@ export function getWslHostRowTurnedOffDetail(): string {
   )
 }
 
-/** This build ships no orcad template, so no WSL host can run; full sentence for dialogs. */
+/** This build ships no quirkyd template, so no WSL host can run; full sentence for dialogs. */
 export function getWslHostServerFilesMissingLabel(): string {
   return translate(
     'auto.components.sidebar.wslHostRowStatus.serverFilesMissing',
-    'This build of Orca can’t run WSL hosts (server files missing).'
+    'This build of Quirky can’t run WSL hosts (server files missing).'
   )
 }
 

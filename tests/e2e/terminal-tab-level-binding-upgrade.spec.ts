@@ -7,15 +7,15 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { DEFAULT_LOCAL_ORCA_PROFILE_ID } from '../../src/shared/orca-profiles'
+import { DEFAULT_LOCAL_QUIRKY_PROFILE_ID } from '../../src/shared/quirky-profiles'
 import type { WorkspaceSessionState } from '../../src/shared/workspace-session-state-types'
 import { openProfileStateDatabaseReadOnly } from '../../src/main/persistence/profile-state/profile-state-database'
 import { readProfileStateSnapshot } from '../../src/main/persistence/profile-state/profile-state-documents'
 import { acquireProfileStateMaintenance } from '../../src/main/persistence/profile-state/profile-state-access'
 import { rollbackProfileState } from '../../src/main/persistence/profile-state/profile-state-recovery-command'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import { ensureTerminalVisible, switchToWorktree, waitForSessionReady } from './helpers/store'
 import {
   execInTerminal,
@@ -25,14 +25,14 @@ import {
 } from './helpers/terminal'
 
 function profileDataPath(userDataDir: string): string {
-  return path.join(userDataDir, 'profiles', DEFAULT_LOCAL_ORCA_PROFILE_ID, 'orca-data.json')
+  return path.join(userDataDir, 'profiles', DEFAULT_LOCAL_QUIRKY_PROFILE_ID, 'quirky-data.json')
 }
 
 /** Rewrites the stopped profile as an older build left it: terminals named on their tabs only. */
 function seedTabLevelOnlyBindings(userDataDir: string, ptyIds: readonly string[]): void {
   const dataPath = profileDataPath(userDataDir)
   const databasePath = path.join(path.dirname(dataPath), 'profile-state.db')
-  const opened = openProfileStateDatabaseReadOnly(databasePath, DEFAULT_LOCAL_ORCA_PROFILE_ID)
+  const opened = openProfileStateDatabaseReadOnly(databasePath, DEFAULT_LOCAL_QUIRKY_PROFILE_ID)
   let profile: { workspaceSession: WorkspaceSessionState }
   try {
     profile = JSON.parse(readProfileStateSnapshot(opened.db).json)

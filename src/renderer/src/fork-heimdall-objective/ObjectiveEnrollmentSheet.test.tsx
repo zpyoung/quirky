@@ -625,7 +625,7 @@ describe('objective enrollment contract', () => {
       />
     )
 
-    expect(screen.getByText(/Gates are unavailable on this host's Orca version/)).toBeVisible()
+    expect(screen.getByText(/Gates are unavailable on this host's Quirky version/)).toBeVisible()
     expect(screen.getByLabelText('Name')).toBeDisabled()
     expect(screen.getByLabelText('Command')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add gate' })).toBeDisabled()

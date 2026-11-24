@@ -16,9 +16,9 @@ const REPO_ID = 'repo-1'
 const WORKTREE_PATH = '/repo/worktree'
 const WORKTREE_ID = `${REPO_ID}::${WORKTREE_PATH}`
 const FORK_TARGET: GitPushTarget = {
-  remoteName: 'pr-contributor-orca',
+  remoteName: 'pr-contributor-quirky',
   branchName: 'contributor/fix',
-  remoteUrl: 'git@github.com:contributor/orca.git'
+  remoteUrl: 'git@github.com:contributor/quirky.git'
 }
 const REPO = { id: REPO_ID, path: '/repo', connectionId: null } as unknown as Repo
 

@@ -135,7 +135,7 @@ describe('createRemoteRuntimePtyTransport', () => {
     const transport = createRemoteRuntimePtyTransport('env-1', {
       worktreeId: 'repo1::/remote/wt',
       command: 'claude',
-      env: { ORCA_TAB_ID: 'tab-1' },
+      env: { QUIRKY_TAB_ID: 'tab-1' },
       tabId: 'tab-1',
       leafId: '11111111-1111-4111-8111-111111111111'
     })
@@ -153,7 +153,7 @@ describe('createRemoteRuntimePtyTransport', () => {
         worktree: 'id:repo1::/remote/wt',
         clientMutationId: expect.any(String),
         command: 'claude',
-        env: { ORCA_TAB_ID: 'tab-1' },
+        env: { QUIRKY_TAB_ID: 'tab-1' },
         tabId: 'tab-1',
         leafId: '11111111-1111-4111-8111-111111111111',
         focus: false,

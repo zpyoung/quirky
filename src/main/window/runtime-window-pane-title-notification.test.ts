@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { BrowserWindow } from 'electron'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { RuntimeNotifier } from '../runtime/runtime-notifier-contract'
 
 vi.mock('electron', () => ({ ipcMain: { on: vi.fn(), removeListener: vi.fn() } }))
@@ -37,7 +37,7 @@ function attachNotifier() {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: registration reads only the supplied window lifecycle and webContents members.
     mainWindow as unknown as BrowserWindow,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: registration calls only the supplied runtime attachment and notification members.
-    runtime as unknown as OrcaRuntimeService
+    runtime as unknown as QuirkyRuntimeService
   )
   if (!attached.notifier?.setPaneTitle) {
     throw new Error('pane-title notifier was not attached')

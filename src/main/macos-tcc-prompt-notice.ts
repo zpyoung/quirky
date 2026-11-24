@@ -8,7 +8,7 @@ import { reclaimOrphanedTccLogStreams } from './macos-tcc-log-stream-orphans'
 
 /**
  * Surfaces Full Disk Access guidance only to users macOS is actually prompting
- * (#9756), instead of nudging every Mac user. Counts Orca-attributed TCC
+ * (#9756), instead of nudging every Mac user. Counts Quirky-attributed TCC
  * dialogs across launches and tells the renderer when the first one lands.
  */
 

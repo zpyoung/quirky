@@ -1,4 +1,4 @@
-// Run: ORCA_BACKGROUND_LAUNCH=1 node --import tsx config/scripts/codex-capacity-status-benchmark.ts
+// Run: QUIRKY_BACKGROUND_LAUNCH=1 node --import tsx config/scripts/codex-capacity-status-benchmark.ts
 import { readFileSync } from 'node:fs'
 import { performance } from 'node:perf_hooks'
 import { CodexCapacityNoticeTracker } from '../../src/shared/codex-capacity-notice'

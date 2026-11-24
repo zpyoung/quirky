@@ -61,10 +61,10 @@ function installedStatus(configPath: string): AgentHookInstallStatus {
 }
 
 beforeEach(() => {
-  tmpHome = mkdtempSync(join(tmpdir(), 'orca-codex-home-'))
-  userDataDir = mkdtempSync(join(tmpdir(), 'orca-codex-user-data-'))
-  previousUserDataPath = process.env.ORCA_USER_DATA_PATH
-  process.env.ORCA_USER_DATA_PATH = userDataDir
+  tmpHome = mkdtempSync(join(tmpdir(), 'quirky-codex-home-'))
+  userDataDir = mkdtempSync(join(tmpdir(), 'quirky-codex-user-data-'))
+  previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
+  process.env.QUIRKY_USER_DATA_PATH = userDataDir
   homedirMock.mockReturnValue(tmpHome)
   getPathMock.mockImplementation((name: string) => {
     if (name === 'userData') {
@@ -87,9 +87,9 @@ afterEach(() => {
   rmSync(tmpHome, { recursive: true, force: true })
   rmSync(userDataDir, { recursive: true, force: true })
   if (previousUserDataPath === undefined) {
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_USER_DATA_PATH
   } else {
-    process.env.ORCA_USER_DATA_PATH = previousUserDataPath
+    process.env.QUIRKY_USER_DATA_PATH = previousUserDataPath
   }
   vi.clearAllMocks()
 })
@@ -124,7 +124,7 @@ describe('launch-prep Codex hook install sharing', () => {
       service.installForLaunchPrep(home, true, () => true)
     ])
 
-    // Why: the plain terminal goes ahead on Orca's own hash; the Codex launch still gets Codex's.
+    // Why: the plain terminal goes ahead on Quirky's own hash; the Codex launch still gets Codex's.
     expect(installExclusivelyMock.mock.calls.map(([, hashes]) => hashes)).toContainEqual(
       codexHashes
     )

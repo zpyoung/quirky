@@ -67,7 +67,7 @@ export function withOpenCodeSkillsPath(
 }
 
 // Why 2.x: 2.x adds inline `skills.paths` to the config files' list; 1.x lets it replace the
-// user's own, so their skills would vanish from Orca's chats.
+// user's own, so their skills would vanish from Quirky's chats.
 const OPENCODE_MERGED_SKILL_PATHS_FIRST_VERSION = '2.0.14'
 
 /** OpenCode reads `skills.paths` from the inline config variable. */

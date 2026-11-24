@@ -181,7 +181,7 @@ async function refresh(arm, transcriptPath, expected) {
   }
 }
 
-const home = await mkdtemp(join(tmpdir(), 'orca-claude-source-compression-'))
+const home = await mkdtemp(join(tmpdir(), 'quirky-claude-source-compression-'))
 try {
   const project = join(home, '.claude', 'projects', 'benchmark')
   const cwd = join(home, 'repo')

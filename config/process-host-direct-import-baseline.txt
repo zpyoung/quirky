@@ -1,4 +1,4 @@
-# Existing production source files importing child_process outside @orca/process-host.
+# Existing production source files importing child_process outside @quirky/process-host.
 # Migration debt: this list may only shrink; new callers use the package public API.
 
 src/cli/handlers/account.ts

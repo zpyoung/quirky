@@ -1,6 +1,6 @@
 // A send's carried choices against the real host, store and journal: kept with the message and
 // applied when its agent starts or is handed it, part of the operation's fingerprint, and kept on
-// a card Orca keeps.
+// a card Quirky keeps.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
@@ -128,7 +128,7 @@ describe('an opening message created with a model and effort', () => {
     }
   })
 
-  it('keeps them on the card Orca keeps when it stops before the handover', async () => {
+  it('keeps them on the card Quirky keeps when it stops before the handover', async () => {
     const rest = await createRestTestRig({ idleSweep: { intervalMs: 60_000 } })
     try {
       const { first } = await createWhileStarting(rest)
@@ -166,7 +166,7 @@ describe('a send carrying its model and effort', () => {
   })
 })
 
-describe('a send kept as a card because Orca stopped before handing it over', () => {
+describe('a send kept as a card because Quirky stopped before handing it over', () => {
   it('keeps its model and effort on the card', async () => {
     const kept = await createQueuedMessageTestRig({ restartable: true })
     try {

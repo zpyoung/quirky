@@ -7,7 +7,7 @@ This is a separate source-level explanation for part of [#19018](https://github.
 From the checkout, with installed dependencies:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/queued-terminal-graph-exit/reproduce.mjs /tmp/queued-terminal-graph-exit.json
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/queued-terminal-graph-exit/reproduce.mjs /tmp/queued-terminal-graph-exit.json
 ```
 
 The script uses the real renderer graph publisher, main `Store.persistPtyBinding`, runtime, daemon server, adapter, and local sockets. Only the subprocess and the IPC dispatch boundary are controlled. It creates temporary data/socket paths, runs hidden Node tests, and removes its scratch files. It does not launch an Electron window or install dependencies. The JSON records source hashes and excludes randomly allocated terminal handles/incarnations.

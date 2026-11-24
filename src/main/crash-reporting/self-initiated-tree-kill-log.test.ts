@@ -25,7 +25,7 @@ import {
 import {
   admitProcessTreeKill,
   setProcessTreeKillGate
-} from '@orca/process-host/process-tree-kill-gate'
+} from '@quirky/process-host/process-tree-kill-gate'
 import { installMainProcessTreeKillGate } from '../own-chromium-tree-kill-guard'
 import { _resetTracerForTests, setActiveSink } from '../observability/tracer'
 
@@ -82,8 +82,8 @@ afterEach(() => {
 })
 
 describe('self-initiated tree kill breadcrumb', () => {
-  it('separates an Orca-issued tree kill from an external kill of the same shape', async () => {
-    // Arm A — Orca issues the kill through its own taskkill choke point.
+  it('separates an Quirky-issued tree kill from an external kill of the same shape', async () => {
+    // Arm A — Quirky issues the kill through its own taskkill choke point.
     recordSelfInitiatedTreeKill({
       pid: 4242,
       site: 'pty-descendant-sweep',
@@ -94,7 +94,7 @@ describe('self-initiated tree kill breadcrumb', () => {
     resetSelfInitiatedTreeKillLogForTest()
     clearCrashBreadcrumbsForTest()
 
-    // Arm B — identical crash, nobody inside Orca issued a kill.
+    // Arm B — identical crash, nobody inside Quirky issued a kill.
     const externallyKilled = await recordKilledRenderer()
 
     expect(selfKilled.selfInitiatedKills).toMatch(

@@ -7,7 +7,7 @@ import {
   makeWorktree,
   TEST_REPO
 } from '../store/slices/store-test-helpers'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { layoutApplyTestDouble } from '@/runtime/layout-apply-test-double'
 import type { AppState } from '../store/types'
 import type { MigrationUnsupportedPtyEntry } from '../../../shared/agent-status-types'
@@ -457,7 +457,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       )
       // A layout-owner build sends main the snapshot's titles as one rename; main's frame (not
       // modelled here) draws them, so the window writes them in neither case twice.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         expect(renamed()).toEqual([paneCount])
       } else {
         expect(store.getState().tabsByWorktree['wt-snapshot-99']?.[0]?.generatedTitle).toBeTruthy()
@@ -467,9 +467,9 @@ describe('useIpcEvents agent status snapshot integration', () => {
       await Promise.resolve()
     }
 
-    expect(relevantPublications).toBe(ORCA_LAYOUT_OWNER_IS_MAIN ? 2 : 3)
+    expect(relevantPublications).toBe(QUIRKY_LAYOUT_OWNER_IS_MAIN ? 2 : 3)
     unsubscribe()
-    expect(renamed()).toEqual(ORCA_LAYOUT_OWNER_IS_MAIN ? [paneCount] : [])
+    expect(renamed()).toEqual(QUIRKY_LAYOUT_OWNER_IS_MAIN ? [paneCount] : [])
   })
 
   it('indexes one 100-pane tab and its split tree once per snapshot', async () => {

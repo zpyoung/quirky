@@ -1,12 +1,12 @@
 // Layout-owner build: main's starts publish their status on the pane, and a start main could not
 // make leaves its pane showing why, whether it failed before the pane was written or after.
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
-import type * as dependencies from '../../orca-runtime-create-terminal-dependencies'
+import type * as dependencies from '../../quirky-runtime-create-terminal-dependencies'
 import { PaneStartStatuses, paneStartFailure } from '../../pane-start-statuses'
 import type { WindowLayoutCommand } from '../../runtime-layout-apply'
 import { allocateTerminalPaneIdentity } from '../../runtime-terminal-pane-identity'
-import { OrcaRuntimeWithCreateTerminal } from './terminal-create'
+import { QuirkyRuntimeWithCreateTerminal } from './terminal-create'
 import { PaneOwnerContentionError } from '../../../ipc/pty/pane/pane-spawn-operation'
 
 export type FailedStartPane = { tabId: string; leafId: string }
@@ -28,12 +28,12 @@ export async function startKeepingFailedPane<T>(
   }
 }
 
-export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCreateTerminal {
+export abstract class QuirkyRuntimeWithFailedStartPanes extends QuirkyRuntimeWithCreateTerminal {
   protected abstract markPaneLiveTitlesDirty(): void
   abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
 
   /** Switch point: main's starts into panes it already holds, published until each binds. */
-  protected readonly paneStartStatuses = ORCA_LAYOUT_OWNER_IS_MAIN
+  protected readonly paneStartStatuses = QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? new PaneStartStatuses(() => this.markPaneLiveTitlesDirty())
     : null
 
@@ -52,7 +52,7 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
   ): Promise<dependencies.RuntimeTerminalCreate> {
     // Switch point: a start main could not make leaves its pane showing why, whatever failed.
     if (
-      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      QUIRKY_LAYOUT_OWNER_IS_MAIN &&
       opts.keepPaneOnStartFailure &&
       worktreeSelector !== undefined
     ) {

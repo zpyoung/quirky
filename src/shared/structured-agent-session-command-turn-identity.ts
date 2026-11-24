@@ -6,7 +6,7 @@ import type { AgentJournalItemIdentity } from './agent-session-journal-types'
 export function structuredAgentSessionCommandTurnIdentity(
   clientMessageId: string
 ): AgentJournalItemIdentity {
-  return { provider: 'orca', clientMessageId: `command-turn:${clientMessageId}` }
+  return { provider: 'quirky', clientMessageId: `command-turn:${clientMessageId}` }
 }
 
 /** The command's turn: its record and the `turnId` a Stop names. The `compact:` prefix is how the
@@ -23,6 +23,6 @@ export function structuredAgentSessionCommandTurn(clientMessageId: string): {
     identity,
     itemId: agentJournalItemKey(identity),
     turnId: `compact:${clientMessageId}`,
-    resultIdentity: { provider: 'orca', clientMessageId: `command-result:${clientMessageId}` }
+    resultIdentity: { provider: 'quirky', clientMessageId: `command-result:${clientMessageId}` }
   }
 }

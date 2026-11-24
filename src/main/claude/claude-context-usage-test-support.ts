@@ -75,7 +75,7 @@ export function journal({ deferred = false } = {}) {
     })
     return { accepted: true }
   }
-  const stopState = createJournalReducerState('orca-session', 'test')
+  const stopState = createJournalReducerState('quirky-session', 'test')
   const queueStop = (turnId: string, at: number): void =>
     run(() => {
       stopState.queuePauseMarks.latestStop = {
@@ -100,7 +100,7 @@ export function journal({ deferred = false } = {}) {
 export function frame(message: Record<string, unknown>, observedAt: number, startsTurn = false) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     observedAt,
     ...(startsTurn ? { startsTurn: true as const } : {}),
     message: { session_id: 'claude-session', parent_tool_use_id: null, ...message }

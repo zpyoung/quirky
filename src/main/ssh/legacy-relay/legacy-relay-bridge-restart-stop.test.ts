@@ -19,7 +19,7 @@ vi.mock('./legacy-relay-endpoints', () => ({
     exhaustive: true,
     endpoints: [
       {
-        endpoint: '/home/me/.orca-remote/relay-x.sock',
+        endpoint: '/home/me/.quirky-remote/relay-x.sock',
         connectCommand: 'node relay.js --connect',
         wrapCommand: true,
         host: getRemoteHostPlatform('linux-x64'),
@@ -96,7 +96,7 @@ afterEach(() => {
 })
 
 describe('a bridged tab closed while disconnected', () => {
-  it('still stops its shell when Orca restarts before reconnecting', async () => {
+  it('still stops its shell when Quirky restarts before reconnecting', async () => {
     relay.ptys = new Set([RELAY_PTY])
     relay.shutdowns = []
     leases = [

@@ -110,7 +110,7 @@ beforeAll(async () => {
     return
   }
   loaded = await loadSweepModules()
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({
     headless: true,
     ...(executablePath ? { executablePath } : {})

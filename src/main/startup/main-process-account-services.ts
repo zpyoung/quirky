@@ -5,7 +5,7 @@ import { createCodexSessionMigrationScheduler } from '../codex/codex-session-mig
 import { startCodexSessionBackfillInBackground } from '../codex/codex-session-backfill'
 import { startCodexSessionIndexHealInBackground } from '../codex/codex-session-index-heal'
 import { startCodexStateDbBackfillRecoveryInBackground } from '../codex/codex-state-db-backfill-recovery'
-import { getOrcaManagedCodexHomePath } from '../codex/codex-home-paths'
+import { getQuirkyManagedCodexHomePath } from '../codex/codex-home-paths'
 import {
   hasOpenCodeGoApiKey,
   readOpenCodeGoApiKey,
@@ -63,7 +63,7 @@ export function initializeMainProcessAccountServices(): void {
   state.codexAccounts = services.codexAccounts
   state.claudeRuntimeAuth = services.claudeRuntimeAuth
   state.claudeAccounts = services.claudeAccounts
-  void startCodexStateDbBackfillRecoveryInBackground(getOrcaManagedCodexHomePath())
+  void startCodexStateDbBackfillRecoveryInBackground(getQuirkyManagedCodexHomePath())
   // Why: migrate historical shared-home sessions after startup; compatibility
   // launches re-arm the non-destructive pass for new rollouts (#4444, #8612, #12480).
   state.codexSessionMigration.scheduleInitialRun()

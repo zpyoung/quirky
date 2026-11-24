@@ -1,6 +1,6 @@
 import { deflateSync } from 'node:zlib'
 import { z } from 'zod'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { repoIconId } from '../../src/main/runtime/sidebar-inputs/repo-icon-data-urls'
@@ -8,7 +8,7 @@ import { readRasterImageDimensions } from '../../src/shared/raster-image-dimensi
 
 test.skip(
   !SIDEBAR_INPUTS_BUILD,
-  'main publishes sidebar inputs only in an ORCA_SIDEBAR_INPUTS=main build'
+  'main publishes sidebar inputs only in an QUIRKY_SIDEBAR_INPUTS=main build'
 )
 
 const ReplySchema = z.object({
@@ -52,19 +52,19 @@ function solidPng(edge: number): string {
   return `data:image/png;base64,${png.toString('base64')}`
 }
 
-test('main re-encodes a 128 px repo upload as a 64 px PNG data URL', async ({ orcaPage }) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
+test('main re-encodes a 128 px repo upload as a 64 px PNG data URL', async ({ quirkyPage }) => {
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
   const icon = { type: 'image' as const, src: solidPng(128), source: 'upload' as const }
 
-  await orcaPage.evaluate(async (repoIcon) => {
+  await quirkyPage.evaluate(async (repoIcon) => {
     const [repo] = await window.api.repos.list()
     await window.api.repos.update({ repoId: repo.id, updates: { repoIcon } })
   }, icon)
 
   const id = repoIconId(icon)
   expect(id).not.toBeNull()
-  const response = await orcaPage.evaluate(
+  const response = await quirkyPage.evaluate(
     (ids) => window.api.runtime.call({ method: 'sidebarInputs.repoIcons', params: { ids } }),
     [id, 'unknown']
   )

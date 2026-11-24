@@ -3,7 +3,7 @@ import type { EnrollInput } from '../../shared/fork-heimdall/watcher-types'
 import { authorizeKindEnrollment } from '../fork-heimdall/kernel-enrollment'
 import { type RegisteredWatcherKind, WatcherKindRegistry } from '../fork-heimdall/registry'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { authorizeObjectiveEnrollment, ObjectiveOwnerNotExecutableError } from './definition'
 import { createObjectiveKind } from './kind'
 import type { ObjectiveForgeAccess } from './objective-forge-access'
@@ -67,14 +67,14 @@ function runtime() {
       git: { isBare: false, prunable: false }
     }
   }))
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: OrcaRuntimeService has private fields; these methods are the authorization surface exercised.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: QuirkyRuntimeService has private fields; these methods are the authorization surface exercised.
   const service = {
     createManagedWorktree,
     removeManagedWorktree,
     listManagedWorktrees,
     invalidateWorktreeCatalog,
     resolveRuntimeGitTarget
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   return {
     service,
     createManagedWorktree,

@@ -6,10 +6,10 @@ import './globals.css'
 const siteUrl = 'https://www.onorca.dev'
 
 export const metadata: Metadata = {
-  title: 'Orca Docs',
-  description: 'Product documentation for Orca — the worktree IDE for AI coding agents.',
+  title: 'Quirky Docs',
+  description: 'Product documentation for Quirky — the worktree IDE for AI coding agents.',
   metadataBase: new URL(siteUrl),
-  applicationName: 'Orca Docs',
+  applicationName: 'Quirky Docs',
   icons: {
     icon: '/docs/favicon.ico',
     shortcut: '/docs/favicon.ico'
@@ -18,14 +18,14 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_US',
     url: `${siteUrl}/docs`,
-    siteName: 'Orca',
-    title: 'Orca Docs',
-    description: 'Product documentation for Orca — the worktree IDE for AI coding agents.'
+    siteName: 'Quirky',
+    title: 'Quirky Docs',
+    description: 'Product documentation for Quirky — the worktree IDE for AI coding agents.'
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Orca Docs',
-    description: 'Product documentation for Orca — the worktree IDE for AI coding agents.'
+    title: 'Quirky Docs',
+    description: 'Product documentation for Quirky — the worktree IDE for AI coding agents.'
   },
   robots: {
     index: true,

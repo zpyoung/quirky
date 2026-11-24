@@ -43,12 +43,12 @@ describe('getPRForBranch', () => {
   it('uses the tracked upstream remote owner for fork branch lookup', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
       candidates: [
-        { owner: 'stablyai', repo: 'orca' },
-        { owner: 'origin-owner', repo: 'orca' }
+        { owner: 'stablyai', repo: 'quirky' },
+        { owner: 'origin-owner', repo: 'quirky' }
       ],
-      headRepo: { owner: 'origin-owner', repo: 'orca' }
+      headRepo: { owner: 'origin-owner', repo: 'quirky' }
     })
-    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'fork-owner', repo: 'orca' })
+    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'fork-owner', repo: 'quirky' })
     ghExecFileAsyncMock
       .mockResolvedValueOnce({ stdout: JSON.stringify([]) })
       .mockResolvedValueOnce({ stdout: JSON.stringify([]) })
@@ -102,20 +102,20 @@ describe('getPRForBranch', () => {
     expect(pr).toMatchObject({
       number: 78,
       title: 'Hydrated fork upstream branch PR',
-      prRepo: { owner: 'stablyai', repo: 'orca' },
-      headRepo: { owner: 'fork-owner', repo: 'orca' }
+      prRepo: { owner: 'stablyai', repo: 'quirky' },
+      headRepo: { owner: 'fork-owner', repo: 'quirky' }
     })
   })
 
   it('uses the tracked upstream remote owner when the fork branch name matches locally', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
       candidates: [
-        { owner: 'stablyai', repo: 'orca' },
-        { owner: 'origin-owner', repo: 'orca' }
+        { owner: 'stablyai', repo: 'quirky' },
+        { owner: 'origin-owner', repo: 'quirky' }
       ],
-      headRepo: { owner: 'origin-owner', repo: 'orca' }
+      headRepo: { owner: 'origin-owner', repo: 'quirky' }
     })
-    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'brennanb2025', repo: 'orca' })
+    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'brennanb2025', repo: 'quirky' })
     ghExecFileAsyncMock
       .mockResolvedValueOnce({ stdout: JSON.stringify([]) })
       .mockResolvedValueOnce({ stdout: JSON.stringify([]) })
@@ -171,8 +171,8 @@ describe('getPRForBranch', () => {
     )
     expect(pr).toMatchObject({
       number: 6433,
-      prRepo: { owner: 'stablyai', repo: 'orca' },
-      headRepo: { owner: 'brennanb2025', repo: 'orca' }
+      prRepo: { owner: 'stablyai', repo: 'quirky' },
+      headRepo: { owner: 'brennanb2025', repo: 'quirky' }
     })
   })
 

@@ -9,9 +9,9 @@ import { announceMissingBaseline } from './fork-benchmark-baseline/benchmark-bas
 const root = fileURLToPath(new URL('../..', import.meta.url))
 const output = path.join(root, '.build/preflight-benchmark')
 mkdirSync(output, { recursive: true })
-const bun = process.env.ORCA_BENCHMARK_BUN ?? 'bun'
+const bun = process.env.QUIRKY_BENCHMARK_BUN ?? 'bun'
 const sourcePath = 'config/scripts/check-compat-boundary-imports.mjs'
-const baselineRef = process.env.ORCA_COMPAT_BASELINE_REF ?? 'HEAD^'
+const baselineRef = process.env.QUIRKY_COMPAT_BASELINE_REF ?? 'HEAD^'
 const baselinePath = path.join(output, 'compat-baseline.mjs')
 const report = {
   sourceSha: process.env.GITHUB_SHA ?? null,
@@ -29,7 +29,7 @@ const command = (program, args, label) =>
     label,
     root,
     output,
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
   })
 async function requireSuccess(program, args, label) {
   const result = await command(program, args, label)

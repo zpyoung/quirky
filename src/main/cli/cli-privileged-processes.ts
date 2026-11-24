@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 export async function runMacPrivilegedCommand(command: string): Promise<void> {
   const result = await runProcess({

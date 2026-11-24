@@ -6,8 +6,8 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1.')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1.')
 }
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
@@ -33,7 +33,7 @@ if (test.split(observe).length !== 2) {
 }
 const observedTest = `import { appendFileSync } from 'node:fs'\n${test.replace(
   observe,
-  `${observe}    appendFileSync(process.env.ORCA_BROWSER_GUEST_COUNTS_PATH, JSON.stringify({ test: expect.getState().currentTestName, counts }) + '\\n')\n`
+  `${observe}    appendFileSync(process.env.QUIRKY_BROWSER_GUEST_COUNTS_PATH, JSON.stringify({ test: expect.getState().currentTestName, counts }) + '\\n')\n`
 )}`
 const sha256 = (source) => createHash('sha256').update(source).digest('hex')
 const sourceHashes = {
@@ -48,7 +48,7 @@ for (const path of [
 ]) {
   sourceHashes[path] = { current: sha256(await readFile(resolve(root, path))) }
 }
-const scratch = await mkdtemp(join(tmpdir(), 'orca-browser-destroyed-guest-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-browser-destroyed-guest-'))
 const require = createRequire(import.meta.url)
 let runnerModuleId
 
@@ -101,7 +101,7 @@ export default {...base, test: {...base.test, include: [${JSON.stringify(testPat
       env: {
         ...process.env,
         NODE_OPTIONS: '--max-old-space-size=512',
-        ORCA_BROWSER_GUEST_COUNTS_PATH: countsPath
+        QUIRKY_BROWSER_GUEST_COUNTS_PATH: countsPath
       },
       timeoutMs: 60_000,
       maxOutputBytes: 2 * 1024 * 1024

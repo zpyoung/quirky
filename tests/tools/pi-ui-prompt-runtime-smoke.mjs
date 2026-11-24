@@ -13,10 +13,10 @@ const piRoot = process.argv[2]
 assert.ok(piRoot, 'Pass the installed pi-coding-agent package directory (Pi >= 0.84.4)')
 const cwd = process.cwd()
 const require = createRequire(join(cwd, 'package.json'))
-const scratch = await mkdtemp(join(tmpdir(), 'orca-pi-ui-prompt-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-pi-ui-prompt-'))
 
 try {
-  const bundle = join(scratch, 'orca-status.cjs')
+  const bundle = join(scratch, 'quirky-status.cjs')
   await build({
     stdin: {
       contents: [
@@ -57,10 +57,10 @@ try {
       title: 'pi',
       argv: ['node', 'pi'],
       env: {
-        ORCA_PANE_KEY: 'tab-1:11111111-1111-4111-8111-111111111111',
-        ORCA_AGENT_HOOK_PORT: '4321',
-        ORCA_AGENT_HOOK_TOKEN: 'test',
-        ORCA_AGENT_HOOK_ENV: 'production'
+        QUIRKY_PANE_KEY: 'tab-1:11111111-1111-4111-8111-111111111111',
+        QUIRKY_AGENT_HOOK_PORT: '4321',
+        QUIRKY_AGENT_HOOK_TOKEN: 'test',
+        QUIRKY_AGENT_HOOK_ENV: 'production'
       }
     },
     fetch: async (_url, init) => {
@@ -77,7 +77,7 @@ try {
     clearTimeout
   })
   module.exports.default({ on: (name, handler) => handlers.set(name, [handler]) })
-  const runner = new ExtensionRunner([{ path: 'orca-status', handlers }], {}, cwd, {}, {})
+  const runner = new ExtensionRunner([{ path: 'quirky-status', handlers }], {}, cwd, {}, {})
   runner.onError((error) => errors.push(error))
   let idle = false
   runner.isIdleFn = () => idle

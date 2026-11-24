@@ -25,7 +25,9 @@ describe('AskRegistry', () => {
 
   it('durably inserts before returning the id', async () => {
     const registry = new AskRegistry(db)
-    const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+    const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+      requestId: 'req_1'
+    })
     expect(db.getAsk(askId)).toBeTruthy()
   })
 
@@ -61,7 +63,9 @@ describe('AskRegistry', () => {
     it('throws when a requestId replay carries a different spec', async () => {
       const registry = new AskRegistry(db)
       await registry.register(textSpec('Original?'), paneOrigin('pane:1'), { requestId: 'req_1' })
-      await expect(registry.register(textSpec('Different?'), paneOrigin('pane:1'), { requestId: 'req_1' })).rejects.toThrow()
+      await expect(
+        registry.register(textSpec('Different?'), paneOrigin('pane:1'), { requestId: 'req_1' })
+      ).rejects.toThrow()
     })
   })
 
@@ -71,8 +75,12 @@ describe('AskRegistry', () => {
       const events: { askId: string; status: string }[] = []
       registry.onAskChanged((event) => events.push({ askId: event.askId, status: event.status }))
 
-      const first = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
-      const second = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_2' })
+      const first = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
+      const second = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_2'
+      })
       expect(events).toEqual([{ askId: first.askId, status: 'registered' }])
 
       registry.cancel(first.askId, 'user')
@@ -97,7 +105,9 @@ describe('AskRegistry', () => {
   describe('waitChunk', () => {
     it('resolves immediately and repeatably for an already-terminal ask', async () => {
       const registry = new AskRegistry(db)
-      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
       registry.answer(askId, { q1: { value: 'hi', source: 'input' } }, [])
 
       const signal = new AbortController().signal
@@ -116,15 +126,23 @@ describe('AskRegistry', () => {
     it('resolves with a pending envelope once chunkMs elapses unanswered', async () => {
       vi.useFakeTimers()
       const registry = new AskRegistry(db)
-      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
       const promise = registry.waitChunk(askId, 5_000, new AbortController().signal)
       await vi.advanceTimersByTimeAsync(5_000)
-      expect(await promise).toEqual({ status: 'pending', askId, instruction: `orca ask wait --id ${askId}` })
+      expect(await promise).toEqual({
+        status: 'pending',
+        askId,
+        instruction: `quirky ask wait --id ${askId}`
+      })
     })
 
     it('never resolves the ask on a mid-chunk transport abort, and a later waitChunk resumes it', async () => {
       const registry = new AskRegistry(db)
-      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
       const controller = new AbortController()
       const aborted = registry.waitChunk(askId, 60_000, controller.signal)
       controller.abort()
@@ -133,7 +151,9 @@ describe('AskRegistry', () => {
       expect(envelope.status).toBe('pending')
       expect(db.getAsk(askId)?.status).toBe('registered')
 
-      expect(registry.answer(askId, { q1: { value: 'hi', source: 'input' } }, []).committed).toBe(true)
+      expect(registry.answer(askId, { q1: { value: 'hi', source: 'input' } }, []).committed).toBe(
+        true
+      )
       const resumed = await registry.waitChunk(askId, 1_000, new AbortController().signal)
       expect(resumed.status).toBe('answered')
     })
@@ -142,7 +162,9 @@ describe('AskRegistry', () => {
   describe('answer / cancel', () => {
     it('enforces exactly one terminal transition; a later commit is a no-op', async () => {
       const registry = new AskRegistry(db)
-      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
 
       const firstAnswer = registry.answer(askId, { q1: { value: 'hi', source: 'input' } }, [])
       const secondAnswer = registry.answer(askId, { q1: { value: 'bye', source: 'input' } }, [])
@@ -158,7 +180,9 @@ describe('AskRegistry', () => {
       const registry = new AskRegistry(db)
       const events: string[] = []
       registry.onAskChanged((event) => events.push(event.status))
-      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
       registry.answer(askId, {}, ['q1'])
       expect(events).toEqual(['registered', 'partial'])
       expect(db.getAsk(askId)?.status).toBe('partial')
@@ -166,11 +190,17 @@ describe('AskRegistry', () => {
 
     it('resolves cancel as "declined" with every question skipped', async () => {
       const registry = new AskRegistry(db)
-      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
       expect(registry.cancel(askId, 'interrupt').committed).toBe(true)
       const row = db.getAsk(askId)
       expect(row?.status).toBe('declined')
-      expect(JSON.parse(row?.answers_json as string)).toEqual({ answers: {}, skipped: ['q1'], summary: '' })
+      expect(JSON.parse(row?.answers_json as string)).toEqual({
+        answers: {},
+        skipped: ['q1'],
+        summary: ''
+      })
     })
 
     it('returns committed:false for an unknown askId rather than throwing', () => {
@@ -185,12 +215,19 @@ describe('AskRegistry', () => {
       const registry = new AskRegistry(db)
       const events: (Record<string, unknown> | undefined)[] = []
       registry.onAskChanged((event) => events.push(event.partial))
-      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
 
-      registry.updatePartial(askId, { q1: { draft: 'partial answer' }, bogus: { draft: 'dropped' } })
+      registry.updatePartial(askId, {
+        q1: { draft: 'partial answer' },
+        bogus: { draft: 'dropped' }
+      })
 
       expect(events).toEqual([undefined, { q1: { draft: 'partial answer' } }])
-      expect(JSON.parse(db.getAsk(askId)?.partial_json as string)).toEqual({ q1: { draft: 'partial answer' } })
+      expect(JSON.parse(db.getAsk(askId)?.partial_json as string)).toEqual({
+        q1: { draft: 'partial answer' }
+      })
     })
 
     it('is a no-op for an unknown askId', () => {
@@ -232,7 +269,10 @@ describe('AskRegistry', () => {
       registry.onAskChanged((event) => events.push({ askId: event.askId, status: event.status }))
 
       const head = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
-      const queued = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_2', timeoutMs: 5_000 })
+      const queued = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_2',
+        timeoutMs: 5_000
+      })
 
       await vi.advanceTimersByTimeAsync(5_000)
 
@@ -284,7 +324,9 @@ describe('AskRegistry', () => {
     it('cancels the grace timer on a reconnect inside the window', async () => {
       vi.useFakeTimers()
       const registry = new AskRegistry(db)
-      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
 
       registry.notePaneDetached('pane:1')
       await vi.advanceTimersByTimeAsync(ASK_LIVENESS_GRACE_MS - 1_000)
@@ -297,9 +339,15 @@ describe('AskRegistry', () => {
     it('resolves unavailable once the grace window elapses without a reconnect', async () => {
       vi.useFakeTimers()
       const registry = new AskRegistry(db)
-      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
 
-      const promise = registry.waitChunk(askId, ASK_LIVENESS_GRACE_MS + 60_000, new AbortController().signal)
+      const promise = registry.waitChunk(
+        askId,
+        ASK_LIVENESS_GRACE_MS + 60_000,
+        new AbortController().signal
+      )
       registry.notePaneDetached('pane:1')
       await vi.advanceTimersByTimeAsync(ASK_LIVENESS_GRACE_MS)
 

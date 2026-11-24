@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 const spawnMock = vi.fn<(spec: Record<string, unknown>) => ChildProcess>()
 
-vi.mock('@orca/process-host', () => ({ spawnProcess: spawnMock }))
+vi.mock('@quirky/process-host', () => ({ spawnProcess: spawnMock }))
 vi.mock('./bundled-ripgrep-path', () => ({
   bundledRipgrepCommand: () => '/install/ripgrep/darwin-arm64/rg'
 }))

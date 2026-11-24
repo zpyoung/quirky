@@ -1,5 +1,5 @@
 import { resolveStructuredWorkerAuthority } from '../../structured-worker-authority'
-import { OrcaRuntimeWithAdoptTerminalOrphansFromInventory } from '../adoption/adopt-terminal-orphans-from-inventory'
+import { QuirkyRuntimeWithAdoptTerminalOrphansFromInventory } from '../adoption/adopt-terminal-orphans-from-inventory'
 import type {
   RuntimeTerminalAgentStatus,
   RuntimeTerminalInteractiveWait,
@@ -14,7 +14,7 @@ import type {
 
 import type { AgentLaunchScope } from '../../session-tabs/structured-session-tab-restoration'
 import { withTimeout } from '../../runtime-async-boundaries'
-import { TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS } from '../../orca-runtime-core'
+import { TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS } from '../../quirky-runtime-core'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { ExactWorkerProviderSession } from '../../../../shared/orchestration-worker-output'
 import { selectExactWorkerProviderSession } from '../../orchestration/worker-provider-session'
@@ -38,7 +38,7 @@ import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-reco
 
 import type { OrchestrationDb } from '../../orchestration/db/orchestration-db'
 
-export abstract class OrcaRuntimeWithGetTerminalInteractiveWait extends OrcaRuntimeWithAdoptTerminalOrphansFromInventory {
+export abstract class QuirkyRuntimeWithGetTerminalInteractiveWait extends QuirkyRuntimeWithAdoptTerminalOrphansFromInventory {
   protected abstract getTerminalAgentStatusPtyId(handle: string): string
 
   protected abstract getTerminalWaitPermissionInputs(

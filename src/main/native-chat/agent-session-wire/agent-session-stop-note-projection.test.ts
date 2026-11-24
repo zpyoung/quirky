@@ -27,7 +27,7 @@ import { HISTORY_PAGE_CONTENT_BUDGET_BYTES } from './agent-session-history-page-
 import { MOBILE_BRIDGE_MAX_FRAME_BYTES } from '../../../shared/mobile-bridge-frame-bytes'
 
 const journals = createTrackedJournalOpener()
-const turnIdentity = { provider: 'orca', clientMessageId: 'turn-1' } as const
+const turnIdentity = { provider: 'quirky', clientMessageId: 'turn-1' } as const
 const turnItemId = agentJournalItemKey(turnIdentity)
 const noteIdentity = structuredAgentSessionStopNoteIdentity('turn-1')
 const noteId = agentJournalItemKey(noteIdentity)
@@ -43,7 +43,7 @@ let root: string
 let journal: AgentSessionJournal
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-stop-note-projection-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-stop-note-projection-'))
   journal = await journals.open({
     identity: {
       sessionId: 'session-1',
@@ -145,7 +145,7 @@ it('leaves unrelated failures and non-Stop notes unchanged', async () => {
     ...agentSessionFailureWords(agentSessionFailureFact('providerExited'), { surface: 'row' })
   }
   await note(failed)
-  await journal.appendItem({ provider: 'orca', clientMessageId: 'other' }, unconfirmed, {
+  await journal.appendItem({ provider: 'quirky', clientMessageId: 'other' }, unconfirmed, {
     fence: 1,
     turnScope: scope
   })
@@ -287,7 +287,7 @@ it('derives a note page with its ended turn on an earlier page, in either paging
     }
   })
   await journal.appendItem(
-    { provider: 'orca', clientMessageId: 'later' },
+    { provider: 'quirky', clientMessageId: 'later' },
     { kind: 'status', text: 'Later' },
     { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
   )
@@ -319,7 +319,7 @@ it('shrinks the triggering row window without dropping the dependent note', asyn
   } as const
   for (const clientMessageId of ['large-1', 'large-2']) {
     await journal.appendItem(
-      { provider: 'orca', clientMessageId },
+      { provider: 'quirky', clientMessageId },
       { ...large, blocks: [...large.blocks] },
       { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
     )

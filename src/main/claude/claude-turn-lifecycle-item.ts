@@ -14,7 +14,7 @@ export type ClaudeCurrentTurn = {
   turnId: string
   startedAt: number
   /** Host clock at the send that opened the turn; absent when the provider
-   *  resumed on its own and no send of Orca's names this turn. */
+   *  resumed on its own and no send of Quirky's names this turn. */
   requestedAt?: number
   /** Provider key of the user echo; the send's own key when output the CLI
    *  wrote for a started send came before its echo; or the lifecycle row itself

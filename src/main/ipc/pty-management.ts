@@ -125,13 +125,13 @@ export function registerDaemonManagementHandlers(): void {
       )
       const identity = readCurrentDaemonIdentity()
       // Why re-probe on the poll: the fix dialog's first step completes in System Settings, and
-      // returning to Orca is the only moment anything can notice. The refresh owns when to skip.
+      // returning to Quirky is the only moment anything can notice. The refresh owns when to skip.
       await refreshDaemonFolderAccessProbe(identity).catch(() => {})
       return { health, folderAccessMismatch: getDaemonFolderAccessMismatch(identity) }
     }
   )
 
-  // Why a separate channel from the poll: this one has a side effect — it clears Orca's TCC row and
+  // Why a separate channel from the poll: this one has a side effect — it clears Quirky's TCC row and
   // makes the app touch the folder so macOS re-prompts — and only a user click may trigger it.
   ipcMain.handle(
     'pty:management:resetFolderAccess',

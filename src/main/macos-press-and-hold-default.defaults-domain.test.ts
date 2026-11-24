@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import {
   PRESS_AND_HOLD_KEY,
   ensureMacPressAndHoldDefault,
@@ -16,17 +16,17 @@ import {
 } from './macos-press-and-hold-default'
 
 /**
- * Runs against the real `/usr/bin/defaults` on a throwaway Orca-owned domain.
+ * Runs against the real `/usr/bin/defaults` on a throwaway Quirky-owned domain.
  *
  * The whole design rests on one claim the mocks cannot make: a domain that has never been written
  * is distinguishable from one explicitly set to `false`. Electron's `systemPreferences` cannot tell
  * them apart, so if `defaults` could not either, "only write when unset" would be unimplementable.
  *
- * Every domain used here is a throwaway UUID under Orca's own prefix, deleted along with its plist
- * in `afterEach`; the real `com.stablyai.orca` domain is never read or written.
+ * Every domain used here is a throwaway UUID under Quirky's own prefix, deleted along with its plist
+ * in `afterEach`; the real `com.zpyoung.quirky` domain is never read or written.
  */
 
-// Why a real Orca-owned domain shape: the ownership guard rejects anything else, so a fake prefix
+// Why a real Quirky-owned domain shape: the ownership guard rejects anything else, so a fake prefix
 // would exercise a different branch than production.
 const domains: string[] = []
 
@@ -34,7 +34,7 @@ const domains: string[] = []
 const DEFAULTS_MISSING_EXIT_CODE = 1
 
 function throwawayDomain(): string {
-  const domain = `com.stablyai.orca.defaults-domain-test.${randomUUID()}`
+  const domain = `com.zpyoung.quirky.defaults-domain-test.${randomUUID()}`
   domains.push(domain)
   return domain
 }
@@ -142,7 +142,7 @@ describe.skipIf(process.platform !== 'darwin')(
     it.skipIf(process.getuid?.() === 0)('reports a write the binary refused', () => {
       // Why a real refusal: `defaults write` exits non-zero instead of throwing, so a caller that
       // only caught exceptions would record 'applied' for a value that never reached the plist.
-      const readOnly = join(mkdtempSync(join(tmpdir(), 'orca-press-hold-ro-')), 'locked')
+      const readOnly = join(mkdtempSync(join(tmpdir(), 'quirky-press-hold-ro-')), 'locked')
       mkdirSync(readOnly)
       chmodSync(readOnly, 0o500)
       try {

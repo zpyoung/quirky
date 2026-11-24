@@ -7,8 +7,8 @@ describe('PendingWorktreeRow', () => {
   afterEach(cleanup)
 
   it('draws a creation this host runs for a phone or the CLI, which the window holds no request for', () => {
-    const { container } = render(<PendingWorktreeRow creationId="from-phone" repoName="orca" />)
-    expect(container.textContent).toBe('Creating workspace…orca')
+    const { container } = render(<PendingWorktreeRow creationId="from-phone" repoName="quirky" />)
+    expect(container.textContent).toBe('Creating workspace…quirky')
     expect(container.querySelector('button')).toBeNull()
   })
 })

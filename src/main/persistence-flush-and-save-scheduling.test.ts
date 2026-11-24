@@ -52,7 +52,7 @@ vi.mock('electron', () => ({
 
 describe('Store', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {
@@ -351,7 +351,7 @@ describe('Store', () => {
     const store = await createStore()
     store.setGitHubCache({ pr: { 'o/r#7': { fetchedAt: 7 } as never }, issue: {} })
     store.flush()
-    expect(existsSync(join(testState.dir, 'orca-github-cache.json'))).toBe(true)
+    expect(existsSync(join(testState.dir, 'quirky-github-cache.json'))).toBe(true)
 
     const restarted = await createStore()
     expect(restarted.getGitHubCache().pr['o/r#7']).toEqual({ fetchedAt: 7 })
@@ -360,8 +360,8 @@ describe('Store', () => {
   it('keeps GitHub cache sidecars scoped to explicit profile data files', async () => {
     const profileADir = join(testState.dir, 'profiles', 'a')
     const profileBDir = join(testState.dir, 'profiles', 'b')
-    const profileADataFile = join(profileADir, 'orca-data.json')
-    const profileBDataFile = join(profileBDir, 'orca-data.json')
+    const profileADataFile = join(profileADir, 'quirky-data.json')
+    const profileBDataFile = join(profileBDir, 'quirky-data.json')
     mkdirSync(profileADir, { recursive: true })
     mkdirSync(profileBDir, { recursive: true })
 

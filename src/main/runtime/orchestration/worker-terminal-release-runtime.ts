@@ -1,7 +1,7 @@
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 
 export type WorkerTerminalReleaseRuntime = Pick<
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   | 'retireStructuredAgentSessionTabFromSnapshot'
   | 'forgetStructuredSessionMail'
   | 'resolveOrchestrationWorkerServer'

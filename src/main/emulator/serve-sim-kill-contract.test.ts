@@ -36,7 +36,7 @@ function isAlive(helper: ChildProcess): boolean {
 // TMPDIR isolates serve-sim's state dir so only these fake helpers are reachable.
 describe.skipIf(process.platform === 'win32')('serve-sim kill contract', () => {
   it('stops only the named device helper', async () => {
-    const stateRoot = mkdtempSync(join(tmpdir(), 'orca-serve-sim-kill-'))
+    const stateRoot = mkdtempSync(join(tmpdir(), 'quirky-serve-sim-kill-'))
     tempDirs.push(stateRoot)
     mkdirSync(join(stateRoot, 'serve-sim'))
     const [helperA, helperB] = [DEVICE_A, DEVICE_B].map((device) => {

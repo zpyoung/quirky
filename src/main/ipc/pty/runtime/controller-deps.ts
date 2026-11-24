@@ -1,5 +1,5 @@
 import type { PtyRendererDelivery } from '../session'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import type { Store } from '../../../persistence'
 import type { IPtyProvider } from '../../../providers/pty-provider-contract'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
@@ -17,7 +17,7 @@ import type { ResolvedPtyHost } from '../provider/registry'
 import type { PtySpawnCodexResumeDeps } from '../spawn-host-env'
 
 export type PtyRuntimeControllerDeps = PtySpawnCodexResumeDeps & {
-  runtime?: OrcaRuntimeService
+  runtime?: QuirkyRuntimeService
   store?: Store
   adoptStablePane: (args: AdoptStablePaneArgs) => Promise<AdoptStablePaneResult | null>
   getLocalPtyStartupPromise: (hostId?: ResolvedPtyHost) => Promise<void> | undefined

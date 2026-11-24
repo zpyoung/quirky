@@ -1,4 +1,4 @@
-import type { MobileWebShellFailureReason } from '../../modules/orca-mobile-web-shell/src/load-state'
+import type { MobileWebShellFailureReason } from '../../modules/quirky-mobile-web-shell/src/load-state'
 import { evaluateMobileWebBundleCompat } from '../transport/mobile-web-bundle-compat'
 import type {
   CachedGeneration,

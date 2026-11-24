@@ -55,7 +55,7 @@ vi.mock('electron', () => ({
 
 describe('Store', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {
@@ -199,7 +199,7 @@ describe('Store', () => {
 
   it('loads state from an explicit profile data file path', async () => {
     const profileDataDirectory = join(testState.dir, 'profiles', 'local-default')
-    const profileDataFile = join(profileDataDirectory, 'orca-data.json')
+    const profileDataFile = join(profileDataDirectory, 'quirky-data.json')
     mkdirSync(profileDataDirectory, { recursive: true })
     writeDataFile({
       schemaVersion: 1,
@@ -228,16 +228,16 @@ describe('Store', () => {
       repos: [
         makeRepo({
           id: 'local-repo',
-          path: '/Users/alice/orca',
-          displayName: 'Orca',
-          upstream: { owner: 'StablyAI', repo: 'Orca' }
+          path: '/Users/alice/quirky',
+          displayName: 'Quirky',
+          upstream: { owner: 'StablyAI', repo: 'Quirky' }
         }),
         makeRepo({
           id: 'remote-repo',
-          path: '/home/alice/orca',
-          displayName: 'orca',
+          path: '/home/alice/quirky',
+          displayName: 'quirky',
           connectionId: 'gpu-vm',
-          upstream: { owner: 'stablyai', repo: 'orca' }
+          upstream: { owner: 'stablyai', repo: 'quirky' }
         })
       ]
     })
@@ -255,13 +255,13 @@ describe('Store', () => {
         id: 'local-repo',
         projectId: 'github:stablyai/orca',
         hostId: 'local',
-        path: '/Users/alice/orca'
+        path: '/Users/alice/quirky'
       }),
       expect.objectContaining({
         id: 'remote-repo',
         projectId: 'github:stablyai/orca',
         hostId: 'ssh:gpu-vm',
-        path: '/home/alice/orca'
+        path: '/home/alice/quirky'
       })
     ])
 

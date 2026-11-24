@@ -15,7 +15,7 @@ function managed(
     createdAt: 1,
     pairingRevision: overrides.pairingRevision ?? 1,
     ...(overrides.hostKey === null ? {} : { hostKeyFingerprint: overrides.hostKey ?? 'key-a' }),
-    orcadDeployment: {
+    quirkydDeployment: {
       sshTargetId: 'box',
       sshTargetGeneration: overrides.generation ?? 1,
       localPort: 46_768,

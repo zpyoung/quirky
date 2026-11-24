@@ -139,7 +139,7 @@ async function flushPromises(): Promise<void> {
 function seedRemoteWorkspace(environmentId = 'env-1'): void {
   useAppStore.setState({
     settings: {
-      ...getDefaultSettings('/tmp/orca-workspaces'),
+      ...getDefaultSettings('/tmp/quirky-workspaces'),
       activeRuntimeEnvironmentId: environmentId
     },
     repos: [
@@ -287,7 +287,7 @@ describe('WorkspacePortScanner', () => {
     await act(async () => {
       useAppStore.setState({
         settings: {
-          ...getDefaultSettings('/tmp/orca-workspaces'),
+          ...getDefaultSettings('/tmp/quirky-workspaces'),
           activeRuntimeEnvironmentId: 'env-1'
         }
       })
@@ -556,7 +556,7 @@ describe('WorkspacePortScanner', () => {
 
 describe('advertised URL refresh bursts', () => {
   async function mountLocalScanner(): Promise<() => void> {
-    useAppStore.setState({ settings: getDefaultSettings('/tmp/orca-workspaces') })
+    useAppStore.setState({ settings: getDefaultSettings('/tmp/quirky-workspaces') })
     await act(async () => {
       root?.render(<WorkspacePortScanner />)
       await flushPromises()
@@ -646,7 +646,7 @@ it('releases the URL burst when its leading scan finishes while hidden', async (
   let visibility: DocumentVisibilityState = 'visible'
   const restore = overrideDocumentVisibilityState(() => visibility)
   try {
-    useAppStore.setState({ settings: getDefaultSettings('/tmp/orca-workspaces') })
+    useAppStore.setState({ settings: getDefaultSettings('/tmp/quirky-workspaces') })
     await act(async () => {
       root?.render(<WorkspacePortScanner />)
       await flushPromises()

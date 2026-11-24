@@ -19,7 +19,7 @@ function git(cwd, args) {
 }
 
 function withGitRepo(run) {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-rc-history-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-rc-history-'))
   try {
     git(dir, ['init', '--initial-branch=main'])
     git(dir, ['config', 'user.name', 'Test Bot'])

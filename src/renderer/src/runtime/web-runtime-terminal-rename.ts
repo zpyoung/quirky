@@ -6,7 +6,7 @@ import { isWebRuntimeSessionActive } from './web-runtime-session-environment'
 import { setWebRuntimeTabProps } from './web-runtime-terminal-actions'
 
 /**
- * Why: a remote server's tab name lives on that server, where `orca terminal rename`, phones and
+ * Why: a remote server's tab name lives on that server, where `quirky terminal rename`, phones and
  * other desktops read it. A rename kept only here diverged from all of them (#29975).
  */
 export function renameWebRuntimeTerminal(

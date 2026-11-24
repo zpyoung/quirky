@@ -149,7 +149,7 @@ describe('ensureVirtualDisplayForHeadlessServe', () => {
       expect(message).toContain('`xorg-server-xvfb` on Arch')
     }
     // Why: the serve failure must not tell someone who just ran serve to run serve.
-    expect(MISSING_SERVE_DISPLAY_MESSAGE).not.toContain('orca-ide serve')
+    expect(MISSING_SERVE_DISPLAY_MESSAGE).not.toContain('quirky-ide serve')
     expect(MISSING_SERVE_DISPLAY_MESSAGE).toContain('Wayland alone is not enough')
     expect(missingLinuxDisplayMessage(true)).toBe(MISSING_SERVE_DISPLAY_MESSAGE)
     expect(missingLinuxDisplayMessage(false)).toBe(MISSING_LINUX_DISPLAY_MESSAGE)
@@ -189,7 +189,7 @@ describe('ensureVirtualDisplayForHeadlessServe', () => {
   })
 
   // removeStaleDisplayArtifacts unlinks the lock before the socket, so a crash between the two
-  // leaves a lockless socket on Orca's OWN :99. Adopting it would resurrect the orphan-socket bug.
+  // leaves a lockless socket on Quirky's OWN :99. Adopting it would resurrect the orphan-socket bug.
   it('does not adopt its own :99 socket when the lock is missing', async () => {
     setPlatform('linux')
     existsSyncMock.mockReturnValue(true)
@@ -519,7 +519,7 @@ describe('ensureVirtualDisplayForHeadlessServe', () => {
       expect(hasUsableLinuxDisplay({ WAYLAND_SOCKET: 'not-an-fd' })).toBe(false)
     })
 
-    // Orca's own teardown unlinks the lock before the socket, so a lockless :99 is our own
+    // Quirky's own teardown unlinks the lock before the socket, so a lockless :99 is our own
     // half-finished cleanup — trusting it because DISPLAY names it would accept a dead display.
     it('does not trust a lockless socket on its own managed display number', async () => {
       setPlatform('linux')
@@ -560,7 +560,7 @@ describe('ensureVirtualDisplayForHeadlessServe', () => {
       const { hasUsableLinuxDisplay } = await import('./ensure-virtual-display')
 
       expect(hasUsableLinuxDisplay({ DISPLAY: ':0' })).toBe(true)
-      // Numbers Orca may pick for itself are still someone else's when DISPLAY names them.
+      // Numbers Quirky may pick for itself are still someone else's when DISPLAY names them.
       expect(hasUsableLinuxDisplay({ DISPLAY: ':100' })).toBe(true)
       expect(killSpy).not.toHaveBeenCalled()
     })

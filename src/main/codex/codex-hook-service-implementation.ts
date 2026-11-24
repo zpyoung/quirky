@@ -4,10 +4,10 @@ import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-p
 import { dedupeInFlightRun } from '../in-flight-run-dedupe'
 import { refreshManagedScriptIfPresent } from '../agent-hooks/managed-hook-script-refresh'
 import { writeManagedScript } from '../agent-hooks/installer-utils'
-import { getOrcaManagedCodexHomePath } from './codex-home-paths'
+import { getQuirkyManagedCodexHomePath } from './codex-home-paths'
 import { getManagedCommand, getManagedScriptPath } from './codex-hook-definition'
 import { installCodexHooksExclusively } from './codex-hook-local-install'
-import { getManagedCodexHookHome, readStopgapOrcaHashes } from './codex-hook-orca-approvals'
+import { getManagedCodexHookHome, readStopgapQuirkyHashes } from './codex-hook-quirky-approvals'
 import {
   refreshCodexRuntimeUserHooksExclusively,
   removeCodexHooksExclusively
@@ -64,7 +64,7 @@ export class CodexHookService {
   }
 
   /**
-   * App start and the setting turning on: reconciles Orca's entry in ~/.codex,
+   * App start and the setting turning on: reconciles Quirky's entry in ~/.codex,
    * converting an older build's, then sweeps retired forms.
    */
   async reconcileHooks(): Promise<AgentHookInstallStatus> {
@@ -84,7 +84,7 @@ export class CodexHookService {
   // per-account home so hooks.json/config.toml/trust land where codex reads.
   // Only launch prep for a pane that does not run Codex skips waiting for Codex's answer.
   async install(
-    runtimeHomePath: string = getOrcaManagedCodexHomePath(),
+    runtimeHomePath: string = getQuirkyManagedCodexHomePath(),
     launchesCodex = true,
     isHooksEnabled: () => boolean = () => true
   ): Promise<AgentHookInstallStatus> {
@@ -103,7 +103,7 @@ export class CodexHookService {
       const hashes =
         answer.kind === 'hashes'
           ? answer.hashes
-          : readStopgapOrcaHashes(
+          : readStopgapQuirkyHashes(
               getManagedCodexHookHome(runtimeHomePath),
               getManagedCommand(getManagedScriptPath())
             )
@@ -130,7 +130,7 @@ export class CodexHookService {
     launchesCodex: boolean,
     isHooksEnabled: () => boolean
   ): Promise<AgentHookInstallStatus> {
-    const homePath = runtimeHomePath ?? getOrcaManagedCodexHomePath()
+    const homePath = runtimeHomePath ?? getQuirkyManagedCodexHomePath()
     return dedupeInFlightRun(
       this.launchPrepInFlight,
       launchPrepKey(launchesCodex ? 'codex-launch' : 'install', homePath),
@@ -139,7 +139,7 @@ export class CodexHookService {
   }
 
   refreshRuntimeUserHooksForLaunchPrep(runtimeHomePath?: string): Promise<AgentHookInstallStatus> {
-    const homePath = runtimeHomePath ?? getOrcaManagedCodexHomePath()
+    const homePath = runtimeHomePath ?? getQuirkyManagedCodexHomePath()
     return dedupeInFlightRun(this.launchPrepInFlight, launchPrepKey('refresh', homePath), () =>
       this.refreshRuntimeUserHooks(homePath)
     )
@@ -154,7 +154,7 @@ export class CodexHookService {
   }
 
   refreshRuntimeUserHooks(
-    runtimeHomePath: string = getOrcaManagedCodexHomePath()
+    runtimeHomePath: string = getQuirkyManagedCodexHomePath()
   ): Promise<AgentHookInstallStatus> {
     return runExclusivelyForRuntimeAndSystemTrustConfig(runtimeHomePath, () =>
       this.refreshRuntimeUserHooksExclusively(runtimeHomePath)
@@ -170,7 +170,7 @@ export class CodexHookService {
   }
 
   remove(): Promise<AgentHookInstallStatus> {
-    return runExclusivelyForRuntimeAndSystemTrustConfig(getOrcaManagedCodexHomePath(), () =>
+    return runExclusivelyForRuntimeAndSystemTrustConfig(getQuirkyManagedCodexHomePath(), () =>
       this.removeExclusively()
     )
   }

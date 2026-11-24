@@ -124,7 +124,7 @@ export function ObjectiveEnrollmentGateFields({
         <p className="text-[11px] text-destructive" role="status">
           {translate(
             'fork.heimdallObjective.enrollment.gatesUnsupportedHost',
-            "Gates are unavailable on this host's Orca version. Remove any gates below to continue."
+            "Gates are unavailable on this host's Quirky version. Remove any gates below to continue."
           )}
         </p>
       ) : null}

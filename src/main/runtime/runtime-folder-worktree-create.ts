@@ -1,5 +1,5 @@
 import { paneIdentity } from './runtime-terminal-pane-identity'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { shouldSeedWorktreePrimaryTerminal } from '../../shared/worktree-first-surface'
 import { randomUUID } from 'node:crypto'
 import { getProjectHostSetupWorktreeMeta } from '../../shared/project-host-setup-lookup'
@@ -85,9 +85,9 @@ export async function createRuntimeFolderWorktree(args: {
       : {}),
     lastActivityAt: now,
     createdAt: now,
-    orcaCreatedAt: now,
-    orcaCreationSource: 'runtime',
-    orcaCreationWorkspaceLayout: {
+    quirkyCreatedAt: now,
+    quirkyCreationSource: 'runtime',
+    quirkyCreationWorkspaceLayout: {
       path: settings.workspaceDir,
       nestWorkspaces: settings.nestWorkspaces
     },
@@ -134,10 +134,10 @@ export async function createRuntimeFolderWorktree(args: {
   let didSpawnStartup = false
   let startupTerminal: CreateWorktreeResult['startupTerminal']
   // Switch point: main starts the agent even with no terminal service, so its pane shows why not.
-  if (args.startup && (deps.ptySpawnAvailable || ORCA_LAYOUT_OWNER_IS_MAIN)) {
+  if (args.startup && (deps.ptySpawnAvailable || QUIRKY_LAYOUT_OWNER_IS_MAIN)) {
     try {
       const launchRuntime = args.startupLaunchRuntime
-      if (launchRuntime instanceof Error && !ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (launchRuntime instanceof Error && !QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         throw launchRuntime
       }
       const terminal = await deps.createTerminal(`id:${worktree.id}`, {
@@ -156,7 +156,7 @@ export async function createRuntimeFolderWorktree(args: {
         startupCommandDelivery: args.startup.startupCommandDelivery,
         telemetry: args.startup.telemetry,
         // Switch point: a start main could not make stays in its pane, showing why.
-        ...(ORCA_LAYOUT_OWNER_IS_MAIN ? { keepPaneOnStartFailure: true as const } : {}),
+        ...(QUIRKY_LAYOUT_OWNER_IS_MAIN ? { keepPaneOnStartFailure: true as const } : {}),
         ...(shouldActivate ? {} : { surfaceOwner: false })
       })
       if (args.draftPaste) {
@@ -186,7 +186,7 @@ export async function createRuntimeFolderWorktree(args: {
       worktree.id,
       undefined,
       // Switch point: a start main could not make stays main's to show, never the window's.
-      ORCA_LAYOUT_OWNER_IS_MAIN
+      QUIRKY_LAYOUT_OWNER_IS_MAIN
         ? undefined
         : args.startup && !didSpawnStartup
           ? args.startup
@@ -199,7 +199,7 @@ export async function createRuntimeFolderWorktree(args: {
     deps.ptySpawnAvailable &&
     shouldSeedWorktreePrimaryTerminal({
       // Switch point: a failed agent start keeps its pane, so no shell is seeded beside it.
-      hasPrimarySurface: didSpawnStartup || (ORCA_LAYOUT_OWNER_IS_MAIN && Boolean(args.startup)),
+      hasPrimarySurface: didSpawnStartup || (QUIRKY_LAYOUT_OWNER_IS_MAIN && Boolean(args.startup)),
       // Background attribution-only creates have historically omitted the shell.
       callerProvidesSurface: args.promisedAgentChat === true || args.createdWithAgent !== undefined
     })

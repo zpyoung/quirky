@@ -25,7 +25,7 @@ const stores = [
 it.each(stores)(
   '%s reclaims orphaned temps while preserving active writes and unrelated files',
   async (_, fileName, open) => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-orphaned-temp-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-orphaned-temp-'))
     dirs.push(dir)
     // Other-process PIDs: the sweep always spares this process's own temps.
     const orphaned = join(dir, `${fileName}.${process.pid + 1}.1784108697605.b306bb91.tmp`)
@@ -57,7 +57,7 @@ it.each(stores)(
 )
 
 it.each(stores)('%s loads while startup cleanup is still pending', async (_, fileName, open) => {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-orphaned-temp-pending-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-orphaned-temp-pending-'))
   dirs.push(dir)
   writeFileSync(join(dir, fileName), '[]')
   let finishCleanup = () => {}

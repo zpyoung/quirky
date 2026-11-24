@@ -1,6 +1,6 @@
 /* eslint-disable no-control-regex -- Terminal control-sequence metadata, never input text. */
 export function installTerminalRenderPhaseProbe() {
-  if (window.__orcaRenderPhaseProbe || !window.__orcaLiveRenderPanes) {
+  if (window.__quirkyRenderPhaseProbe || !window.__quirkyLiveRenderPanes) {
     throw new Error('Missing verified pane references, or another probe is active')
   }
   const events = []
@@ -44,7 +44,7 @@ export function installTerminalRenderPhaseProbe() {
       cleanup.push(() => disposable.dispose())
     }
   }
-  for (const pane of window.__orcaLiveRenderPanes) {
+  for (const pane of window.__quirkyLiveRenderPanes) {
     const terminal = pane.terminal
     const service = terminal?._core?._renderService
     if (!service) {
@@ -106,7 +106,7 @@ export function installTerminalRenderPhaseProbe() {
     )
   }
   const keydown = (event) => {
-    const pane = window.__orcaLiveRenderPanes.find((p) =>
+    const pane = window.__quirkyLiveRenderPanes.find((p) =>
       p.terminal.element?.contains(event.target)
     )
     if (pane) {
@@ -115,15 +115,15 @@ export function installTerminalRenderPhaseProbe() {
   }
   document.addEventListener('keydown', keydown, true)
   cleanup.push(() => document.removeEventListener('keydown', keydown, true))
-  window.__orcaRenderPhaseProbe = {
+  window.__quirkyRenderPhaseProbe = {
     stop() {
       for (const dispose of cleanup.toReversed()) {
         dispose()
       }
-      delete window.__orcaRenderPhaseProbe
-      delete window.__orcaLiveRenderPanes
+      delete window.__quirkyRenderPhaseProbe
+      delete window.__quirkyLiveRenderPanes
       return { startedAt, endedAt: performance.now(), events, dropped }
     }
   }
-  return { startedAt, panes: window.__orcaLiveRenderPanes.length }
+  return { startedAt, panes: window.__quirkyLiveRenderPanes.length }
 }

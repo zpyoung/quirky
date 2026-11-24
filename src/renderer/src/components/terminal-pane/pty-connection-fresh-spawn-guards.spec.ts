@@ -355,13 +355,13 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
       await flushAsyncTicks()
 
-      capturedDataCallback.current?.('Created https://github.com/acme/orca/pull/42\r\n')
+      capturedDataCallback.current?.('Created https://github.com/acme/quirky/pull/42\r\n')
 
       expect(mockStoreState.observeTerminalGitHubPullRequestLink).toHaveBeenCalledWith(
         'wt-1',
         expect.objectContaining({
-          url: 'https://github.com/acme/orca/pull/42',
-          slug: { owner: 'acme', repo: 'orca', host: 'github.com' },
+          url: 'https://github.com/acme/quirky/pull/42',
+          slug: { owner: 'acme', repo: 'quirky', host: 'github.com' },
           number: 42
         }),
         expect.objectContaining({ tabId: 'tab-1' })
@@ -391,7 +391,9 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
 
       expect(deps.onPtyErrorRef.current).toHaveBeenCalledWith(
         1,
-        expect.stringContaining('Orca attempts background recovery for managed local and WSL homes')
+        expect.stringContaining(
+          'Quirky attempts background recovery for managed local and WSL homes'
+        )
       )
     })
 

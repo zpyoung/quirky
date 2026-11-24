@@ -13,7 +13,7 @@ import {
   verifyClaudeUsageBenchmarkReadAccounting
 } from './claude-usage-benchmark-scanner.mjs'
 
-const ROUNDS = Number(process.env.ORCA_CLAUDE_USAGE_APPEND_BENCH_ROUNDS ?? '8')
+const ROUNDS = Number(process.env.QUIRKY_CLAUDE_USAGE_APPEND_BENCH_ROUNDS ?? '8')
 assert(Number.isSafeInteger(ROUNDS) && ROUNDS > 0, 'benchmark rounds must be a positive integer')
 const VERIFY = process.argv.includes('--verify')
 const BASELINE = process.argv.includes('--baseline')
@@ -284,7 +284,7 @@ async function runSmallCorpus(arms, project, cwd) {
   }
 }
 
-const home = await mkdtemp(join(tmpdir(), 'orca-claude-usage-append-benchmark-'))
+const home = await mkdtemp(join(tmpdir(), 'quirky-claude-usage-append-benchmark-'))
 try {
   const project = join(home, '.claude', 'projects', 'benchmark')
   const cwd = join(home, 'repo')

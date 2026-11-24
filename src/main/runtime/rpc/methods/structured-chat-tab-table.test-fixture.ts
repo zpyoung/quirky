@@ -23,7 +23,7 @@ import {
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { AgentSessionRecordStore } from '../../agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../agent-session-record-store-test-harness'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcDispatchStreamingOptions } from '../dispatcher-stream-options'
 import { SESSION_TAB_METHODS } from './session-tabs'
@@ -41,7 +41,7 @@ export const caller = { callerKey: 'trusted-local:runtime' }
 export let directory: string
 export let store: AgentSessionRecordStore
 export let host: StructuredAgentSessionHost
-export let runtime: OrcaRuntimeService
+export let runtime: QuirkyRuntimeService
 export let dispatcher: RpcDispatcher
 export let acquisitions = 0
 let acquireFails = false
@@ -189,11 +189,11 @@ beforeEach(async () => {
   acquisitions = 0
   acquireFails = false
   closeSession = vi.fn(async () => true)
-  directory = await mkdtemp(join(tmpdir(), 'orca-chat-tab-table-'))
-  runtime = new OrcaRuntimeService()
+  directory = await mkdtemp(join(tmpdir(), 'quirky-chat-tab-table-'))
+  runtime = new QuirkyRuntimeService()
   vi.spyOn(runtime, 'getClientSettings').mockReturnValue(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the structured-chat policy reads only this one setting on these paths.
-    { experimentalNativeChat: true } as ReturnType<OrcaRuntimeService['getClientSettings']>
+    { experimentalNativeChat: true } as ReturnType<QuirkyRuntimeService['getClientSettings']>
   )
   dispatcher = new RpcDispatcher({
     runtime,

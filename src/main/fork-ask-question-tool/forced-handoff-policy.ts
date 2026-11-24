@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 
 /**
  * Which orchestration runs must receive their workers' questions even when a UI could render them.
@@ -7,7 +7,7 @@ import type { OrcaRuntimeService } from '../runtime/orca-runtime'
  * and nothing is forced while none is installed — including every suite that never boots one.
  */
 export type ForcedHandoffPolicy = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   isForcedRun: (runId: string) => boolean
 }
 

@@ -1,6 +1,6 @@
 /**
  * The Claude/Codex account services and the usage service they share, built the same way for
- * the desktop and for orcad. Nothing here may import Electron: orcad bundles this module.
+ * the desktop and for quirkyd. Nothing here may import Electron: quirkyd bundles this module.
  */
 import type { Store } from './persistence'
 import { RateLimitService } from './rate-limits/service'

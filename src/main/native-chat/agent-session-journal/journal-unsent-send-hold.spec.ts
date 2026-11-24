@@ -86,7 +86,7 @@ export function registerJournalUnsentSendHoldTests(): void {
     kind: 'agent',
     senders: [
       {
-        party: { address: 'agent:coordinator', terminalHandle: null, orcaSessionId: null },
+        party: { address: 'agent:coordinator', terminalHandle: null, quirkySessionId: null },
         name: null
       }
     ],
@@ -159,7 +159,7 @@ export function registerJournalUnsentSendHoldTests(): void {
 
   beforeEach(async () => {
     epochs = 0
-    root = await mkdtemp(join(tmpdir(), 'orca-unsent-hold-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-unsent-hold-'))
   })
 
   afterEach(async () => {
@@ -297,7 +297,9 @@ export function registerJournalUnsentSendHoldTests(): void {
       expect(unsentSendKeptAsCard({ origin: 'client', source: { kind: 'agent' } }, body)).toBeNull()
       // Undecodable (folded as an empty kind) and unknown kinds are never a person's.
       expect(unsentSendKeptAsCard({ origin: 'client', source: { kind: '' } }, body)).toBeNull()
-      expect(unsentSendKeptAsCard({ origin: 'client', source: { kind: 'orca' } }, body)).toBeNull()
+      expect(
+        unsentSendKeptAsCard({ origin: 'client', source: { kind: 'quirky' } }, body)
+      ).toBeNull()
       expect(unsentSendKeptAsCard({ origin: 'client', queuedMessageId: 'card' }, body)).toBeNull()
       expect(unsentSendKeptAsCard({ origin: 'client' }, null)).toBeNull()
     })

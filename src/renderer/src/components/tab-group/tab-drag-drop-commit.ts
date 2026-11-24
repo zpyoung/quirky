@@ -10,7 +10,7 @@ import {
   type TabGroupPanelGeometrySnapshot
 } from './tab-group-panel-split-target'
 import { isPaneDropData, isTabDragData, type TabDragItemData } from './tab-drag-data'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { dropTabThroughLayoutOwner } from './tab-group-layout-owner-commands'
 
 type AppState = ReturnType<typeof useAppStore.getState>
@@ -55,7 +55,7 @@ export function commitTabDragDrop({
     // Switch point: main places the tab beside the group first; the drag ends now, the move shows
     // once main answers.
     if (
-      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      QUIRKY_LAYOUT_OWNER_IS_MAIN &&
       dropTabThroughLayoutOwner(worktreeId, {
         kind: 'split',
         tabId: activeData.unifiedTabId,
@@ -133,7 +133,7 @@ export function commitTabDragDrop({
         nextOrder.splice(nextIndex, 0, activeData.unifiedTabId)
         // Switch point: main reorders the group first.
         if (
-          ORCA_LAYOUT_OWNER_IS_MAIN &&
+          QUIRKY_LAYOUT_OWNER_IS_MAIN &&
           dropTabThroughLayoutOwner(worktreeId, {
             kind: 'reorder',
             tabId: activeData.unifiedTabId,
@@ -157,7 +157,7 @@ export function commitTabDragDrop({
       const index = overIndex === -1 ? targetGroup.tabOrder.length : rawInsertIndex
       // Switch point: main moves the tab into the group first.
       if (
-        ORCA_LAYOUT_OWNER_IS_MAIN &&
+        QUIRKY_LAYOUT_OWNER_IS_MAIN &&
         dropTabThroughLayoutOwner(worktreeId, {
           kind: 'move',
           tabId: activeData.unifiedTabId,
@@ -195,7 +195,7 @@ export function commitTabDragDrop({
     if (activeData.groupId !== overData.groupId) {
       // Switch point: main moves the tab into the group first.
       if (
-        ORCA_LAYOUT_OWNER_IS_MAIN &&
+        QUIRKY_LAYOUT_OWNER_IS_MAIN &&
         dropTabThroughLayoutOwner(worktreeId, {
           kind: 'move',
           tabId: activeData.unifiedTabId,

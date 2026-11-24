@@ -5,7 +5,7 @@ import type { InputEvent, KeyboardInputEvent } from 'electron'
 type ElectronModifier = NonNullable<InputEvent['modifiers']>[number]
 
 // Why: Electron honours this NativeWebKeyboardEvent flag although its typings omit it; an
-// unhandled agent key must not be redispatched to Orca's window or application menu.
+// unhandled agent key must not be redispatched to Quirky's window or application menu.
 export type GuestKeyboardEvent = KeyboardInputEvent & { skipIfUnhandled: true }
 
 export type GuestEditCommand = 'selectAll' | 'copy' | 'cut' | 'paste' | 'undo' | 'redo' | 'delete'

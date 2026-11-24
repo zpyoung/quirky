@@ -1,4 +1,4 @@
-// Headless `orca serve` never opens a window. Hook-derived "<Agent> ready" titles used to be
+// Headless `quirky serve` never opens a window. Hook-derived "<Agent> ready" titles used to be
 // driven from the window's listener and dropped without a window, so Hermes never settled.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'

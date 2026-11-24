@@ -1,9 +1,9 @@
-import type { OrcaRuntimeWithBindPtyIncarnationHandle as BindPtyIncarnationHandleMethods } from '../terminal/identity/terminal-handle-bindings'
-import { OrcaRuntimeWithTouchMobileSessionTabsForWorktree } from './mobile-session-membership'
+import type { QuirkyRuntimeWithBindPtyIncarnationHandle as BindPtyIncarnationHandleMethods } from '../terminal/identity/terminal-handle-bindings'
+import { QuirkyRuntimeWithTouchMobileSessionTabsForWorktree } from './mobile-session-membership'
 import type { RetiredTerminalSurface } from '../mobile-session-terminal-retirement'
 import type { RuntimeMobileSessionRetiredTerminalSurface } from '../../../shared/runtime-types'
 import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../../shared/execution-host'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { keepsExitedPane } from '../exited-split-pane-layout-close'
 import type { ExitedSplitPaneFacts } from '../terminal/lifecycle/exited-split-pane-rule'
 import { retireTerminalSurfaceFromPersistence } from '../mobile-session-terminal-persistence-retirement'
@@ -11,7 +11,7 @@ import { retireTerminalSurfacesFromSnapshot } from '../mobile-session-terminal-r
 import { attachRetirementProofsToSnapshot } from '../mobile-session-terminal-retirement-proof'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 
-export abstract class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntimeWithTouchMobileSessionTabsForWorktree {
+export abstract class QuirkyRuntimeWithPersistTerminalSurfaceRetirements extends QuirkyRuntimeWithTouchMobileSessionTabsForWorktree {
   protected abstract findHandleForPtyRecord(
     ...args: Parameters<BindPtyIncarnationHandleMethods['findHandleForPtyRecord']>
   ): ReturnType<BindPtyIncarnationHandleMethods['findHandleForPtyRecord']>
@@ -44,7 +44,7 @@ export abstract class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends O
       }
       // Switch point: main keeps an exited pane the window's rule keeps; others retire as before.
       if (
-        ORCA_LAYOUT_OWNER_IS_MAIN &&
+        QUIRKY_LAYOUT_OWNER_IS_MAIN &&
         exit &&
         parseExecutionHostId(hostId)?.kind !== 'runtime' &&
         keepsExitedPane(current, surface, exit)

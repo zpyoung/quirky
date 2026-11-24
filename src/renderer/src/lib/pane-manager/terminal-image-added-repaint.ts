@@ -11,7 +11,7 @@ type ImageAddedSource = {
 /**
  * Repaint the viewport once after the image addon registers an image.
  *
- * Why: an image's rows are dirtied in a write that Orca's synchronous per-write
+ * Why: an image's rows are dirtied in a write that Quirky's synchronous per-write
  * repair may not cover (async decoders even place tiles after that write's
  * parse), so they reach only xterm's frame-debounced refresh. A throttled or
  * hidden window may never run that frame, leaving every image row but the

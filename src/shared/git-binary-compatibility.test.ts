@@ -43,9 +43,9 @@ import { registerGitLocalBaseBranchBinaryCompatibilityCase } from './git-local-b
 import { registerGitResolutionBinaryCompatibilityCases } from './git-resolution-binary-compatibility.test-cases'
 import { registerGitWorktreeBinaryCompatibilityCases } from './git-worktree-binary-compatibility.test-cases'
 
-const image = process.env.ORCA_GIT_COMPAT_IMAGE
-const binary = process.env.ORCA_GIT_COMPAT_BINARY
-const expectedVersion = process.env.ORCA_GIT_COMPAT_VERSION
+const image = process.env.QUIRKY_GIT_COMPAT_IMAGE
+const binary = process.env.QUIRKY_GIT_COMPAT_BINARY
+const expectedVersion = process.env.QUIRKY_GIT_COMPAT_VERSION
 const describeBinaryCompatibility = image || binary ? describe : describe.skip
 
 type GitResult = { stdout: string; stderr: string }
@@ -82,7 +82,7 @@ describeBinaryCompatibility('real Git binary compatibility', () => {
   }
 
   beforeAll(async () => {
-    repoPath = await realpath(await mkdtemp(join(tmpdir(), 'orca-git-binary-compat-')))
+    repoPath = await realpath(await mkdtemp(join(tmpdir(), 'quirky-git-binary-compat-')))
     fixture = new GitBinaryTestFixture(repoPath, '/repo')
     await fixture.start()
     const versionOutput = await runGit(['--version'])
@@ -211,7 +211,7 @@ describeBinaryCompatibility('real Git binary compatibility', () => {
       '-c',
       'color.ui=always',
       '-c',
-      'gpg.program=orca-nonexistent-signature-verifier',
+      'gpg.program=quirky-nonexistent-signature-verifier',
       'log',
       '--no-show-signature',
       '--no-color',
@@ -297,7 +297,7 @@ describeBinaryCompatibility('real Git binary compatibility', () => {
     expectPreferredOrRecognizedFallback
   )
 
-  // Why pin this: Orca answers "which remote has this URL" from one `git remote -v`
+  // Why pin this: Quirky answers "which remote has this URL" from one `git remote -v`
   // instead of one `git remote get-url` per remote. That is only equivalent if both
   // commands report the same URL — the insteadOf-expanded first `remote.<name>.url`,
   // which a raw config read does not produce — on every supported Git.
@@ -336,7 +336,7 @@ describeBinaryCompatibility('real Git binary compatibility', () => {
     const fetchHeadPath = join(repoPath, '.git', 'FETCH_HEAD')
     await writeFile(fetchHeadPath, 'sentinel\n')
     await expectPreferredOrRecognizedFallback(
-      ['fetch', '--no-write-fetch-head', '.', '+HEAD:refs/orca/compat/no-write-fetch-head'],
+      ['fetch', '--no-write-fetch-head', '.', '+HEAD:refs/quirky/compat/no-write-fetch-head'],
       supports(2, 29),
       isNoWriteFetchHeadUnsupportedError
     )

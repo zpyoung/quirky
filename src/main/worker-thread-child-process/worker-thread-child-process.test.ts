@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MessageChannel, Worker, type MessagePort } from 'node:worker_threads'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { build } from 'esbuild'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -51,7 +51,7 @@ function waitForSpawn(child: WorkerThreadChildProcess): Promise<number> {
 }
 
 // Why the zombie check: libuv reaps a child only through its own loop's handle, so
-// once the worker's loop is gone an exited POSIX child stays a zombie until Orca exits.
+// once the worker's loop is gone an exited POSIX child stays a zombie until Quirky exits.
 async function isRunning(pid: number): Promise<boolean> {
   try {
     process.kill(pid, 0)
@@ -120,9 +120,9 @@ describe('WorkerThreadChildProcessHost over a message channel', () => {
   it('passes env and cwd through to the child', async () => {
     const child = makeConnectedHost().spawn({
       program: process.execPath,
-      args: ['-e', 'process.stdout.write(process.env.ORCA_PROBE_MARKER + "|" + process.cwd())'],
+      args: ['-e', 'process.stdout.write(process.env.QUIRKY_PROBE_MARKER + "|" + process.cwd())'],
       cwd: process.cwd(),
-      env: { ...process.env, ORCA_PROBE_MARKER: 'marker' }
+      env: { ...process.env, QUIRKY_PROBE_MARKER: 'marker' }
     })
     const stdout: string[] = []
     child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk.toString()))
@@ -133,7 +133,7 @@ describe('WorkerThreadChildProcessHost over a message channel', () => {
 
   it('reports a missing program as ENOENT so callers can say the CLI is not installed', async () => {
     const child = makeConnectedHost().spawn({
-      program: 'orca-definitely-missing-program',
+      program: 'quirky-definitely-missing-program',
       args: []
     })
     const error = new Promise<NodeJS.ErrnoException>((resolve) => child.once('error', resolve))
@@ -143,7 +143,7 @@ describe('WorkerThreadChildProcessHost over a message channel', () => {
 
   it('drops an error nobody listens for instead of throwing on the main loop', async () => {
     const child = makeConnectedHost().spawn({
-      program: 'orca-definitely-missing-program',
+      program: 'quirky-definitely-missing-program',
       args: []
     })
 
@@ -238,7 +238,7 @@ describe('WorkerThreadChildProcessHost on a real worker thread', () => {
   let entryPath = ''
 
   beforeAll(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'orca-worker-child-'))
+    directory = await mkdtemp(join(tmpdir(), 'quirky-worker-child-'))
     entryPath = join(directory, 'worker-thread-child-process-entry.cjs')
     await build({
       entryPoints: [join(__dirname, 'worker-thread-child-process-entry.ts')],

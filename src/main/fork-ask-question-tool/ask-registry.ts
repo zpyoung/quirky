@@ -61,7 +61,7 @@ function filterPartialToKnownQuestions(spec: AskSpec, partial: AskPartial): AskP
 }
 
 /**
- * Lifecycle owner for the `orca ask` registry (tech.md C2): the only writer of terminal
+ * Lifecycle owner for the `quirky ask` registry (tech.md C2): the only writer of terminal
  * statuses, and the source every card, pending count, and `wait` reads from. Domain outcomes are
  * always returned as envelopes; only a programmer error (invalid askId shape) throws.
  */

@@ -36,7 +36,7 @@ vi.mock('electron', () => ({
   app: { getPath: appGetPathMock },
   session: { fromPartition: sessionFromPartitionMock }
 }))
-vi.mock('@orca/process-host', () => ({
+vi.mock('@quirky/process-host', () => ({
   runProcessSync: runProcessSyncMock
 }))
 vi.mock('./browser-session-registry', () => ({
@@ -125,7 +125,7 @@ describe('Chromium import snapshot ownership', () => {
   let platformSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'orca-cookie-snapshot-owner-test-'))
+    root = mkdtempSync(join(tmpdir(), 'quirky-cookie-snapshot-owner-test-'))
     snapshotRoot = root
     sourcePath = join(root, 'Chrome', 'Default', 'Network', 'Cookies')
     targetPath = join(root, 'userData', 'Partitions', 'test', 'Network', 'Cookies')
@@ -172,7 +172,7 @@ describe('Chromium import snapshot ownership', () => {
   })
 
   function snapshotDirectories() {
-    return readdirSync(snapshotRoot).filter((name) => name.startsWith('orca-cookie-import-'))
+    return readdirSync(snapshotRoot).filter((name) => name.startsWith('quirky-cookie-import-'))
   }
 
   function expectRefusalCleanup() {

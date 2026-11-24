@@ -25,7 +25,7 @@ import { adoptRuntimeTerminalOrphansFromInventory } from './runtime-terminal-orp
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 
 vi.mock('electron', () => ({
-  app: { getPath: () => testStateDirRef.dir, getName: () => 'orca', getVersion: () => '0.0.0' },
+  app: { getPath: () => testStateDirRef.dir, getName: () => 'quirky', getVersion: () => '0.0.0' },
   BrowserWindow: { fromId: () => null, getAllWindows: () => [] },
   webContents: { fromId: () => null },
   ipcMain: { on: () => {}, handle: () => {}, removeListener: () => {} },
@@ -100,7 +100,7 @@ function adopt(
     request,
     workspace: {
       id: GIT_KEY,
-      path: '/Users/dev/orca',
+      path: '/Users/dev/quirky',
       connectionId: host.connectionId,
       repo: null,
       folderWorkspace: null
@@ -145,7 +145,7 @@ function adopt(
 
 describe('orphan adoption whose flush fails', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-orphan-rollback-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-orphan-rollback-'))
     testStateDirRef.dir = testState.dir
   })
 

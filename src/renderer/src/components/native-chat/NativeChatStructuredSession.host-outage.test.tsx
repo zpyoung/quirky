@@ -326,5 +326,5 @@ it("still words a refusal the host itself sent beside the host's outage", () => 
   setHost(hostStatus('blocked', 'disconnected'))
 
   expect(screen.getByText('Build box is offline')).toBeTruthy()
-  expect(screen.getByText("Orca couldn't open this chat's history right now.")).toBeTruthy()
+  expect(screen.getByText("Quirky couldn't open this chat's history right now.")).toBeTruthy()
 })

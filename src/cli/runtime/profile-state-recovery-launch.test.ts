@@ -10,9 +10,9 @@ import {
 } from './profile-state-recovery-launch'
 
 const mocks = vi.hoisted(() => ({ run: vi.fn() }))
-vi.mock('@orca/process-host', () => ({ runProcess: mocks.run }))
-vi.mock('./orca-app-executable', () => ({
-  resolveForegroundOrcaExecutable: () => '/packaged/Orca',
+vi.mock('@quirky/process-host', () => ({ runProcess: mocks.run }))
+vi.mock('./quirky-app-executable', () => ({
+  resolveForegroundQuirkyExecutable: () => '/packaged/Quirky',
   resolveAppRoot: () => '/application',
   getExecutableAppArgs: () => ['/application'],
   stripElectronRunAsNode: (env: NodeJS.ProcessEnv) => {
@@ -24,7 +24,7 @@ vi.mock('./orca-app-executable', () => ({
 
 const result = {
   profileId: 'profile',
-  dataFile: '/root/orca-data.json',
+  dataFile: '/root/quirky-data.json',
   databaseFile: '/root/profile-state.db',
   exportPaths: [],
   backups: [],
@@ -32,7 +32,7 @@ const result = {
   quarantineDirectory: '/root/quarantine',
   removedDatabaseFiles: [],
   storage: 'json',
-  restoredPath: '/root/orca-data.json'
+  restoredPath: '/root/quirky-data.json'
 }
 const request = { userDataPath: '.', selector: { kind: 'json', revision: 1 } } as const
 beforeEach(() => {
@@ -49,22 +49,22 @@ afterEach(() => vi.unstubAllEnvs())
 describe('profile-state recovery launch', () => {
   it('preserves direct participation only for plain Node without an explicit Electron executable', () => {
     vi.stubEnv('ELECTRON_RUN_AS_NODE', undefined)
-    vi.stubEnv('ORCA_APP_EXECUTABLE', undefined)
+    vi.stubEnv('QUIRKY_APP_EXECUTABLE', undefined)
     expect(canLaunchProfileStateRecovery()).toBe(false)
     vi.stubEnv('ELECTRON_RUN_AS_NODE', '1')
     expect(canLaunchProfileStateRecovery()).toBe(true)
     vi.stubEnv('ELECTRON_RUN_AS_NODE', undefined)
-    vi.stubEnv('ORCA_APP_EXECUTABLE', '/explicit/Orca')
+    vi.stubEnv('QUIRKY_APP_EXECUTABLE', '/explicit/Quirky')
     expect(canLaunchProfileStateRecovery()).toBe(true)
   })
 
   it('uses a foreground-safe serve request and binds the canonical recovery root', async () => {
     vi.stubEnv('ELECTRON_RUN_AS_NODE', '1')
-    vi.stubEnv('ORCA_USER_DATA_PATH', '/stale/root')
+    vi.stubEnv('QUIRKY_USER_DATA_PATH', '/stale/root')
     expect(await launchProfileStateRecovery(request)).toEqual(result)
     expect(mocks.run).toHaveBeenCalledWith(
       expect.objectContaining({
-        program: '/packaged/Orca',
+        program: '/packaged/Quirky',
         args: [
           '/application',
           '--serve',
@@ -72,8 +72,8 @@ describe('profile-state recovery launch', () => {
           JSON.stringify({ ...request, userDataPath: realpathSync('.') })
         ],
         env: expect.objectContaining({
-          ORCA_BACKGROUND_LAUNCH: '1',
-          ORCA_USER_DATA_PATH: realpathSync('.')
+          QUIRKY_BACKGROUND_LAUNCH: '1',
+          QUIRKY_USER_DATA_PATH: realpathSync('.')
         }),
         timeoutMs: null
       })

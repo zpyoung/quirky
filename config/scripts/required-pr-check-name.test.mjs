@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { verifyRequiredPrContext } from '../../.github/scripts/check-required-pr-context.mjs'
 
 it('reserves the required PR context for the full aggregate with both YAML parsers', () => {
@@ -9,7 +9,7 @@ it('reserves the required PR context for the full aggregate with both YAML parse
   const result = runProcessSync({
     program: 'bun',
     args: ['.github/scripts/check-required-pr-context.mjs'],
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
     timeoutMs: 10_000
   })
   expect(result.code, result.stderr).toBe(0)

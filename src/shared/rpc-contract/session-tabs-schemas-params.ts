@@ -8,10 +8,7 @@ import { isTuiAgent } from '../tui-agent-config'
 import { LEGACY_MAX_QUICK_COMMAND_AGENT_PROMPT_LENGTH } from '../terminal-quick-command-prompt-limit'
 import { ResumeProviderSessionParam, WindowsShellOverrideParam } from './terminal-unary-params'
 import { parseLegacyNumericPaneKey, parsePaneKey } from '../stable-pane-id'
-import {
-  MAX_GUTTER_ROWS,
-  MIN_GUTTER_ROWS
-} from '../fork-terminal-dock/terminal-dock-gutter-rows'
+import { MAX_GUTTER_ROWS, MIN_GUTTER_ROWS } from '../fork-terminal-dock/terminal-dock-gutter-rows'
 
 // Why: paneKey is attacker-reachable (remote client input) and never checked
 // against a live pane, so its shape is bound to the two forms the host ever

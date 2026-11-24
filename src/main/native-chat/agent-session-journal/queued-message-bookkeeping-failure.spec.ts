@@ -81,7 +81,7 @@ export function registerQueuedMessageBookkeepingFailureTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-queued-bookkeeping-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-queued-bookkeeping-'))
     clock = 1_000
   })
 

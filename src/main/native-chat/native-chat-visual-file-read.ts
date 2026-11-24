@@ -45,7 +45,7 @@ function sameFile(left: Stats, right: Stats): boolean {
 }
 
 /**
- * The folder and its parent are Orca's own directories below the trusted state directory. Either
+ * The folder and its parent are Quirky's own directories below the trusted state directory. Either
  * one replaced by a symlink would aim every read somewhere else, so a link there is refused.
  */
 async function canonicalFolder(folder: string): Promise<string> {
@@ -97,7 +97,7 @@ async function openVisual(candidate: string): Promise<FileHandle> {
 
 /**
  * After the open: the handle must still be the file directly inside the canonical folder, and the
- * folder that canonical path names must still be the real directory at Orca's own path (a symlink
+ * folder that canonical path names must still be the real directory at Quirky's own path (a symlink
  * swapped in and out around the first check would otherwise aim `folderReal` elsewhere).
  */
 async function assertStillContained(

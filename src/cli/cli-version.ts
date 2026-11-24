@@ -12,11 +12,11 @@ function readCompiledOutputField(runtimeDir: string, field: 'version' | 'commit'
 }
 
 // Node-mode CLI code cannot read the package metadata inside app.asar.
-export function readOrcaCliVersion(runtimeDir = __dirname): string | null {
+export function readQuirkyCliVersion(runtimeDir = __dirname): string | null {
   return readCompiledOutputField(runtimeDir, 'version')
 }
 
 /** The commit the CLI was built from, stamped into the same package boundary. */
-export function readOrcaCliBuildCommit(runtimeDir = __dirname): string | null {
+export function readQuirkyCliBuildCommit(runtimeDir = __dirname): string | null {
   return readCompiledOutputField(runtimeDir, 'commit')
 }

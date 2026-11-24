@@ -1,11 +1,11 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import { runProcessSync } from '@quirky/process-host'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 import { writeFileAtomically } from './codex-accounts/fs-utils'
 
 /**
- * Turns off the macOS accent picker for Orca's own preferences domain (#14746).
+ * Turns off the macOS accent picker for Quirky's own preferences domain (#14746).
  *
  * macOS routes press-and-hold to the accent popup unless an app opts out via
  * `ApplePressAndHoldEnabled`, so holding `j` in vim inserts one character instead of repeating.
@@ -43,15 +43,15 @@ const DEFAULTS_TIMEOUT_MS = 5_000
 /** Why: `defaults` exits 1 for "does not exist"; anything else means the probe itself failed. */
 const DEFAULTS_MISSING_STATUS = 1
 
-const ORCA_BUNDLE_ID = 'com.stablyai.orca'
-const FORK_BUNDLE_ID = 'com.zpyoung.orca'
+const QUIRKY_BUNDLE_ID = 'com.zpyoung.quirky'
+const FORK_BUNDLE_ID = 'com.zpyoung.quirky'
 
 export type PressAndHoldDecision =
   /** Not macOS — nothing is read or written. */
   | 'not-macos'
   /** A previous launch already decided; the domain is never touched again. */
   | 'already-decided'
-  /** The running bundle is not Orca's (e.g. a bare `Electron.app`), whose domain we do not own. */
+  /** The running bundle is not Quirky's (e.g. a bare `Electron.app`), whose domain we do not own. */
   | 'foreign-bundle'
   /** `defaults read` could not answer, so we cannot tell an unset key from a user's choice. */
   | 'probe-failed'
@@ -82,12 +82,12 @@ export type PressAndHoldHost = {
   now: () => string
 }
 
-/** Only Orca's own bundle: an unpackaged run is `com.github.Electron`, shared with every other
+/** Only Quirky's own bundle: an unpackaged run is `com.github.Electron`, shared with every other
  *  unpackaged Electron app on the machine. */
-export function isOrcaPreferencesDomain(domain: string): boolean {
+export function isQuirkyPreferencesDomain(domain: string): boolean {
   return (
-    domain === ORCA_BUNDLE_ID ||
-    domain.startsWith(`${ORCA_BUNDLE_ID}.`) ||
+    domain === QUIRKY_BUNDLE_ID ||
+    domain.startsWith(`${QUIRKY_BUNDLE_ID}.`) ||
     domain === FORK_BUNDLE_ID ||
     domain.startsWith(`${FORK_BUNDLE_ID}.`)
   )
@@ -176,7 +176,7 @@ function parseRecord(raw: string): PressAndHoldRecord | null {
 }
 
 /**
- * Apply Orca's press-and-hold default at most once, leaving any explicit user value alone.
+ * Apply Quirky's press-and-hold default at most once, leaving any explicit user value alone.
  *
  * Returns the decision so startup can log it; the same value is persisted for support triage.
  */
@@ -205,7 +205,7 @@ export function ensureMacPressAndHoldDefault(host: PressAndHoldHost): PressAndHo
   }
 
   const domain = host.resolveBundleIdentifier()
-  if (!domain || !isOrcaPreferencesDomain(domain)) {
+  if (!domain || !isQuirkyPreferencesDomain(domain)) {
     return record('foreign-bundle', domain)
   }
 

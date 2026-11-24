@@ -1,5 +1,5 @@
 /**
- * `orca serve --supervise` re-runs itself from a copy of the CLI outside the app. The CLI loads
+ * `quirky serve --supervise` re-runs itself from a copy of the CLI outside the app. The CLI loads
  * modules lazily from the app's files, so a desktop update that swaps the app under a running
  * supervisor would otherwise mix two releases' code inside one process. The served child still
  * starts from the app, so it updates as before.
@@ -12,7 +12,7 @@ import { cloneMacTree } from '../../main/macos-tree-clone'
 import { isProcessAlive } from '../../shared/serve-bundle-coordination'
 
 /** Set on the re-run supervisor: the app root its own `__dirname` no longer points at. */
-export const SERVE_SUPERVISOR_APP_ROOT_ENV = 'ORCA_SERVE_SUPERVISOR_APP_ROOT'
+export const SERVE_SUPERVISOR_APP_ROOT_ENV = 'QUIRKY_SERVE_SUPERVISOR_APP_ROOT'
 
 const PACKAGED_APP_ROOT_NAME = 'app.asar.unpacked'
 const COMPLETE_MARKER = '.complete'
@@ -167,7 +167,7 @@ export async function relocateServeSupervisor(
     return 'already-relocated'
   }
   // Why packaged only: a dev or overridden executable has no app swapped under it by an update.
-  const override = deps.env.ORCA_APP_EXECUTABLE
+  const override = deps.env.QUIRKY_APP_EXECUTABLE
   if (
     deps.env.ELECTRON_RUN_AS_NODE !== '1' ||
     (typeof override === 'string' && override.trim().length > 0) ||

@@ -62,7 +62,7 @@ export function buildHostedReviewAgentPrompt(input: HostedReviewAgentPromptInput
     ? [
         'This is an unattended PR Sitter preparation. If the policy requires escalation, stop and explain the blocker; do not substitute a weaker change.',
         'Run the narrow verification needed for the affected failure.',
-        `Create exactly one local commit whose final trailer is "Orca-Heimdall-Attempt: ${input.preparationAttemptFingerprint}". Do not push, merge the hosted review, comment, or otherwise publish it. Stop after the local commit exists.`
+        `Create exactly one local commit whose final trailer is "Quirky-Heimdall-Attempt: ${input.preparationAttemptFingerprint}". Do not push, merge the hosted review, comment, or otherwise publish it. Stop after the local commit exists.`
       ]
     : [
         'This is a person-requested fix session. If the policy requires escalation, explain the blocker instead of weakening the repository safeguards.',

@@ -1,4 +1,4 @@
-import { runProcessSync, spawnProcess } from '@orca/process-host'
+import { runProcessSync, spawnProcess } from '@quirky/process-host'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { availableParallelism, totalmem } from 'node:os'

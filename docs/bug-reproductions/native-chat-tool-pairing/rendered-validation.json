@@ -2,8 +2,8 @@
   "recordedAt": "2026-10-10T01:03:28.131138+00:00",
   "baselineCommit": "51e7181850b022bae2d41091fe1229accef4bd50",
   "sourceCommit": "bcfbb8cb6d543aca516fca346c32c47ec880019f",
-  "command": "ORCA_BACKGROUND_LAUNCH=1 SKIP_BUILD=1 pnpm exec playwright test tests/e2e/native-chat-tool-pairing.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1 --retries=0 --output=/tmp/orca-perf-2-pr-proof/round2-desktop-test-results",
-  "buildCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm run build:electron-vite --mode e2e",
+  "command": "QUIRKY_BACKGROUND_LAUNCH=1 SKIP_BUILD=1 pnpm exec playwright test tests/e2e/native-chat-tool-pairing.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1 --retries=0 --output=/tmp/quirky-perf-2-pr-proof/round2-desktop-test-results",
+  "buildCommand": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm run build:electron-vite --mode e2e",
   "build": {
     "sourceSnapshotAt": "2026-10-10T01:01:51.984377+00:00",
     "headCommit": "bcfbb8cb6d543aca516fca346c32c47ec880019f",
@@ -67,12 +67,12 @@
       "src/shared/structured-agent-session-tool-call-block.ts": "2bfcf1bba56b94154ca7f5b3fc44a517754e61352512c5e486457e5ea4744e7e",
       "tests/e2e/helpers/electron-process-shutdown.ts": "94e6be0f7348309561186d529410621caace80966b5d6fc3e3e68182c0253c60",
       "tests/e2e/helpers/native-chat-transcript-fixture.ts": "e769ca91c2c2d117f817cd36544e1be99583139306444a411f699aa83053b60b",
-      "tests/e2e/helpers/orca-app.ts": "f514cb2215434c57519e63c01a9ca49c129203f46ea470232fcb2bf9bb0cc573",
+      "tests/e2e/helpers/quirky-app.ts": "f514cb2215434c57519e63c01a9ca49c129203f46ea470232fcb2bf9bb0cc573",
       "tests/e2e/helpers/store.ts": "82807c85d54f68bf4347ac37dee04a6112eae84521f3f597f883728df4627dea",
       "tests/e2e/native-chat-tool-pairing.spec.ts": "4a76af0989ae2e47df0e2f01792ff995d8b5b18546c3505e41ca42b9f7973608"
     },
     "sourceSnapshotSelection": "Prior desktop surface, fixture and launch policy plus recorded A/B/C production paths",
-    "buildCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm run build:electron-vite --mode e2e",
+    "buildCommand": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm run build:electron-vite --mode e2e",
     "compilerOnly": true,
     "buildOutputSha256": {
       "out/main/index.js": "4244ad9f7c023bbf4c9e305b3e7cd3784ffd5ade622485ecc03fa594c45bed67",
@@ -96,7 +96,7 @@
     },
     "sourceStableThroughoutBuild": true,
     "buildCompletedAt": "2026-10-10T01:02:51.504006+00:00",
-    "ensureElectronCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm run ensure:electron-runtime",
+    "ensureElectronCommand": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm run ensure:electron-runtime",
     "ensureElectronSeconds": 1.888,
     "nativeRuntimeEnsuredAfterCompilerOnlyBuild": true,
     "sourceAndBuildStableThroughoutCapture": true,
@@ -150,7 +150,7 @@
   },
   "typecheck": {
     "status": "passed",
-    "command": "ORCA_BACKGROUND_LAUNCH=1 node node_modules/typescript/bin/tsc --noEmit -p config/tsconfig.native-chat-tool-pairing.verify.json",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/typescript/bin/tsc --noEmit -p config/tsconfig.native-chat-tool-pairing.verify.json",
     "temporaryConfiguration": {
       "extends": "./tsconfig.e2e.json",
       "include": [
@@ -190,8 +190,8 @@
       "passedTests": 8398,
       "todoTests": 5,
       "scope": "Historical affected-domain Node unit coverage from the preceding integration; not the current revision or whole repository unit suite",
-      "command": "ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts --maxWorkers=4 src/main/claude-usage src/main/codex-usage src/main/usage src/shared/native-chat src/main/native-chat src/renderer/src/components/native-chat src/main/runtime/orchestration/structured-worker-journal-archive.test.ts src/main/runtime/rpc/methods/native-chat-ssh-transcript.test.ts",
-      "log": "/tmp/orca-perf-2-hardening-domain-tests-node.log",
+      "command": "QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts --maxWorkers=4 src/main/claude-usage src/main/codex-usage src/main/usage src/shared/native-chat src/main/native-chat src/renderer/src/components/native-chat src/main/runtime/orchestration/structured-worker-journal-archive.test.ts src/main/runtime/rpc/methods/native-chat-ssh-transcript.test.ts",
+      "log": "/tmp/quirky-perf-2-hardening-domain-tests-node.log",
       "sourceCommit": "38598a51c5069a116a17eda3a35365761181be6e"
     },
     "historicalPerformanceContracts": {
@@ -209,7 +209,7 @@
     }
   },
   "launch": {
-    "appPath": "/Users/nwparker/orca/workspaces/orca/perf-2",
+    "appPath": "/Users/nwparker/quirky/workspaces/quirky/perf-2",
     "windows": [
       {
         "visible": false,

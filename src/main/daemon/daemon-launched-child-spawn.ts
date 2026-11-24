@@ -1,6 +1,6 @@
-import { forkProcess, type ForkSpec } from '@orca/process-host/fork-process'
-import { spawnProcess } from '@orca/process-host'
-import type { SpawnedProcess } from '@orca/process-host/process-spec'
+import { forkProcess, type ForkSpec } from '@quirky/process-host/fork-process'
+import { spawnProcess } from '@quirky/process-host'
+import type { SpawnedProcess } from '@quirky/process-host/process-spec'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { removeChromiumDisabledSessionBus } from '../pty/chromium-session-bus-env'
 import { buildDurableDaemonScopeCommand } from './daemon-cgroup-scope'
@@ -57,7 +57,7 @@ export function buildDaemonScriptArgs(
  * unchanged. Do not read the daemon's PID off the returned child; the daemon reports its own
  * (see daemon-ready-identity.ts).
  *
- * Both arms go through the process-host chokepoint (`@orca/process-host`), which
+ * Both arms go through the process-host chokepoint (`@quirky/process-host`), which
  * is what every caller outside that directory must use — `forkProcess` for the Node-module arm,
  * `spawnProcess` for the program arm.
  */
@@ -72,7 +72,7 @@ export function spawnDaemonChildProcess(
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
     // Why: the detached plain-Node daemon has no AppEnvironment, but shell rcfiles must live outside swept tmp.
-    ORCA_USER_DATA_PATH: userDataPath
+    QUIRKY_USER_DATA_PATH: userDataPath
   }
   // Why: this env becomes the daemon's, and so every PTY's (#21119).
   removeChromiumDisabledSessionBus(daemonEnv)
@@ -88,7 +88,7 @@ export function spawnDaemonChildProcess(
       ...childOptions,
       modulePath: forkEntryPath,
       args: scriptArgs,
-      // Why: run the byte-identical relocated Orca.exe so the image path sits outside the updater's kill zone.
+      // Why: run the byte-identical relocated Quirky.exe so the image path sits outside the updater's kill zone.
       ...(relocatedExecPath ? { execPath: relocatedExecPath } : {}),
       env: daemonEnv
     })

@@ -1,18 +1,18 @@
 ---
 name: orchestration
 description: >-
-  Coordinate supervised Orca workers: threaded messages, blocking ask/reply,
+  Coordinate supervised Quirky workers: threaded messages, blocking ask/reply,
   task dispatch, worker_done/escalation waits, task DAGs, decision gates,
-  coordinator loops, and decomposing work across agents. Use `orca-cli` for full
+  coordinator loops, and decomposing work across agents. Use `quirky-cli` for full
   ownership handoffs — "hand off", "handoff", "handover", "give this to another
   agent", "another worktree" — unless asked to supervise, monitor, or coordinate
   a DAG, and for terminal control, lightweight terminal prompts, shell commands,
-  Orca worktree management, and reading or waiting on terminals.
+  Quirky worktree management, and reading or waiting on terminals.
 ---
 
-# Orca orchestration
+# Quirky orchestration
 
-Orchestration is Orca's structured coordination layer. It records who owns work,
+Orchestration is Quirky's structured coordination layer. It records who owns work,
 which attempt is authoritative, and when supervised work has settled.
 
 ## Outcome
@@ -32,18 +32,18 @@ absence included, is a checkpoint.
 
 ## Classify the role
 
-| Current context                                                                                                                                | Role                    | Route                                                                          |
-| ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------ |
-| The user explicitly asks to supervise, monitor, wait for results, track completion, coordinate a DAG, use a decision gate, or manage ask/reply | Coordinator             | Use the supervised loop below                                                  |
-| The current prompt contains a live injected preamble with Task and Dispatch IDs                                                                | Dispatched worker       | Follow the preamble and the worker obligations below                           |
-| The user asks to hand off ownership or start another agent/worktree without supervision                                                        | Handoff owner           | Use `orca-cli`; create no Run, Task, or Dispatch and do not monitor completion |
-| A message carries a legacy authority label                                                                                                     | Compatibility operator  | Load the legacy contract reference before any lifecycle mutation               |
-| No live preamble and no explicit supervision                                                                                                   | Ordinary terminal agent | Do not emit lifecycle messages; use `orca-cli` for terminal/worktree work      |
+| Current context                                                                                                                                | Role                    | Route                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------- |
+| The user explicitly asks to supervise, monitor, wait for results, track completion, coordinate a DAG, use a decision gate, or manage ask/reply | Coordinator             | Use the supervised loop below                                                    |
+| The current prompt contains a live injected preamble with Task and Dispatch IDs                                                                | Dispatched worker       | Follow the preamble and the worker obligations below                             |
+| The user asks to hand off ownership or start another agent/worktree without supervision                                                        | Handoff owner           | Use `quirky-cli`; create no Run, Task, or Dispatch and do not monitor completion |
+| A message carries a legacy authority label                                                                                                     | Compatibility operator  | Load the legacy contract reference before any lifecycle mutation                 |
+| No live preamble and no explicit supervision                                                                                                   | Ordinary terminal agent | Do not emit lifecycle messages; use `quirky-cli` for terminal/worktree work      |
 
-Model or effort selection does not make a handoff supervised: `orca-cli`'s
+Model or effort selection does not make a handoff supervised: `quirky-cli`'s
 `worktree create --agent` and `agent launch` take `--model` and `--effort`, and
 open a chat or a terminal per the user's Chat UI setting, as `worker-start` does.
-Never substitute a non-Orca subagent tool when Orca orchestration provenance was
+Never substitute a non-Quirky subagent tool when Quirky orchestration provenance was
 requested.
 
 ## Authority and safety floor
@@ -67,9 +67,9 @@ requested.
   decoders may silently drop unknown opcodes. Never fall back to local execution
   when remote authority or capability is unproven.
 - Use the executable you used to run `skills get` for the entire run. In the
-  examples below, replace `ORCA` with it; do not create a shell variable or run
-  `ORCA` literally. If it fails, report that exact error instead of switching.
-- `ORCA status --json` shows your Orca session ID as `caller.orcaSessionId` when you have one.
+  examples below, replace `QUIRKY` with it; do not create a shell variable or run
+  `QUIRKY` literally. If it fails, report that exact error instead of switching.
+- `QUIRKY status --json` shows your Quirky session ID as `caller.quirkySessionId` when you have one.
 - A successful `orchestration send` proves durable enqueue; its wake or nudge is
   best-effort attention only and does not prove the recipient read or accepted it.
 
@@ -84,7 +84,7 @@ The injected preamble is authoritative. A dispatched worker must:
    liveness, not completion.
 3. Read coordinator follow-ups at each natural checkpoint — before starting a
    new file, after a test run — and once more immediately before `worker_done`:
-   `ORCA orchestration check --terminal <your_handle> --json`.
+   `QUIRKY orchestration check --terminal <your_handle> --json`.
 4. Send `worker_done` exactly once, from the dispatched terminal, with a
    three-sentence executive summary, both lifecycle IDs, and explicit
    `--outcome succeeded` or `--outcome failed`. Never encode failure only in prose.
@@ -101,11 +101,11 @@ Confirm the runtime, bind one Run, and start the full independent wave before
 waiting. `worker-start --spec` creates the Task and its attempt in one call:
 
 ```text
-ORCA status --json
-ORCA orchestration run-create --objective "<objective>" --json
-ORCA orchestration worker-start --spec "<worker A task>" --worktree current --agent codex --json
-ORCA orchestration worker-start --spec "<worker B task>" --worktree current --agent claude --json
-ORCA orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
+QUIRKY status --json
+QUIRKY orchestration run-create --objective "<objective>" --json
+QUIRKY orchestration worker-start --spec "<worker A task>" --worktree current --agent codex --json
+QUIRKY orchestration worker-start --spec "<worker B task>" --worktree current --agent claude --json
+QUIRKY orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
 ```
 
 If `worker-start` exits non-zero, do not relaunch. Read the receipt's
@@ -118,15 +118,15 @@ and prefer parallel waves over chains deeper than three or four steps; nested
 workers obey the depth limit, and a new Run does not reset the caller's depth.
 
 A consuming `check` names its caller with `--terminal <handle>`, never `--from`;
-omit it inside the coordinator's own Orca terminal. It returns the bound Run's
+omit it inside the coordinator's own Quirky terminal. It returns the bound Run's
 oldest FIFO Delivery and replays that batch until acknowledged. Process every
 message: reply to questions, validate each `worker_done` against the expected
 active Dispatch, and decide each settled terminal's next owner before the ack:
 
 ```text
-ORCA orchestration reply --id <message_id> --body "<answer>" --json
-ORCA orchestration worker-release --dispatch <dispatch_id> --json
-ORCA orchestration check --ack <delivery_id> --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
+QUIRKY orchestration reply --id <message_id> --body "<answer>" --json
+QUIRKY orchestration worker-release --dispatch <dispatch_id> --json
+QUIRKY orchestration check --ack <delivery_id> --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
 ```
 
 Keep waiting until every expected Dispatch settles. A timeout or empty result is
@@ -134,7 +134,7 @@ a checkpoint, not a failure. Do not stop, retry, release, or launch a duplicate
 editor without the positive proof `## Outcome` requires.
 
 After three consecutive empty waits, stop waiting blindly and enumerate with
-`ORCA orchestration worker-list --include-remote --json` (defaults to the bound
+`QUIRKY orchestration worker-list --include-remote --json` (defaults to the bound
 Run; `--run <run_id>` overrides; the receipt's `scope` names which), acting on
 each row's `projection.attention` categories, `projection.attention.requiresAction`, and literal `projection.nextAction` argv.
 Rows come newest first and page at 100: while `page.hasMore`, follow `page.nextCursor` with `--cursor <value>`.
@@ -181,9 +181,9 @@ and do not end the coordinator turn until it returns none.
 ## Conditional references
 
 This compact guide is sufficient for the normal local loop. At an action gate
-below, run `ORCA skills get orchestration --reference references/<file>.md` and
+below, run `QUIRKY skills get orchestration --reference references/<file>.md` and
 read only that document; `--references` lists the names. If the CLI rejects
-`--reference`, run `ORCA skills get orchestration --full` once instead: it
+`--reference`, run `QUIRKY skills get orchestration --full` once instead: it
 returns this exact kernel and every reference, so read only the named one. If an
 older CLI rejects `--full`, keep this kernel's safety floor, use that command's
 `--help`, and never guess newer flags.

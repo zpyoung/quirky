@@ -40,7 +40,7 @@ export function isKiroHooksConfigSupported(config: Record<string, unknown>): boo
 
 /**
  * Kiro has no global hook config: hooks live in each agent file, and the built-in
- * `kiro_default` agent has none to edit. So Orca patches every global agent the user owns.
+ * `kiro_default` agent has none to edit. So Quirky patches every global agent the user owns.
  */
 export function getKiroAgentsDir(): string {
   return join(resolveKiroHomeDir(), 'agents')
@@ -105,7 +105,7 @@ function hasManagedDefinition(
   )
 }
 
-/** Returns the agent config with exactly one Orca hook per event, user hooks untouched. */
+/** Returns the agent config with exactly one Quirky hook per event, user hooks untouched. */
 export function applyManagedKiroHooks(
   config: Record<string, unknown>,
   command: string,

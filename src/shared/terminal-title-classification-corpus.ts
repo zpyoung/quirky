@@ -10,7 +10,7 @@ export const TERMINAL_TITLE_CLASSIFICATION_CORPUS: readonly string[] = [
   '',
   'zsh',
   'bash',
-  'nwparker@mac: ~/orca',
+  'nwparker@mac: ~/quirky',
   'npm run dev',
   // Boundary-guard cases from agent-name-token-match.ts's header comment.
   'opencode-blinker',
@@ -76,9 +76,9 @@ export const TERMINAL_TITLE_CLASSIFICATION_CORPUS: readonly string[] = [
   'cursor - action required',
   'cursor position reset',
   // Pi / OMP compatible titles.
-  '\u03c0 > session - ~/orca',
+  '\u03c0 > session - ~/quirky',
   '\u03c0 ! blocked-session',
-  '\u280b \u03c0 - session - ~/orca',
+  '\u280b \u03c0 - session - ~/quirky',
   // Wrapper/multiplexer prefixes.
   'zsh | \u280b Codex',
   'tmux | claude - action required',

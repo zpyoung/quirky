@@ -210,7 +210,7 @@ describe('useSourceControlHostedReviewCreation', () => {
         prFieldRevisions: { base: 1, title: 1, body: 1, draft: 1 }
       })
       await act(async () => {
-        finish({ ...generatedFields, title: '[ORCA-7] Generated title' })
+        finish({ ...generatedFields, title: '[QUIRKY-7] Generated title' })
         await click
       })
       expect(input.createHostedReview).toHaveBeenCalledWith(
@@ -251,7 +251,7 @@ describe('useSourceControlHostedReviewCreation', () => {
       prFieldRevisions: { base: 0, title: 1, body: 0, draft: 0 }
     })
     await act(async () => {
-      finish({ ...generatedFields, title: '[ORCA-7] Generated title' })
+      finish({ ...generatedFields, title: '[QUIRKY-7] Generated title' })
       await click
     })
     expect(input.createHostedReview).toHaveBeenCalledWith(
@@ -287,7 +287,7 @@ describe('useSourceControlHostedReviewCreation', () => {
       })
     )
     await act(async () => {
-      finish({ ...generatedFields, title: '[ORCA-7] Generated title' })
+      finish({ ...generatedFields, title: '[QUIRKY-7] Generated title' })
       await click
     })
     expect(input.createHostedReview).toHaveBeenCalledWith(

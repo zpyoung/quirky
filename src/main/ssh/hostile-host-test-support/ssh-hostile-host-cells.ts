@@ -1,13 +1,13 @@
 /**
  * The hostile-host matrix: each cell is an SSH target (a container, or the runner's own loopback
- * sshd) and what managed orcad must do there. `ssh-hostile-hosts.docker.test.ts` drives the real
+ * sshd) and what managed quirkyd must do there. `ssh-hostile-hosts.docker.test.ts` drives the real
  * client-side deploy against each one; `.github/workflows/ssh-hostile-hosts.yml` runs it.
  */
 import type { NodeRuntimeTarget } from '../../../shared/node-runtime-pin'
-import type { OrcadHostUnavailableReason } from '../../orcad/orcad-host-unavailable'
+import type { QuirkydHostUnavailableReason } from '../../quirkyd/quirkyd-host-unavailable'
 
 /** Every shimmed toolchain command appends its name here; a managed deploy must leave it empty. */
-export const FORBIDDEN_TOOL_LOG = '/tmp/orca-forbidden-tool-calls.log'
+export const FORBIDDEN_TOOL_LOG = '/tmp/quirky-forbidden-tool-calls.log'
 export const FORBIDDEN_TOOLS = ['npm', 'npx', 'node-gyp', 'gcc', 'g++', 'cc', 'c++', 'make']
 
 /** The shim every forbidden tool name links to: it records the call and fails like a missing tool. */
@@ -20,16 +20,16 @@ export function forbiddenToolShimScript(logPath: string): string {
 /** What any hostile-host driver needs, whatever provisions the host. */
 export type HostileHostCellCore = {
   id: string
-  /** Managed orcad on a fresh host: the runtime target it resolves, and what the deploy does there. */
-  managed: ManagedOrcadExpectation
+  /** Managed quirkyd on a fresh host: the runtime target it resolves, and what the deploy does there. */
+  managed: ManagedQuirkydExpectation
   /** This computer's Node download is refused and its cache is empty, so only the host can fetch it. */
   desktopNoEgress?: boolean
 }
 
-export type ManagedOrcadExpectation =
+export type ManagedQuirkydExpectation =
   | { outcome: 'activated'; runtime: NodeRuntimeTarget }
-  /** The deploy throws an error the connect classifies as this host being unable to run orcad. */
-  | { outcome: 'unavailable'; runtime: NodeRuntimeTarget; reason: OrcadHostUnavailableReason }
+  /** The deploy throws an error the connect classifies as this host being unable to run quirkyd. */
+  | { outcome: 'unavailable'; runtime: NodeRuntimeTarget; reason: QuirkydHostUnavailableReason }
 
 export type DockerHostileHostCell = HostileHostCellCore & {
   host?: 'docker'
@@ -110,7 +110,7 @@ export const HOSTILE_HOST_CELLS: readonly HostileHostCell[] = [
     managed: { outcome: 'activated', runtime: 'linux-x64-musl' }
   },
   {
-    // The musl Node links libstdc++, so its self-test fails before orcad can start.
+    // The musl Node links libstdc++, so its self-test fails before quirkyd can start.
     id: 'alpine-musl-no-libstdcxx',
     dockerfile: [`FROM ${ALPINE_3_20}`, ALPINE_SSHD],
     managed: { outcome: 'unavailable', runtime: 'linux-x64-musl', reason: 'runtime_self_test' }
@@ -128,7 +128,7 @@ export const HOSTILE_HOST_CELLS: readonly HostileHostCell[] = [
     managed: { outcome: 'unavailable', runtime: 'linux-x64-glibc', reason: 'runtime_noexec' }
   },
   {
-    // glibc 2.17 is below the pinned Node's floor, so orcad runs on the glibc 2.17 compat runtime.
+    // glibc 2.17 is below the pinned Node's floor, so quirkyd runs on the glibc 2.17 compat runtime.
     id: 'centos7-glibc217',
     dockerfile: [
       `FROM ${CENTOS_7}`,
@@ -139,7 +139,7 @@ export const HOSTILE_HOST_CELLS: readonly HostileHostCell[] = [
     managed: { outcome: 'activated', runtime: 'linux-x64-glibc217' }
   },
   {
-    // The client uploads the runtime over SSH, so a host that cannot reach nodejs.org still runs orcad.
+    // The client uploads the runtime over SSH, so a host that cannot reach nodejs.org still runs quirkyd.
     id: 'debian10-no-egress',
     dockerfile: DEBIAN_10_LINES,
     noEgress: true,
@@ -182,7 +182,7 @@ export function canRunHostileHostCell(cell: HostileHostCell, machine: HostileHos
 }
 
 /**
- * `ORCA_SSH_HOSTILE_HOST_CELLS=a,b` narrows a run and every named cell must be hostable here;
+ * `QUIRKY_SSH_HOSTILE_HOST_CELLS=a,b` narrows a run and every named cell must be hostable here;
  * unset or empty runs every cell this machine can host.
  */
 export function selectHostileHostCells(

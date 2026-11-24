@@ -59,7 +59,7 @@ export function registerJournalDispatchReasonBoundTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-dispatch-reason-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-dispatch-reason-'))
     clock = 1_000
   })
 
@@ -77,7 +77,7 @@ export function registerJournalDispatchReasonBoundTests(): void {
 
     it('marks the clipped reason rather than truncating it silently', async () => {
       const stored = await settle(HUGE)
-      expect(stored).toContain('[Orca: output truncated')
+      expect(stored).toContain('[Quirky: output truncated')
     })
 
     it('leaves a reason that already fits exactly as written', async () => {

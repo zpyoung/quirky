@@ -39,7 +39,7 @@ export function probeDisplayLock(displayNumber: number): DisplayLockProbe {
 }
 
 /**
- * Liveness for a display Orca did not create. An X server writes its lock beside the socket and
+ * Liveness for a display Quirky did not create. An X server writes its lock beside the socket and
  * both survive a crash (verified against Xvfb under SIGKILL), so a socket with no lock was never
  * left by a crashed server — it is an endpoint published from elsewhere: a container bind-mounting
  * only /tmp/.X11-unix, WSLg, or a foreign PID namespace. We cannot judge those, and refusing them
@@ -50,8 +50,8 @@ export function isForeignDisplayServerAlive(displayNumber: number): boolean {
 }
 
 /**
- * Liveness for Orca's own managed display numbers. Stricter on purpose: `removeStaleDisplayArtifacts`
- * unlinks the lock before the socket, so a lockless socket here is Orca's own half-finished
+ * Liveness for Quirky's own managed display numbers. Stricter on purpose: `removeStaleDisplayArtifacts`
+ * unlinks the lock before the socket, so a lockless socket here is Quirky's own half-finished
  * teardown, not a foreign endpoint. Adopting it would resurrect the orphan-socket bug and stop the
  * cleanup below from self-healing.
  */

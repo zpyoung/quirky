@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-export const WEB_CLIENT_FILES_FILENAME = '.orca-web-client-files.json'
+export const WEB_CLIENT_FILES_FILENAME = '.quirky-web-client-files.json'
 
 /** Limits HTTP access when desktop and browser assets share one installed directory. */
 export function readBundledWebClientFiles(root: string): ReadonlySet<string> | undefined {

@@ -60,8 +60,8 @@ export function activateLocalPtySession(args: {
     ptyAgentSessionIds.add(id)
   }
   ptyShellPath.set(id, plan.shellPath)
-  if (env.ORCA_TERMINAL_HANDLE) {
-    ptyTerminalHandle.set(id, env.ORCA_TERMINAL_HANDLE)
+  if (env.QUIRKY_TERMINAL_HANDLE) {
+    ptyTerminalHandle.set(id, env.QUIRKY_TERMINAL_HANDLE)
   }
   if (spawn.worktreeId) {
     ptyWorktreeId.set(id, spawn.worktreeId)
@@ -183,7 +183,7 @@ export function activateLocalPtySession(args: {
     staging = stageStartupCommand({
       command: spawn.command,
       shellPath: plan.shellPath,
-      orcaBuiltLine: spawn.launchAgent !== undefined
+      quirkyBuiltLine: spawn.launchAgent !== undefined
     })
     const notice = startupStagingFailureNotice(staging)
     if (notice) {

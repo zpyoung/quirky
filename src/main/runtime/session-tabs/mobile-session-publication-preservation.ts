@@ -1,5 +1,5 @@
-import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged as ScheduleMobileSessionTabsChangedMethods } from './session-tabs-change-publication'
-import { OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs } from './mobile-session-preservation'
+import type { QuirkyRuntimeWithScheduleMobileSessionTabsChanged as ScheduleMobileSessionTabsChangedMethods } from './session-tabs-change-publication'
+import { QuirkyRuntimeWithMergePreservedHeadlessMobileSessionTabs } from './mobile-session-preservation'
 import type {
   RuntimeMobileSessionSnapshotTab,
   RuntimeMobileSessionTabsRemovedResult,
@@ -10,7 +10,7 @@ import { getRuntimeBrowserPageRegistry } from '../runtime-browser-page-registry'
 import { sameRuntimeBrowserPlacement } from '../../../shared/runtime-browser-placement'
 import type { ClientHostedBrowserRowsEvent } from '../../../shared/client-hosted-browser-rows'
 
-export abstract class OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab extends OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs {
+export abstract class QuirkyRuntimeWithStoredMobileSnapshotHasStalePreservedTab extends QuirkyRuntimeWithMergePreservedHeadlessMobileSessionTabs {
   protected abstract getListedBrowserTabsByPageId(
     ...args: Parameters<ScheduleMobileSessionTabsChangedMethods['getListedBrowserTabsByPageId']>
   ): ReturnType<ScheduleMobileSessionTabsChangedMethods['getListedBrowserTabsByPageId']>

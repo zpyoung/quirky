@@ -119,7 +119,7 @@ describe('Windows shell PATH hydration', () => {
 
     const resultPromise = hydrateShellPath()
     await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(2))
-    proc.stdout.emit('data', Buffer.from('__ORCA_SHELL_PATH__C:\\inbox-ps__ORCA_SHELL_PATH__'))
+    proc.stdout.emit('data', Buffer.from('__QUIRKY_SHELL_PATH__C:\\inbox-ps__QUIRKY_SHELL_PATH__'))
     proc.emit('close', 0, null)
 
     await expect(resultPromise).resolves.toEqual({
@@ -165,7 +165,7 @@ describe('Windows shell PATH hydration', () => {
     proc.stdout.emit(
       'data',
       Buffer.from(
-        'profile banner\r\n__ORCA_SHELL_PATH__C:\\profile-node;C:\\Windows__ORCA_SHELL_PATH__'
+        'profile banner\r\n__QUIRKY_SHELL_PATH__C:\\profile-node;C:\\Windows__QUIRKY_SHELL_PATH__'
       )
     )
     proc.emit('close', 0, null)
@@ -194,7 +194,7 @@ describe('Windows shell PATH hydration', () => {
 
     proc.stdout.emit(
       'data',
-      Buffer.from('__ORCA_SHELL_PATH__C:\\git-node;C:\\Windows__ORCA_SHELL_PATH__')
+      Buffer.from('__QUIRKY_SHELL_PATH__C:\\git-node;C:\\Windows__QUIRKY_SHELL_PATH__')
     )
     proc.emit('close', 0, null)
 

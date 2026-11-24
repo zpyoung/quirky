@@ -20,7 +20,7 @@ vi.mock('./serve-update-supervisor', async (importOriginal) => ({
   superviseForegroundServe: superviseMock
 }))
 
-import { serveOrcaApp } from './launch'
+import { serveQuirkyApp } from './launch'
 
 class FakeChildProcess extends EventEmitter {
   stdout = new EventEmitter()
@@ -31,25 +31,25 @@ class FakeChildProcess extends EventEmitter {
 
 const PROFILE = resolve('/profiles/serve-preflight')
 
-describe('serveOrcaApp: Electron serve preflight', () => {
+describe('serveQuirkyApp: Electron serve preflight', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     spawnMock.mockReturnValue(new FakeChildProcess())
-    process.env.ORCA_APP_EXECUTABLE = '/opt/orca/orca'
-    process.env.ORCA_SERVE_RUNTIME = 'electron'
-    process.env.ORCA_USER_DATA_PATH = PROFILE
+    process.env.QUIRKY_APP_EXECUTABLE = '/opt/quirky/quirky'
+    process.env.QUIRKY_SERVE_RUNTIME = 'electron'
+    process.env.QUIRKY_USER_DATA_PATH = PROFILE
   })
 
   afterEach(() => {
-    delete process.env.ORCA_APP_EXECUTABLE
-    delete process.env.ORCA_SERVE_RUNTIME
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_APP_EXECUTABLE
+    delete process.env.QUIRKY_SERVE_RUNTIME
+    delete process.env.QUIRKY_USER_DATA_PATH
   })
 
   it('never execs a second Electron main once the preflight refuses', async () => {
     preflightMock.mockReturnValue(Promise.resolve(3))
 
-    await expect(serveOrcaApp({ json: true })).resolves.toBe(3)
+    await expect(serveQuirkyApp({ json: true })).resolves.toBe(3)
     expect(spawnMock).not.toHaveBeenCalled()
     expect(preflightMock).toHaveBeenCalledWith({ json: true }, PROFILE)
   })
@@ -58,7 +58,7 @@ describe('serveOrcaApp: Electron serve preflight', () => {
     preflightMock.mockReturnValue(Promise.resolve(null))
     superviseMock.mockResolvedValue(0)
 
-    await expect(serveOrcaApp({})).resolves.toBe(0)
+    await expect(serveQuirkyApp({})).resolves.toBe(0)
     expect(spawnMock).toHaveBeenCalledOnce()
   })
 
@@ -67,7 +67,7 @@ describe('serveOrcaApp: Electron serve preflight', () => {
     const abort = new MacServeStartupAbortError('runtime_serve_failed', 'aborted at startup')
     superviseMock.mockRejectedValue(abort)
 
-    await expect(serveOrcaApp({})).rejects.toBe(abort)
+    await expect(serveQuirkyApp({})).rejects.toBe(abort)
     expect(recordAbortMock).toHaveBeenCalledWith(PROFILE, 'aborted at startup')
   })
 })

@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { prependOrcaCliDirToChildPath } from './cli/orca-cli-child-path'
+import { prependQuirkyCliDirToChildPath } from './cli/quirky-cli-child-path'
 import { getDaemonZshWrapperSpec } from './daemon/daemon-zsh-shell-ready-wrapper-spec'
 import { POSIX_SHELL_STARTUP_COMMAND_ENV } from './pty/posix-shell-startup-command'
 import { getZshShellReadyWrapperFile } from './providers/local-pty-shell-ready-wrapper-generation'
@@ -12,20 +12,20 @@ import { buildZshStartupHook } from './zsh-startup-wrapper-builder'
 import { hasZsh, MARKERS, runZshPty, ZSH_PATH } from './zsh-startup-hook-pty-harness'
 
 const itWithZsh = hasZsh ? it : it.skip
-const USER_WIDGET = `orca_test_line_init() {
+const USER_WIDGET = `quirky_test_line_init() {
   O_UC=$((\${O_UC:-0}+1))
   O_UN="$WIDGET"
-  builtin printf 'ORCA_TEST_USER_WIDGET_CALL\\n'
+  builtin printf 'QUIRKY_TEST_USER_WIDGET_CALL\\n'
   return 1
 }
-zle -N zle-line-init orca_test_line_init
+zle -N zle-line-init quirky_test_line_init
 `
-const USER_REDRAW = `orca_test_redraw() {
+const USER_REDRAW = `quirky_test_redraw() {
   O_RC=$((\${O_RC:-0}+1))
   O_RN="$WIDGET"
   return 1
 }
-zle -N zle-line-pre-redraw orca_test_redraw
+zle -N zle-line-pre-redraw quirky_test_redraw
 `
 const USER_PRECMD = `precmd() {
   O_PCALLS=$((\${O_PCALLS:-0}+1))
@@ -76,7 +76,7 @@ describe('zsh deferred startup after prompt-hook replacement', () => {
       const scheduledPrecmd = intent === 'scheduled-startup'
       const unavailableSched = intent === 'unavailable-startup'
       const scheduleCleanup = scheduledPrecmd || unavailableSched || orderedPrecmd
-      const home = mkdtempSync(join(tmpdir(), 'orca-deferred-line-init-'))
+      const home = mkdtempSync(join(tmpdir(), 'quirky-deferred-line-init-'))
       roots.push(home)
       const cliBin = join(home, 'cli', 'bin')
       const ambientBin = join(home, 'ambient-bin')
@@ -85,8 +85,8 @@ describe('zsh deferred startup after prompt-hook replacement', () => {
         mkdirSync(bin, { recursive: true })
       }
       for (const bin of [cliBin, ambientBin]) {
-        writeFileSync(join(bin, 'orca-dev'), '#!/bin/sh\nexit 0\n')
-        chmodSync(join(bin, 'orca-dev'), 0o755)
+        writeFileSync(join(bin, 'quirky-dev'), '#!/bin/sh\nexit 0\n')
+        chmodSync(join(bin, 'quirky-dev'), 0o755)
       }
       writeFileSync(
         join(home, '.zshenv'),
@@ -100,7 +100,7 @@ describe('zsh deferred startup after prompt-hook replacement', () => {
             : stickyPrecmd
               ? `emulate sh -c 'precmd() { O_FIRST_IN="\${O_FIRST_IN:-$?:\${options[shwordsplit]}:\${options[ksharrays]}}"; return 1; }'\n`
               : scheduledPrecmd
-                ? 'zmodload zsh/sched\nO_EVENT() { O_EO=${_orca_deferred_init_done:-0}; }\nsched +0 O_EVENT\nsched +3600 O_EVENT\n'
+                ? 'zmodload zsh/sched\nO_EVENT() { O_EO=${_quirky_deferred_init_done:-0}; }\nsched +0 O_EVENT\nsched +3600 O_EVENT\n'
                 : unavailableSched
                   ? 'zmodload zsh/zleparameter zsh/terminfo\nO_MP=("${module_path[@]}"); module_path=()\n'
                   : nonzeroPrecmd || replacedPrecmd
@@ -112,23 +112,23 @@ describe('zsh deferred startup after prompt-hook replacement', () => {
       if (statusPrecmd || stickyPrecmd) {
         writeFileSync(
           join(home, '.zlogin'),
-          'orca_test_status() { return 42; }; orca_test_status\n'
+          'quirky_test_status() { return 42; }; quirky_test_status\n'
         )
       }
       // Replay Ubuntu's later widget binding before the user's own startup changes.
       const stockWidget =
         stockBinding || stickyPrecmd || scheduledPrecmd
-          ? USER_WIDGET.replaceAll('orca_test_line_init', 'zle-line-init')
+          ? USER_WIDGET.replaceAll('quirky_test_line_init', 'zle-line-init')
           : ''
       writeFileSync(
         join(home, '.zshrc'),
-        `${statusPrecmd || stickyPrecmd ? 'PS1="ORCA_FIRST_PROMPT:%? "\n' : ''}${repeatSource ? USER_WIDGET : ''}${unavailableSched ? 'module_path=("${O_MP[@]}")\n' : ''}${stockWidget}export PATH="$HOME/ambient-bin:/usr/bin:/bin:$HOME/cli/bin"\n${orderedPrecmd ? '' : 'precmd_functions=()\n'}${
+        `${statusPrecmd || stickyPrecmd ? 'PS1="QUIRKY_FIRST_PROMPT:%? "\n' : ''}${repeatSource ? USER_WIDGET : ''}${unavailableSched ? 'module_path=("${O_MP[@]}")\n' : ''}${stockWidget}export PATH="$HOME/ambient-bin:/usr/bin:/bin:$HOME/cli/bin"\n${orderedPrecmd ? '' : 'precmd_functions=()\n'}${
           chainedLineInit
-            ? `${USER_WIDGET.replace('zle -N zle-line-init orca_test_line_init', 'zle -N orca_test_line_init')}autoload -Uz add-zle-hook-widget\nadd-zle-hook-widget line-init orca_test_line_init\n`
+            ? `${USER_WIDGET.replace('zle -N zle-line-init quirky_test_line_init', 'zle -N quirky_test_line_init')}autoload -Uz add-zle-hook-widget\nadd-zle-hook-widget line-init quirky_test_line_init\n`
             : chainedRedraw
-              ? `${USER_REDRAW.replace('zle -N zle-line-pre-redraw orca_test_redraw', 'zle -N orca_test_redraw')}autoload -Uz add-zle-hook-widget\nadd-zle-hook-widget line-pre-redraw orca_test_redraw\n`
+              ? `${USER_REDRAW.replace('zle -N zle-line-pre-redraw quirky_test_redraw', 'zle -N quirky_test_redraw')}autoload -Uz add-zle-hook-widget\nadd-zle-hook-widget line-pre-redraw quirky_test_redraw\n`
               : ''
-        }${nonzeroPrecmd ? 'orca_test_array() { O_AC=called; }\nprecmd_functions=(orca_test_array)\nsetopt KSH_ARRAYS NO_UNSET\n' : orderedPrecmd ? 'orca_test_array() { O_AO=${O_AO:-${_orca_deferred_init_done:-0}}; }\nprecmd_functions=(orca_test_array "${precmd_functions[@]}")\n' : replacedPrecmd ? 'precmd() { O_NPC=$((${O_NPC:-0}+1)); O_NPN="$0"; }\n' : ''}`
+        }${nonzeroPrecmd ? 'quirky_test_array() { O_AC=called; }\nprecmd_functions=(quirky_test_array)\nsetopt KSH_ARRAYS NO_UNSET\n' : orderedPrecmd ? 'quirky_test_array() { O_AO=${O_AO:-${_quirky_deferred_init_done:-0}}; }\nprecmd_functions=(quirky_test_array "${precmd_functions[@]}")\n' : replacedPrecmd ? 'precmd() { O_NPC=$((${O_NPC:-0}+1)); O_NPN="$0"; }\n' : ''}`
       )
       writeFileSync(join(wrapperDir, '.zshenv'), getZshShellReadyWrapperFile())
       writeFileSync(join(wrapperDir, ZSH_WRAPPER_DIR_MARKER_FILE), '')
@@ -140,9 +140,12 @@ describe('zsh deferred startup after prompt-hook replacement', () => {
         // Stock cases replay this replacement after the fixture installs its own widgets.
         DEBIAN_PREVENT_KEYBOARD_CHANGES: '1',
         ZDOTDIR: wrapperDir,
-        ORCA_HISTFILE: join(home, 'scoped-history')
+        QUIRKY_HISTFILE: join(home, 'scoped-history')
       }
-      const launcher = prependOrcaCliDirToChildPath(env, { isPackaged: false, userDataPath: home })
+      const launcher = prependQuirkyCliDirToChildPath(env, {
+        isPackaged: false,
+        userDataPath: home
+      })
       const features = selectShellStartupFeatures({
         shellPath: ZSH_PATH,
         env,
@@ -150,7 +153,7 @@ describe('zsh deferred startup after prompt-hook replacement', () => {
         waitsForShellReady: !historyOnly,
         emitsStartupIdentity: false
       })
-      env.ORCA_SHELL_FEATURES = encodeShellStartupFeatures(features)
+      env.QUIRKY_SHELL_FEATURES = encodeShellStartupFeatures(features)
       if (!historyOnly) {
         env[POSIX_SHELL_STARTUP_COMMAND_ENV] = 'O_SU=$((${O_SU:-0}+1))'
       }
@@ -166,11 +169,11 @@ describe('zsh deferred startup after prompt-hook replacement', () => {
           ...(repeatSource
             ? ['source -- "$HOME/wrapper/.zshenv"', 'source -- "$HOME/wrapper/.zshenv"']
             : []),
-          'O_LK=$(command -v orca-dev)',
-          'O_SR=${+widgets[__orca_saved_line_init]}',
+          'O_LK=$(command -v quirky-dev)',
+          'O_SR=${+widgets[__quirky_saved_line_init]}',
           ...(scheduleCleanup
             ? [
-                'O_SC=${+functions[__orca_deferred_sched_init]}',
+                'O_SC=${+functions[__quirky_deferred_sched_init]}',
                 'O_SE=${zsh_scheduled_events[*]:-UNSET}'
               ]
             : []),
@@ -207,16 +210,16 @@ describe('zsh deferred startup after prompt-hook replacement', () => {
       expect(result.values.O_SR).toBe('0')
       if (repeatSource) {
         expect(result.output).not.toContain('job table full or recursion limit exceeded')
-        expect(result.values.O_PC).not.toContain('__orca_deferred_init')
+        expect(result.values.O_PC).not.toContain('__quirky_deferred_init')
       }
       if (scheduleCleanup) {
         expect(result.values.O_SC).toBe('0')
-        expect(result.values.O_SE).not.toContain('orca')
+        expect(result.values.O_SE).not.toContain('quirky')
       }
       if (unavailableSched) {
         // Stock completion modules can fail before the fixture restores module_path.
         expect(result.output).not.toContain('zsh/sched')
-        expect(result.output).not.toContain('__orca_arm_deferred_line_init:')
+        expect(result.output).not.toContain('__quirky_arm_deferred_line_init:')
         expect(result.values.O_SE).toBe('UNSET')
       }
       if (scheduledPrecmd) {
@@ -226,9 +229,11 @@ describe('zsh deferred startup after prompt-hook replacement', () => {
       }
       if (stockBinding) {
         expect(Number(result.values.O_RC)).toBeGreaterThan(0)
-        expect(result.values.O_RN).toBe(chainedRedraw ? 'orca_test_redraw' : 'zle-line-pre-redraw')
+        expect(result.values.O_RN).toBe(
+          chainedRedraw ? 'quirky_test_redraw' : 'zle-line-pre-redraw'
+        )
         if (!chainedRedraw) {
-          expect(result.values.O_RW).toBe('user:orca_test_redraw')
+          expect(result.values.O_RW).toBe('user:quirky_test_redraw')
         }
       }
       expect(result.values.HISTFILE).toBe(join(home, 'scoped-history'))
@@ -251,25 +256,25 @@ describe('zsh deferred startup after prompt-hook replacement', () => {
       }
       if (statusPrecmd || stickyPrecmd) {
         expect(result.values.O_FIRST_IN).toBe(stickyPrecmd ? '42:on:on' : '42')
-        expect(result.output).toContain('ORCA_FIRST_PROMPT:42 ')
+        expect(result.output).toContain('QUIRKY_FIRST_PROMPT:42 ')
       }
       if (historyOnly) {
         expect(result.output).not.toContain('\x1b]133;')
         expect(result.values.O_LI).toBe(
-          stockBinding ? 'user:zle-line-init' : 'user:orca_test_line_init'
+          stockBinding ? 'user:zle-line-init' : 'user:quirky_test_line_init'
         )
-        expect(result.values.O_PC).not.toContain('orca')
+        expect(result.values.O_PC).not.toContain('quirky')
         expect(result.values.O_SU).toBe('UNSET')
       } else {
         expect(result.output).toContain(MARKERS.ready)
-        expect(result.values.O_LI).toBe('user:__orca_prompt_mark')
+        expect(result.values.O_LI).toBe('user:__quirky_prompt_mark')
         expect(result.values.O_PC).toBe(
           nonzeroPrecmd || orderedPrecmd
-            ? 'orca_test_array __orca_osc133_precmd'
-            : '__orca_osc133_precmd'
+            ? 'quirky_test_array __quirky_osc133_precmd'
+            : '__quirky_osc133_precmd'
         )
         expect(result.values.O_SU).toBe('1')
-        expect(result.output.split('ORCA_TEST_USER_WIDGET_CALL\r\n').length - 1).toBe(
+        expect(result.output.split('QUIRKY_TEST_USER_WIDGET_CALL\r\n').length - 1).toBe(
           result.output.split(MARKERS.ready).length - 1
         )
       }
@@ -289,16 +294,16 @@ describe('zsh plugins that call deferred line-init by name', () => {
   itWithZsh.each(['local', 'daemon'] as const)(
     'keeps the plugin call working across prompts in a %s wrapper',
     async (transport) => {
-      const home = mkdtempSync(join(tmpdir(), 'orca-zsh-named-wrapper-'))
+      const home = mkdtempSync(join(tmpdir(), 'quirky-zsh-named-wrapper-'))
       roots.push(home)
       const wrapperDir = join(home, 'wrapper')
       mkdirSync(wrapperDir)
       // Some input plugins copy the bound widget's function name into their own body.
       writeFileSync(
         join(home, '.zshrc'),
-        `functions[orca_test_app_mode]=\${widgets[zle-line-init]#user:}'
+        `functions[quirky_test_app_mode]=\${widgets[zle-line-init]#user:}'
   O_AM=$((\${O_AM:-0}+1))'
-zle -N zle-line-init orca_test_app_mode
+zle -N zle-line-init quirky_test_app_mode
 `
       )
       const wrapper =
@@ -314,7 +319,7 @@ zle -N zle-line-init orca_test_app_mode
         DEBIAN_PREVENT_KEYBOARD_CHANGES: '1',
         ZDOTDIR: wrapperDir
       }
-      env.ORCA_SHELL_FEATURES = encodeShellStartupFeatures(
+      env.QUIRKY_SHELL_FEATURES = encodeShellStartupFeatures(
         selectShellStartupFeatures({
           shellPath: ZSH_PATH,
           env,
@@ -329,9 +334,9 @@ zle -N zle-line-init orca_test_app_mode
         commands: [
           'true',
           'false',
-          '[[ ${functions[orca_test_app_mode]} == *__orca_deferred_line_init* ]]; O_CALL_REF=$?',
-          '__orca_deferred_line_init; O_NOOP=$?',
-          'O_INIT=${+functions[__orca_deferred_init]}'
+          '[[ ${functions[quirky_test_app_mode]} == *__quirky_deferred_line_init* ]]; O_CALL_REF=$?',
+          '__quirky_deferred_line_init; O_NOOP=$?',
+          'O_INIT=${+functions[__quirky_deferred_init]}'
         ],
         report: ['O_AM', 'O_CALL_REF', 'O_NOOP', 'O_INIT']
       })

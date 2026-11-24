@@ -8,7 +8,7 @@ export function getRequiredReleaseAssetNames() {
   // Fork: mac-only, arm64-only. The mac .zip assets (names derive from
   // productName) are added dynamically from latest-mac.yml below, so only the
   // deterministically-named manifest + dmg installer are hardcoded here.
-  return ['latest-mac.yml', 'orca-macos-arm64.dmg', 'orca-macos-arm64.dmg.blockmap']
+  return ['latest-mac.yml', 'quirky-macos-arm64.dmg', 'quirky-macos-arm64.dmg.blockmap']
 }
 
 export function extractManifestAssetNames(manifestText) {

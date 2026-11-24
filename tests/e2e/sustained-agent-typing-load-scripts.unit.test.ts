@@ -2,11 +2,11 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { writeSustainedAgentLoadScript } from './sustained-agent-typing-load-scripts'
 
 it('paces the generated Unicode stream in bytes without splitting UTF-8 characters', async () => {
-  const directory = mkdtempSync(path.join(tmpdir(), 'orca-typing-stream-test-'))
+  const directory = mkdtempSync(path.join(tmpdir(), 'quirky-typing-stream-test-'))
   try {
     const script = path.join(directory, 'load.mjs')
     writeSustainedAgentLoadScript(script, 'rate-test', directory)

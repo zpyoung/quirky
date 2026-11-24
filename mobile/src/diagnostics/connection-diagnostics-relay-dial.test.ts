@@ -5,7 +5,7 @@ import {
 } from './connection-diagnostics-analysis'
 import type { ConnectionLogEntry } from '../transport/types'
 
-// Provenance: the last two resume windows of a real diagnostics export (Orca
+// Provenance: the last two resume windows of a real diagnostics export (Quirky
 // Mobile 0.0.50 against host 1.4.203, 2026-09-18), which read "No single failure
 // cause can be determined". Every relay dial ended in 4404 and the LAN dial
 // timed out, then the app resumed and the export was cut before the next outcome:
@@ -91,7 +91,7 @@ function diagnose(entries: readonly ConnectionLogEntry[]) {
 const HOST_OFFLINE_CAUSE =
   'Relay answered, but the desktop is not connected to it (close code 4404, host offline).'
 const HOST_OFFLINE_STEP =
-  'Check the desktop is awake, Orca is running, and it is signed in to Orca Cloud.'
+  'Check the desktop is awake, Quirky is running, and it is signed in to Quirky Cloud.'
 
 describe('diagnoseConnection on the relay-4404 export', () => {
   // The export is cut mid-window, so the newest evidence predates the last resume.
@@ -185,7 +185,7 @@ describe('diagnoseConnection on the other relay close codes', () => {
       detail: 'RelayDirectorHttpError: relay director resolve failed (503); retry-after=30000ms'
     }
     expect(diagnose([appResumed(), lanOpening(), director]).likelyCause).toBe(
-      'Relay service was temporarily unavailable and asked Orca to retry in 30s.'
+      'Relay service was temporarily unavailable and asked Quirky to retry in 30s.'
     )
   })
 })

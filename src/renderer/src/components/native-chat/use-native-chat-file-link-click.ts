@@ -14,7 +14,7 @@ import {
 } from './native-chat-link-target-actions'
 
 /** A plain click offers the terminal's file popover (when that is the user's link-click
- *  setting); a modifier click opens in Orca, and Shift opens the default app. */
+ *  setting); a modifier click opens in Quirky, and Shift opens the default app. */
 export function useNativeChatFileLinkClick(
   context: NativeChatFileLinkContext | null,
   request?: (request: LinkActionRequest) => void,

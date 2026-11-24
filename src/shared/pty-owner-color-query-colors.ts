@@ -4,8 +4,8 @@ import {
 } from './terminal-osc-color-reply'
 import { resolveConfiguredTerminalColors } from './terminal-theme-selection'
 
-// Last resort before this process is told anything: Orca's default dark terminal theme.
-export const ORCA_DEFAULT_COLOR_QUERY_REPLY_COLORS: TerminalOscColorQueryReplyColors =
+// Last resort before this process is told anything: Quirky's default dark terminal theme.
+export const QUIRKY_DEFAULT_COLOR_QUERY_REPLY_COLORS: TerminalOscColorQueryReplyColors =
   resolveConfiguredTerminalColors(
     {
       theme: 'dark',
@@ -64,12 +64,12 @@ export function _resetPtyOwnerHostColorsForTest(): void {
 
 /**
  * The PTY owner always answers. The host-wide viewer colours win over the colours sent at
- * spawn, so a theme change reaches old panes; Orca's default theme answers when nothing has
+ * spawn, so a theme change reaches old panes; Quirky's default theme answers when nothing has
  * been reported yet.
  */
 export function resolvePtyOwnerColorQueryColors(
   host: TerminalOscColorQueryReplyColors | null | undefined,
   spawn: TerminalOscColorQueryReplyColors | null | undefined
 ): TerminalOscColorQueryReplyColors {
-  return [host, spawn].find(answersBothSlots) ?? ORCA_DEFAULT_COLOR_QUERY_REPLY_COLORS
+  return [host, spawn].find(answersBothSlots) ?? QUIRKY_DEFAULT_COLOR_QUERY_REPLY_COLORS
 }

@@ -4,7 +4,7 @@ export const PANE_AGENT_EVIDENCE_SOURCES = [
   'live-hook',
   /** The pane's foreground process, as read on the execution host. */
   'process',
-  /** Orca launched, resumed, or accepted a command for this agent. A fact Orca owns. */
+  /** Quirky launched, resumed, or accepted a command for this agent. A fact Quirky owns. */
   'launch',
   /** A provider hook from a turn that finished. Still authoritative about identity. */
   'completed-hook',

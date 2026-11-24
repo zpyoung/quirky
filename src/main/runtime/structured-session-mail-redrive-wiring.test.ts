@@ -19,12 +19,12 @@ vi.mock('./structured-agent-session-runtime', async (importOriginal) => ({
   })
 }))
 
-const { OrcaRuntimeService } = await import('./orca-runtime')
+const { QuirkyRuntimeService } = await import('./quirky-runtime')
 const { OrchestrationDb } = await import('./orchestration/db')
 
 describe("the runtime's own structured host install", () => {
   it('reports every session status change to the mail redrive', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const redrive = vi
       .spyOn(runtime, 'onStructuredSessionStatusForMail')
       .mockImplementation(() => {})
@@ -46,7 +46,7 @@ describe("the runtime's own structured host install", () => {
   })
 
   it('logs a redrive the database fails, so the status callback goes on to the workspace rename', () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const closed = new OrchestrationDb(':memory:')
     closed.close()
     vi.spyOn(runtime, 'getExistingOrchestrationDb').mockReturnValue(closed)

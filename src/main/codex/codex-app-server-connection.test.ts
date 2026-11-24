@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { PassThrough } from 'node:stream'
 import { providerDiagnosticOf } from '../../shared/agent-session-failure'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ProcessSpec, PipedProcessSpawner } from '@orca/process-host/process-spec'
+import type { ProcessSpec, PipedProcessSpawner } from '@quirky/process-host/process-spec'
 
 import {
   isCodexAppServerRequestError,
@@ -177,7 +177,7 @@ describe('openCodexAppServerConnection', () => {
 
       expect(
         JSON.parse(
-          Buffer.from(String(specs[0]?.env?.ORCA_PROVIDER_SUPERVISOR_SPEC), 'base64').toString()
+          Buffer.from(String(specs[0]?.env?.QUIRKY_PROVIDER_SUPERVISOR_SPEC), 'base64').toString()
         )
       ).toMatchObject({ closeRequest: 'stdin-end' })
       await connection.close()
@@ -312,7 +312,7 @@ describe('openCodexAppServerConnection', () => {
 
     expect(isCodexAppServerRequestError(refusal)).toBe(true)
     expect((refusal as Error).message).toContain('bad params')
-    // Codex's own words, apart from Orca's prefix, for a person to read.
+    // Codex's own words, apart from Quirky's prefix, for a person to read.
     expect(providerDiagnosticOf(refusal)).toEqual({ text: 'bad params', audience: 'person' })
     expect(providerDiagnosticOf(missing)).toBeUndefined()
     expect(isCodexAppServerUnsupportedError(missing)).toBe(true)

@@ -1,7 +1,7 @@
 // Opening editor, browser and agent-session tabs: the tab and its content record in one apply.
 
 import type { EditorTabView } from '../editor-tab-view-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 import { applied, refuse, workspaceOrEmpty, type Applied } from './workspace-layout-command-steps'
 import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import { editorOpenFileId } from './workspace-layout-editor-open-file-id'
@@ -219,7 +219,7 @@ export function openAgentSessionTab(
     command.tabId,
     (tab) => tab.kind === 'agent-session' && tab.entityId === command.sessionId,
     // Switch point: shipped builds still save a chat tab whose id another tab holds.
-    ORCA_LAYOUT_OWNER_IS_MAIN
+    QUIRKY_LAYOUT_OWNER_IS_MAIN
   )
   if (drawn) {
     return drawn

@@ -25,12 +25,12 @@ const METHOD_NOT_FOUND = -32601
 const OWNER_RETRY_BUDGET_MS = 35_000
 
 export const REMOTE_CLI_UNAVAILABLE =
-  'This terminal was started by an older version of Orca, so orca commands are unavailable ' +
+  'This terminal was started by an older version of Quirky, so quirky commands are unavailable ' +
   'in it. Run them in a new terminal on this host.'
 
 export type LegacyRelayOwnerClaim = { ownerGeneration: number; ownerLease: string }
 
-/** Serves the `orca` commands run inside the old relay's terminals; params are the host's. */
+/** Serves the `quirky` commands run inside the old relay's terminals; params are the host's. */
 export type LegacyRelayCliServer = {
   /** `signal` aborts when this client's connection closes, so a waiting check stops with it. */
   cli: (params: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>
@@ -45,7 +45,7 @@ export type LegacyRelayClientOptions = {
   openTransport: () => Promise<MultiplexerTransport>
   /** Test seam for the owner-claim retry wait. */
   sleep?: (ms: number) => Promise<void>
-  /** Absent: every relay-era `orca` command is refused with REMOTE_CLI_UNAVAILABLE. */
+  /** Absent: every relay-era `quirky` command is refused with REMOTE_CLI_UNAVAILABLE. */
   cliServer?: LegacyRelayCliServer
 }
 
@@ -53,7 +53,7 @@ export type LegacyRelayClientOptions = {
 export class LegacyRelayOwnerHeldError extends Error {
   readonly code = 'legacy_relay_owner_held'
   constructor() {
-    super('Another Orca client is attached to this relay')
+    super('Another Quirky client is attached to this relay')
   }
 }
 
@@ -141,15 +141,15 @@ export class LegacyRelayClient {
     cliServer: LegacyRelayCliServer | undefined
   ) {
     mux.onNotification((method, params) => this.route(method, params))
-    // The old relay forwards `orca` commands run inside its terminals to its attached client;
+    // The old relay forwards `quirky` commands run inside its terminals to its attached client;
     // without a server this says why instead of "Method not found".
     const closed = new AbortController()
-    mux.onRequest('orca.cli', (params) =>
+    mux.onRequest('quirky.cli', (params) =>
       cliServer
         ? cliServer.cli(params, closed.signal)
         : Promise.reject(new Error(REMOTE_CLI_UNAVAILABLE))
     )
-    mux.onRequest('orca.cli.postOutput', (params) =>
+    mux.onRequest('quirky.cli.postOutput', (params) =>
       cliServer
         ? cliServer.postOutput(params, closed.signal)
         : Promise.reject(new Error(REMOTE_CLI_UNAVAILABLE))

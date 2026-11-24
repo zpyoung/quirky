@@ -6,8 +6,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1.')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1.')
 }
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
@@ -48,7 +48,7 @@ async function loadHolds(withPostResumeCheck) {
       }
     ]
   })
-  const scratch = await mkdtemp(join(tmpdir(), 'orca-structured-hold-proof-'))
+  const scratch = await mkdtemp(join(tmpdir(), 'quirky-structured-hold-proof-'))
   const require = createRequire(import.meta.url)
   let moduleId
   try {

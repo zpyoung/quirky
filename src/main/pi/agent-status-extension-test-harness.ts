@@ -65,14 +65,14 @@ export type AgentStatusExtensionHarness = {
 }
 
 const BASE_ENV = {
-  ORCA_PANE_KEY: 'pane-1',
-  ORCA_AGENT_LAUNCH_TOKEN: 'launch-1',
-  ORCA_TAB_ID: 'tab-1',
-  ORCA_WORKTREE_ID: 'tree-1',
-  ORCA_AGENT_HOOK_PORT: '4321',
-  ORCA_AGENT_HOOK_TOKEN: 'token-1',
-  ORCA_AGENT_HOOK_ENV: 'env-1',
-  ORCA_AGENT_HOOK_VERSION: '1.2.3'
+  QUIRKY_PANE_KEY: 'pane-1',
+  QUIRKY_AGENT_LAUNCH_TOKEN: 'launch-1',
+  QUIRKY_TAB_ID: 'tab-1',
+  QUIRKY_WORKTREE_ID: 'tree-1',
+  QUIRKY_AGENT_HOOK_PORT: '4321',
+  QUIRKY_AGENT_HOOK_TOKEN: 'token-1',
+  QUIRKY_AGENT_HOOK_ENV: 'env-1',
+  QUIRKY_AGENT_HOOK_VERSION: '1.2.3'
 } satisfies Record<string, string>
 
 // Why: ownership keys on process.pid, so reload and child-process tests need
@@ -188,7 +188,7 @@ export function createAgentStatusExtensionHarness(args: {
     },
     pid: args.pid ?? AGENT_STATUS_EXTENSION_SELF_PID,
     title: args.title ?? 'node',
-    argv: args.argv ?? ['node', '/usr/bin/orca']
+    argv: args.argv ?? ['node', '/usr/bin/quirky']
   }
 
   const context = {

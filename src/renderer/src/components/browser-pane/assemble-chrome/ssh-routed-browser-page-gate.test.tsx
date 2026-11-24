@@ -37,7 +37,7 @@ describe('SshRoutedBrowserPageGate', () => {
         ]
       ])
     })
-    mocks.prepare.mockReset().mockResolvedValue({ partition: 'persist:orca-browser-v1-routed' })
+    mocks.prepare.mockReset().mockResolvedValue({ partition: 'persist:quirky-browser-v1-routed' })
     mocks.destroyPersistentWebview.mockReset()
     Object.defineProperty(window, 'api', {
       configurable: true,
@@ -63,7 +63,7 @@ describe('SshRoutedBrowserPageGate', () => {
 
   it('mounts the page only on the prepared partition for SSH workspaces', async () => {
     mocks.executionHostId = 'ssh:target-a'
-    mocks.prepare.mockResolvedValue({ partition: 'persist:orca-browser-v1-routed' })
+    mocks.prepare.mockResolvedValue({ partition: 'persist:quirky-browser-v1-routed' })
     render(
       <SshRoutedBrowserPageGate worktreeId="wt-1" sessionProfileId="session-x" pageIds={PAGE_IDS}>
         {(partition) => <div data-testid="page">{String(partition)}</div>}
@@ -72,7 +72,7 @@ describe('SshRoutedBrowserPageGate', () => {
     // Why: fail closed — no webview may exist before the proxy-verified partition arrives.
     expect(screen.queryByTestId('page')).toBeNull()
     await settle()
-    expect(screen.getByTestId('page').textContent).toBe('persist:orca-browser-v1-routed')
+    expect(screen.getByTestId('page').textContent).toBe('persist:quirky-browser-v1-routed')
     expect(mocks.prepare).toHaveBeenCalledWith({
       targetId: 'target-a',
       browserProfileId: 'session-x'
@@ -82,7 +82,7 @@ describe('SshRoutedBrowserPageGate', () => {
   it('never renders the page on failure and retries on demand', async () => {
     mocks.executionHostId = 'ssh:target-a'
     mocks.prepare.mockRejectedValueOnce(new Error('browser_tunnel_execution_host_unavailable'))
-    mocks.prepare.mockResolvedValueOnce({ partition: 'persist:orca-browser-v1-routed' })
+    mocks.prepare.mockResolvedValueOnce({ partition: 'persist:quirky-browser-v1-routed' })
     render(
       <SshRoutedBrowserPageGate worktreeId="wt-1" sessionProfileId={null} pageIds={PAGE_IDS}>
         {(partition) => <div data-testid="page">{String(partition)}</div>}
@@ -92,7 +92,7 @@ describe('SshRoutedBrowserPageGate', () => {
     expect(screen.queryByTestId('page')).toBeNull()
     screen.getByRole('button', { name: 'Retry' }).click()
     await settle()
-    expect(screen.getByTestId('page').textContent).toBe('persist:orca-browser-v1-routed')
+    expect(screen.getByTestId('page').textContent).toBe('persist:quirky-browser-v1-routed')
   })
 
   it('stays unrouted when the setting is off', async () => {
@@ -120,7 +120,7 @@ describe('SshRoutedBrowserPageGate', () => {
   it('offers Try anyway for a blocked-forwarding verdict and skips the probe on it', async () => {
     mocks.executionHostId = 'ssh:target-a'
     mocks.prepare.mockRejectedValueOnce(new Error('browser_local_route_forwarding_blocked'))
-    mocks.prepare.mockResolvedValueOnce({ partition: 'persist:orca-browser-v1-routed' })
+    mocks.prepare.mockResolvedValueOnce({ partition: 'persist:quirky-browser-v1-routed' })
     render(
       <SshRoutedBrowserPageGate worktreeId="wt-1" sessionProfileId={null} pageIds={PAGE_IDS}>
         {(partition) => <div data-testid="page">{String(partition)}</div>}
@@ -135,7 +135,7 @@ describe('SshRoutedBrowserPageGate', () => {
       browserProfileId: 'default',
       skipProbe: true
     })
-    expect(screen.getByTestId('page').textContent).toBe('persist:orca-browser-v1-routed')
+    expect(screen.getByTestId('page').textContent).toBe('persist:quirky-browser-v1-routed')
   })
 
   it('records the per-target opt-out from Browse from this device instead', async () => {
@@ -191,7 +191,7 @@ describe('SshRoutedBrowserPageGate', () => {
     // already-mounted instance; a stale 'unrouted' render would mount a
     // local-egress webview behind the preparing card, and unmount only parks it.
     mocks.executionHostId = 'local'
-    mocks.prepare.mockResolvedValue({ partition: 'persist:orca-browser-v1-routed' })
+    mocks.prepare.mockResolvedValue({ partition: 'persist:quirky-browser-v1-routed' })
     const view = render(
       <SshRoutedBrowserPageGate worktreeId="wt-1" sessionProfileId={null} pageIds={PAGE_IDS}>
         {(partition) => <div data-testid="page">{String(partition)}</div>}
@@ -213,7 +213,7 @@ describe('SshRoutedBrowserPageGate', () => {
     expect(mocks.destroyPersistentWebview).toHaveBeenCalledWith('page-1')
     expect(mocks.destroyPersistentWebview).toHaveBeenCalledWith('page-2')
     await settle()
-    expect(screen.getByTestId('page').textContent).toBe('persist:orca-browser-v1-routed')
+    expect(screen.getByTestId('page').textContent).toBe('persist:quirky-browser-v1-routed')
   })
 
   it('leaves runtime-owned ephemeral SSH targets to the paired machinery', async () => {

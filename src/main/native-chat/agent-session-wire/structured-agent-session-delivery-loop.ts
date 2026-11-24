@@ -197,7 +197,7 @@ export class StructuredAgentSessionDeliveryLoop {
         }
       }
     } catch (error) {
-      // The error is Orca's own and goes to the log; the chat says only that Orca failed.
+      // The error is Quirky's own and goes to the log; the chat says only that Quirky failed.
       this.deps.logger.warn('delivering a queued message failed', {
         scope: 'delivery-loop',
         sessionId,

@@ -50,7 +50,7 @@ async function createServeSimPackage(packageDir: string): Promise<string> {
 }
 
 beforeEach(async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-serve-sim-execution-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-serve-sim-execution-'))
   cleanupPaths.push(root)
   setProcessProperty('platform', 'linux')
   setProcessProperty('resourcesPath', join(root, 'resources'))

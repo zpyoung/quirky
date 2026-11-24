@@ -55,7 +55,7 @@ vi.mock('@/store', () => ({
 function inventory(eligibleUpdateNames: string[]): SkillFreshnessInventory {
   return {
     schemaVersion: 1,
-    // Why: an update is only advertised for a copy the skills.sh lock attributes to Orca.
+    // Why: an update is only advertised for a copy the skills.sh lock attributes to Quirky.
     installations: eligibleUpdateNames.map((name) => ({
       id: name,
       name,

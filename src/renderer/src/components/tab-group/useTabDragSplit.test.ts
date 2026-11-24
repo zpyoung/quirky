@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Tab, TabGroup, TabGroupLayoutNode } from '../../../../shared/tab-types'
 import { useAppStore } from '../../store'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { TabDragItemData } from './useTabDragSplit'
 import { shouldActivateTabDragFromDistanceSample } from './tab-drag-pointer-sensor'
 import {
@@ -38,7 +38,7 @@ const WT = 'wt-1'
 
 /** The drop split tab-1 off beside group-2: through main in a layout-owner build, else here. */
 function expectSplitBesideGroup2(dropUnifiedTab: ReturnType<typeof vi.fn>): void {
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     expect(layoutOwner.drop).toHaveBeenCalledWith(WT, {
       kind: 'split',
       tabId: 'tab-1',

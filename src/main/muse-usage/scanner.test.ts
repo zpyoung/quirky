@@ -181,7 +181,7 @@ describe('scanMuseUsageFiles', () => {
     displayName: string
   }[] => [{ repoId: 'repo-1', worktreeId: 'wt-1', path: worktreePath, displayName: 'repo/main' }]
 
-  it('aggregates sessions and attributes them to the Orca worktree', async () => {
+  it('aggregates sessions and attributes them to the Quirky worktree', async () => {
     writeSession('2026-09-22', 'session-a', [
       metadata(worktreePath),
       modelConfigured('muse-spark-1.3'),

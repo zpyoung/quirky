@@ -72,16 +72,16 @@ function envInt(name, fallback) {
   return value
 }
 
-const KEYSTROKES = envInt('ORCA_QUADRATIC_BENCH_KEYSTROKES', 12)
-const WORKTREES = envInt('ORCA_QUADRATIC_BENCH_WORKTREES', 300)
-const TABS = envInt('ORCA_QUADRATIC_BENCH_TABS', 60)
-const OPEN_FILES = envInt('ORCA_QUADRATIC_BENCH_OPEN_FILES', 120)
-const CHANGED_FILES = envInt('ORCA_QUADRATIC_BENCH_CHANGED_FILES', 5000)
-const SIDEBAR_ROWS = envInt('ORCA_QUADRATIC_BENCH_SIDEBAR_ROWS', 600)
-const SIDEBAR_REPOS = envInt('ORCA_QUADRATIC_BENCH_SIDEBAR_REPOS', 80)
+const KEYSTROKES = envInt('QUIRKY_QUADRATIC_BENCH_KEYSTROKES', 12)
+const WORKTREES = envInt('QUIRKY_QUADRATIC_BENCH_WORKTREES', 300)
+const TABS = envInt('QUIRKY_QUADRATIC_BENCH_TABS', 60)
+const OPEN_FILES = envInt('QUIRKY_QUADRATIC_BENCH_OPEN_FILES', 120)
+const CHANGED_FILES = envInt('QUIRKY_QUADRATIC_BENCH_CHANGED_FILES', 5000)
+const SIDEBAR_ROWS = envInt('QUIRKY_QUADRATIC_BENCH_SIDEBAR_ROWS', 600)
+const SIDEBAR_REPOS = envInt('QUIRKY_QUADRATIC_BENCH_SIDEBAR_REPOS', 80)
 if (SIDEBAR_REPOS > SIDEBAR_ROWS) {
   throw new Error(
-    'ORCA_QUADRATIC_BENCH_SIDEBAR_REPOS must not exceed ORCA_QUADRATIC_BENCH_SIDEBAR_ROWS'
+    'QUIRKY_QUADRATIC_BENCH_SIDEBAR_REPOS must not exceed QUIRKY_QUADRATIC_BENCH_SIDEBAR_ROWS'
   )
 }
 
@@ -120,7 +120,7 @@ const { buildWorkspaceBoardPaletteDocuments, matchWorkspaceBoardWorktrees } = aw
 )
 
 const repoMap = new Map([
-  ['repo-1', { id: 'repo-1', name: 'orca', path: '/tmp/orca', branch: 'main' }]
+  ['repo-1', { id: 'repo-1', name: 'quirky', path: '/tmp/quirky', branch: 'main' }]
 ])
 const boardWorktrees = Array.from({ length: WORKTREES }, (_, index) => ({
   id: `repo-1::/tmp/worktree-${index}`,

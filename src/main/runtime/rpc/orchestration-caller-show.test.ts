@@ -26,7 +26,7 @@ vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry'
   getStructuredAgentSessionHost: () => hostRef.current
 }))
 
-describe('orchestration.callerShow: a session learns its Orca session ID from the host', () => {
+describe('orchestration.callerShow: a session learns its Quirky session ID from the host', () => {
   let h: SessionCallerHarness
 
   beforeEach(() => {
@@ -42,7 +42,7 @@ describe('orchestration.callerShow: a session learns its Orca session ID from th
     return orchestrationRequest('orchestration.callerShow', {}, options)
   }
 
-  it('answers a chat with its Orca session ID, even in terminal view where it also carries a pane', async () => {
+  it('answers a chat with its Quirky session ID, even in terminal view where it also carries a pane', async () => {
     const response = await h.dispatch(
       callerShow({
         sessionId: SESSION_X,
@@ -51,11 +51,11 @@ describe('orchestration.callerShow: a session learns its Orca session ID from th
     )
 
     expect(resultOf(response)).toEqual({
-      caller: { orcaSessionId: ADDRESS_X, live: true }
+      caller: { quirkySessionId: ADDRESS_X, live: true }
     })
   })
 
-  it('answers a structured worker with the Orca session ID its preamble names, whose mail is keyed by its handle', async () => {
+  it('answers a structured worker with the Quirky session ID its preamble names, whose mail is keyed by its handle', async () => {
     const handle = mintStructuredWorkerHandle()
     structuredWorkerIdentities.register({
       handle,
@@ -86,9 +86,9 @@ describe('orchestration.callerShow: a session learns its Orca session ID from th
     )
     const checked = resultOf(await asX('orchestration.check', { all: true, format: true }))
 
-    expect(shown).toEqual({ caller: { orcaSessionId: ADDRESS_Y, live: true } })
-    expect(preamble).toContain(`Your coordinator's Orca session ID is: ${ADDRESS_X}\n`)
-    expect(preamble).toContain(`Your Orca session ID is: ${ADDRESS_Y}\n`)
+    expect(shown).toEqual({ caller: { quirkySessionId: ADDRESS_Y, live: true } })
+    expect(preamble).toContain(`Your coordinator's Quirky session ID is: ${ADDRESS_X}\n`)
+    expect(preamble).toContain(`Your Quirky session ID is: ${ADDRESS_Y}\n`)
     expect(preamble).not.toContain(handle)
     // Storage is unchanged: the mail it sends as either spelling is keyed by its minted handle.
     expect(checked.messages).toEqual([expect.objectContaining({ from_handle: handle })])
@@ -105,12 +105,12 @@ describe('orchestration.callerShow: a session learns its Orca session ID from th
     })
   })
 
-  it("names the Orca id when handed the provider's id", async () => {
+  it("names the Quirky id when handed the provider's id", async () => {
     const response = await h.dispatch(callerShow({ sessionId: PROVIDER_ID_X }))
 
     expect(response).toMatchObject({
       ok: false,
-      error: { code: CODES.providerId, data: { orcaSessionId: SESSION_X } }
+      error: { code: CODES.providerId, data: { quirkySessionId: SESSION_X } }
     })
   })
 
@@ -128,7 +128,7 @@ describe('orchestration.callerShow: a session learns its Orca session ID from th
     expect(resultOf(response)).toEqual({ caller: null })
   })
 
-  it('gives the menu the Orca session ID each session of a cleared chat acts as', async () => {
+  it('gives the menu the Quirky session ID each session of a cleared chat acts as', async () => {
     const cleared = sessionRecord(SESSION_X)
     h.records.set(SESSION_X, {
       ...cleared,
@@ -148,12 +148,12 @@ describe('orchestration.callerShow: a session learns its Orca session ID from th
       )
       const acting = resultOf(await h.dispatch(callerShow({ sessionId })))
       // One derivation: the conversation's root, which the successor copies and acts as too.
-      expect(shown.orcaSessionId).toBe(ADDRESS_X)
-      expect(acting.caller).toMatchObject({ orcaSessionId: shown.orcaSessionId })
+      expect(shown.quirkySessionId).toBe(ADDRESS_X)
+      expect(acting.caller).toMatchObject({ quirkySessionId: shown.quirkySessionId })
     }
   })
 
-  it('refuses an id that is not an Orca session ID', async () => {
+  it('refuses an id that is not an Quirky session ID', async () => {
     const response = await h.dispatch(
       orchestrationRequest('orchestration.sessionAddress', { sessionId: 'not an id' })
     )

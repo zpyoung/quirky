@@ -30,8 +30,8 @@ afterEach(() => {
 })
 
 const setup = {
-  runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-  envVars: { ORCA_WORKTREE_PATH: '/tmp/worktrees/wt-1' }
+  runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
+  envVars: { QUIRKY_WORKTREE_PATH: '/tmp/worktrees/wt-1' }
 }
 
 // Why: a native-chat create used to land the user on a bare "Terminal 1" beside the chat,
@@ -58,7 +58,7 @@ describe('seeding beside a caller-provided chat surface', () => {
       recordInteraction: false
     })
     expect(createdTabStartups(store)['tab-1']).toEqual({
-      command: 'bash /tmp/repo/.git/orca/setup-runner.sh',
+      command: 'bash /tmp/repo/.git/quirky/setup-runner.sh',
       env: setup.envVars
     })
   })
@@ -82,7 +82,7 @@ describe('seeding beside a caller-provided chat surface', () => {
         recordInteraction: false,
         activate: false,
         pendingStartup: {
-          command: 'bash /tmp/repo/.git/orca/setup-runner.sh',
+          command: 'bash /tmp/repo/.git/quirky/setup-runner.sh',
           env: setup.envVars
         }
       })
@@ -103,14 +103,14 @@ describe('seeding beside a caller-provided chat surface', () => {
       'wt-1',
       undefined,
       undefined,
-      { command: 'orca issue run' },
+      { command: 'quirky issue run' },
       undefined,
       { callerProvidesSurface: true }
     )
 
     expect(createTab).toHaveBeenCalledTimes(1)
     expect(store.queueTabIssueCommandSplit).toHaveBeenCalledWith('tab-1', {
-      command: 'orca issue run',
+      command: 'quirky issue run',
       env: undefined
     })
   })

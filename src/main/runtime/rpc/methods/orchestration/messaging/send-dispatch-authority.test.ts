@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RpcContext } from '../../../core'
 import type { OrchestrationDb } from '../../../../orchestration/db'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { RuntimeTerminalSummary } from '../../../../../../shared/runtime-types'
 import { openDecisionGateFromMessage } from '../../../../orchestration/coordinator-decision-gates'
 import { applyEscalationToDispatch } from '../../../../orchestration/coordinator-escalation-triage'
@@ -11,7 +11,7 @@ import { createRootDispatch } from '../../../../orchestration/db/root-dispatch-t
 describe('orchestration.send Dispatch authority', () => {
   const harness = createOrchestrationRpcHarness()
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let ctx: RpcContext
 
   function setup(): void {
@@ -175,7 +175,7 @@ function terminalSummary(handle: string): RuntimeTerminalSummary {
 describe('orchestration send and reply receipts', () => {
   const h = createOrchestrationRpcHarness()
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let ctx: RpcContext
   let activeRunId: string | undefined
 

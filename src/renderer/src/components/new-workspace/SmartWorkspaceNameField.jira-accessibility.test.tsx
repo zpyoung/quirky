@@ -176,7 +176,7 @@ function renderField(
       repos={[]}
       repoId="repo-1"
       onRepoChange={vi.fn()}
-      value={overrides.value ?? 'https://company.atlassian.net/browse/ORCA-123'}
+      value={overrides.value ?? 'https://company.atlassian.net/browse/QUIRKY-123'}
       onValueChange={overrides.onValueChange ?? vi.fn()}
       onGitHubItemSelect={vi.fn()}
       onBranchSelect={vi.fn()}
@@ -265,7 +265,7 @@ describe('SmartWorkspaceNameField Jira accessibility', () => {
       selectedSource: {
         kind: 'github-issue',
         label: 'Issue #123',
-        url: 'https://github.com/orca/ide/issues/123'
+        url: 'https://github.com/quirky/ide/issues/123'
       }
     })
 
@@ -279,7 +279,7 @@ describe('SmartWorkspaceNameField Jira accessibility', () => {
     expect(onClearSelectedSource).toHaveBeenCalledOnce()
 
     fireEvent.keyDown(pill as HTMLElement, { key: 'Enter', altKey: true })
-    expect(shellMock.openUrl).toHaveBeenCalledWith('https://github.com/orca/ide/issues/123')
+    expect(shellMock.openUrl).toHaveBeenCalledWith('https://github.com/quirky/ide/issues/123')
     expect(onPlainEnter).not.toHaveBeenCalled()
   })
 
@@ -352,7 +352,7 @@ describe('SmartWorkspaceNameField Jira accessibility', () => {
   it('replaces the combined field value only for recognized Jira URL pastes', () => {
     const onValueChange = vi.fn()
     renderField({ value: 'existing-name', onValueChange })
-    const jiraUrl = 'https://company.atlassian.net/browse/ORCA-456'
+    const jiraUrl = 'https://company.atlassian.net/browse/QUIRKY-456'
     const input = screen.getByRole('textbox')
     const event = createEvent.paste(input, {
       clipboardData: { getData: () => jiraUrl }
@@ -399,12 +399,12 @@ describe('SmartWorkspaceNameField Jira accessibility', () => {
     jiraSearchMock.mockResolvedValueOnce([
       {
         id: 'jira-1',
-        key: 'ORCA-123',
+        key: 'QUIRKY-123',
         siteId: 'site-a',
         siteName: 'Company Jira',
         title: 'Disambiguate Jira search',
-        url: 'https://company.atlassian.net/browse/ORCA-123',
-        project: { id: 'project-1', key: 'ORCA', name: 'Orca' },
+        url: 'https://company.atlassian.net/browse/QUIRKY-123',
+        project: { id: 'project-1', key: 'QUIRKY', name: 'Quirky' },
         issueType: { id: 'type-1', name: 'Task' },
         status: { id: 'status-1', name: 'Open', categoryKey: 'new', categoryName: 'To Do' },
         labels: [],
@@ -412,13 +412,13 @@ describe('SmartWorkspaceNameField Jira accessibility', () => {
         updatedAt: '2026-01-01T00:00:00.000Z'
       }
     ])
-    renderField({ jiraSourceContext: true, value: 'ORCA-123' })
+    renderField({ jiraSourceContext: true, value: 'QUIRKY-123' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Jira' }))
 
     expect(
       await screen.findByRole('button', {
-        name: /ORCA-123.*Disambiguate Jira search.*Company Jira.*ada@example.com/
+        name: /QUIRKY-123.*Disambiguate Jira search.*Company Jira.*ada@example.com/
       })
     ).not.toBeNull()
   })
@@ -429,10 +429,10 @@ describe('SmartWorkspaceNameField Jira accessibility', () => {
     jiraSearchMock.mockResolvedValueOnce([]).mockResolvedValueOnce([
       {
         id: 'jira-2',
-        key: 'ORCA-7',
+        key: 'QUIRKY-7',
         title: 'Decode utf-8 names',
-        url: 'https://company.atlassian.net/browse/ORCA-7',
-        project: { id: 'project-1', key: 'ORCA', name: 'Orca' },
+        url: 'https://company.atlassian.net/browse/QUIRKY-7',
+        project: { id: 'project-1', key: 'QUIRKY', name: 'Quirky' },
         issueType: { id: 'type-1', name: 'Task' },
         status: { id: 'status-1', name: 'Open', categoryKey: 'new', categoryName: 'To Do' },
         labels: [],
@@ -444,7 +444,9 @@ describe('SmartWorkspaceNameField Jira accessibility', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Jira' }))
 
-    expect(await screen.findByRole('button', { name: /ORCA-7.*Decode utf-8 names/ })).not.toBeNull()
+    expect(
+      await screen.findByRole('button', { name: /QUIRKY-7.*Decode utf-8 names/ })
+    ).not.toBeNull()
     expect(jiraSearchMock).toHaveBeenCalledTimes(2)
     expect(jiraSearchMock).toHaveBeenNthCalledWith(1, 'key = "UTF-8"', 12, expect.anything())
     expect(jiraSearchMock).toHaveBeenNthCalledWith(2, 'text ~ "utf 8*"', 12, expect.anything())

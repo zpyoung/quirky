@@ -29,7 +29,7 @@ afterEach(async () => {
 })
 
 async function setup() {
-  directory = await mkdtemp(join(tmpdir(), 'orca-pi-startup-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-pi-startup-'))
   const root = directory
   const script = piScriptedChild()
   const host = await ensureStructuredAgentSessionHost({

@@ -7,7 +7,7 @@ The fix skips only the empty `chunks.push` operation. Empty-stream creation, sna
 ## Reproduce
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/empty-streamed-delta-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/empty-streamed-delta-retention/reproduce.cjs
 ```
 
 The runner reverses hash-checked patches in memory and checks every bundled source dependency. It changes no product files and starts no native process or UI. A bounded CRLF control checks source and patch loading. Reports were recorded on Node 26.6.0 and Electron 43.7.0's Node 24.21.0.

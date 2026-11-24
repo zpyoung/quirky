@@ -22,7 +22,7 @@ function folder(): string {
 
 describe('prepareClaudeSignInBrowser', () => {
   it.skipIf(process.platform === 'win32')(
-    'hands the link Claude gives BROWSER to Orca and leaves nothing behind',
+    'hands the link Claude gives BROWSER to Quirky and leaves nothing behind',
     async () => {
       const home = folder()
       const browser = await prepareClaudeSignInBrowser({
@@ -30,7 +30,7 @@ describe('prepareClaudeSignInBrowser', () => {
         linuxPath: null,
         wslDistro: null
       })
-      expect(browser?.path).toBe(join(home, '.orca-sign-in-browser'))
+      expect(browser?.path).toBe(join(home, '.quirky-sign-in-browser'))
       expect(statSync(browser!.path).mode & 0o700).toBe(0o700)
       const next = browser!.nextLink(new AbortController().signal)
       // Claude runs BROWSER as a program with the link as its only argument.
@@ -62,8 +62,8 @@ describe('prepareClaudeSignInBrowser', () => {
       linuxPath: '/home/u/claude-profiles/a/home',
       wslDistro: 'Ubuntu'
     })
-    expect(browser?.path).toBe('/home/u/claude-profiles/a/home/.orca-sign-in-browser')
-    expect(existsSync(join(home, '.orca-sign-in-browser'))).toBe(true)
+    expect(browser?.path).toBe('/home/u/claude-profiles/a/home/.quirky-sign-in-browser')
+    expect(existsSync(join(home, '.quirky-sign-in-browser'))).toBe(true)
   })
 
   it('refuses to catch a Windows host login, whose Claude cannot run the stand-in', async () => {

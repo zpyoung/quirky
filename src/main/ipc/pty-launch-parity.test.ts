@@ -88,7 +88,7 @@ vi.mock('../wsl', async (importOriginal) =>
 vi.mock('node:fs/promises', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).fsPromisesModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -269,7 +269,7 @@ describe('host lane: producer call -> runtime controller -> provider', () => {
     expect(await providerFacts(lanes.provider)).toEqual(expectedHostProvider(c))
     // The host stamps its own pane identity (the window lane's stale-key case is below).
     const spawned = recordOf(lanes.provider.mock.calls.at(-1)?.[0])
-    expect(recordOf(spawned.env).ORCA_PANE_KEY).toBe(spawned.paneKey)
+    expect(recordOf(spawned.env).QUIRKY_PANE_KEY).toBe(spawned.paneKey)
     expect(lanes.persistPtyBinding.mock.calls[0]?.[0]).toMatchObject({
       placement: { kind: 'new-tab' }
     })
@@ -730,13 +730,13 @@ describe('launch facts outside the tables', () => {
       worktreeId: launchWorkspaceId(POSIX_REPO),
       tabId,
       leafId,
-      env: { ORCA_WORKSPACE_ID: 'folder:f1', ORCA_PANE_KEY: 'stale', ORCA_TAB_ID: 'stale' }
+      env: { QUIRKY_WORKSPACE_ID: 'folder:f1', QUIRKY_PANE_KEY: 'stale', QUIRKY_TAB_ID: 'stale' }
     })
     const env = recordOf(recordOf(lanes.provider.mock.calls.at(-1)?.[0]).env)
-    expect(pick(env, ['ORCA_WORKSPACE_ID', 'ORCA_PANE_KEY', 'ORCA_TAB_ID'])).toEqual({
-      ORCA_WORKSPACE_ID: 'folder:f1',
-      ORCA_PANE_KEY: `${tabId}:${leafId}`,
-      ORCA_TAB_ID: tabId
+    expect(pick(env, ['QUIRKY_WORKSPACE_ID', 'QUIRKY_PANE_KEY', 'QUIRKY_TAB_ID'])).toEqual({
+      QUIRKY_WORKSPACE_ID: 'folder:f1',
+      QUIRKY_PANE_KEY: `${tabId}:${leafId}`,
+      QUIRKY_TAB_ID: tabId
     })
   })
 })
@@ -835,11 +835,11 @@ describe('spawn preflight: where the lanes differ today', () => {
     expect(facts.host).toMatchObject(c.host)
   })
 
-  // One resolution reads it for both lanes. Only an SSH-launched orcad has this env, and it has no
+  // One resolution reads it for both lanes. Only an SSH-launched quirkyd has this env, and it has no
   // window (no pty:spawn), so the window lane never meets it in practice.
   it('Windows managed SSH host: both lanes open the OpenSSH login shell', async () => {
     setMainPlatform('win32')
-    vi.stubEnv('ORCA_ORCAD_MANAGED_ACTIVATION_ROOT', '/activation')
+    vi.stubEnv('QUIRKY_QUIRKYD_MANAGED_ACTIVATION_ROOT', '/activation')
     vi.mocked(readOpenSshDefaultShell).mockReturnValue(LOGIN_SHELL)
     const workspace = { kind: 'repo', path: WIN_PATH } satisfies LaunchWorkspace
     const lanes = startParityLanes(suite, { workspace })

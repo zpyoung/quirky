@@ -140,7 +140,7 @@ runs:
         printf 'path=%s\n' "$cache_path" >> "$GITHUB_OUTPUT"
         printf 'arch=%s\n' "$(node -p 'require("node:os").arch()')" >> "$GITHUB_OUTPUT"
         if [ "$STORE_LOOKUP_ONLY" = 'true' ]; then
-          printf 'ORCA_PNPM_STORE_CACHE_PATH=%s\n' "$cache_path" >> "$GITHUB_ENV"
+          printf 'QUIRKY_PNPM_STORE_CACHE_PATH=%s\n' "$cache_path" >> "$GITHUB_ENV"
         fi
 
     # Match setup-node's key and path so existing default-branch stores remain reusable.
@@ -165,7 +165,7 @@ runs:
       uses: actions/cache@v5
       with:
         # Twice-nested composite cleanup loses internal step outputs.
-        path: ${{ env.ORCA_PNPM_STORE_CACHE_PATH }}
+        path: ${{ env.QUIRKY_PNPM_STORE_CACHE_PATH }}
         key: node-cache-${{ runner.os }}-${{ steps.pnpm-store.outputs.arch }}-pnpm-${{ hashFiles(inputs.cache-dependency-path) }}
         lookup-only: true
 

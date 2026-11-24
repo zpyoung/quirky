@@ -18,7 +18,7 @@
         "createUnavailable": "No Git repository is available for worktree creation.",
         "createWorktree": "Create a new worktree",
         "createdTargetUnavailable": "The new worktree could not be resolved.",
-        "deliveryAutomaticRetrySucceeded": "The initial delivery failed, then Orca resent the brief.",
+        "deliveryAutomaticRetrySucceeded": "The initial delivery failed, then Quirky resent the brief.",
         "deliveryFailedRetry": "Brief delivery and the automatic retry failed.",
         "deliverySucceeded": "The handoff brief was sent.",
         "deliveryUnconfirmed": "Brief delivery could not be confirmed.",

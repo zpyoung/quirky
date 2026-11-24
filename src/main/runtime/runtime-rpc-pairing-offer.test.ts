@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeService } from './quirky-runtime'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import { parsePairingCode } from '../../shared/pairing'
 import { DEVICE_REGISTRY_FILENAME, E2EE_KEYPAIR_FILENAME } from './mobile-pairing-files'
 import { STATUS_METHODS } from './rpc/methods/status'
@@ -25,11 +25,11 @@ vi.mock('../git/worktree', () => {
   }
 })
 
-describe('OrcaRuntimeRpcServer', () => {
+describe('QuirkyRuntimeRpcServer', () => {
   it('creates a pairing offer for the active WebSocket transport', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
+    const server = new QuirkyRuntimeRpcServer({
       methods: [],
       runtime,
       userDataPath,
@@ -56,10 +56,10 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('reports why pairing is unavailable before the WebSocket listener is ready', () => {
-    const server = new OrcaRuntimeRpcServer({
+    const server = new QuirkyRuntimeRpcServer({
       methods: [],
-      runtime: new OrcaRuntimeService(),
-      userDataPath: mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-')),
+      runtime: new QuirkyRuntimeService(),
+      userDataPath: mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-')),
       enableWebSocket: true,
       wsPort: 0
     })
@@ -72,11 +72,11 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('reports an E2EE identity initialization failure after the local transport starts', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
     mkdirSync(join(userDataPath, E2EE_KEYPAIR_FILENAME))
-    const server = new OrcaRuntimeRpcServer({
+    const server = new QuirkyRuntimeRpcServer({
       methods: [],
-      runtime: new OrcaRuntimeService(),
+      runtime: new QuirkyRuntimeService(),
       userDataPath,
       enableWebSocket: true,
       wsPort: 0
@@ -97,10 +97,10 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('reports a registry persistence failure without retaining a ghost credential', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const server = new OrcaRuntimeRpcServer({
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const server = new QuirkyRuntimeRpcServer({
       methods: [],
-      runtime: new OrcaRuntimeService(),
+      runtime: new QuirkyRuntimeService(),
       userDataPath,
       enableWebSocket: true,
       wsPort: 0
@@ -123,10 +123,10 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('rejects wildcard advertised addresses before minting a device credential', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const server = new OrcaRuntimeRpcServer({
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const server = new QuirkyRuntimeRpcServer({
       methods: [],
-      runtime: new OrcaRuntimeService(),
+      runtime: new QuirkyRuntimeService(),
       userDataPath,
       enableWebSocket: true,
       wsPort: 0
@@ -149,9 +149,9 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('includes a web client URL when the web bundle is served by the runtime', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
+    const server = new QuirkyRuntimeRpcServer({
       methods: [],
       runtime,
       userDataPath,
@@ -180,9 +180,9 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('preserves proxy path prefixes in web client URLs', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
+    const server = new QuirkyRuntimeRpcServer({
       methods: [],
       runtime,
       userDataPath,
@@ -195,12 +195,12 @@ describe('OrcaRuntimeRpcServer', () => {
 
     try {
       const offer = server.createPairingOffer({
-        address: 'wss://runtime.example.com/orca',
+        address: 'wss://runtime.example.com/quirky',
         name: 'Proxy test'
       })
       expect(offer.available).toBe(true)
       if (offer.available) {
-        expect(offer.webClientUrl).toContain('https://runtime.example.com/orca/web-index.html')
+        expect(offer.webClientUrl).toContain('https://runtime.example.com/quirky/web-index.html')
       }
     } finally {
       await server.stop()
@@ -208,9 +208,9 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('formats pairing-address overrides for IPv6 and host-port tunnel endpoints', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
+    const server = new QuirkyRuntimeRpcServer({
       methods: [],
       runtime,
       userDataPath,
@@ -239,12 +239,12 @@ describe('OrcaRuntimeRpcServer', () => {
       }
 
       const fullUrl = server.createPairingOffer({
-        address: 'wss://runtime.example.com/orca',
+        address: 'wss://runtime.example.com/quirky',
         name: 'Full URL test'
       })
       expect(fullUrl.available).toBe(true)
       if (fullUrl.available) {
-        expect(fullUrl.endpoint).toBe('wss://runtime.example.com/orca')
+        expect(fullUrl.endpoint).toBe('wss://runtime.example.com/quirky')
       }
     } finally {
       await server.stop()
@@ -252,9 +252,9 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('creates mobile-scoped pairing offers for headless mobile pairing', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
+    const server = new QuirkyRuntimeRpcServer({
       methods: [],
       runtime,
       userDataPath,
@@ -289,10 +289,10 @@ describe('OrcaRuntimeRpcServer', () => {
 
 describe('host descriptor publication', () => {
   it('status.get and runtime offers carry the same descriptor, stable across restarts', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
     const start = async () => {
-      const runtime = new OrcaRuntimeService()
-      const server = new OrcaRuntimeRpcServer({
+      const runtime = new QuirkyRuntimeService()
+      const server = new QuirkyRuntimeRpcServer({
         methods: [],
         runtime,
         userDataPath,
@@ -302,7 +302,7 @@ describe('host descriptor publication', () => {
       await server.start()
       return { runtime, server }
     }
-    const statusOf = async (runtime: OrcaRuntimeService) =>
+    const statusOf = async (runtime: QuirkyRuntimeService) =>
       (await STATUS_METHODS[0].handler(undefined, { runtime })).hostDescriptor
     const first = await start()
     const descriptor = await statusOf(first.runtime)

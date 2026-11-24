@@ -16,7 +16,7 @@ import { useHostWorktreeCatalog } from './use-host-worktree-catalog'
 
 type Worktree = { worktreeId: string; repo: string; isPinned: boolean }
 
-const CONFIRMED: Worktree[] = [{ worktreeId: 'wt-1', repo: 'orca', isPinned: false }]
+const CONFIRMED: Worktree[] = [{ worktreeId: 'wt-1', repo: 'quirky', isPinned: false }]
 
 /**
  * The clear the list depends on to stop showing a failure the host has since disproved.

@@ -13,7 +13,7 @@ import {
   resolveWorkerStartReadinessTimeoutMs
 } from '../../../../../../shared/orchestration-timing-budgets'
 import { assertWorkerStartTaskSpecWithinPromptBudget } from './worker-start-prompt-budget'
-import { ORCA_SESSION_ADDRESS_PREFIX } from '../../../../../../shared/orca-session-address'
+import { QUIRKY_SESSION_ADDRESS_PREFIX } from '../../../../../../shared/quirky-session-address'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as SESSION_CODES } from '../../../../../../shared/orchestration-session-caller-codes'
 
 export const ORCHESTRATION_WORKER_START_METHODS = [
@@ -57,11 +57,11 @@ export const ORCHESTRATION_WORKER_START_METHODS = [
         params,
         settings: readWorkerStartModeSettings(runtime)
       })
-      if (params.on && params.terminal?.startsWith(ORCA_SESSION_ADDRESS_PREFIX)) {
-        // Refused here, before any remote call: an Orca session ID names a chat only on its own host.
+      if (params.on && params.terminal?.startsWith(QUIRKY_SESSION_ADDRESS_PREFIX)) {
+        // Refused here, before any remote call: an Quirky session ID names a chat only on its own host.
         throw new OrchestrationError(
           SESSION_CODES.hostBoundary,
-          `${params.terminal} names a chat by its Orca session ID, which identifies it only on the host that runs it. Run worker-start on that host. No effects were applied.`,
+          `${params.terminal} names a chat by its Quirky session ID, which identifies it only on the host that runs it. Run worker-start on that host. No effects were applied.`,
           { effectsApplied: false }
         )
       }

@@ -1,7 +1,7 @@
 import { sessionIdFromStructuredWorkerIncarnation } from '../../structured-worker-identity'
 import { observeStructuredWorker } from '../../rpc/methods/orchestration-structured-worker-lifecycle'
-import { OrcaRuntimeWithApplyMobileDisplayMode } from './terminal-display-mode'
-import { addListenerToMap } from '../../orca-runtime-core'
+import { QuirkyRuntimeWithApplyMobileDisplayMode } from './terminal-display-mode'
+import { addListenerToMap } from '../../quirky-runtime-core'
 import { notifyRuntimeListeners, withTimeoutResult } from '../../runtime-async-boundaries'
 import type { TerminalExitCause } from '../../../../shared/terminal-exit-cause'
 import {
@@ -11,7 +11,7 @@ import {
 import {
   DEFAULT_TERMINAL_LIST_LIMIT,
   PTY_CONTROLLER_LIST_TIMEOUT_MS
-} from '../../orca-runtime-postlude'
+} from '../../quirky-runtime-postlude'
 import type {
   RuntimeTerminalListResult,
   RuntimeTerminalOrphanAdoptionRequest,
@@ -23,7 +23,7 @@ import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import { buildOrchestrationTaskDisplayMetadata } from '../../../../shared/orchestration-task-display'
 import { LOCAL_EXECUTION_HOST_ID, toSshExecutionHostId } from '../../../../shared/execution-host'
 
-export abstract class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRuntimeWithApplyMobileDisplayMode {
+export abstract class QuirkyRuntimeWithSubscribeToTerminalResize extends QuirkyRuntimeWithApplyMobileDisplayMode {
   subscribeToTerminalResize(
     ptyId: string,
     listener: (event: {

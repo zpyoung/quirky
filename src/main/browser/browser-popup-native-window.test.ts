@@ -60,7 +60,7 @@ describe('native popup admission', () => {
   })
 
   it('leaves request continuation to Electron and expires an unused admission before the next turn', async () => {
-    vi.stubEnv('ORCA_BACKGROUND_LAUNCH', '1')
+    vi.stubEnv('QUIRKY_BACKGROUND_LAUNCH', '1')
     const opener = nativeWindow().browserWindow.webContents
     const onCreated = vi.fn()
     const response = allowNativeBrowserPopup({
@@ -264,7 +264,7 @@ describe('native popup admission', () => {
     'changed-session',
     'preparation-rejected'
   ])('presents background children only after safe readiness: %s', (state) => {
-    vi.stubEnv('ORCA_BACKGROUND_LAUNCH', state === 'background-launch' ? '1' : '0')
+    vi.stubEnv('QUIRKY_BACKGROUND_LAUNCH', state === 'background-launch' ? '1' : '0')
     const { browserWindow, window, contents } = nativeWindow()
     const opener = nativeWindow()
     contents.session = opener.contents.session
@@ -297,7 +297,7 @@ describe('native popup admission', () => {
       opener.contents.isDestroyed.mockReturnValue(true)
     }
     if (state === 'changed-launch') {
-      vi.stubEnv('ORCA_BACKGROUND_LAUNCH', '1')
+      vi.stubEnv('QUIRKY_BACKGROUND_LAUNCH', '1')
     }
     if (state === 'changed-hidden') {
       options.show = false

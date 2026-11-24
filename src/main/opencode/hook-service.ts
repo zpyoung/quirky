@@ -33,7 +33,7 @@ import {
 } from '../../shared/opencode-tui-plugin-install'
 import {
   OPENCODE_OVERLAY_DIR,
-  ORCA_OPENCODE_PLUGIN_FILE,
+  QUIRKY_OPENCODE_PLUGIN_FILE,
   sourceOverlayDirName,
   toSafeDirName
 } from './overlay-dir-names'
@@ -73,13 +73,13 @@ export class OpenCodeHookService {
     const config: OpenCodeHookVariant =
       typeof variant === 'function'
         ? {
-            pluginFileName: ORCA_OPENCODE_PLUGIN_FILE,
+            pluginFileName: QUIRKY_OPENCODE_PLUGIN_FILE,
             legacyHooksDir: OPENCODE_LEGACY_HOOKS_DIR,
             overlayDir: OPENCODE_OVERLAY_DIR,
             pluginSource: variant
           }
         : (variant ?? {
-            pluginFileName: ORCA_OPENCODE_PLUGIN_FILE,
+            pluginFileName: QUIRKY_OPENCODE_PLUGIN_FILE,
             legacyHooksDir: OPENCODE_LEGACY_HOOKS_DIR,
             overlayDir: OPENCODE_OVERLAY_DIR,
             pluginSource: getOpenCodePluginSource,
@@ -126,7 +126,7 @@ export class OpenCodeHookService {
     defaultConfigDir?: string
   ): Record<string, string> {
     if (!isUsableId(ptyId)) {
-      // Why: on a bad id, still preserve a user-set OPENCODE_CONFIG_DIR; only the Orca status plugin is forfeited.
+      // Why: on a bad id, still preserve a user-set OPENCODE_CONFIG_DIR; only the Quirky status plugin is forfeited.
       return existingConfigDir ? { OPENCODE_CONFIG_DIR: existingConfigDir } : {}
     }
 
@@ -163,7 +163,7 @@ export class OpenCodeHookService {
     }
   }
 
-  // Why: pre-1.4.209 Orca left a server()-only plugin here that OpenCode 2 rejects. Only helps
+  // Why: pre-1.4.209 Quirky left a server()-only plugin here that OpenCode 2 rejects. Only helps
   // processes that load it later; a running OpenCode 2 service keeps its cached module until restarted.
   refreshLegacySharedPlugin(): void {
     if (this.tuiOnlyDirectory) {
@@ -187,7 +187,7 @@ export class OpenCodeHookService {
     }
   }
 
-  // Why: a running OpenCode 2 service reloads a changed plugin file, so refreshing Orca's existing
+  // Why: a running OpenCode 2 service reloads a changed plugin file, so refreshing Quirky's existing
   // installs at app start upgrades it without waiting for the next pane. Never creates an install.
   refreshInstalledPlugins(): void {
     this.refreshLegacySharedPlugin()
@@ -227,10 +227,10 @@ export class OpenCodeHookService {
     )
   }
 
-  // Why: mirror user config entries as symlinks so edits propagate live; only plugins/ becomes a real overlay dir so Orca can drop a sibling plugin file.
+  // Why: mirror user config entries as symlinks so edits propagate live; only plugins/ becomes a real overlay dir so Quirky can drop a sibling plugin file.
   private mirrorUserConfig(sourceDir: string, overlayDir: string): void {
     const previousManifest = readOpenCodeOverlayManifest(overlayDir)
-    // Why: overlays persist across terminals; remove only Orca-mirrored paths so stale user config clears but OpenCode runtime dirs (node_modules) survive.
+    // Why: overlays persist across terminals; remove only Quirky-mirrored paths so stale user config clears but OpenCode runtime dirs (node_modules) survive.
     clearOpenCodeOverlayManifestEntries(overlayDir, previousManifest, this.pluginFileName)
 
     const nextManifest: OpenCodeOverlayManifest = {
@@ -261,7 +261,7 @@ export class OpenCodeHookService {
           const overlayPluginsDir = join(overlayDir, 'plugins')
           mkdirSync(overlayPluginsDir, { recursive: true })
           for (const pluginEntry of readdirSync(resolvedSource, { withFileTypes: true })) {
-            // Why: skip a user plugin sharing Orca's filename; mirroring it would let writePluginIntoOverlay clobber the user's file.
+            // Why: skip a user plugin sharing Quirky's filename; mirroring it would let writePluginIntoOverlay clobber the user's file.
             if (
               pluginEntry.name === this.pluginFileName ||
               pluginEntry.name === this.tuiOnlyDirectory ||
@@ -319,7 +319,7 @@ export class OpenCodeHookService {
 
 export const openCodeHookService = new OpenCodeHookService()
 export const openCode2HookService = new OpenCodeHookService({
-  pluginFileName: 'orca-opencode2-status.js',
+  pluginFileName: 'quirky-opencode2-status.js',
   legacyHooksDir: OPENCODE2_LEGACY_HOOKS_DIR,
   overlayDir: 'opencode2-config-overlays',
   pluginSource: getOpenCode2PluginSource,

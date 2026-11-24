@@ -3,7 +3,7 @@ import { persistMirrored } from '../storage/mirrored-storage-keys'
 
 import { TERMINAL_ACCESSORY_KEYS, type TerminalAccessoryKey } from './terminal-accessory-keys'
 
-export const TERMINAL_ACCESSORY_LAYOUT_STORAGE_KEY = 'orca:terminal-accessory-layout'
+export const TERMINAL_ACCESSORY_LAYOUT_STORAGE_KEY = 'quirky:terminal-accessory-layout'
 
 export type TerminalAccessoryLayout = {
   orderedBuiltInIds: string[]

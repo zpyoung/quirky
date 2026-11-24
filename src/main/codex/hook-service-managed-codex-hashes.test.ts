@@ -61,7 +61,7 @@ import {
 import {
   CODEX_EVENTS,
   CODEX_EVENT_LABEL,
-  computeOrcaCodexHookHashes,
+  computeQuirkyCodexHookHashes,
   getManagedCommand,
   getManagedScriptPath
 } from './codex-hook-definition'
@@ -69,8 +69,8 @@ import { CODEX_DAEMON_OVERRIDE_MARKER } from './codex-daemon-socket-path-guard'
 import { writeCodexTrustGrantLedgerHome } from './codex-trust-grant-ledger'
 import { getCodexHookTrustSignature } from './codex-hook-identity'
 
-// Why this file: a managed CODEX_HOME's approval for Orca's entry is Codex's
-// own hash, not one Orca computes, and is written before the entry.
+// Why this file: a managed CODEX_HOME's approval for Quirky's entry is Codex's
+// own hash, not one Quirky computes, and is written before the entry.
 
 const homes = setupCodexHookHomes(homedirMock, getPathMock)
 // Why started: lets the lookup ask the stand-in Codex, as the app does.
@@ -101,7 +101,7 @@ function managedKey(eventLabel: CodexEventLabel, groupIndex: number): string {
   })
 }
 
-/** The approval at Orca's entry in each event Codex listed. */
+/** The approval at Quirky's entry in each event Codex listed. */
 function listedEventApprovals(): Record<string, string | undefined> {
   const trust = readHookTrustEntries(join(managedHome(), 'config.toml'))
   return Object.fromEntries(
@@ -148,7 +148,7 @@ const timedOut: CodexHookAnswer = { kind: 'pending', failure: 'timed out' }
 const command = (): string => getManagedCommand(getManagedScriptPath())
 
 describe('managed-home Codex hook approval', () => {
-  it("approves Orca's entry with Codex's hash, enabled, only in the events Codex lists", async () => {
+  it("approves Quirky's entry with Codex's hash, enabled, only in the events Codex lists", async () => {
     seedSystemUserStopHook()
     useCodexHashes()
 
@@ -173,7 +173,7 @@ describe('managed-home Codex hook approval', () => {
       enabled: true
     })
     expect(trust.get(managedKey('subagent_start', 0))).toBeUndefined()
-    // Why: the mirrored user hook moved behind Orca's group, and its approval with it.
+    // Why: the mirrored user hook moved behind Quirky's group, and its approval with it.
     expect(
       trust.get(
         computeTrustKey({
@@ -217,7 +217,7 @@ describe('managed-home Codex hook approval', () => {
     useAnswer({
       kind: 'refused',
       codexVersion: 'codex-cli 0.127.0',
-      failure: 'Codex 0.127.0 is too old for Orca status; update Codex'
+      failure: 'Codex 0.127.0 is too old for Quirky status; update Codex'
     })
 
     const status = await service.install()
@@ -257,7 +257,7 @@ describe('managed-home Codex hook approval', () => {
     ).toBeUndefined()
   })
 
-  it("leaves a user hook's approval in place in an event Codex does not list Orca's entry for", async () => {
+  it("leaves a user hook's approval in place in an event Codex does not list Quirky's entry for", async () => {
     const systemHome = join(homes.tmpHome, '.codex')
     mkdirSync(systemHome, { recursive: true })
     writeFileSync(
@@ -275,7 +275,7 @@ describe('managed-home Codex hook approval', () => {
     upsertHookTrustEntries(join(systemHome, 'config.toml'), [
       { ...userInterrupt, sourcePath: join(systemHome, 'hooks.json') }
     ])
-    // Why: a Codex before 0.150 does not know Interrupt, so Orca's entry does not lead that event.
+    // Why: a Codex before 0.150 does not know Interrupt, so Quirky's entry does not lead that event.
     useAnswer({ kind: 'hashes', codexVersion: 'codex-cli 0.149.0', hashes: CODEX_HASHES })
 
     expect((await new CodexHookService().install()).state).toBe('installed')
@@ -308,11 +308,11 @@ describe('managed-home Codex hook approval', () => {
     ).toBe('sha256:codex-stop')
     expect(status).toMatchObject({
       state: 'installed',
-      detail: expect.stringContaining('Approved by Orca; not yet confirmed by Codex')
+      detail: expect.stringContaining('Approved by Quirky; not yet confirmed by Codex')
     })
   })
 
-  it("leaves user trust byte-untouched while approving Orca's entries", async () => {
+  it("leaves user trust byte-untouched while approving Quirky's entries", async () => {
     mkdirSync(managedHome(), { recursive: true })
     const userBlock = [
       '[hooks.state."/home/user/.codex/hooks.json:stop:3:1"]',
@@ -344,12 +344,12 @@ describe('managed-home Codex hook approval', () => {
     expect(trust.get(managedKey('session_start', 0))).toBeUndefined()
   })
 
-  it('reports why there is no status when Orca has not asked Codex yet', () => {
+  it('reports why there is no status when Quirky has not asked Codex yet', () => {
     lookupInternals.resetForTesting()
 
     expect(new CodexHookService().getStatus(managedHome())).toMatchObject({
       state: 'not_installed',
-      detail: 'Orca has not asked Codex yet'
+      detail: 'Quirky has not asked Codex yet'
     })
   })
 
@@ -551,15 +551,15 @@ describe('managed-home Codex hook approval', () => {
     expect(trust.get(userKey(1))).toBeUndefined()
   })
 
-  describe("Orca's own hash until Codex answers, as main wrote it", () => {
-    const orcaStop = (): string | undefined => computeOrcaCodexHookHashes().stop ?? undefined
+  describe("Quirky's own hash until Codex answers, as main wrote it", () => {
+    const quirkyStop = (): string | undefined => computeQuirkyCodexHookHashes().stop ?? undefined
 
     function stopApproval(): string | undefined {
       return readHookTrustEntries(join(managedHome(), 'config.toml')).get(managedKey('stop', 0))
         ?.trustedHash
     }
 
-    it("approves a fresh home with Orca's hash when Codex answers after the launch's wait", async () => {
+    it("approves a fresh home with Quirky's hash when Codex answers after the launch's wait", async () => {
       useAnswer(new Promise(() => {}))
 
       const status = await new CodexHookService().install(undefined, false)
@@ -571,17 +571,17 @@ describe('managed-home Codex hook approval', () => {
       expect(
         readHookTrustEntries(join(managedHome(), 'config.toml')).get(managedKey('stop', 0))
       ).toEqual({
-        trustedHash: orcaStop(),
+        trustedHash: quirkyStop(),
         enabled: true
       })
       expect(status).toMatchObject({
         state: 'installed',
-        detail: 'Approved by Orca; not yet confirmed by Codex (waiting for Codex to answer)'
+        detail: 'Approved by Quirky; not yet confirmed by Codex (waiting for Codex to answer)'
       })
       expect(new CodexHookService().getStatus(managedHome()).detail).toBe(status.detail)
     })
 
-    it("keeps the approval main's grant recorded for Orca's entry until Codex answers", async () => {
+    it("keeps the approval main's grant recorded for Quirky's entry until Codex answers", async () => {
       useAnswer(timedOut)
       const service = new CodexHookService()
       await service.install()
@@ -612,7 +612,7 @@ describe('managed-home Codex hook approval', () => {
       expect(service.getStatus(managedHome()).state).toBe('installed')
     })
 
-    it("does not report a user hook's approval left at Orca's key as Orca's", async () => {
+    it("does not report a user hook's approval left at Quirky's key as Quirky's", async () => {
       useAnswer(timedOut)
       const service = new CodexHookService()
       await service.install()
@@ -629,16 +629,16 @@ describe('managed-home Codex hook approval', () => {
 
       expect(service.getStatus(managedHome())).toMatchObject({
         state: 'partial',
-        detail: "Orca's hook entry is not approved yet (timed out)"
+        detail: "Quirky's hook entry is not approved yet (timed out)"
       })
     })
 
-    it("approves a fresh home with Orca's hash while Codex is not found", async () => {
+    it("approves a fresh home with Quirky's hash while Codex is not found", async () => {
       codex.fingerprintCodex.mockReturnValue(null)
 
       expect((await new CodexHookService().install()).state).toBe('installed')
 
-      expect(stopApproval()).toBe(orcaStop())
+      expect(stopApproval()).toBe(quirkyStop())
     })
 
     it('reports an entry left without any approval while Codex has not answered', async () => {
@@ -649,11 +649,11 @@ describe('managed-home Codex hook approval', () => {
 
       expect(service.getStatus(managedHome())).toMatchObject({
         state: 'partial',
-        detail: "Orca's hook entry is not approved yet (timed out)"
+        detail: "Quirky's hook entry is not approved yet (timed out)"
       })
     })
 
-    it("keeps each event's approval and gives Orca's hash to the rest until Codex answers", async () => {
+    it("keeps each event's approval and gives Quirky's hash to the rest until Codex answers", async () => {
       useAnswer({
         kind: 'hashes',
         codexVersion: 'codex-cli 0.131.0',
@@ -672,15 +672,15 @@ describe('managed-home Codex hook approval', () => {
       const trust = readHookTrustEntries(join(managedHome(), 'config.toml'))
       expect(trust.get(managedKey('stop', 0))?.trustedHash).toBe('sha256:codex-stop')
       expect(trust.get(managedKey('session_start', 0))?.trustedHash).toBe(
-        computeOrcaCodexHookHashes().session_start
+        computeQuirkyCodexHookHashes().session_start
       )
     })
 
-    it("replaces a user hook's approval left at Orca's key with Orca's hash", async () => {
+    it("replaces a user hook's approval left at Quirky's key with Quirky's hash", async () => {
       useAnswer(timedOut)
       const service = new CodexHookService()
       await service.install()
-      // Why: keys are positional; removing a user hook ahead of Orca's leaves its approval here.
+      // Why: keys are positional; removing a user hook ahead of Quirky's leaves its approval here.
       upsertHookTrustEntries(join(managedHome(), 'config.toml'), [
         {
           sourcePath: getCodexExplicitHomeHookSourcePath(join(managedHome(), 'hooks.json')),
@@ -694,14 +694,14 @@ describe('managed-home Codex hook approval', () => {
 
       await service.install()
 
-      expect(stopApproval()).toBe(orcaStop())
+      expect(stopApproval()).toBe(quirkyStop())
     })
 
-    it("replaces Orca's hash with Codex's once Codex answers", async () => {
+    it("replaces Quirky's hash with Codex's once Codex answers", async () => {
       useAnswer(timedOut)
       const service = new CodexHookService()
       await service.install()
-      expect(stopApproval()).toBe(orcaStop())
+      expect(stopApproval()).toBe(quirkyStop())
 
       useCodexHashes()
       expect((await service.install()).state).toBe('installed')
@@ -713,7 +713,7 @@ describe('managed-home Codex hook approval', () => {
       useAnswer({
         kind: 'refused',
         codexVersion: 'codex-cli 0.127.0',
-        failure: 'Codex 0.127.0 is too old for Orca status; update Codex'
+        failure: 'Codex 0.127.0 is too old for Quirky status; update Codex'
       })
 
       const status = await new CodexHookService().install()
@@ -726,13 +726,13 @@ describe('managed-home Codex hook approval', () => {
       })
     })
 
-    it("approves with Orca's hash in a process that may not ask Codex, as the offline CLI is", async () => {
+    it("approves with Quirky's hash in a process that may not ask Codex, as the offline CLI is", async () => {
       // Why reset: no resolver stub and no permission to ask, as in the CLI's process.
       lookupInternals.resetForTesting()
 
       expect((await new CodexHookService().install()).state).toBe('installed')
 
-      expect(stopApproval()).toBe(orcaStop())
+      expect(stopApproval()).toBe(quirkyStop())
     })
   })
 })

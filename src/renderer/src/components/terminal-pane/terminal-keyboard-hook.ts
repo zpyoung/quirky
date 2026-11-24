@@ -11,7 +11,7 @@ export type { KeyboardHandlersDeps } from './terminal-keyboard-dependencies'
 /**
  * Installs terminal-pane shortcuts on the tab keyboard scope.
  * Uses the shared shortcut policy before forwarding unmatched input to xterm
- * so configurable Orca actions remain consistent across local and SSH panes.
+ * so configurable Quirky actions remain consistent across local and SSH panes.
  */
 export function useTerminalKeyboardShortcuts({
   tabId,
@@ -41,7 +41,7 @@ export function useTerminalKeyboardShortcuts({
   macOptionAsAltRef,
   paneKittyKeyboardModesRef,
   keybindings,
-  terminalShortcutPolicy = 'orca-first'
+  terminalShortcutPolicy = 'quirky-first'
 }: KeyboardHandlersDeps): void {
   useEffect(() => {
     if (!isActive) {

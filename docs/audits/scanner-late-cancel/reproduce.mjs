@@ -7,8 +7,8 @@ import { getHeapStatistics } from 'node:v8'
 import { runInNewContext } from 'node:vm'
 import { transform } from 'esbuild'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1')
 }
 
 const sourcePath = 'src/main/ai-vault/session-scanner-service-entry.ts'

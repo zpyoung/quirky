@@ -14,9 +14,9 @@ import { wrapWindowsBatchHookCommand } from '../agent-hooks/windows-direct-cmd-h
 import { DshHookService } from './hook-service'
 import { DSH_HOOK_EVENTS } from './hook-settings'
 
-// Why: getSharedManagedScriptPath() writes under homedir()/.orca and the patch layer
+// Why: getSharedManagedScriptPath() writes under homedir()/.quirky and the patch layer
 // resolves via DSH_HOME ?? ~/.dsh. Point the home env at a temp dir and clear DSH_HOME so
-// install/remove never touches the real ~/.orca or a developer's own DSH home.
+// install/remove never touches the real ~/.quirky or a developer's own DSH home.
 // Why both names: os.homedir() reads $HOME on POSIX and %USERPROFILE% on Windows, and this
 // file asserts the Windows script name too — setting only HOME would let a Windows run edit
 // the developer's real home.
@@ -26,7 +26,7 @@ let originalUserProfile: string | undefined
 let originalDshHome: string | undefined
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'orca-dsh-hook-'))
+  home = mkdtempSync(join(tmpdir(), 'quirky-dsh-hook-'))
   originalHome = process.env.HOME
   originalUserProfile = process.env.USERPROFILE
   originalDshHome = process.env.DSH_HOME
@@ -55,9 +55,14 @@ afterEach(() => {
 })
 
 const configPath = (): string => join(home, '.dsh', 'cordis.patch.yml')
-const managedHooksPath = (): string => join(home, '.orca', 'agent-hooks', 'dsh-hooks.json')
+const managedHooksPath = (): string => join(home, '.quirky', 'agent-hooks', 'dsh-hooks.json')
 const scriptPath = (): string =>
-  join(home, '.orca', 'agent-hooks', process.platform === 'win32' ? 'dsh-hook.cmd' : 'dsh-hook.sh')
+  join(
+    home,
+    '.quirky',
+    'agent-hooks',
+    process.platform === 'win32' ? 'dsh-hook.cmd' : 'dsh-hook.sh'
+  )
 
 function readManagedHooks(): { hooks: Record<string, unknown[]> } {
   const parsed: { hooks: Record<string, unknown[]> } = JSON.parse(
@@ -93,14 +98,14 @@ describe('DshHookService', () => {
   })
 
   it('restores the pane identity DSH scrubs before anything reads it', () => {
-    // DSH drops env names containing KEY/TOKEN, so the script has to recover ORCA_PANE_KEY
-    // and ORCA_AGENT_LAUNCH_TOKEN from their aliases before the guard or the spool run.
+    // DSH drops env names containing KEY/TOKEN, so the script has to recover QUIRKY_PANE_KEY
+    // and QUIRKY_AGENT_LAUNCH_TOKEN from their aliases before the guard or the spool run.
     new DshHookService().install()
     const script = readFileSync(scriptPath(), 'utf-8')
-    const restoreAt = script.indexOf('ORCA_AGENT_PANE')
-    const guardAt = script.indexOf('ORCA_AGENT_HOOK_PORT')
+    const restoreAt = script.indexOf('QUIRKY_AGENT_PANE')
+    const guardAt = script.indexOf('QUIRKY_AGENT_HOOK_PORT')
     expect(restoreAt).toBeGreaterThan(-1)
-    expect(script).toContain('ORCA_AGENT_LAUNCH')
+    expect(script).toContain('QUIRKY_AGENT_LAUNCH')
     expect(restoreAt).toBeLessThan(guardAt)
   })
 
@@ -189,7 +194,7 @@ describe('DshHookService', () => {
 
   it('refuses a flow-style patch file instead of corrupting it', () => {
     // Appending a block entry after `[…]` is invalid YAML — DSH would then fail to load the
-    // user's own layer as well as Orca's hooks, so install must change nothing.
+    // user's own layer as well as Quirky's hooks, so install must change nothing.
     const flow = '[{ id: llm-deepseek }]\n'
     mkdirSync(join(home, '.dsh'), { recursive: true })
     writeFileSync(configPath(), flow, 'utf-8')

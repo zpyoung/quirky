@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import type { WorktreeMeta } from '../../../../shared/worktree/meta-types'
 import { displayNameUpdatePinsLabel } from '../../../../shared/worktree/display-name-provenance'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
-import { stripOrcaProvenanceMetaUpdates } from '../../../worktree-removal-safety'
+import { stripQuirkyProvenanceMetaUpdates } from '../../../worktree-removal-safety'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import { notifyWorktreesChanged } from '../../worktree-remote'
 import { parseWorktreeId } from '../../worktree-logic'
@@ -63,7 +63,7 @@ export function registerWorktreeMetadataHandlers(context: WorktreeIpcContext): v
               firstAgentMessageRenameError: null
             }
           : validatedUpdates
-      const sanitizedUpdates = stripOrcaProvenanceMetaUpdates(updates)
+      const sanitizedUpdates = stripQuirkyProvenanceMetaUpdates(updates)
       // Why: a late write from a terminal still bound to a removed folder workspace (#22712).
       if (isRemovedFolderWorkspaceInstance(store, args.worktreeId, executionHostId)) {
         return null

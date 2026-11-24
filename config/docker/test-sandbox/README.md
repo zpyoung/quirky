@@ -14,7 +14,7 @@ ssh buildbox 'curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker 
 docker context create buildbox --docker host=ssh://you@buildbox
 ```
 
-`--docker-host` defaults to `$ORCA_SANDBOX_DOCKER_HOST`, so set that once instead of passing the
+`--docker-host` defaults to `$QUIRKY_SANDBOX_DOCKER_HOST`, so set that once instead of passing the
 flag on every run. This checkout reads it from `.claude/settings.local.json`, which is machine-local
 and untracked — a fresh clone has to set it before the runner reaches anything but the local daemon.
 
@@ -40,7 +40,7 @@ pnpm test:sandbox --shards=16 --only=1 -- --reporter=verbose
 Running vitest directly is blocked by a `PreToolUse` hook — see the testing section in
 [`AGENTS.md`](../../../AGENTS.md).
 
-Per-shard logs land in `.orca-sandbox-logs/`. `--node=26` builds the second Node version from
+Per-shard logs land in `.quirky-sandbox-logs/`. `--node=26` builds the second Node version from
 the CI matrix.
 
 ## Image lifecycle
@@ -56,4 +56,4 @@ the entrypoint reinstalls before running rather than testing against the wrong t
 - Unsets inherited `GIT_CONFIG_*`, which otherwise fails the relay agent-exec suites.
 - Removes `config/*.tsbuildinfo`, which caches errors across checkouts sharing a tree.
 - Sends only non-ignored files, so a stale local `out/` never reaches the container.
-- Sets `ORCA_REQUIRE_FISH=1` on the shell lane, so a missing fish fails instead of skipping.
+- Sets `QUIRKY_REQUIRE_FISH=1` on the shell lane, so a missing fish fails instead of skipping.

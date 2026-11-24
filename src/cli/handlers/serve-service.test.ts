@@ -12,20 +12,20 @@ import {
 import { resolveServiceCommand } from '../runtime/serve-app-launcher'
 import { serveSupervisorBrakePath } from '../runtime/serve-supervisor-brake'
 
-describe('orca serve service', () => {
+describe('quirky serve service', () => {
   let home: string
   let bin: string
   let calls: string[]
   let answers: Map<string, { code: number | null; out: string }>
 
   beforeEach(async () => {
-    home = await mkdtemp(join(tmpdir(), 'orca-serve-service-'))
+    home = await mkdtemp(join(tmpdir(), 'quirky-serve-service-'))
     bin = join(home, 'bin')
     await mkdir(bin)
-    await writeFile(join(bin, 'orca'), '#!/bin/sh\n')
-    await chmod(join(bin, 'orca'), 0o755)
-    await writeFile(join(bin, 'orca-ide'), '#!/bin/sh\n')
-    await chmod(join(bin, 'orca-ide'), 0o755)
+    await writeFile(join(bin, 'quirky'), '#!/bin/sh\n')
+    await chmod(join(bin, 'quirky'), 0o755)
+    await writeFile(join(bin, 'quirky-ide'), '#!/bin/sh\n')
+    await chmod(join(bin, 'quirky-ide'), 0o755)
     calls = []
     answers = new Map()
   })
@@ -38,7 +38,7 @@ describe('orca serve service', () => {
     platform,
     env: {
       PATH: `/nonexistent:${bin}`,
-      ORCA_USER_DATA_PATH: join(home, 'profile'),
+      QUIRKY_USER_DATA_PATH: join(home, 'profile'),
       ELECTRON_RUN_AS_NODE: '1'
     },
     homeDir: home,
@@ -55,9 +55,9 @@ describe('orca serve service', () => {
     await writeFile(serveSupervisorBrakePath(join(home, 'profile')), '{}')
     const result = await installServeService({ command: null, dryRun: false }, deps('darwin'))
     const unitPath = String(result.unitPath)
-    expect(await readFile(unitPath, 'utf8')).toContain(`<string>${join(bin, 'orca')}</string>`)
+    expect(await readFile(unitPath, 'utf8')).toContain(`<string>${join(bin, 'quirky')}</string>`)
     expect(calls).toEqual([
-      expect.stringMatching(/^launchctl bootout gui\/501\/com\.stablyai\.orca\.serve\./),
+      expect.stringMatching(/^launchctl bootout gui\/501\/com\.zpyoung\.quirky\.serve\./),
       `launchctl bootstrap gui/501 ${unitPath}`
     ])
     expect(existsSync(serveSupervisorBrakePath(join(home, 'profile')))).toBe(false)
@@ -70,8 +70,8 @@ describe('orca serve service', () => {
     expect(result.linger).toBe('no')
     expect(calls.slice(0, 3)).toEqual([
       'systemctl --user daemon-reload',
-      expect.stringMatching(/^systemctl --user enable orca-serve-[0-9a-f]{8}\.service$/),
-      expect.stringMatching(/^systemctl --user restart orca-serve-/)
+      expect.stringMatching(/^systemctl --user enable quirky-serve-[0-9a-f]{8}\.service$/),
+      expect.stringMatching(/^systemctl --user restart quirky-serve-/)
     ])
   })
 
@@ -115,29 +115,29 @@ describe('orca serve service', () => {
     calls = []
     await expect(uninstallServeService(d)).resolves.toMatchObject({ removed: true })
     expect(existsSync(String(result.unitPath))).toBe(false)
-    expect(calls[0]).toMatch(/^systemctl --user disable --now orca-serve-/)
+    expect(calls[0]).toMatch(/^systemctl --user disable --now quirky-serve-/)
   })
 
   it('never picks a version-scoped launcher from the profile or a mounted AppImage', async () => {
     const scoped = join(home, 'profile', 'cli', 'bin')
     await mkdir(scoped, { recursive: true })
-    await writeFile(join(scoped, 'orca'), '#!/bin/sh\n')
-    await chmod(join(scoped, 'orca'), 0o755)
+    await writeFile(join(scoped, 'quirky'), '#!/bin/sh\n')
+    await chmod(join(scoped, 'quirky'), 0o755)
     expect(
       resolveServiceCommand(null, {
         platform: 'darwin',
-        env: { PATH: `${scoped}:${bin}`, ORCA_USER_DATA_PATH: join(home, 'profile') }
+        env: { PATH: `${scoped}:${bin}`, QUIRKY_USER_DATA_PATH: join(home, 'profile') }
       })
-    ).toBe(join(bin, 'orca'))
-    // Linux takes only orca-ide, never a bare `orca` (often the screen reader).
-    const onlyOrca = join(home, 'only-orca')
-    await mkdir(onlyOrca)
-    await writeFile(join(onlyOrca, 'orca'), '#!/bin/sh\n')
-    await chmod(join(onlyOrca, 'orca'), 0o755)
+    ).toBe(join(bin, 'quirky'))
+    // Linux takes only quirky-ide, never a bare `quirky` (often the screen reader).
+    const onlyQuirky = join(home, 'only-quirky')
+    await mkdir(onlyQuirky)
+    await writeFile(join(onlyQuirky, 'quirky'), '#!/bin/sh\n')
+    await chmod(join(onlyQuirky, 'quirky'), 0o755)
     expect(() =>
       resolveServiceCommand(null, {
         platform: 'linux',
-        env: { PATH: onlyOrca, ORCA_USER_DATA_PATH: join(home, 'profile') }
+        env: { PATH: onlyQuirky, QUIRKY_USER_DATA_PATH: join(home, 'profile') }
       })
     ).toThrow(/PATH/)
   })
@@ -146,13 +146,13 @@ describe('orca serve service', () => {
     await expect(
       installServeService({ command: null, dryRun: true }, deps('win32'))
     ).rejects.toThrow(/Windows/)
-    expect(() => resolveServiceCommand('orca', { platform: 'darwin', env: {} })).toThrow()
+    expect(() => resolveServiceCommand('quirky', { platform: 'darwin', env: {} })).toThrow()
     expect(() =>
       resolveServiceCommand(null, { platform: 'darwin', env: { PATH: '/nonexistent' } })
     ).toThrow(/PATH/)
   })
-  it('names the command to run when only a server-only orca exists here', async () => {
-    // The `orca` an SSH-launched Orca server puts on a remote host runs on plain Node.
+  it('names the command to run when only a server-only quirky exists here', async () => {
+    // The `quirky` an SSH-launched Quirky server puts on a remote host runs on plain Node.
     const serverCli = (platform: NodeJS.Platform, path: string): ServeServiceDeps => {
       const base = deps(platform)
       const { ELECTRON_RUN_AS_NODE: _electron, ...env } = base.env
@@ -160,14 +160,14 @@ describe('orca serve service', () => {
     }
     const scoped = join(home, 'profile', 'cli', 'bin')
     await mkdir(scoped, { recursive: true })
-    await writeFile(join(scoped, 'orca'), '#!/bin/sh\n')
-    await chmod(join(scoped, 'orca'), 0o755)
+    await writeFile(join(scoped, 'quirky'), '#!/bin/sh\n')
+    await chmod(join(scoped, 'quirky'), 0o755)
     await expect(
       installServeService({ command: null, dryRun: false }, serverCli('linux', scoped))
-    ).rejects.toThrow(/install the Orca app.*`orca-ide serve service install`/i)
+    ).rejects.toThrow(/install the Quirky app.*`quirky-ide serve service install`/i)
     await expect(
       installServeService({ command: null, dryRun: true }, serverCli('darwin', scoped))
-    ).rejects.toThrow(/`orca serve service install`/)
+    ).rejects.toThrow(/`quirky serve service install`/)
     expect(calls).toEqual([])
     // An installed app's launcher on PATH (or named by --command) still works from that terminal.
     await expect(
@@ -175,22 +175,22 @@ describe('orca serve service', () => {
     ).resolves.toMatchObject({ dryRun: true })
     await expect(
       installServeService(
-        { command: join(bin, 'orca-ide'), dryRun: true },
+        { command: join(bin, 'quirky-ide'), dryRun: true },
         serverCli('linux', scoped)
       )
     ).resolves.toMatchObject({ dryRun: true })
   })
 
-  it('refuses a --command tied to one Orca version', async () => {
+  it('refuses a --command tied to one Quirky version', async () => {
     const scoped = join(home, 'profile', 'cli', 'bin')
     await mkdir(scoped, { recursive: true })
-    await writeFile(join(scoped, 'orca'), '#!/bin/sh\n')
-    await chmod(join(scoped, 'orca'), 0o755)
+    await writeFile(join(scoped, 'quirky'), '#!/bin/sh\n')
+    await chmod(join(scoped, 'quirky'), 0o755)
     expect(() =>
-      resolveServiceCommand(join(scoped, 'orca'), {
+      resolveServiceCommand(join(scoped, 'quirky'), {
         platform: 'darwin',
-        env: { ORCA_USER_DATA_PATH: join(home, 'profile') }
+        env: { QUIRKY_USER_DATA_PATH: join(home, 'profile') }
       })
-    ).toThrow(/one Orca version/)
+    ).toThrow(/one Quirky version/)
   })
 })

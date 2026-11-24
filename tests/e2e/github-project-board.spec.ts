@@ -1,4 +1,4 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 import { githubProjectIdentityKey } from '../../src/shared/github/project-identity'
 import type { GitHubProjectTable } from '../../src/shared/github/project-types'
@@ -80,11 +80,11 @@ const board: GitHubProjectTable = {
 }
 
 test('board drops cross preload, settle optimistically, and roll back failures', async ({
-  orcaPage,
+  quirkyPage,
   electronApp,
   seededRepoPath
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
+  await waitForSessionReady(quirkyPage)
   await electronApp.evaluate(({ ipcMain }, data) => {
     const responses = {
       'gh:repoSlug': () => ({ owner: 'board-proof', repo: 'repo' }),
@@ -110,7 +110,7 @@ test('board drops cross preload, settle optimistically, and roll back failures',
       return { ok: false, error: { type: 'network_error', message: 'Board verification: offline' } }
     })
   }, board)
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     ({ project, identity, seededRepoPath }) => {
       const store = window.__store!
       const state = store.getState()
@@ -147,16 +147,16 @@ test('board drops cross preload, settle optimistically, and roll back failures',
     },
     { project, identity: githubProjectIdentityKey(project), seededRepoPath }
   )
-  await orcaPage.getByRole('button', { name: 'Tasks', exact: true }).click()
-  await orcaPage.getByRole('button', { name: 'Projects', exact: true }).click()
-  const todo = orcaPage.getByTestId('board-column-todo')
-  const done = orcaPage.getByTestId('board-column-done')
-  const empty = orcaPage.getByTestId('board-column-__empty__')
+  await quirkyPage.getByRole('button', { name: 'Tasks', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Projects', exact: true }).click()
+  const todo = quirkyPage.getByTestId('board-column-todo')
+  const done = quirkyPage.getByTestId('board-column-done')
+  const empty = quirkyPage.getByTestId('board-column-__empty__')
   const title = board.rows[0].content.title
   await expect(todo.getByRole('button', { name: title })).toBeVisible()
-  await expect(orcaPage.getByTestId('board-column-doing')).toBeVisible()
-  await orcaPage.evaluate(() => document.documentElement.classList.add('dark'))
-  await orcaPage.screenshot({ path: testInfo.outputPath('board-dark.png') })
+  await expect(quirkyPage.getByTestId('board-column-doing')).toBeVisible()
+  await quirkyPage.evaluate(() => document.documentElement.classList.add('dark'))
+  await quirkyPage.screenshot({ path: testInfo.outputPath('board-dark.png') })
 
   await todo.getByRole('listitem').dragTo(done)
   await expect(done.getByRole('button', { name: title })).toBeVisible()
@@ -177,7 +177,7 @@ test('board drops cross preload, settle optimistically, and roll back failures',
   await empty.scrollIntoViewIfNeeded()
   await done.getByRole('listitem').dragTo(empty)
   await expect(empty.getByRole('button', { name: title })).toBeVisible()
-  await expect(orcaPage.getByText('Board verification: offline', { exact: true })).toBeVisible()
+  await expect(quirkyPage.getByText('Board verification: offline', { exact: true })).toBeVisible()
   await expect(done.getByRole('button', { name: title })).toBeVisible()
   await expect(empty.getByRole('button', { name: title })).toHaveCount(0)
   await expect
@@ -192,10 +192,10 @@ test('board drops cross preload, settle optimistically, and roll back failures',
       },
       { projectId: 'project', host: 'github.com', itemId: 'row', fieldId: 'status' }
     ])
-  await orcaPage.screenshot({ path: testInfo.outputPath('board-rollback.png') })
-  await orcaPage.evaluate(() => document.documentElement.classList.remove('dark'))
-  await orcaPage.screenshot({ path: testInfo.outputPath('board-light.png') })
-  await orcaPage.evaluate(() => {
+  await quirkyPage.screenshot({ path: testInfo.outputPath('board-rollback.png') })
+  await quirkyPage.evaluate(() => document.documentElement.classList.remove('dark'))
+  await quirkyPage.screenshot({ path: testInfo.outputPath('board-light.png') })
+  await quirkyPage.evaluate(() => {
     const store = window.__store!
     const entry = Object.entries(store.getState().projectViewCache).find(
       ([, entry]) => entry.data?.project.id === 'project'
@@ -267,7 +267,7 @@ test('board drops cross preload, settle optimistically, and roll back failures',
   await todo.getByRole('button', { name: 'Overflow card 39', exact: true }).scrollIntoViewIfNeeded()
   await expect(todo.getByRole('button', { name: 'Overflow card 39', exact: true })).toBeVisible()
   await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
-  await orcaPage.getByTestId('board-column-extra-5').scrollIntoViewIfNeeded()
-  await expect(orcaPage.getByTestId('board-column-extra-5')).toBeVisible()
-  await orcaPage.screenshot({ path: testInfo.outputPath('board-scroll.png') })
+  await quirkyPage.getByTestId('board-column-extra-5').scrollIntoViewIfNeeded()
+  await expect(quirkyPage.getByTestId('board-column-extra-5')).toBeVisible()
+  await quirkyPage.screenshot({ path: testInfo.outputPath('board-scroll.png') })
 })

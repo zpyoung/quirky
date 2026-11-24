@@ -30,7 +30,7 @@ export function stagedRuntimeUploadByteLength(source: StagedExternalImportSource
  * @param totalBytesBefore Bytes already staged by earlier sources in the same drop,
  *   so the total ceiling covers the whole drop rather than each source alone.
  * @param options.nameExtensionlessImages Append the sniffed image extension to an
- *   extensionless top-level file; only for Orca-owned destinations like `.orca/drops`.
+ *   extensionless top-level file; only for Quirky-owned destinations like `.quirky/drops`.
  */
 export async function stageOneSourceForRuntimeUpload(
   sourcePath: string,

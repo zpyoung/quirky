@@ -1,11 +1,11 @@
-import './orca-runtime-test-lifecycle.spec'
+import './quirky-runtime-test-lifecycle.spec'
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeStore } from './runtime-store-contract'
-import { OrcaRuntimeService } from './orca-runtime-test-mocks.spec'
+import { QuirkyRuntimeService } from './quirky-runtime-test-mocks.spec'
 import {
   TEST_WORKTREE_ID,
   makeRuntimeStoreWithWorkspaceSession
-} from './orca-runtime-test-fixtures.spec'
+} from './quirky-runtime-test-fixtures.spec'
 import { openEditorFileThroughLayoutOwner } from './files/editor-open-through-layout-owner'
 import { ownedEditorFileId } from '../../shared/workspace-session-pane-ownership'
 import {
@@ -14,9 +14,9 @@ import {
   leaf
 } from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
-class RuntimeWithEditorOpenGroup extends OrcaRuntimeService {
+class RuntimeWithEditorOpenGroup extends QuirkyRuntimeService {
   groupForTest(worktreeId: string): string | undefined {
     return this.editorOpenGroupFor(worktreeId)
   }

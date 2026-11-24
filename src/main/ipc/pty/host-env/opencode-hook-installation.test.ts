@@ -15,7 +15,7 @@ vi.mock('../../../../shared/app-environment', () => ({
   getAppEnvironment: () => ({ getPath: () => fixture.userData, onWillQuit: vi.fn() })
 }))
 vi.mock('../../../agent-hooks/server', () => ({
-  agentHookServer: { buildPtyEnv: () => ({ ORCA_AGENT_HOOK_PORT: '12345' }) }
+  agentHookServer: { buildPtyEnv: () => ({ QUIRKY_AGENT_HOOK_PORT: '12345' }) }
 }))
 vi.mock('../../../agent-hooks/wsl-hook-relay-manager', () => ({
   wslHookRelayManager: {
@@ -28,20 +28,20 @@ vi.mock('../../../agent-hooks/wsl-hook-relay-manager', () => ({
 vi.mock('../../../pi/titlebar-extension-service', () => ({
   piTitlebarExtensionService: { buildPtyEnv: () => ({}), buildFreshOmpEnv: () => ({}) }
 }))
-vi.mock('../../../cli/orca-cli-child-path', () => ({ prependOrcaCliDirToChildPath: () => {} }))
+vi.mock('../../../cli/quirky-cli-child-path', () => ({ prependQuirkyCliDirToChildPath: () => {} }))
 vi.mock('../../../cli/wsl-managed-cli', () => ({
   getManagedWslCliDir: () => undefined,
-  getWslCliCommandName: () => 'orca-ide'
+  getWslCliCommandName: () => 'quirky-ide'
 }))
 
 let root: string
 let config: string
 let custom: string
 let options: BuildPtyHostEnvOptions
-const plugin = (dir: string, agent: string) => join(dir, 'plugins', `orca-${agent}-status.js`)
+const plugin = (dir: string, agent: string) => join(dir, 'plugins', `quirky-${agent}-status.js`)
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-opencode-disabled-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-opencode-disabled-'))
   const home = join(root, 'home')
   const xdg = join(root, 'xdg')
   mkdirSync(home)
@@ -57,9 +57,9 @@ beforeEach(() => {
   vi.stubEnv('XDG_CONFIG_HOME', xdg)
   for (const key of [
     'OPENCODE_CONFIG_DIR',
-    'ORCA_OPENCODE_CONFIG_DIR',
-    'ORCA_OPENCODE_SOURCE_CONFIG_DIR',
-    'ORCA_OPENCODE_AGENT',
+    'QUIRKY_OPENCODE_CONFIG_DIR',
+    'QUIRKY_OPENCODE_SOURCE_CONFIG_DIR',
+    'QUIRKY_OPENCODE_AGENT',
     'ZDOTDIR'
   ]) {
     vi.stubEnv(key, undefined)
@@ -167,9 +167,9 @@ describe('OpenCode installation uses the current enabled agents', () => {
         'owned-launch',
         {
           OPENCODE_CONFIG_DIR: custom,
-          ORCA_OPENCODE_PLUGIN_API: 'v2',
-          ORCA_OPENCODE_STARTUP_PROMPT_NONCE: 'fixture-nonce',
-          ORCA_OPENCODE_STARTUP_PROMPT_BODY: 'original caller brief'
+          QUIRKY_OPENCODE_PLUGIN_API: 'v2',
+          QUIRKY_OPENCODE_STARTUP_PROMPT_NONCE: 'fixture-nonce',
+          QUIRKY_OPENCODE_STARTUP_PROMPT_BODY: 'original caller brief'
         },
         { ...options, agentStatusHooksEnabled: false }
       )
@@ -194,7 +194,7 @@ describe('OpenCode installation uses the current enabled agents', () => {
           disabledTuiAgents: disabled
         }
       )
-      expect(env.ORCA_OPENCODE_AGENT).toBe(fallback)
+      expect(env.QUIRKY_OPENCODE_AGENT).toBe(fallback)
       const selected = env.OPENCODE_CONFIG_DIR ?? config
       for (const agent of ['opencode', 'opencode2']) {
         expect(existsSync(plugin(selected, agent))).toBe(agent === fallback)
@@ -219,7 +219,7 @@ describe('OpenCode installation uses the current enabled agents', () => {
             { ...options, ...selection, disabledTuiAgents: disabled }
           )
           const selected = disabled.includes(agent) ? undefined : agent
-          expect(env.ORCA_OPENCODE_AGENT).toBe(selected)
+          expect(env.QUIRKY_OPENCODE_AGENT).toBe(selected)
           expect(existsSync(plugin(config, agent))).toBe(selected === agent)
           expect(existsSync(plugin(config, agent === 'opencode' ? 'opencode2' : 'opencode'))).toBe(
             false
@@ -234,7 +234,7 @@ describe('OpenCode installation uses the current enabled agents', () => {
     const installed = plugin(config, 'opencode')
     writeFileSync(installed, '// already installed sentinel')
     const env = buildPtyHostEnv('second', {}, { ...options, disabledTuiAgents: ['opencode'] })
-    expect(env.ORCA_OPENCODE_AGENT).toBe('opencode2')
+    expect(env.QUIRKY_OPENCODE_AGENT).toBe('opencode2')
     expect(readFileSync(installed, 'utf8')).toBe('// already installed sentinel')
     buildPtyHostEnv('third', {}, options)
     expect(readFileSync(installed, 'utf8')).toContain('/hook/opencode')
@@ -255,11 +255,11 @@ describe('OpenCode installation uses the current enabled agents', () => {
         }
       )
       expect(env.OPENCODE_CONFIG_DIR).toBe(custom)
-      expect(env.ORCA_OPENCODE_CONFIG_DIR).toBeUndefined()
-      expect(env.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
-      expect(env.ORCA_OPENCODE_AGENT).toBeUndefined()
+      expect(env.QUIRKY_OPENCODE_CONFIG_DIR).toBeUndefined()
+      expect(env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
+      expect(env.QUIRKY_OPENCODE_AGENT).toBeUndefined()
       expect(readFileSync(plugin(first.OPENCODE_CONFIG_DIR, 'opencode'), 'utf8')).toBe(original)
-      expect(env.ORCA_AGENT_HOOK_PORT).toBe(enabled ? '12345' : undefined)
+      expect(env.QUIRKY_AGENT_HOOK_PORT).toBe(enabled ? '12345' : undefined)
     }
   )
 
@@ -269,13 +269,13 @@ describe('OpenCode installation uses the current enabled agents', () => {
         'pane',
         {
           OPENCODE_CONFIG_DIR: primary,
-          ORCA_OPENCODE_CONFIG_DIR: fixture.guestOverlay,
-          ORCA_OPENCODE_AGENT: 'opencode'
+          QUIRKY_OPENCODE_CONFIG_DIR: fixture.guestOverlay,
+          QUIRKY_OPENCODE_AGENT: 'opencode'
         },
         { ...options, disabledTuiAgents: ['opencode', 'opencode2'] }
       )
       expect(env.OPENCODE_CONFIG_DIR).toBe(primary === custom ? custom : undefined)
-      expect(env.ORCA_OPENCODE_AGENT).toBeUndefined()
+      expect(env.QUIRKY_OPENCODE_AGENT).toBeUndefined()
     }
   })
 
@@ -297,7 +297,7 @@ describe('OpenCode installation uses the current enabled agents', () => {
       }
     )
     expect(disabled.OPENCODE_CONFIG_DIR).toBeUndefined()
-    expect(disabled.ORCA_AGENT_HOOK_ENDPOINT).toBe('/guest/endpoint.json')
+    expect(disabled.QUIRKY_AGENT_HOOK_ENDPOINT).toBe('/guest/endpoint.json')
     expect(existsSync(config)).toBe(false)
   })
 })
@@ -314,10 +314,10 @@ it.each(['source', 'no-source', 'user-config'])(
       }
     )
     vi.stubEnv('OPENCODE_CONFIG_DIR', kind === 'user-config' ? custom : fixture.guestOverlay)
-    vi.stubEnv('ORCA_OPENCODE_CONFIG_DIR', fixture.guestOverlay)
-    vi.stubEnv('ORCA_OPENCODE_AGENT', 'opencode')
+    vi.stubEnv('QUIRKY_OPENCODE_CONFIG_DIR', fixture.guestOverlay)
+    vi.stubEnv('QUIRKY_OPENCODE_AGENT', 'opencode')
     if (kind === 'source') {
-      vi.stubEnv('ORCA_OPENCODE_SOURCE_CONFIG_DIR', custom)
+      vi.stubEnv('QUIRKY_OPENCODE_SOURCE_CONFIG_DIR', custom)
     }
     const result = createDaemonPtyEnvironment({
       sessionId: 'fixture',
@@ -327,9 +327,9 @@ it.each(['source', 'no-source', 'user-config'])(
       envToDelete: getInheritedAgentHookEnvKeysToDelete(prepared)
     })
     expect(result.OPENCODE_CONFIG_DIR).toBe(kind === 'no-source' ? undefined : custom)
-    expect(result.ORCA_OPENCODE_AGENT).toBeUndefined()
-    expect(result.ORCA_OPENCODE_CONFIG_DIR).toBeUndefined()
-    expect(result.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
+    expect(result.QUIRKY_OPENCODE_AGENT).toBeUndefined()
+    expect(result.QUIRKY_OPENCODE_CONFIG_DIR).toBeUndefined()
+    expect(result.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
   }
 )
 
@@ -358,9 +358,9 @@ it.each([
         ? custom
         : fixture.guestOverlay
   )
-  vi.stubEnv('ORCA_OPENCODE_CONFIG_DIR', fixture.guestOverlay)
-  vi.stubEnv('ORCA_OPENCODE_SOURCE_CONFIG_DIR', scenario.source ? previous : undefined)
-  vi.stubEnv('ORCA_OPENCODE_AGENT', 'opencode')
+  vi.stubEnv('QUIRKY_OPENCODE_CONFIG_DIR', fixture.guestOverlay)
+  vi.stubEnv('QUIRKY_OPENCODE_SOURCE_CONFIG_DIR', scenario.source ? previous : undefined)
+  vi.stubEnv('QUIRKY_OPENCODE_AGENT', 'opencode')
   const request = {
     sessionId: 'fixture',
     cols: 80,
@@ -377,9 +377,9 @@ it.each([
   } else {
     expect(result.OPENCODE_CONFIG_DIR).toBeUndefined()
   }
-  expect(result.ORCA_OPENCODE_CONFIG_DIR).toBeUndefined()
-  expect(result.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
-  expect(result.ORCA_OPENCODE_AGENT).toBeUndefined()
+  expect(result.QUIRKY_OPENCODE_CONFIG_DIR).toBeUndefined()
+  expect(result.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
+  expect(result.QUIRKY_OPENCODE_AGENT).toBeUndefined()
 })
 
 it.each(['opencode', 'opencode2'] as const)(
@@ -394,8 +394,8 @@ it.each(['opencode', 'opencode2'] as const)(
       }
     )
     vi.stubEnv('OPENCODE_CONFIG_DIR', fixture.guestOverlay)
-    vi.stubEnv('ORCA_OPENCODE_CONFIG_DIR', fixture.guestOverlay)
-    vi.stubEnv('ORCA_OPENCODE_SOURCE_CONFIG_DIR', join(root, 'stale-source'))
+    vi.stubEnv('QUIRKY_OPENCODE_CONFIG_DIR', fixture.guestOverlay)
+    vi.stubEnv('QUIRKY_OPENCODE_SOURCE_CONFIG_DIR', join(root, 'stale-source'))
     const result = createDaemonPtyEnvironment({
       sessionId: 'fixture',
       cols: 80,
@@ -407,8 +407,8 @@ it.each(['opencode', 'opencode2'] as const)(
       '{"model":"fixture"}'
     )
     expect(existsSync(plugin(result.OPENCODE_CONFIG_DIR, agent))).toBe(true)
-    expect(result.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBe(custom)
-    expect(result.ORCA_OPENCODE_AGENT).toBe(agent)
+    expect(result.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBe(custom)
+    expect(result.QUIRKY_OPENCODE_AGENT).toBe(agent)
   }
 )
 
@@ -420,8 +420,8 @@ it.each([true, false])(
     writeFileSync(join(stale, 'opencode.json'), '{"model":"stale"}')
     for (const inheritedFromProcess of [true, false]) {
       const markers = {
-        ORCA_OPENCODE_CONFIG_DIR: join(root, 'old-overlay'),
-        ORCA_OPENCODE_SOURCE_CONFIG_DIR: stale
+        QUIRKY_OPENCODE_CONFIG_DIR: join(root, 'old-overlay'),
+        QUIRKY_OPENCODE_SOURCE_CONFIG_DIR: stale
       }
       for (const [key, value] of Object.entries(markers)) {
         vi.stubEnv(key, inheritedFromProcess ? value : undefined)
@@ -437,7 +437,7 @@ it.each([true, false])(
       expect(readFileSync(join(env.OPENCODE_CONFIG_DIR, 'opencode.json'), 'utf8')).toBe(
         '{"model":"fixture"}'
       )
-      expect(env.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBe(enabled ? custom : undefined)
+      expect(env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBe(enabled ? custom : undefined)
       expect(existsSync(plugin(stale, 'opencode'))).toBe(false)
     }
   }
@@ -446,29 +446,29 @@ it.each([true, false])(
 it.each([true, false])(
   'drops host config for disabled WSL variants with explicit primary %s',
   (explicit) => {
-    const overlay = 'C:\\Users\\fixture\\Orca\\opencode-overlays\\old'
+    const overlay = 'C:\\Users\\fixture\\Quirky\\opencode-overlays\\old'
     const source = 'C:\\Users\\fixture\\config\\opencode'
-    vi.stubEnv('ORCA_OPENCODE_CONFIG_DIR', overlay)
-    vi.stubEnv('ORCA_OPENCODE_SOURCE_CONFIG_DIR', source)
+    vi.stubEnv('QUIRKY_OPENCODE_CONFIG_DIR', overlay)
+    vi.stubEnv('QUIRKY_OPENCODE_SOURCE_CONFIG_DIR', source)
     const env = buildPtyHostEnv(
       'wsl-disabled-inherited',
       {
         OPENCODE_CONFIG_DIR: explicit ? source : overlay,
-        ORCA_OPENCODE_CONFIG_DIR: overlay,
-        ORCA_OPENCODE_SOURCE_CONFIG_DIR: source
+        QUIRKY_OPENCODE_CONFIG_DIR: overlay,
+        QUIRKY_OPENCODE_SOURCE_CONFIG_DIR: source
       },
       { ...options, isWsl: true, disabledTuiAgents: ['opencode', 'opencode2'] }
     )
     expect(env.OPENCODE_CONFIG_DIR).toBeUndefined()
-    expect(env.ORCA_OPENCODE_CONFIG_DIR).toBeUndefined()
-    expect(env.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
-    expect(env.ORCA_OPENCODE_AGENT).toBeUndefined()
-    expect(env.ORCA_AGENT_HOOK_ENDPOINT).toBe('/guest/endpoint.json')
+    expect(env.QUIRKY_OPENCODE_CONFIG_DIR).toBeUndefined()
+    expect(env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
+    expect(env.QUIRKY_OPENCODE_AGENT).toBeUndefined()
+    expect(env.QUIRKY_AGENT_HOOK_ENDPOINT).toBe('/guest/endpoint.json')
     expect(existsSync(config)).toBe(false)
   }
 )
 
-// Why: pre-1.4.209 panes exported Orca's retired <userData>/opencode-hooks/shared dir. OpenCode 2
+// Why: pre-1.4.209 panes exported Quirky's retired <userData>/opencode-hooks/shared dir. OpenCode 2
 // treats OPENCODE_CONFIG_DIR as the only config dir, so inheriting it loaded a stale plugin and hid
 // the user's global config.
 describe.each([
@@ -486,13 +486,13 @@ describe.each([
     const env = buildPtyHostEnv(
       'pane',
       marked
-        ? { OPENCODE_CONFIG_DIR: legacy, ORCA_OPENCODE_CONFIG_DIR: legacy }
+        ? { OPENCODE_CONFIG_DIR: legacy, QUIRKY_OPENCODE_CONFIG_DIR: legacy }
         : { OPENCODE_CONFIG_DIR: legacy },
       { ...options, launchAgent: agent }
     )
     expect(env.OPENCODE_CONFIG_DIR).toBeUndefined()
-    expect(env.ORCA_OPENCODE_CONFIG_DIR).toBeUndefined()
-    expect(env.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
+    expect(env.QUIRKY_OPENCODE_CONFIG_DIR).toBeUndefined()
+    expect(env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
     expect(existsSync(plugin(config, agent))).toBe(true)
     expect(existsSync(join(fixture.userData, `${agent}-config-overlays`))).toBe(false)
   })
@@ -502,15 +502,15 @@ it('keeps a user config dir that merely sits beside the retired hooks dir', () =
   const neighbour = join(fixture.userData, 'opencode-hooks', 'mine')
   mkdirSync(neighbour, { recursive: true })
   const env = buildPtyHostEnv('pane', { OPENCODE_CONFIG_DIR: neighbour }, options)
-  expect(env.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBe(neighbour)
+  expect(env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBe(neighbour)
   expect(env.OPENCODE_CONFIG_DIR).not.toBeUndefined()
 })
 
 it.each(['explicit', 'inherited'])('refreshes the %s stale plugin with hooks off', (source) => {
   const legacy = join(fixture.userData, 'opencode-hooks', 'shared')
-  const stalePlugin = join(legacy, 'plugins', 'orca-opencode-status.js')
+  const stalePlugin = join(legacy, 'plugins', 'quirky-opencode-status.js')
   mkdirSync(join(legacy, 'plugins'), { recursive: true })
-  writeFileSync(stalePlugin, 'export default { id: "orca-opencode-status", server() {} }\n')
+  writeFileSync(stalePlugin, 'export default { id: "quirky-opencode-status", server() {} }\n')
   if (source === 'inherited') {
     vi.stubEnv('OPENCODE_CONFIG_DIR', legacy)
   }
@@ -529,7 +529,7 @@ it.each([true, false])('strips daemon-inherited retired paths (known to main: %s
     vi.stubEnv('OPENCODE_CONFIG_DIR', legacy)
   }
   const env = buildPtyHostEnv('pane', {}, { ...options, agentStatusHooksEnabled: false })
-  vi.stubEnv('ORCA_USER_DATA_PATH', fixture.userData)
+  vi.stubEnv('QUIRKY_USER_DATA_PATH', fixture.userData)
   vi.stubEnv('OPENCODE_CONFIG_DIR', legacy)
   const request = { sessionId: 'pane', cols: 80, rows: 24, cwd: root, env }
   const result = createDaemonPtyEnvironment(request)
@@ -540,7 +540,7 @@ it.each([true, false])('strips daemon-inherited retired paths (known to main: %s
 })
 
 it('preserves explicit user config over a retired daemon-inherited path', () => {
-  vi.stubEnv('ORCA_USER_DATA_PATH', fixture.userData)
+  vi.stubEnv('QUIRKY_USER_DATA_PATH', fixture.userData)
   vi.stubEnv('OPENCODE_CONFIG_DIR', join(fixture.userData, 'opencode-hooks', 'shared'))
   const env = { OPENCODE_CONFIG_DIR: custom }
   const result = createDaemonPtyEnvironment({
@@ -554,7 +554,10 @@ it('preserves explicit user config over a retired daemon-inherited path', () => 
 })
 
 it('does not restore a retired source from process.env with hooks disabled', () => {
-  vi.stubEnv('ORCA_OPENCODE_SOURCE_CONFIG_DIR', join(fixture.userData, 'opencode-hooks', 'shared'))
+  vi.stubEnv(
+    'QUIRKY_OPENCODE_SOURCE_CONFIG_DIR',
+    join(fixture.userData, 'opencode-hooks', 'shared')
+  )
   const env = buildPtyHostEnv('pane', {}, { ...options, agentStatusHooksEnabled: false })
   expect(env.OPENCODE_CONFIG_DIR).toBeUndefined()
 })
@@ -563,7 +566,7 @@ it.each([true, false])(
   'preserves explicit config with a retired parent source (hooks: %s)',
   (enabled) => {
     vi.stubEnv(
-      'ORCA_OPENCODE_SOURCE_CONFIG_DIR',
+      'QUIRKY_OPENCODE_SOURCE_CONFIG_DIR',
       join(fixture.userData, 'opencode-hooks', 'shared')
     )
     const env = buildPtyHostEnv(
@@ -572,7 +575,7 @@ it.each([true, false])(
       { ...options, agentStatusHooksEnabled: enabled }
     )
     if (enabled) {
-      expect(env.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBe(custom)
+      expect(env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBe(custom)
       expect(readFileSync(join(env.OPENCODE_CONFIG_DIR, 'opencode.json'), 'utf8')).toBe(
         '{"model":"fixture"}'
       )

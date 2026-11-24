@@ -33,7 +33,7 @@ export async function importExternalPathsToRuntime(
     assertCurrent?: () => void
     /** Local imports only; remote destinations stay root-relative. */
     access?: LocalFileAccess
-    /** Remote `.orca/drops` uploads: name an extensionless image by its bytes. */
+    /** Remote `.quirky/drops` uploads: name an extensionless image by its bytes. */
     nameExtensionlessImages?: boolean
   }
 ): Promise<{ results: ImportItemResult[] }> {
@@ -158,7 +158,7 @@ export async function importExternalPathsToRuntime(
     } catch (error) {
       if (createdDirectoryImportRoot) {
         // Why: match local directory imports by removing the no-clobber root
-        // Orca created when a nested runtime upload fails halfway through.
+        // Quirky created when a nested runtime upload fails halfway through.
         await callRuntimeFileImportMutation(
           importSession,
           'files.delete',

@@ -1,7 +1,7 @@
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import {
   getSystemCodexHomePath,
-  resolveOrcaManagedCodexHomePath,
+  resolveQuirkyManagedCodexHomePath,
   syncSystemCodexResourcesIntoManagedHome
 } from '../codex/codex-home-paths'
 import { syncSystemConfigIntoManagedCodexHome } from '../codex/codex-config-mirror'
@@ -23,9 +23,9 @@ import { CodexRuntimeHomeManagedHome } from './runtime-home-service-managed-home
 export abstract class CodexRuntimeHomeRouting extends CodexRuntimeHomeManagedHome {
   getHostCodexHomePathsForSessionDiscovery(): string[] {
     // Why the path-only resolver: transcript lookups poll this on a miss; launch creates the mirror.
-    const homes = [resolveOrcaManagedCodexHomePath()]
+    const homes = [resolveQuirkyManagedCodexHomePath()]
     if (this.isHostSystemDefaultRealHomeSelected() || this.getSelfContainedManagedHostAccount()) {
-      // Why: nested Orca processes can retain an ambient managed CODEX_HOME.
+      // Why: nested Quirky processes can retain an ambient managed CODEX_HOME.
       // Per-account lanes no longer bridge real-home history into the shared
       // mirror, so include the real root for both directly-routed host lanes.
       homes.push(getSystemCodexHomePath())
@@ -133,7 +133,7 @@ export abstract class CodexRuntimeHomeRouting extends CodexRuntimeHomeManagedHom
     syncLegacySharedCodexConfigForRetainedPanes()
   }
 
-  // Why: copies only while the recorded baseline is null (Orca's copy's login never
+  // Why: copies only while the recorded baseline is null (Quirky's copy's login never
   // came from ~/.codex); recording it as the baseline, copied or not, ends that.
   protected copyMirrorLoginIntoEmptySystemHome(): void {
     if (process.platform !== 'win32') {
@@ -188,7 +188,7 @@ export abstract class CodexRuntimeHomeRouting extends CodexRuntimeHomeManagedHom
         this.syncLegacySharedSystemDefaultAuthForRetainedPanes()
       }
       // Why: null lets the fetcher fall back to the main process's inherited
-      // CODEX_HOME before ~/.codex. Nested Orca launches can inherit the
+      // CODEX_HOME before ~/.codex. Nested Quirky launches can inherit the
       // managed home, restarting the background OAuth conflict (#5370), so
       // pin this non-interactive lane to the native home explicitly.
       return { kind: 'ready', codexHomePath: getSystemCodexHomePath() }
@@ -206,7 +206,7 @@ export abstract class CodexRuntimeHomeRouting extends CodexRuntimeHomeManagedHom
     if (
       this.getSelfContainedManagedHostAccount() ||
       normalizeRuntimePathForComparison(homePath) !==
-        normalizeRuntimePathForComparison(resolveOrcaManagedCodexHomePath())
+        normalizeRuntimePathForComparison(resolveQuirkyManagedCodexHomePath())
     ) {
       return
     }

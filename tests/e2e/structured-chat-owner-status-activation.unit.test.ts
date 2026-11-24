@@ -130,7 +130,7 @@ function activate(): ReturnType<typeof runWorktreeAgentActivationGate> {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-owner-status-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-owner-status-'))
   clock = NOW
   resetHostTestOperationIds()
   closeSession = vi.fn(async () => true)

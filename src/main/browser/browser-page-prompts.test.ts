@@ -16,7 +16,7 @@ type MockGuest = Electron.WebContents & EventEmitter
 const guests: MockGuest[] = []
 const targets = new Map<number, BrowserPagePromptTarget>()
 
-/** The Orca window; prompts only read its id, liveness, send and its destroyed or crash events. */
+/** The Quirky window; prompts only read its id, liveness, send and its destroyed or crash events. */
 function mockRenderer(id: number): MockGuest {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: prompts only read id, isDestroyed, send and the destroyed and crash events.
   const renderer = new EventEmitter() as MockGuest
@@ -175,7 +175,7 @@ describe('browser page prompts', () => {
     guest.emit('did-start-navigation', { isMainFrame: true, initiator: {} })
     guest.emit('input-event', {}, { type: 'mouseMove' })
     expect(ask(guest).opening).toBe('refused')
-    // Reload from Orca's toolbar: no frame started it.
+    // Reload from Quirky's toolbar: no frame started it.
     guest.emit('did-start-navigation', { isMainFrame: true, initiator: null })
     expect(ask(guest).opening).toBe('prompting')
 

@@ -2,7 +2,7 @@ import { realpathSync, statSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { withCliRuntimeOnPath } from '../codex-cli/command'
 import { CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS } from '../codex-cli/codex-read-only-app-server-args'
 import { collectListedHooks, type CodexListedHook } from './codex-app-server-client'
@@ -18,15 +18,15 @@ import {
 } from './config-toml-trust'
 
 /**
- * Codex's hash per event it lists Orca's entry in; null for a listed event on a
+ * Codex's hash per event it lists Quirky's entry in; null for a listed event on a
  * Codex with no hook approvals (before 0.129). An unlisted event gets no entry.
  */
 export type CodexHookHashes = Readonly<Partial<Record<CodexEventLabel, string | null>>>
 
-/** What Codex said about Orca's entry. */
+/** What Codex said about Quirky's entry. */
 export type CodexHookAnswer =
   | { kind: 'hashes'; codexVersion: string; hashes: CodexHookHashes }
-  /** Codex answered, and its answer cannot approve Orca's entry: too old, unrecognized, inconsistent. */
+  /** Codex answered, and its answer cannot approve Quirky's entry: too old, unrecognized, inconsistent. */
   | { kind: 'refused'; codexVersion: string; failure: string }
   /** No answer yet (not asked, not found, or Codex failed before answering); asking again may get one. */
   | { kind: 'pending'; failure: string; codexMissing?: true }
@@ -37,9 +37,9 @@ const VERSION_TIMEOUT_MS = 30_000
 const DERIVE_TIMEOUT_MS = 30_000
 // Why a second group: the copy after it shows whether Codex's hash depends on position.
 const SCRATCH_DUMMY_HOOK = { type: 'command', command: 'exit 0' }
-const SCRATCH_ORCA_GROUP_INDEXES = [0, 2] as const
+const SCRATCH_QUIRKY_GROUP_INDEXES = [0, 2] as const
 const SCRATCH_DUMMY_GROUP_INDEX = 1
-const SCRATCH_PREFIXES = ['orca-codex-hook-trust-', 'orca-codex-version-'] as const
+const SCRATCH_PREFIXES = ['quirky-codex-hook-trust-', 'quirky-codex-version-'] as const
 // Why an hour: no ask lives that long, so an older scratch home is one a quit left behind.
 const STALE_SCRATCH_MS = 60 * 60_000
 
@@ -50,7 +50,7 @@ type CodexHookScratchListing = {
 }
 
 /**
- * Asks one Codex binary for its hash of Orca's entry in each event, from a
+ * Asks one Codex binary for its hash of Quirky's entry in each event, from a
  * throwaway CODEX_HOME. The same entry is listed at group 0, after another
  * group, and from a trusted project folder; Codex must hash all three alike,
  * so the answer holds for every home. Never throws; never reads or writes a real home.
@@ -72,24 +72,24 @@ export async function deriveCodexHookHashes(
     }
     if (hashes === 'inconsistent') {
       return refused(
-        `${describeCodexVersion(codexVersion)} hashes Orca's status hook differently by its file or position, so Orca does not approve it`
+        `${describeCodexVersion(codexVersion)} hashes Quirky's status hook differently by its file or position, so Quirky does not approve it`
       )
     }
     if (hashes === 'unloaded') {
       // Why pending: an empty or reshaped answer says nothing about this version.
       return {
         kind: 'pending',
-        failure: `${describeCodexVersion(codexVersion)} listed no hooks from Orca's test home`
+        failure: `${describeCodexVersion(codexVersion)} listed no hooks from Quirky's test home`
       }
     }
     if (!hashes) {
-      return refused(`${describeCodexVersion(codexVersion)} did not recognize Orca's status hook`)
+      return refused(`${describeCodexVersion(codexVersion)} did not recognize Quirky's status hook`)
     }
     return { kind: 'hashes', codexVersion, hashes }
   } catch (error) {
     if (isCodexAppServerUnsupportedError(error)) {
       return refused(
-        `${describeCodexVersion(codexVersion)} is too old for Orca status; update Codex`
+        `${describeCodexVersion(codexVersion)} is too old for Quirky status; update Codex`
       )
     }
     console.warn('[codex-hook-trust] could not derive Codex hook hashes:', error)
@@ -98,12 +98,15 @@ export async function deriveCodexHookHashes(
   }
 }
 
-/** Orca's entry in every event: alone in group 0 and, with `positionCopy`, again after a dummy group. */
+/** Quirky's entry in every event: alone in group 0 and, with `positionCopy`, again after a dummy group. */
 export function buildScratchHooksJson(hookCommand: string, positionCopy: boolean): string {
   const hooks = Object.fromEntries(
     CODEX_EVENTS.map((eventName) => {
-      const orca = { hooks: [buildCodexManagedHook(hookCommand, eventName)] }
-      return [eventName, positionCopy ? [orca, { hooks: [SCRATCH_DUMMY_HOOK] }, orca] : [orca]]
+      const quirky = { hooks: [buildCodexManagedHook(hookCommand, eventName)] }
+      return [
+        eventName,
+        positionCopy ? [quirky, { hooks: [SCRATCH_DUMMY_HOOK] }, quirky] : [quirky]
+      ]
     })
   )
   return `${JSON.stringify({ hooks }, null, 2)}\n`
@@ -161,9 +164,9 @@ async function listScratchHomeHooks(
 }
 
 /**
- * Codex's hash per event it lists Orca's scratch entry at group 0 for;
+ * Codex's hash per event it lists Quirky's scratch entry at group 0 for;
  * 'inconsistent' when a copy elsewhere hashes differently; null when Codex
- * loaded the scratch home (its dummy hook is listed) but none of Orca's
+ * loaded the scratch home (its dummy hook is listed) but none of Quirky's
  * entries; 'unloaded' when it listed neither. Only the scratch files count.
  */
 export function readCodexHookHashes(
@@ -189,12 +192,12 @@ export function readCodexHookHashes(
   const hashes: Partial<Record<CodexEventLabel, string | null>> = {}
   for (const eventName of CODEX_EVENTS) {
     const label = CODEX_EVENT_LABEL[eventName]
-    const primary = listed(scratch.homeHooksPath, label, SCRATCH_ORCA_GROUP_INDEXES[0])
+    const primary = listed(scratch.homeHooksPath, label, SCRATCH_QUIRKY_GROUP_INDEXES[0])
     if (!primary) {
       continue
     }
     const copies = [
-      listed(scratch.homeHooksPath, label, SCRATCH_ORCA_GROUP_INDEXES[1]),
+      listed(scratch.homeHooksPath, label, SCRATCH_QUIRKY_GROUP_INDEXES[1]),
       listed(scratch.projectHooksPath, label, 0)
     ]
     if (copies.some((copy) => copy && copy.currentHash !== primary.currentHash)) {

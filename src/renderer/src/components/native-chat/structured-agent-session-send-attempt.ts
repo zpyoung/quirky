@@ -88,7 +88,7 @@ const NOT_SENT = agentSessionWriteNotDoneParts('composer-send')
 const RUNTIME_ENVIRONMENT_CHANGED = 'runtime_environment_changed'
 
 /** What a failure before the request says: this client and the server can't talk, what the host
- *  refused, that Orca couldn't reach it, or only that nothing was sent. */
+ *  refused, that Quirky couldn't reach it, or only that nothing was sent. */
 function notSentParts(error: unknown): AgentSessionWriteNoticePart[] {
   if (isRuntimeCompatBlockError(error) && error instanceof Error) {
     return [{ text: error.message }, 'notDoneSend']

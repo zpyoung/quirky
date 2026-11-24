@@ -176,7 +176,7 @@ describe('CodexAccountService abandoned login', () => {
     const rejection = expect(pending).rejects.toThrow('Codex sign-in was cancelled.')
     await vi.waitUntil(() => children.length === 1)
 
-    const authUrl = 'https://auth.openai.com/oauth/authorize?client_id=orca&state=abc'
+    const authUrl = 'https://auth.openai.com/oauth/authorize?client_id=quirky&state=abc'
     children[0].stdout.write(
       `Starting local login server on http://localhost:1455.\nIf your browser did not open, navigate to this URL to authenticate:\n\n${authUrl}\n`
     )

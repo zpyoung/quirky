@@ -63,12 +63,12 @@ describe('AI Vault fork into the CLI', () => {
         agent: 'codex',
         sessionId: SESSION_ID,
         cwd: '/Users/ada/repo',
-        codexHome: '/Users/ada/.orca/codex-accounts/a1/home'
+        codexHome: '/Users/ada/.quirky/codex-accounts/a1/home'
       }
     })
 
     expect(startup?.command).toBe(
-      `CODEX_HOME='/Users/ada/.orca/codex-accounts/a1/home' codex '-c' 'tui.resume_cwd=current' 'fork' '${SESSION_ID}'`
+      `CODEX_HOME='/Users/ada/.quirky/codex-accounts/a1/home' codex '-c' 'tui.resume_cwd=current' 'fork' '${SESSION_ID}'`
     )
     expect(startup).not.toHaveProperty('providerSession')
   })

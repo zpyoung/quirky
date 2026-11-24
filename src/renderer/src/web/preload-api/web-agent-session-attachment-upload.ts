@@ -10,7 +10,7 @@ import { resolveEnvironment } from './web-runtime-session'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 
 const ATTACHMENT_CALL_TIMEOUT_MS = 30_000
-const SERVER_CHANGED = 'The paired Orca server changed while the request was in progress.'
+const SERVER_CHANGED = 'The paired Quirky server changed while the request was in progress.'
 
 /** Every call goes to the server the paste was meant for, as its desktop counterpart does: a
  *  re-pair or a replaced server process ends the upload instead of storing it elsewhere. */

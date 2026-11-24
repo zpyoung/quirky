@@ -7,7 +7,7 @@
 // error, and an error the agent recovered from folds behind the answer after it.
 
 import { AGENT_SESSION_COMPACTION_SKIPPED_PRESENTATION } from './agent-session-compaction'
-import { AGENT_SESSION_ORCA_STOP_PRESENTATION } from './agent-session-orca-stop'
+import { AGENT_SESSION_QUIRKY_STOP_PRESENTATION } from './agent-session-quirky-stop'
 import { nativeChatRowRendersContent } from './native-chat-row-content'
 import { isStoppedBeforeStartBlock } from './native-chat-stopped-before-start'
 import { nativeChatRowRendersProse } from './native-chat-trailing-run'
@@ -62,19 +62,19 @@ export function nativeChatTurnFoldRow(
         isBackgroundTaskBlock(block) ||
         isStoppedBeforeStartBlock(block)
     ),
-    // A row about Orca's own stop is stored red for clients that predate it; it reports no failure.
+    // A row about Quirky's own stop is stored red for clients that predate it; it reports no failure.
     reportsFailure: message.blocks.some(
       (block) =>
         block.type === 'text' &&
         (block.tone === 'error' || block.failure?.kind === 'usageLimitReached') &&
-        block.presentation !== AGENT_SESSION_ORCA_STOP_PRESENTATION
+        block.presentation !== AGENT_SESSION_QUIRKY_STOP_PRESENTATION
     ),
     explainsTurn: message.blocks.some(
       (block) =>
         block.type === 'text' &&
         (block.presentation === 'compaction' ||
           block.presentation === AGENT_SESSION_COMPACTION_SKIPPED_PRESENTATION ||
-          block.presentation === AGENT_SESSION_ORCA_STOP_PRESENTATION)
+          block.presentation === AGENT_SESSION_QUIRKY_STOP_PRESENTATION)
     )
   }
 }

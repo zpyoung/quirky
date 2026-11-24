@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ServeOrcadLaunch from './serve-orcad-launch'
+import type * as ServeQuirkydLaunch from './serve-quirkyd-launch'
 
-const { spawnMock, resolveLocalServeRuntimeMock, serveWithOrcadMock, refuseIfProfileServedMock } =
+const { spawnMock, resolveLocalServeRuntimeMock, serveWithQuirkydMock, refuseIfProfileServedMock } =
   vi.hoisted(() => ({
     spawnMock: vi.fn(),
     resolveLocalServeRuntimeMock: vi.fn(),
-    serveWithOrcadMock: vi.fn(),
+    serveWithQuirkydMock: vi.fn(),
     refuseIfProfileServedMock: vi.fn()
   }))
 
@@ -20,13 +20,13 @@ vi.mock('./serve-electron-preflight', () => ({
   recordElectronServeStartupAbort: vi.fn(),
   refuseIfProfileServed: refuseIfProfileServedMock
 }))
-vi.mock('./serve-orcad-launch', async (importOriginal) => ({
-  ...(await importOriginal<typeof ServeOrcadLaunch>()),
+vi.mock('./serve-quirkyd-launch', async (importOriginal) => ({
+  ...(await importOriginal<typeof ServeQuirkydLaunch>()),
   resolveLocalServeRuntime: resolveLocalServeRuntimeMock,
-  serveWithOrcad: serveWithOrcadMock
+  serveWithQuirkyd: serveWithQuirkydMock
 }))
 
-import { serveOrcaApp } from './launch'
+import { serveQuirkyApp } from './launch'
 import { speechRecognizerPackageName } from '../../shared/speech-recognizer-package'
 
 class FakeChildProcess extends EventEmitter {
@@ -45,14 +45,14 @@ function electronChild(): void {
   })
 }
 
-describe('orca serve host selection', () => {
+describe('quirky serve host selection', () => {
   let stderr: string[]
 
   beforeEach(() => {
     spawnMock.mockReset()
     resolveLocalServeRuntimeMock.mockReset()
-    serveWithOrcadMock.mockReset()
-    process.env.ORCA_APP_EXECUTABLE = '/opt/orca/orca-ide'
+    serveWithQuirkydMock.mockReset()
+    process.env.QUIRKY_APP_EXECUTABLE = '/opt/quirky/quirky-ide'
     stderr = []
     vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
       stderr.push(String(chunk))
@@ -62,56 +62,66 @@ describe('orca serve host selection', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
-    delete process.env.ORCA_APP_EXECUTABLE
-    delete process.env.ORCA_SERVE_RUNTIME
-    delete process.env.ORCA_USER_DATA_PATH
-    delete process.env.ORCA_DEV_USER_DATA_PATH
-    delete process.env.ORCA_APP_EXECUTABLE_NEEDS_APP_ROOT
+    delete process.env.QUIRKY_APP_EXECUTABLE
+    delete process.env.QUIRKY_SERVE_RUNTIME
+    delete process.env.QUIRKY_USER_DATA_PATH
+    delete process.env.QUIRKY_DEV_USER_DATA_PATH
+    delete process.env.QUIRKY_APP_EXECUTABLE_NEEDS_APP_ROOT
   })
 
-  it('checks for a live peer before orcad only when supervised, so the brake never counts it', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-serve-orcad-supervise-'))
+  it('checks for a live peer before quirkyd only when supervised, so the brake never counts it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'quirky-serve-quirkyd-supervise-'))
     try {
-      process.env.ORCA_APP_EXECUTABLE = join(root, 'orca')
-      await writeFile(process.env.ORCA_APP_EXECUTABLE, '')
-      process.env.ORCA_USER_DATA_PATH = join(root, 'profile')
-      const selection = { kind: 'orcad', runtime: '/node', entry: '/slot/orcad.js', version: '1' }
+      process.env.QUIRKY_APP_EXECUTABLE = join(root, 'quirky')
+      await writeFile(process.env.QUIRKY_APP_EXECUTABLE, '')
+      process.env.QUIRKY_USER_DATA_PATH = join(root, 'profile')
+      const selection = {
+        kind: 'quirkyd',
+        runtime: '/node',
+        entry: '/slot/quirkyd.js',
+        version: '1'
+      }
       resolveLocalServeRuntimeMock.mockResolvedValue(selection)
-      serveWithOrcadMock.mockResolvedValue(0)
+      serveWithQuirkydMock.mockResolvedValue(0)
 
       refuseIfProfileServedMock.mockReturnValue(null)
-      await expect(serveOrcaApp({})).resolves.toBe(0)
+      await expect(serveQuirkyApp({})).resolves.toBe(0)
       expect(refuseIfProfileServedMock).not.toHaveBeenCalled()
 
       refuseIfProfileServedMock.mockImplementation(async () => {
         setTimeout(() => process.emit('SIGTERM', 'SIGTERM'), 20)
         return 3
       })
-      serveWithOrcadMock.mockClear()
-      await expect(serveOrcaApp({ supervise: true })).resolves.toBe(0)
-      expect(serveWithOrcadMock).not.toHaveBeenCalled()
-      expect(stderr.join('')).toContain('Another Orca serves this profile')
+      serveWithQuirkydMock.mockClear()
+      await expect(serveQuirkyApp({ supervise: true })).resolves.toBe(0)
+      expect(serveWithQuirkydMock).not.toHaveBeenCalled()
+      expect(stderr.join('')).toContain('Another Quirky serves this profile')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   })
 
-  // #30100: the slot carries no browser client, so orcad must be handed the app's.
-  it("serves on orcad by default, handing it the app's browser client", async () => {
-    const appRoot = await mkdtemp(join(tmpdir(), 'orca-serve-orcad-web-'))
+  // #30100: the slot carries no browser client, so quirkyd must be handed the app's.
+  it("serves on quirkyd by default, handing it the app's browser client", async () => {
+    const appRoot = await mkdtemp(join(tmpdir(), 'quirky-serve-quirkyd-web-'))
     try {
       await mkdir(join(appRoot, 'out', 'web'), { recursive: true })
       await writeFile(join(appRoot, 'out', 'web', 'web-index.html'), '<html></html>')
       const recognizer = speechRecognizerPackageName(process.platform, process.arch)
       await mkdir(join(appRoot, 'node_modules', recognizer), { recursive: true })
       await writeFile(join(appRoot, 'node_modules', recognizer, 'sherpa-onnx.node'), '')
-      process.env.ORCA_SERVE_SUPERVISOR_APP_ROOT = appRoot
-      const selection = { kind: 'orcad', runtime: '/node', entry: '/slot/orcad.js', version: '1' }
+      process.env.QUIRKY_SERVE_SUPERVISOR_APP_ROOT = appRoot
+      const selection = {
+        kind: 'quirkyd',
+        runtime: '/node',
+        entry: '/slot/quirkyd.js',
+        version: '1'
+      }
       resolveLocalServeRuntimeMock.mockResolvedValue(selection)
-      serveWithOrcadMock.mockResolvedValue(0)
+      serveWithQuirkydMock.mockResolvedValue(0)
 
-      await expect(serveOrcaApp({ json: true })).resolves.toBe(0)
-      expect(serveWithOrcadMock).toHaveBeenCalledWith(
+      await expect(serveQuirkyApp({ json: true })).resolves.toBe(0)
+      expect(serveWithQuirkydMock).toHaveBeenCalledWith(
         selection,
         { json: true },
         expect.any(String),
@@ -121,31 +131,31 @@ describe('orca serve host selection', () => {
         process.platform === 'win32' ? undefined : join(appRoot, 'node_modules', recognizer)
       )
       expect(spawnMock).not.toHaveBeenCalled()
-      expect(stderr.join('')).toContain('[serve] running on orcad 1')
+      expect(stderr.join('')).toContain('[serve] running on quirkyd 1')
     } finally {
-      delete process.env.ORCA_SERVE_SUPERVISOR_APP_ROOT
+      delete process.env.QUIRKY_SERVE_SUPERVISOR_APP_ROOT
       await rm(appRoot, { recursive: true, force: true })
     }
   })
 
-  it('falls back to Electron and prints why when orcad cannot serve', async () => {
+  it('falls back to Electron and prints why when quirkyd cannot serve', async () => {
     resolveLocalServeRuntimeMock.mockResolvedValue({ kind: 'electron', reason: 'no template' })
     electronChild()
 
-    await expect(serveOrcaApp({ json: true })).resolves.toBe(0)
+    await expect(serveQuirkyApp({ json: true })).resolves.toBe(0)
     expect(spawnMock).toHaveBeenCalledWith(
-      '/opt/orca/orca-ide',
+      '/opt/quirky/quirky-ide',
       expect.arrayContaining(['--serve', '--serve-json']),
       expect.any(Object)
     )
     expect(stderr.join('')).toContain('[serve] using Electron serve: no template')
   })
 
-  it('keeps Electron without asking orcad when ORCA_SERVE_RUNTIME=electron', async () => {
-    process.env.ORCA_SERVE_RUNTIME = 'electron'
+  it('keeps Electron without asking quirkyd when QUIRKY_SERVE_RUNTIME=electron', async () => {
+    process.env.QUIRKY_SERVE_RUNTIME = 'electron'
     electronChild()
 
-    await expect(serveOrcaApp({ json: true })).resolves.toBe(0)
+    await expect(serveQuirkyApp({ json: true })).resolves.toBe(0)
     expect(resolveLocalServeRuntimeMock).not.toHaveBeenCalled()
     expect(spawnMock).toHaveBeenCalledOnce()
     expect(stderr.join('')).not.toContain('[serve]')
@@ -157,46 +167,51 @@ describe('orca serve host selection', () => {
       return { args, env: options.env }
     }
 
-    it('starts the Electron fallback on ORCA_USER_DATA_PATH, not the default profile', async () => {
+    it('starts the Electron fallback on QUIRKY_USER_DATA_PATH, not the default profile', async () => {
       const profile = resolve('/isolated/profile-r')
-      process.env.ORCA_USER_DATA_PATH = profile
+      process.env.QUIRKY_USER_DATA_PATH = profile
       resolveLocalServeRuntimeMock.mockResolvedValue({ kind: 'electron', reason: 'ssh targets' })
       electronChild()
 
-      await expect(serveOrcaApp({ json: true })).resolves.toBe(0)
+      await expect(serveQuirkyApp({ json: true })).resolves.toBe(0)
       expect(resolveLocalServeRuntimeMock).toHaveBeenCalledWith(
         expect.objectContaining({ userDataPath: profile })
       )
       const child = electronSpawn()
       expect(child.args).toContain(`--user-data-dir=${profile}`)
       expect(child.env).toMatchObject({
-        ORCA_USER_DATA_PATH: profile,
-        ORCA_SERVE_USER_DATA_PATH: profile
+        QUIRKY_USER_DATA_PATH: profile,
+        QUIRKY_SERVE_USER_DATA_PATH: profile
       })
     })
 
     it('pins the opt-out Electron serve to the same profile', async () => {
       const profile = resolve('/isolated/profile-e')
-      process.env.ORCA_USER_DATA_PATH = profile
-      process.env.ORCA_SERVE_RUNTIME = 'electron'
+      process.env.QUIRKY_USER_DATA_PATH = profile
+      process.env.QUIRKY_SERVE_RUNTIME = 'electron'
       electronChild()
 
-      await expect(serveOrcaApp({ json: true })).resolves.toBe(0)
+      await expect(serveQuirkyApp({ json: true })).resolves.toBe(0)
       expect(electronSpawn().args).toContain(`--user-data-dir=${profile}`)
     })
 
-    it('hands orcad the absolute profile the selector read', async () => {
-      process.env.ORCA_USER_DATA_PATH = join('relative', 'profile')
-      const selection = { kind: 'orcad', runtime: '/node', entry: '/slot/orcad.js', version: '1' }
+    it('hands quirkyd the absolute profile the selector read', async () => {
+      process.env.QUIRKY_USER_DATA_PATH = join('relative', 'profile')
+      const selection = {
+        kind: 'quirkyd',
+        runtime: '/node',
+        entry: '/slot/quirkyd.js',
+        version: '1'
+      }
       resolveLocalServeRuntimeMock.mockResolvedValue(selection)
-      serveWithOrcadMock.mockResolvedValue(0)
+      serveWithQuirkydMock.mockResolvedValue(0)
 
-      await expect(serveOrcaApp({})).resolves.toBe(0)
+      await expect(serveQuirkyApp({})).resolves.toBe(0)
       const profile = resolve('relative', 'profile')
       expect(resolveLocalServeRuntimeMock).toHaveBeenCalledWith(
         expect.objectContaining({ userDataPath: profile })
       )
-      expect(serveWithOrcadMock.mock.calls[0]?.slice(0, 4)).toEqual([
+      expect(serveWithQuirkydMock.mock.calls[0]?.slice(0, 4)).toEqual([
         selection,
         {},
         profile,
@@ -204,22 +219,22 @@ describe('orca serve host selection', () => {
       ])
     })
 
-    it('uses ORCA_DEV_USER_DATA_PATH for both the selector and a dev Electron child', async () => {
+    it('uses QUIRKY_DEV_USER_DATA_PATH for both the selector and a dev Electron child', async () => {
       const profile = resolve('/isolated/dev-profile')
-      delete process.env.ORCA_USER_DATA_PATH
-      process.env.ORCA_DEV_USER_DATA_PATH = profile
-      process.env.ORCA_APP_EXECUTABLE_NEEDS_APP_ROOT = '1'
+      delete process.env.QUIRKY_USER_DATA_PATH
+      process.env.QUIRKY_DEV_USER_DATA_PATH = profile
+      process.env.QUIRKY_APP_EXECUTABLE_NEEDS_APP_ROOT = '1'
       resolveLocalServeRuntimeMock.mockResolvedValue({ kind: 'electron', reason: 'dev' })
       electronChild()
 
-      await expect(serveOrcaApp({ json: true })).resolves.toBe(0)
+      await expect(serveQuirkyApp({ json: true })).resolves.toBe(0)
       expect(resolveLocalServeRuntimeMock).toHaveBeenCalledWith(
         expect.objectContaining({ userDataPath: profile })
       )
       // A dev build ignores --user-data-dir and reads this instead.
       expect(electronSpawn().env).toMatchObject({
-        ORCA_DEV_USER_DATA_PATH: profile,
-        ORCA_SERVE_USER_DATA_PATH: profile
+        QUIRKY_DEV_USER_DATA_PATH: profile,
+        QUIRKY_SERVE_USER_DATA_PATH: profile
       })
     })
   })

@@ -17,15 +17,15 @@ describe('attachment preview sources', () => {
     rememberUploadedAttachmentPreviewSources(
       HOST,
       ['/local/a.png', '/local/b.png'],
-      ['/remote/.orca/drops/a.png', '/remote/.orca/drops/b.png'],
+      ['/remote/.quirky/drops/a.png', '/remote/.quirky/drops/b.png'],
       [],
       []
     )
 
-    expect(attachmentPreviewSourcePath(HOST.connectionId, '/remote/.orca/drops/a.png')).toBe(
+    expect(attachmentPreviewSourcePath(HOST.connectionId, '/remote/.quirky/drops/a.png')).toBe(
       '/local/a.png'
     )
-    expect(attachmentPreviewSourcePath(HOST.connectionId, '/remote/.orca/drops/b.png')).toBe(
+    expect(attachmentPreviewSourcePath(HOST.connectionId, '/remote/.quirky/drops/b.png')).toBe(
       '/local/b.png'
     )
   })
@@ -34,12 +34,12 @@ describe('attachment preview sources', () => {
     rememberUploadedAttachmentPreviewSources(
       HOST,
       ['/local/skipped.png', '/local/kept.png', '/local/failed.png'],
-      ['/remote/.orca/drops/kept.png'],
+      ['/remote/.quirky/drops/kept.png'],
       [{ sourcePath: '/local/skipped.png' }],
       [{ sourcePath: '/local/failed.png' }]
     )
 
-    expect(attachmentPreviewSourcePath(HOST.connectionId, '/remote/.orca/drops/kept.png')).toBe(
+    expect(attachmentPreviewSourcePath(HOST.connectionId, '/remote/.quirky/drops/kept.png')).toBe(
       '/local/kept.png'
     )
   })
@@ -48,13 +48,13 @@ describe('attachment preview sources', () => {
     rememberUploadedAttachmentPreviewSources(
       HOST,
       ['/local/a.png', '/local/b.png'],
-      ['/remote/.orca/drops/a.png'],
+      ['/remote/.quirky/drops/a.png'],
       [],
       []
     )
 
-    expect(attachmentPreviewSourcePath(HOST.connectionId, '/remote/.orca/drops/a.png')).toBe(
-      '/remote/.orca/drops/a.png'
+    expect(attachmentPreviewSourcePath(HOST.connectionId, '/remote/.quirky/drops/a.png')).toBe(
+      '/remote/.quirky/drops/a.png'
     )
   })
 
@@ -65,7 +65,7 @@ describe('attachment preview sources', () => {
   })
 
   it('keeps two hosts that share a remote path apart', () => {
-    const remotePath = '/home/user/project/.orca/drops/shot.png'
+    const remotePath = '/home/user/project/.quirky/drops/shot.png'
     rememberUploadedAttachmentPreviewSources(HOST, ['/local/a/secret.png'], [remotePath], [], [])
     rememberUploadedAttachmentPreviewSources(
       OTHER_HOST,

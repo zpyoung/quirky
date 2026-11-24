@@ -11,7 +11,7 @@ import type { SshTarget } from '../../../shared/ssh-types'
 import { SshConnection } from '../connection/ssh-connection'
 
 export function installHostileHostAppEnvironment(): () => void {
-  const userData = mkdtempSync(join(tmpdir(), 'orca-hostile-hosts-userdata-'))
+  const userData = mkdtempSync(join(tmpdir(), 'quirky-hostile-hosts-userdata-'))
   const { version } = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
   setAppEnvironment({
     getPath: (name) => (name === 'userData' ? userData : tmpdir()),

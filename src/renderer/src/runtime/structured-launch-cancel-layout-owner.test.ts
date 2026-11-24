@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-// With ORCA_LAYOUT_OWNER=main, this machine's host is told about a cancel instead of the window
+// With QUIRKY_LAYOUT_OWNER=main, this machine's host is told about a cancel instead of the window
 // keeping a tombstone; paired hosts keep the tombstone in both orders.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return mocks.layoutOwnerIsMain
   }
 }))

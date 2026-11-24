@@ -72,7 +72,7 @@
         "nativeCallsAfterFreshValidation": 2,
         "lateResult": {
           "status": "rejected",
-          "message": "Working directory \"synthetic-validation-true\" does not exist. It may have been deleted or is on an unmounted volume (cwd: synthetic-validation-true, arch: arm64, platform: darwin 25.6.0, orca: synthetic-cwd-validation-audit)."
+          "message": "Working directory \"synthetic-validation-true\" does not exist. It may have been deleted or is on an unmounted volume (cwd: synthetic-validation-true, arch: arm64, platform: darwin 25.6.0, quirky: synthetic-cwd-validation-audit)."
         }
       },
       "laneOwnership": {
@@ -121,7 +121,7 @@
         "nativeCallsAfterFreshValidation": 2,
         "lateResult": {
           "status": "rejected",
-          "message": "Working directory \"synthetic-validation-true\" does not exist. It may have been deleted or is on an unmounted volume (cwd: synthetic-validation-true, arch: arm64, platform: darwin 25.6.0, orca: synthetic-cwd-validation-audit)."
+          "message": "Working directory \"synthetic-validation-true\" does not exist. It may have been deleted or is on an unmounted volume (cwd: synthetic-validation-true, arch: arm64, platform: darwin 25.6.0, quirky: synthetic-cwd-validation-audit)."
         }
       },
       "laneOwnership": {
@@ -996,7 +996,7 @@
         "outcome": [
           "rejected",
           "Error",
-          "Working directory \"matrix-true-true-2-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-2-false, arch: arm64, platform: darwin 25.6.0, orca: synthetic-cwd-validation-audit)."
+          "Working directory \"matrix-true-true-2-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-2-false, arch: arm64, platform: darwin 25.6.0, quirky: synthetic-cwd-validation-audit)."
         ],
         "calls": 1
       },
@@ -1004,7 +1004,7 @@
         "outcome": [
           "rejected",
           "Error",
-          "Working directory \"matrix-true-true-2-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-2-false, arch: arm64, platform: darwin 25.6.0, orca: synthetic-cwd-validation-audit)."
+          "Working directory \"matrix-true-true-2-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-2-false, arch: arm64, platform: darwin 25.6.0, quirky: synthetic-cwd-validation-audit)."
         ],
         "calls": 1
       }
@@ -1040,7 +1040,7 @@
         "outcome": [
           "rejected",
           "Error",
-          "Working directory \"matrix-true-true-3-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-3-false, arch: arm64, platform: darwin 25.6.0, orca: synthetic-cwd-validation-audit)."
+          "Working directory \"matrix-true-true-3-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-3-false, arch: arm64, platform: darwin 25.6.0, quirky: synthetic-cwd-validation-audit)."
         ],
         "calls": 1
       },
@@ -1048,7 +1048,7 @@
         "outcome": [
           "rejected",
           "Error",
-          "Working directory \"matrix-true-true-3-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-3-false, arch: arm64, platform: darwin 25.6.0, orca: synthetic-cwd-validation-audit)."
+          "Working directory \"matrix-true-true-3-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-3-false, arch: arm64, platform: darwin 25.6.0, quirky: synthetic-cwd-validation-audit)."
         ],
         "calls": 1
       }
@@ -1084,7 +1084,7 @@
         "outcome": [
           "rejected",
           "Error",
-          "Working directory \"matrix-true-true-4-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-4-false, arch: arm64, platform: darwin 25.6.0, orca: synthetic-cwd-validation-audit)."
+          "Working directory \"matrix-true-true-4-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-4-false, arch: arm64, platform: darwin 25.6.0, quirky: synthetic-cwd-validation-audit)."
         ],
         "calls": 1
       },
@@ -1092,7 +1092,7 @@
         "outcome": [
           "rejected",
           "Error",
-          "Working directory \"matrix-true-true-4-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-4-false, arch: arm64, platform: darwin 25.6.0, orca: synthetic-cwd-validation-audit)."
+          "Working directory \"matrix-true-true-4-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-4-false, arch: arm64, platform: darwin 25.6.0, quirky: synthetic-cwd-validation-audit)."
         ],
         "calls": 1
       }
@@ -1128,7 +1128,7 @@
         "outcome": [
           "rejected",
           "Error",
-          "Working directory \"matrix-true-true-8-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-8-false, arch: arm64, platform: darwin 25.6.0, orca: synthetic-cwd-validation-audit)."
+          "Working directory \"matrix-true-true-8-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-8-false, arch: arm64, platform: darwin 25.6.0, quirky: synthetic-cwd-validation-audit)."
         ],
         "calls": 1
       },
@@ -1136,7 +1136,7 @@
         "outcome": [
           "rejected",
           "Error",
-          "Working directory \"matrix-true-true-8-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-8-false, arch: arm64, platform: darwin 25.6.0, orca: synthetic-cwd-validation-audit)."
+          "Working directory \"matrix-true-true-8-false\" does not exist. It may have been deleted or is on an unmounted volume (cwd: matrix-true-true-8-false, arch: arm64, platform: darwin 25.6.0, quirky: synthetic-cwd-validation-audit)."
         ],
         "calls": 1
       }

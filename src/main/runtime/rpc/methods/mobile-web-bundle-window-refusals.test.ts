@@ -36,7 +36,7 @@ function errorMessage(response: RpcResponse): string | undefined {
 }
 
 beforeEach(() => {
-  scratch = mkdtempSync(join(tmpdir(), 'orca-mobile-web-bundle-window-'))
+  scratch = mkdtempSync(join(tmpdir(), 'quirky-mobile-web-bundle-window-'))
   installMobileWebBundleAppPath(scratch)
   resetBundledMobileWebBundleCacheForTests()
   resetMobileWebBundleAssetVerdictsForTests()

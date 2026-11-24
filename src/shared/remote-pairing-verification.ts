@@ -70,7 +70,7 @@ export function verifyRemotePairingRuntimeStatus(
     return {
       ok: false,
       kind: 'access-link-invalid',
-      message: 'This link grants mobile-only access. Generate a link for another Orca client.'
+      message: 'This link grants mobile-only access. Generate a link for another Quirky client.'
     }
   }
   const versionFields = [
@@ -103,8 +103,8 @@ export function verifyRemotePairingRuntimeStatus(
       kind: 'protocol-incompatible',
       message:
         compatibility.reason === 'client-too-old'
-          ? 'Update this Orca client before adding the remote host.'
-          : 'Update Orca on the remote host before adding it.'
+          ? 'Update this Quirky client before adding the remote host.'
+          : 'Update Quirky on the remote host before adding it.'
     }
   }
   if (!hasValidRuntimeStatus(status)) {

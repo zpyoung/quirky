@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const SHIPIT_BINARY_SUFFIX = '/Squirrel.framework/Resources/ShipIt'
 

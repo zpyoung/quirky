@@ -56,7 +56,7 @@ it.each(['C:\\repo', '\\\\server\\share\\repo'])(
 
 describe.skipIf(process.platform === 'win32')('real POSIX filename collision', () => {
   it('opens both literal-backslash and nested files without changing identity', async () => {
-    const parent = await mkdtemp(join(tmpdir(), 'orca-rg-path-'))
+    const parent = await mkdtemp(join(tmpdir(), 'quirky-rg-path-'))
     const root = join(parent, 'repo\\root')
     try {
       await mkdir(join(root, 'a'), { recursive: true })

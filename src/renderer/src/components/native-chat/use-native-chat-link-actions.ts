@@ -19,7 +19,7 @@ export type NativeChatLinkActions = {
 }
 
 /** Transcript links offer the same destination popovers the terminal shows: file
- *  targets open in Orca or the default app, http(s) targets in a browser. */
+ *  targets open in Quirky or the default app, http(s) targets in a browser. */
 export function useNativeChatLinkActions(
   context: NativeChatFileLinkContext | null,
   rootRef: RefObject<HTMLElement | null>,

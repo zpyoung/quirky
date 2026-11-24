@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { build, testContext, WS } from './workspace-layout-command.test-fixture'
 import { workspaceRootGroupId } from './workspace-layout-minted-ids'
 
-vi.mock('../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const groupIds = (model: ReturnType<typeof build>['model']) =>
   model.workspaces[WS]!.groups.map((group) => group.id)

@@ -3,7 +3,7 @@
 Run from the repository root:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/structured-hold-retention/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/structured-hold-retention/reproduce.mjs
 ```
 
 The script bundles the actual `StructuredAgentSessionHolds` implementation into temporary CommonJS

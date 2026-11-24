@@ -90,7 +90,7 @@ export function fakeClient(relay: FakeRelay): FakeClient {
 }
 
 export const ENDPOINT: LegacyRelayEndpoint = {
-  endpoint: '/home/me/.orca-remote/relay-0.1.0+abc/relay-x.sock',
+  endpoint: '/home/me/.quirky-remote/relay-0.1.0+abc/relay-x.sock',
   connectCommand: 'cd x && node relay.js --connect',
   wrapCommand: true,
   host: getRemoteHostPlatform('linux-x64'),

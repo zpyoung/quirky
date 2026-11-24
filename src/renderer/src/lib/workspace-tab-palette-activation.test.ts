@@ -109,7 +109,7 @@ function makeResult(
     title: 'Terminal',
     secondaryText: '',
     secondaryMatches: [],
-    repoName: 'repo/orca',
+    repoName: 'repo/quirky',
     worktreeName: 'Palette Worktree',
     branchName: 'main',
     titleRanges: [],

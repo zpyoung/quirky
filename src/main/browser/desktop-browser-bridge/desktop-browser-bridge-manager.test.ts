@@ -16,7 +16,7 @@ const HOST: DesktopBrowserBridgeCandidate = {
 }
 
 function event(result: unknown): RuntimeRpcResponse<unknown> {
-  return { id: 'attach', ok: true, result, _meta: { runtimeId: 'orcad' } }
+  return { id: 'attach', ok: true, result, _meta: { runtimeId: 'quirkyd' } }
 }
 
 function harness(options: { supports?: boolean } = {}) {
@@ -107,7 +107,7 @@ describe('DesktopBrowserBridgeManager', () => {
     )
   })
 
-  it('never attaches to a server that does not advertise the bridge (an older orcad)', async () => {
+  it('never attaches to a server that does not advertise the bridge (an older quirkyd)', async () => {
     const h = harness({ supports: false })
     h.manager.reconcile()
     await vi.waitFor(() => expect(h.supportsBridge).toHaveBeenCalled())
@@ -275,7 +275,7 @@ describe('DesktopBrowserBridgeManager', () => {
       id: 'r',
       ok: false,
       error: { code: 'invalid_argument', message: 'refused' },
-      _meta: { runtimeId: 'orcad' }
+      _meta: { runtimeId: 'quirkyd' }
     })
     socket.callbacks.onResponse(event({ type: 'ready', attachmentId: 'att-1' }))
 
@@ -296,7 +296,7 @@ describe('DesktopBrowserBridgeManager', () => {
     )
   })
 
-  it('never starts a command after orcad stopped waiting for it', async () => {
+  it('never starts a command after quirkyd stopped waiting for it', async () => {
     const h = harness()
     let seen: AbortSignal | null = null
     h.execute.mockImplementationOnce(async (_candidate, _request, signal) => {
@@ -317,7 +317,7 @@ describe('DesktopBrowserBridgeManager', () => {
     await vi.waitFor(() => expect(seen!.aborted).toBe(true))
   })
 
-  it('stops a queued or running command when orcad cancels it, and stays attached', async () => {
+  it('stops a queued or running command when quirkyd cancels it, and stays attached', async () => {
     const h = harness()
     let seen: AbortSignal | null = null
     let finish = (): void => {}

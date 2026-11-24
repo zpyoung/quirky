@@ -27,7 +27,7 @@ const roots: string[] = []
 const zshAvailable = existsSync('/bin/zsh')
 const bashAvailable = existsSync('/bin/bash')
 // Why the shared lookup: it also finds a Homebrew fish that is off PATH, and it
-// carries the ORCA_REQUIRE_FISH contract asserted below.
+// carries the QUIRKY_REQUIRE_FISH contract asserted below.
 const fishLookup = resolveFishBinary()
 const fishAvailable = fishLookup.available
 const pwshAvailable =
@@ -72,18 +72,18 @@ function createFishSandbox(prefix: string): { bin: string; preflight: string; ma
   mkdirSync(bin)
   symlinkSync(fishBinary, join(bin, 'fish'))
   const marker = join(root, 'preflight-ran')
-  const preflight = join(bin, 'orca-preflight')
+  const preflight = join(bin, 'quirky-preflight')
   writeExecutable(preflight, `#!/bin/sh\nprintf ran > ${JSON.stringify(marker)}\n`)
   return { bin, preflight, marker }
 }
 
-// Reports Orca's own wrapper (not a user-defined codex function) and any capture leak.
+// Reports Quirky's own wrapper (not a user-defined codex function) and any capture leak.
 const FISH_STATE_PROBE = `if functions -q codex; and functions codex | string match -q '*prepare-codex*'
   echo -n wrapper=YES
 else
   echo -n wrapper=NO
 end
-echo " var=[$__orca_codex_type]"`
+echo " var=[$__quirky_codex_type]"`
 
 function writeExecutable(path: string, content: string): void {
   writeFileSync(path, content)
@@ -106,7 +106,7 @@ function runAliasLaunch(
     '#!/bin/sh\nif [ -f "$CODEX_HOME/trusted" ]; then printf "normal\\n"; else printf "hooks-review\\n"; fi\n'
   )
   writeExecutable(
-    join(bin, 'orca-test'),
+    join(bin, 'quirky-test'),
     preflightSucceeds
       ? '#!/bin/sh\n[ "$1 $2 $3" = "agent hooks prepare-codex" ] || exit 2\nprintf "valid\\n" > "$CODEX_HOME/trusted"\n'
       : '#!/bin/sh\nexit 7\n'
@@ -132,17 +132,17 @@ function runAliasLaunch(
         ...process.env,
         PATH: `${bin}:${process.env.PATH ?? ''}`,
         CODEX_HOME: home,
-        ORCA_CODEX_HOME: home,
-        ORCA_CODEX_LAUNCH_PREFLIGHT: join(bin, 'orca-test')
+        QUIRKY_CODEX_HOME: home,
+        QUIRKY_CODEX_LAUNCH_PREFLIGHT: join(bin, 'quirky-test')
       }
     }
   ).trim()
 }
 
-/** Launches a startup file that aliases the very name Orca wraps, then asserts the
+/** Launches a startup file that aliases the very name Quirky wraps, then asserts the
  *  wrapper installed, the preflight ran, and the user's alias still applies. */
 function expectNamedAliasSurvives(shell: string, enableAliases: string): void {
-  const root = mkdtempSync(join(tmpdir(), 'orca-codex-named-alias-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-codex-named-alias-'))
   roots.push(root)
   const bin = join(root, 'bin')
   mkdirSync(bin)
@@ -152,7 +152,7 @@ function expectNamedAliasSurvives(shell: string, enableAliases: string): void {
     '#!/bin/sh\nprintf "launched args=[%s] author=[%s]\\n" "$*" "$GIT_AUTHOR_NAME"\n'
   )
   writeExecutable(
-    join(bin, 'orca-test'),
+    join(bin, 'quirky-test'),
     `#!/bin/sh\nprintf '%s' "$*" > ${JSON.stringify(preflightMarker)}\n`
   )
   // Why nested in `if true`: the shell parses a whole compound command before
@@ -179,8 +179,8 @@ function expectNamedAliasSurvives(shell: string, enableAliases: string): void {
       env: {
         ...process.env,
         PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
-        ORCA_CODEX_LAUNCH_PREFLIGHT: join(bin, 'orca-test'),
-        // Why: a run inside an Orca terminal inherits its identity, which the wrapper forwards.
+        QUIRKY_CODEX_LAUNCH_PREFLIGHT: join(bin, 'quirky-test'),
+        // Why: a run inside an Quirky terminal inherits its identity, which the wrapper forwards.
         ...Object.fromEntries(CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => [key, '']))
       }
     }
@@ -200,8 +200,8 @@ afterEach(() => {
 
 describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', () => {
   it('repairs trust invalidated after shell creation before an alias launches Codex', () => {
-    const beforeRoot = mkdtempSync(join(tmpdir(), 'orca-codex-shell-before-'))
-    const afterRoot = mkdtempSync(join(tmpdir(), 'orca-codex-shell-after-'))
+    const beforeRoot = mkdtempSync(join(tmpdir(), 'quirky-codex-shell-before-'))
+    const afterRoot = mkdtempSync(join(tmpdir(), 'quirky-codex-shell-after-'))
     roots.push(beforeRoot, afterRoot)
 
     expect(runAliasLaunch(beforeRoot, '')).toBe('hooks-review')
@@ -209,7 +209,7 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
   })
 
   it.skipIf(!existsSync('/bin/zsh'))('repairs a zsh cx alias before Codex starts', () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-codex-zsh-alias-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-codex-zsh-alias-'))
     roots.push(root)
 
     expect(runAliasLaunch(root, getPosixCodexShellLaunchPreflight(), '/bin/zsh')).toBe('normal')
@@ -224,7 +224,7 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
   })
 
   it('still launches Codex when the best-effort preflight fails', () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-codex-preflight-failure-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-codex-preflight-failure-'))
     roots.push(root)
 
     expect(runAliasLaunch(root, getPosixCodexShellLaunchPreflight(), '/bin/bash', false)).toBe(
@@ -232,14 +232,14 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
     )
   })
 
-  it('does not trigger a preflight outside an Orca terminal', () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-codex-plain-shell-'))
+  it('does not trigger a preflight outside an Quirky terminal', () => {
+    const root = mkdtempSync(join(tmpdir(), 'quirky-codex-plain-shell-'))
     roots.push(root)
     const bin = join(root, 'bin')
     const marker = join(root, 'preflight-ran')
     mkdirSync(bin)
     writeExecutable(join(bin, 'codex'), '#!/bin/sh\nprintf launched\n')
-    writeExecutable(join(bin, 'orca-test'), `#!/bin/sh\nprintf ran > ${JSON.stringify(marker)}\n`)
+    writeExecutable(join(bin, 'quirky-test'), `#!/bin/sh\nprintf ran > ${JSON.stringify(marker)}\n`)
 
     const output = execFileSync(
       '/bin/bash',
@@ -265,7 +265,7 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
     it.skipIf(!existsSync(shell))(
       `keeps ${shell} startup alive under strict error handling when Codex is absent`,
       () => {
-        const root = mkdtempSync(join(tmpdir(), 'orca-codex-strict-startup-'))
+        const root = mkdtempSync(join(tmpdir(), 'quirky-codex-strict-startup-'))
         roots.push(root)
 
         const output = execFileSync(
@@ -277,7 +277,7 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
           ],
           {
             encoding: 'utf-8',
-            env: { ...process.env, PATH: root, ORCA_CODEX_LAUNCH_PREFLIGHT: 'orca-test' }
+            env: { ...process.env, PATH: root, QUIRKY_CODEX_LAUNCH_PREFLIGHT: 'quirky-test' }
           }
         )
 
@@ -293,7 +293,7 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
         '--no-config',
         '-c',
         [
-          'set -gx ORCA_CODEX_LAUNCH_PREFLIGHT missing-preflight',
+          'set -gx QUIRKY_CODEX_LAUNCH_PREFLIGHT missing-preflight',
           'function codex; echo custom-codex; end',
           getFishCodexShellLaunchPreflight(),
           'codex'
@@ -316,12 +316,12 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
   // at index 3" on every fish pane launch. Uses the real `-l -C` launch shape both
   // shell-ready call sites use.
   it.skipIf(!fishAvailable)('stays silent and installs no wrapper when codex is absent', () => {
-    const { bin, preflight } = createFishSandbox('orca-codex-fish-absent-')
+    const { bin, preflight } = createFishSandbox('quirky-codex-fish-absent-')
 
     const result = spawnSync(
       join(bin, 'fish'),
       ['--no-config', '-l', '-C', getFishCodexShellLaunchPreflight(), '-c', FISH_STATE_PROBE],
-      { encoding: 'utf-8', env: { PATH: bin, ORCA_CODEX_LAUNCH_PREFLIGHT: preflight } }
+      { encoding: 'utf-8', env: { PATH: bin, QUIRKY_CODEX_LAUNCH_PREFLIGHT: preflight } }
     )
 
     expect(result.stderr).not.toContain('Missing argument')
@@ -330,13 +330,13 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
   })
 
   it.skipIf(!fishAvailable)('wraps codex and runs the preflight when codex is a real file', () => {
-    const { bin, preflight, marker } = createFishSandbox('orca-codex-fish-present-')
+    const { bin, preflight, marker } = createFishSandbox('quirky-codex-fish-present-')
     writeExecutable(join(bin, 'codex'), '#!/bin/sh\nprintf "real codex $*"\n')
 
     const output = execFileSync(
       join(bin, 'fish'),
       ['--no-config', '-l', '-C', getFishCodexShellLaunchPreflight(), '-c', 'codex hi'],
-      { encoding: 'utf-8', env: { PATH: bin, ORCA_CODEX_LAUNCH_PREFLIGHT: preflight } }
+      { encoding: 'utf-8', env: { PATH: bin, QUIRKY_CODEX_LAUNCH_PREFLIGHT: preflight } }
     )
 
     expect(output.trim()).toBe('real codex hi')
@@ -344,7 +344,7 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
   })
 
   it.skipIf(!fishAvailable)('leaves a codex alias unwrapped', () => {
-    const { bin, preflight } = createFishSandbox('orca-codex-fish-alias-')
+    const { bin, preflight } = createFishSandbox('quirky-codex-fish-alias-')
     writeExecutable(join(bin, 'codex'), '#!/bin/sh\nprintf "real codex"\n')
 
     const result = spawnSync(
@@ -357,7 +357,7 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
         '-c',
         FISH_STATE_PROBE
       ],
-      { encoding: 'utf-8', env: { PATH: bin, ORCA_CODEX_LAUNCH_PREFLIGHT: preflight } }
+      { encoding: 'utf-8', env: { PATH: bin, QUIRKY_CODEX_LAUNCH_PREFLIGHT: preflight } }
     )
 
     expect(result.stderr).not.toContain('Missing argument')
@@ -368,18 +368,18 @@ describe.skipIf(process.platform === 'win32')('Codex shell launch preflight', ()
 describe('PowerShell Codex shell launch preflight', () => {
   it('preserves a user-defined command', () => {
     expect(getPowerShellCodexShellLaunchPreflight()).toContain(
-      '$orcaCodexCommand.CommandType -in @("Application", "ExternalScript")'
+      '$quirkyCodexCommand.CommandType -in @("Application", "ExternalScript")'
     )
   })
 
   it.skipIf(!pwshAvailable)('fails open when native errors are promoted', () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-codex-pwsh-failure-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-codex-pwsh-failure-'))
     const bin = join(root, 'bin')
     roots.push(root)
     mkdirSync(bin)
     const executableSuffix = process.platform === 'win32' ? '.cmd' : ''
     writeExecutable(
-      join(bin, `orca-test${executableSuffix}`),
+      join(bin, `quirky-test${executableSuffix}`),
       process.platform === 'win32' ? '@exit /b 7\r\n' : '#!/bin/sh\nexit 7\n'
     )
     writeExecutable(
@@ -405,7 +405,7 @@ describe('PowerShell Codex shell launch preflight', () => {
         env: {
           ...process.env,
           PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
-          ORCA_CODEX_LAUNCH_PREFLIGHT: join(bin, `orca-test${executableSuffix}`)
+          QUIRKY_CODEX_LAUNCH_PREFLIGHT: join(bin, `quirky-test${executableSuffix}`)
         }
       }
     )
@@ -417,7 +417,7 @@ describe('PowerShell Codex shell launch preflight', () => {
 
 describe('Codex shell launch preflight command', () => {
   function makeCliRoot(): { resourcesPath: string } {
-    const root = mkdtempSync(join(tmpdir(), 'orca-codex-preflight-cli-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-codex-preflight-cli-'))
     roots.push(root)
     const resourcesPath = join(root, 'resources')
     mkdirSync(join(resourcesPath, 'bin'), { recursive: true })
@@ -429,17 +429,17 @@ describe('Codex shell launch preflight command', () => {
       hooksEnabled: true,
       isPackaged: true,
       isWsl: true,
-      managedHomePath: '/home/jin/.local/share/orca/codex-runtime-home/home',
+      managedHomePath: '/home/jin/.local/share/quirky/codex-runtime-home/home',
       resourcesPath,
       platform: 'win32' as const
     }
   }
 
   it.each([
-    { platform: 'darwin' as const, bundled: 'orca', isPackaged: true },
-    { platform: 'linux' as const, bundled: 'orca-ide', isPackaged: true },
-    { platform: 'win32' as const, bundled: 'orca.exe', isPackaged: true },
-    { platform: 'darwin' as const, bundled: 'orca', isPackaged: false }
+    { platform: 'darwin' as const, bundled: 'quirky', isPackaged: true },
+    { platform: 'linux' as const, bundled: 'quirky-ide', isPackaged: true },
+    { platform: 'win32' as const, bundled: 'quirky.exe', isPackaged: true },
+    { platform: 'darwin' as const, bundled: 'quirky', isPackaged: false }
   ])(
     'gives a native $platform pane no preflight: the app prepares its Codex home (packaged $isPackaged)',
     (config) => {
@@ -460,7 +460,7 @@ describe('Codex shell launch preflight command', () => {
 
   it('carries the packaged Windows launcher, as an absolute path, for WSLENV path translation', () => {
     const { resourcesPath } = makeCliRoot()
-    const launcherPath = join(resourcesPath, 'bin', 'orca.exe')
+    const launcherPath = join(resourcesPath, 'bin', 'quirky.exe')
     writeExecutable(launcherPath, '#!/bin/sh\nexit 0\n')
 
     const command = resolveCodexShellLaunchPreflightCommand(wslOptions(resourcesPath))
@@ -475,7 +475,7 @@ describe('Codex shell launch preflight command', () => {
   ])('skips the preflight when $label', (config) => {
     const { resourcesPath } = makeCliRoot()
     if (config.create === 'directory') {
-      mkdirSync(join(resourcesPath, 'bin', 'orca.exe'))
+      mkdirSync(join(resourcesPath, 'bin', 'quirky.exe'))
     }
 
     expect(resolveCodexShellLaunchPreflightCommand(wslOptions(resourcesPath))).toBeNull()
@@ -489,7 +489,7 @@ describe('Codex shell launch preflight command', () => {
     'does not enable an unsupported WSL preflight for %o',
     (override) => {
       const { resourcesPath } = makeCliRoot()
-      writeExecutable(join(resourcesPath, 'bin', 'orca.exe'), '#!/bin/sh\nexit 0\n')
+      writeExecutable(join(resourcesPath, 'bin', 'quirky.exe'), '#!/bin/sh\nexit 0\n')
 
       expect(
         resolveCodexShellLaunchPreflightCommand({ ...wslOptions(resourcesPath), ...override })
@@ -502,10 +502,10 @@ describe('Codex shell launch preflight command', () => {
 // Program Files (Windows) both put spaces in it.
 describe.skipIf(process.platform === 'win32')('Codex preflight paths containing spaces', () => {
   function writeSpacedPreflight(root: string): { preflightPath: string; markerPath: string } {
-    const dir = join(root, 'Orca Dev.app', 'Contents', 'Resources', 'bin')
+    const dir = join(root, 'Quirky.app', 'Contents', 'Resources', 'bin')
     mkdirSync(dir, { recursive: true })
     const markerPath = join(root, 'preflight-ran')
-    const preflightPath = join(dir, 'orca')
+    const preflightPath = join(dir, 'quirky')
     writeExecutable(
       preflightPath,
       `#!/bin/sh\n[ "$1 $2 $3" = "agent hooks prepare-codex" ] || exit 2\nprintf ran > ${JSON.stringify(markerPath)}\n`
@@ -514,7 +514,7 @@ describe.skipIf(process.platform === 'win32')('Codex preflight paths containing 
   }
 
   it('invokes a POSIX preflight whose absolute path contains spaces', () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-codex-spaced-posix-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-codex-spaced-posix-'))
     roots.push(root)
     const bin = join(root, 'bin')
     mkdirSync(bin)
@@ -528,7 +528,7 @@ describe.skipIf(process.platform === 'win32')('Codex preflight paths containing 
         env: {
           ...process.env,
           PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
-          ORCA_CODEX_LAUNCH_PREFLIGHT: preflightPath
+          QUIRKY_CODEX_LAUNCH_PREFLIGHT: preflightPath
         }
       }
     )
@@ -537,7 +537,7 @@ describe.skipIf(process.platform === 'win32')('Codex preflight paths containing 
   })
 
   it.skipIf(!fishAvailable)('invokes a fish preflight whose absolute path contains spaces', () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-codex-spaced-fish-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-codex-spaced-fish-'))
     roots.push(root)
     const bin = join(root, 'bin')
     mkdirSync(bin)
@@ -548,7 +548,7 @@ describe.skipIf(process.platform === 'win32')('Codex preflight paths containing 
       env: {
         ...process.env,
         PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
-        ORCA_CODEX_LAUNCH_PREFLIGHT: preflightPath
+        QUIRKY_CODEX_LAUNCH_PREFLIGHT: preflightPath
       }
     })
 
@@ -558,7 +558,7 @@ describe.skipIf(process.platform === 'win32')('Codex preflight paths containing 
   it.skipIf(!pwshAvailable)(
     'invokes a PowerShell preflight whose absolute path contains spaces',
     () => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-codex-spaced-pwsh-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-codex-spaced-pwsh-'))
       roots.push(root)
       const bin = join(root, 'bin')
       mkdirSync(bin)
@@ -573,7 +573,7 @@ describe.skipIf(process.platform === 'win32')('Codex preflight paths containing 
           env: {
             ...process.env,
             PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
-            ORCA_CODEX_LAUNCH_PREFLIGHT: preflightPath
+            QUIRKY_CODEX_LAUNCH_PREFLIGHT: preflightPath
           }
         }
       )

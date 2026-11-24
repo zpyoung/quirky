@@ -13,8 +13,8 @@ const { exactLookup } = vi.hoisted(() => ({ exactLookup: vi.fn() }))
 vi.mock('@/lib/github-work-item-source-lookup', () => ({
   lookupGitHubWorkItemByOwnerRepoForSource: exactLookup
 }))
-const url = 'https://github.com/acme/orca/pull/42'
-const link = { number: 42, url, slug: { owner: 'acme', repo: 'orca' } }
+const url = 'https://github.com/acme/quirky/pull/42'
+const link = { number: 42, url, slug: { owner: 'acme', repo: 'quirky' } }
 const secondary: GitHubWorkItem = {
   id: '42',
   repoId: 'repo',
@@ -39,7 +39,7 @@ function setup() {
     title: 'First branch PR',
     state: 'open',
     status: 'success',
-    url: 'https://github.com/acme/orca/pull/7',
+    url: 'https://github.com/acme/quirky/pull/7',
     mergeable: 'MERGEABLE',
     updatedAt: '2026-01-01'
   }
@@ -49,7 +49,7 @@ function setup() {
     value: { forBranch: branchLookup }
   })
   store.setState({
-    repos: [{ id: 'repo', path: '/repo', displayName: 'Orca', addedAt: 0, badgeColor: '' }],
+    repos: [{ id: 'repo', path: '/repo', displayName: 'Quirky', addedAt: 0, badgeColor: '' }],
     worktreesByRepo: { repo: [workspace] }
   })
   return { store, workspace, branchLookup }
@@ -77,7 +77,7 @@ it('confirms a second PR by exact source and head when branch discovery would re
   expect(exactLookup).toHaveBeenCalledWith(
     expect.objectContaining({
       owner: 'acme',
-      repo: 'orca',
+      repo: 'quirky',
       host: 'github.com',
       number: 42,
       type: 'pr',

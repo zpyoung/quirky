@@ -42,7 +42,7 @@ export function registerJournalLifecycleBatchAppenderTests(): void {
   })
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-repeated-items-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-repeated-items-'))
     journal = await journals.open(options())
   })
 
@@ -129,7 +129,7 @@ export function registerJournalLifecycleBatchAppenderTests(): void {
       fence: 8
     })
     await journal.appendItem(
-      { provider: 'orca', clientMessageId: 'saved' },
+      { provider: 'quirky', clientMessageId: 'saved' },
       { kind: 'status', text: 'seeded' },
       { fence: 8, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
     )
@@ -137,13 +137,13 @@ export function registerJournalLifecycleBatchAppenderTests(): void {
       settlementId: 'alias-repeats',
       fence: 8,
       mutations: [
-        item('orca:saved', 'first'),
+        item('quirky:saved', 'first'),
         ...Array.from({ length: 199 }, (_, index) => item(`filler-${index}`)),
         { kind: 'tombstone', identity },
-        item('orca:saved', 'last')
+        item('quirky:saved', 'last')
       ]
     })
-    expect(journal.snapshot().items.find((row) => row.itemId === 'orca:saved')).toMatchObject({
+    expect(journal.snapshot().items.find((row) => row.itemId === 'quirky:saved')).toMatchObject({
       revision: 4,
       body: { text: 'last' }
     })

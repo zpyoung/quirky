@@ -39,7 +39,7 @@ const markers = {
 let api
 let registration
 let transport
-const endpoint = `\\\\.\\pipe\\orca-file-id-${process.pid}`
+const endpoint = `\\\\.\\pipe\\quirky-file-id-${process.pid}`
 let settings = {}
 let transcript
 const database = join(profile, 'ai-vault', 'session-search.sqlite')
@@ -66,7 +66,7 @@ function inspect(marker) {
 }
 async function query(marker, present) {
   const result = await api.runProcess({
-    program: process.env.ORCA_FILE_ID_NODE,
+    program: process.env.QUIRKY_FILE_ID_NODE,
     args: [
       join(output, 'client.cjs'),
       endpoint,
@@ -141,7 +141,7 @@ async function stopChild() {
   }
 }
 async function run() {
-  assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+  assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
   await fs.mkdir(profile, { recursive: true })
   api = require('./production.js')
   api.setAppEnvironment({
@@ -176,7 +176,7 @@ async function run() {
     additionalCodexSessionsDirs: [],
     executionHostId: 'local'
   }
-  process.env.ORCA_FILE_ID_ROOTS = JSON.stringify(roots)
+  process.env.QUIRKY_FILE_ID_ROOTS = JSON.stringify(roots)
   await fs.mkdir(roots.claudeProjectsDir, { recursive: true })
   transcript = join(roots.claudeProjectsDir, `${sessionId}.jsonl`)
   if (phase === 'restart') {

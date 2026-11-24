@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeWithRuntimeId } from '../../../runtime/construction/runtime-identity-state'
+import { QuirkyRuntimeWithRuntimeId } from '../../../runtime/construction/runtime-identity-state'
 import { TerminalIntentionalStops } from '../../../runtime/terminal-intentional-stops'
 import { TerminalRunFactsRegister } from '../../../runtime/terminal-run-facts'
 import { ptySizes } from '../delivery/visibility-state'
@@ -8,7 +8,7 @@ import { commitPtyIpcSpawn } from './spawn-commit'
 import { createPtyIpcSpawnState } from './spawn-state'
 import type { PtySpawnIpcDeps } from './spawn-types'
 
-const PTY_ID = 'orca-ipc-pty-run-facts'
+const PTY_ID = 'quirky-ipc-pty-run-facts'
 const INCARNATION_ID = 'inc-ipc-run-facts'
 
 async function commit(persistPtyBinding: ReturnType<typeof vi.fn>) {
@@ -19,7 +19,7 @@ async function commit(persistPtyBinding: ReturnType<typeof vi.fn>) {
     terminalRunFacts: facts,
     intentionalPtyStops: stops,
     // Why the real method: the case under test is what the runtime does with each commit.
-    noteTerminalSpawnCommit: OrcaRuntimeWithRuntimeId.prototype.noteTerminalSpawnCommit,
+    noteTerminalSpawnCommit: QuirkyRuntimeWithRuntimeId.prototype.noteTerminalSpawnCommit,
     registerPreAllocatedHandleForPty: vi.fn(),
     registerPty: vi.fn(),
     cancelPendingPtyRegistration: vi.fn(),

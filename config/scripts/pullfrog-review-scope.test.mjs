@@ -5,7 +5,7 @@ it('groups a current review by PR while leaving other agent tasks independent', 
   const get = vi.fn(async () => ({ data: { state: 'open', head: { sha: 'current' } } }))
   const core = { setOutput: vi.fn(), warning: vi.fn() }
   const context = {
-    repo: { owner: 'stablyai', repo: 'orca' },
+    repo: { owner: 'stablyai', repo: 'quirky' },
     runId: 7,
     payload: { inputs: { name: 'Review #42 [abc]' } }
   }
@@ -16,7 +16,7 @@ it('groups a current review by PR while leaving other agent tasks independent', 
     }
   }
   await scope.reviewScope({ core, context, github })
-  expect(get).toHaveBeenCalledWith({ owner: 'stablyai', repo: 'orca', pull_number: 42 })
+  expect(get).toHaveBeenCalledWith({ owner: 'stablyai', repo: 'quirky', pull_number: 42 })
   expect(core.setOutput).toHaveBeenCalledWith('head', 'current')
   get.mockClear()
   await scope.reviewScope({
@@ -84,7 +84,7 @@ it('a delayed older scope cannot cancel or replace a newer review', async () => 
     const core = { setOutput: vi.fn(), warning: vi.fn() }
     await scope.reviewScope({
       context: {
-        repo: { owner: 'stablyai', repo: 'orca' },
+        repo: { owner: 'stablyai', repo: 'quirky' },
         runId,
         payload: { inputs: { name: 'Review #42 [current]' } }
       },

@@ -1,6 +1,6 @@
 import { once } from 'node:events'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import type { ChildProcessHandle, PipedChildProcess, ProcessSpec } from './process-spec'
 
 async function waitForClose(child: ChildProcessHandle): Promise<void> {

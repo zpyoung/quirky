@@ -14,7 +14,7 @@ import {
   openTopologyStore
 } from './terminal-topology-profile-fixture'
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []
@@ -35,7 +35,7 @@ afterEach(() => {
 })
 
 async function openStore(): Promise<Store> {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-layout-resend-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-layout-resend-'))
   directories.push(directory)
   const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
   const window = new WindowSession(getDefaultWorkspaceSession())

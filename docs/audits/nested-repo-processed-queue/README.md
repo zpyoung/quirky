@@ -5,7 +5,7 @@
 ## Run
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/nested-repo-processed-queue/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/nested-repo-processed-queue/reproduce.cjs
 ```
 
 The runner uses the repository's process launcher to start a Node child with forced GC, a 256 MiB old-space limit and a 15-second timeout. It bundles the actual scan and ignore-rule parser. An observational hook records weak references and scalar queue counts. A finite injected filesystem pauses one directory read; no app window, PTY, SSH connection or native watcher starts. The unused local Git detector is a throwing stub, ensuring the injected filesystem owns every probe.

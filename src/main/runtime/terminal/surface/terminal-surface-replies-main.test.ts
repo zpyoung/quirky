@@ -6,7 +6,7 @@ import {
   HEADLESS_SECOND_LEAF_ID,
   HEADLESS_THIRD_LEAF_ID as THIRD_LEAF_ID,
   TEST_WORKTREE_ID
-} from '../../orca-runtime-test-fixtures.spec'
+} from '../../quirky-runtime-test-fixtures.spec'
 import {
   SURFACE_PTYS,
   SURFACE_TAB_ID,
@@ -16,7 +16,7 @@ import {
   surfaceRuntime
 } from './terminal-surface-replies.test-fixture'
 
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const golden = (name: string): string =>
   recordedSurfaceReplies(path.join(__dirname, '__fixtures__', name))

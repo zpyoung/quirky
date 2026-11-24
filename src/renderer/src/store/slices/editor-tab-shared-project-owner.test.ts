@@ -29,7 +29,10 @@ function sharedProjectStore(worktreeHostId: 'local' | undefined, localRepoStampe
     activeWorktreeId: 'repo-1::/local/repo-feature',
     activeWorkspaceExecutionHostId: worktreeHostId ?? null,
     // The paired server is the focused environment, as when it is the default for new projects.
-    settings: { ...getDefaultSettings('/tmp/orca-test'), activeRuntimeEnvironmentId: 'paired-mac' },
+    settings: {
+      ...getDefaultSettings('/tmp/quirky-test'),
+      activeRuntimeEnvironmentId: 'paired-mac'
+    },
     sshConnectionStates: new Map(),
     sshStateByEnvironment: new Map()
   })

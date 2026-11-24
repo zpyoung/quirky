@@ -74,7 +74,7 @@ const context = () => ({
 })
 
 beforeEach(async () => {
-  workDir = await mkdtemp(join(tmpdir(), 'orca-attachment-upload-'))
+  workDir = await mkdtemp(join(tmpdir(), 'quirky-attachment-upload-'))
   serverStore = new AgentSessionAttachmentStore(
     join(workDir, 'server', 'agent-session-attachments'),
     { hasSession: () => true }
@@ -165,8 +165,8 @@ describe('uploadExternalPathsToAgentSessionAttachments', () => {
 describe('uploadBufferToAgentSessionAttachments', () => {
   it('stores a pasted image under the chat', async () => {
     const png = Buffer.alloc(900 * 1024, 3)
-    const stored = await uploadBufferToAgentSessionAttachments(context(), 'orca-paste-1.png', png)
-    expect(stored.name).toBe('orca-paste-1.png')
+    const stored = await uploadBufferToAgentSessionAttachments(context(), 'quirky-paste-1.png', png)
+    expect(stored.name).toBe('quirky-paste-1.png')
     expect((await readFile(stored.path)).equals(png)).toBe(true)
     // 900 KiB in 384 KiB slices.
     expect(

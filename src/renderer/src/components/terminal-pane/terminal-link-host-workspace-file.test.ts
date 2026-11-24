@@ -34,7 +34,7 @@ installTerminalLinkTestEnvironment(doubles)
 
 const featureWorktree = {
   worktreeId: 'wt-feat',
-  worktreePath: '/repo/.orca/worktrees/feat-x',
+  worktreePath: '/repo/.quirky/worktrees/feat-x',
   runtimeEnvironmentId: 'env-1'
 }
 
@@ -168,13 +168,13 @@ describe('a paired-server link outside its own workspace', () => {
     hostAnswers({
       worktree: 'wt-y',
       relativePath: 'src/gone.ts',
-      absolutePath: '/repo/.orca/worktrees/feat-y/src/gone.ts',
+      absolutePath: '/repo/.quirky/worktrees/feat-y/src/gone.ts',
       exists: false,
       isDirectory: false
     })
     const onOpenFailure = vi.fn()
 
-    openDetectedFilePath('/repo/.orca/worktrees/feat-y/src/gone.ts', null, null, {
+    openDetectedFilePath('/repo/.quirky/worktrees/feat-y/src/gone.ts', null, null, {
       ...featureWorktree,
       onOpenFailure
     })
@@ -187,7 +187,7 @@ describe('a paired-server link outside its own workspace', () => {
   it('keeps a file inside its own workspace on the plain stat path', async () => {
     hostAnswers({ size: 1, isDirectory: false, mtime: 1 })
 
-    openDetectedFilePath('/repo/.orca/worktrees/feat-x/a.ts', null, null, featureWorktree)
+    openDetectedFilePath('/repo/.quirky/worktrees/feat-x/a.ts', null, null, featureWorktree)
     await flushDoubleRaf()
 
     expect(runtimeEnvironmentCallMock).toHaveBeenCalledWith(

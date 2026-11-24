@@ -56,7 +56,7 @@ export function RuntimeServerRowDetails({
   const lead = unreachable
     ? translate(
         'auto.components.settings.serverList.unreachableLead',
-        'Orca couldn’t reach this server.'
+        'Quirky couldn’t reach this server.'
       )
     : updateError
       ? translate(
@@ -71,7 +71,7 @@ export function RuntimeServerRowDetails({
         <p className="text-muted-foreground">
           {translate(
             'auto.components.settings.serverList.unreachableHint',
-            'Check that Orca is running on the server and that this computer can reach its address.'
+            'Check that Quirky is running on the server and that this computer can reach its address.'
           )}
           {kind === 'tailscale'
             ? ` ${translate(

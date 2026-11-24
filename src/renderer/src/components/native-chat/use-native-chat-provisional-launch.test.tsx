@@ -95,7 +95,7 @@ function answerCatalog(method: string): Promise<unknown> {
 function saveSelection(model: string): void {
   useAppStore.setState({
     settings: {
-      ...getDefaultSettings('/tmp/orca-workspaces'),
+      ...getDefaultSettings('/tmp/quirky-workspaces'),
       nativeChatSessionOptions: { codex: { model } }
     }
   })
@@ -241,7 +241,7 @@ describe('a chat pane over its own launch', () => {
     async (picked) => {
       useAppStore.setState({
         settings: {
-          ...getDefaultSettings('/tmp/orca-workspaces'),
+          ...getDefaultSettings('/tmp/quirky-workspaces'),
           nativeChatSessionOptions: {
             claude: { model: 'sonnet', valuesByModel: { sonnet: { effort: 'low' } } }
           }

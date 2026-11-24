@@ -1,6 +1,6 @@
-import type { PipedChildProcess, PipedProcessSpawner } from '@orca/process-host/process-spec'
+import type { PipedChildProcess, PipedProcessSpawner } from '@quirky/process-host/process-spec'
 import type { SpawnOptions as ClaudeAgentSdkSpawnOptions } from '@anthropic-ai/claude-agent-sdk'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import {
   spawnManagedProviderProcess,
   type ManagedProviderProcess
@@ -10,7 +10,7 @@ import { claudeChildClosePolicy, claudeChildCloseProven } from './claude-child-e
 export type ClaudeCodeProcessSpawn = {
   /** Pass as the SDK's `spawnClaudeCodeProcess`; the SDK never learns the pid because it never owns it. */
   spawn: (options: ClaudeAgentSdkSpawnOptions) => PipedChildProcess
-  /** The retained child, so Orca keeps its own tree-kill and exit-proof ladder. Null until the SDK spawns. */
+  /** The retained child, so Quirky keeps its own tree-kill and exit-proof ladder. Null until the SDK spawns. */
   readonly child: PipedChildProcess | null
   readonly managed: ManagedProviderProcess | null
   /**
@@ -33,12 +33,12 @@ function definedEnv(env: Record<string, string | undefined>): Record<string, str
 }
 
 /**
- * Orca supplies the Claude Code child rather than letting the SDK spawn it.
+ * Quirky supplies the Claude Code child rather than letting the SDK spawn it.
  *
- * Two independent reasons: the SDK's `SpawnedProcess` has no pid, and Orca's
+ * Two independent reasons: the SDK's `SpawnedProcess` has no pid, and Quirky's
  * spawner is the only path that encodes `.cmd` arguments safely on Windows.
  *
- * On POSIX Claude runs under the provider supervisor, so an Orca that dies stops
+ * On POSIX Claude runs under the provider supervisor, so an Quirky that dies stops
  * it instead of leaving it to finish its turn, tools and edits included, with
  * nobody watching. Windows has no supervisor and spawns Claude directly.
  */
@@ -49,7 +49,7 @@ export function createClaudeCodeProcessSpawn(
   let managed: ManagedProviderProcess | null = null
   return {
     spawn: (options) => {
-      // SDK abort would kill the child outside Orca's ladder, losing observed exit proof.
+      // SDK abort would kill the child outside Quirky's ladder, losing observed exit proof.
       managed = spawnManagedProviderProcess(
         {
           command: options.command,

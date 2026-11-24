@@ -174,7 +174,7 @@ describe('useNativeChatComposerPaste', () => {
 
   it('saves a local paste where its draft can bring it back after a restart', async () => {
     mocks.saveClipboardImageAsTempFile.mockResolvedValue(
-      '/Users/me/Library/Application Support/orca/native-chat-pastes/orca-paste-1.png'
+      '/Users/me/Library/Application Support/quirky/native-chat-pastes/quirky-paste-1.png'
     )
     const probe = await renderProbe({ resolveAttachmentOwner: () => ({ kind: 'local' }) })
     await act(async () => {
@@ -215,9 +215,9 @@ describe('useNativeChatComposerPaste', () => {
       { id: 'chip-1', path: '', previewUrl: 'blob:clipboard-image', pending: true }
     ])
     await act(async () => {
-      resolveSave('/tmp/orca-paste-1.png')
+      resolveSave('/tmp/quirky-paste-1.png')
     })
-    expect(store.chips[0]).toMatchObject({ path: '/tmp/orca-paste-1.png', pending: false })
+    expect(store.chips[0]).toMatchObject({ path: '/tmp/quirky-paste-1.png', pending: false })
   })
 
   it('does not settle a local path after the attachment owner changes', async () => {
@@ -243,7 +243,7 @@ describe('useNativeChatComposerPaste', () => {
 
     owner = { kind: 'remote' }
     await act(async () => {
-      resolveSave('/tmp/orca-paste-owner-changed.png')
+      resolveSave('/tmp/quirky-paste-owner-changed.png')
     })
 
     expect(store.chips).toHaveLength(0)
@@ -274,14 +274,14 @@ describe('useNativeChatComposerPaste', () => {
       { id: 'chip-1', path: '', previewUrl: 'data:image/png;base64,AAA', pending: true }
     ])
     await act(async () => {
-      resolveSave('/tmp/orca-paste-2.png')
+      resolveSave('/tmp/quirky-paste-2.png')
     })
-    expect(store.chips[0]).toMatchObject({ path: '/tmp/orca-paste-2.png', pending: false })
+    expect(store.chips[0]).toMatchObject({ path: '/tmp/quirky-paste-2.png', pending: false })
   })
 
   it('settles the owned operation when no clipboard preview was available', async () => {
     mocks.readClipboardImageThumbnail.mockResolvedValue(null)
-    mocks.saveClipboardImageAsTempFile.mockResolvedValue('C:\\Temp\\orca-paste-3.png')
+    mocks.saveClipboardImageAsTempFile.mockResolvedValue('C:\\Temp\\quirky-paste-3.png')
     const store = createChipStore()
     const attachResolvedPaths = vi.fn()
     const probe = await renderProbe({
@@ -292,7 +292,7 @@ describe('useNativeChatComposerPaste', () => {
     await act(async () => {
       probe.latest().pasteFromClipboard()
     })
-    expect(store.chips[0]).toMatchObject({ path: 'C:\\Temp\\orca-paste-3.png', pending: false })
+    expect(store.chips[0]).toMatchObject({ path: 'C:\\Temp\\quirky-paste-3.png', pending: false })
     expect(attachResolvedPaths).not.toHaveBeenCalled()
   })
 

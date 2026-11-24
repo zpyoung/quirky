@@ -96,18 +96,18 @@ describe('CodexRuntimeHomeService', () => {
       )
     }
     const previousCodexHome = process.env.CODEX_HOME
-    const previousOrcaCodexHome = process.env.ORCA_CODEX_HOME
+    const previousQuirkyCodexHome = process.env.QUIRKY_CODEX_HOME
     process.env.CODEX_HOME = getRuntimeCodexHomePath()
-    process.env.ORCA_CODEX_HOME = getRuntimeCodexHomePath()
+    process.env.QUIRKY_CODEX_HOME = getRuntimeCodexHomePath()
     try {
       // Background fetchers prefer ambient CODEX_HOME when passed null, so an
-      // explicit path proves nested Orca launches cannot poll the managed home.
+      // explicit path proves nested Quirky launches cannot poll the managed home.
       expect(service.prepareForRateLimitFetch()).toEqual({
         kind: 'ready',
         codexHomePath: getSystemCodexHomePath()
       })
       process.env.CODEX_HOME = getSystemCodexHomePath()
-      delete process.env.ORCA_CODEX_HOME
+      delete process.env.QUIRKY_CODEX_HOME
       expect(service.isHostSystemDefaultRealHomeSelected()).toBe(true)
       process.env.CODEX_HOME = join(testState.fakeHomeDir, 'user-owned-codex-home')
       expect(service.isHostSystemDefaultRealHomeSelected()).toBe(false)
@@ -121,10 +121,10 @@ describe('CodexRuntimeHomeService', () => {
       } else {
         process.env.CODEX_HOME = previousCodexHome
       }
-      if (previousOrcaCodexHome === undefined) {
-        delete process.env.ORCA_CODEX_HOME
+      if (previousQuirkyCodexHome === undefined) {
+        delete process.env.QUIRKY_CODEX_HOME
       } else {
-        process.env.ORCA_CODEX_HOME = previousOrcaCodexHome
+        process.env.QUIRKY_CODEX_HOME = previousQuirkyCodexHome
       }
     }
   })
@@ -189,7 +189,7 @@ describe('CodexRuntimeHomeService', () => {
     }
   })
 
-  it('resolves only Orca-owned homes used by live retained host shells', async () => {
+  it('resolves only Quirky-owned homes used by live retained host shells', async () => {
     const accountHome = createManagedAuth(
       testState.userDataDir,
       'account-1',
@@ -197,7 +197,7 @@ describe('CodexRuntimeHomeService', () => {
     )
     const unownedHome = join(testState.fakeHomeDir, 'unowned-codex-home')
     mkdirSync(unownedHome, { recursive: true })
-    writeFileSync(join(unownedHome, '.orca-managed-home'), 'account-2\n', 'utf-8')
+    writeFileSync(join(unownedHome, '.quirky-managed-home'), 'account-2\n', 'utf-8')
     writePaneRegistry({
       'shared-pane': { selectionKey: 'host', accountId: null, homeRoute: 'shared-home' },
       'account-pane': { selectionKey: 'host', accountId: 'account-1', homeRoute: 'account-home' },

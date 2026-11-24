@@ -1,5 +1,5 @@
 /**
- * One windowed Orca under the layout oracle: launch, relaunch (optionally with a cold PTY daemon),
+ * One windowed Quirky under the layout oracle: launch, relaunch (optionally with a cold PTY daemon),
  * and a report of every finding per scenario.
  */
 
@@ -8,8 +8,8 @@ import path from 'node:path'
 import type { ElectronApplication, Page, TestInfo } from '@stablyai/playwright-test'
 import { RuntimeClient } from '../../../src/cli/runtime/client'
 import { PROTOCOL_VERSION } from '../../../src/main/daemon/types'
-import { expect } from './orca-app'
-import { createRestartSession } from './orca-restart'
+import { expect } from './quirky-app'
+import { createRestartSession } from './quirky-restart'
 import { bootstrapRestoredLaunch } from './terminal-restart-persistence'
 import { waitForPaneCount } from './terminal'
 import { LayoutOracle, type OracleFinding } from './workspace-layout-oracle'
@@ -18,7 +18,7 @@ import { subscribeWindowLayout } from './workspace-layout-oracle-stream'
 import { readSavedPartitions } from './workspace-layout-oracle-views'
 import { summarizeEventLoopDelay, type EventLoopDelaySummary } from './event-loop-delay-report'
 
-export const ORACLE_REPORT_DIR_ENV = 'ORCA_LAYOUT_ORACLE_REPORT_DIR'
+export const ORACLE_REPORT_DIR_ENV = 'QUIRKY_LAYOUT_ORACLE_REPORT_DIR'
 
 export type OracleRun = {
   page: Page

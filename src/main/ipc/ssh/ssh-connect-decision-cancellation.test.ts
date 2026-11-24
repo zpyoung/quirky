@@ -105,7 +105,7 @@ describe('a connect cancelled during its server decision', () => {
       recordSshConnectionOpened(asTransport(opened))
       mockConnectionManager.getConnection.mockReturnValue(opened)
       await new Promise<void>((resolve) => (resumeStale = resolve))
-      return { route: 'unserved', reason: 'orcad_unavailable', detail: 'unsupported_host' }
+      return { route: 'unserved', reason: 'quirkyd_unavailable', detail: 'unsupported_host' }
     })
     const stale = Promise.resolve(handlers.get('ssh:connect')!(null, { targetId: 'ssh-1' }))
     await vi.waitFor(() => expect(staleDecided).toBe(true))
@@ -186,7 +186,7 @@ describe('a connect cancelled during its server decision', () => {
       host: 'example.com',
       port: 22,
       username: 'deploy',
-      orcadFence: { environmentId: 'env-1' }
+      quirkydFence: { environmentId: 'env-1' }
     }
     const opened = { id: 'tunnel-transport' }
     const failure = new Error('listen EADDRINUSE 127.0.0.1:46768')

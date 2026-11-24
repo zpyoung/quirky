@@ -139,7 +139,7 @@ function agent(overrides: Partial<RuntimeWorktreeAgentRow> = {}): RuntimeWorktre
 const baseItem: TestItem = {
   worktreeId: 'worktree-1',
   repoId: 'repo-1',
-  repo: 'orca',
+  repo: 'quirky',
   path: 'mobile-list',
   hasAttachedPty: true,
   isPinned: false,
@@ -417,7 +417,7 @@ describe('memoized worktree rows', () => {
         .flatMap((node) => node.props.children)
         .filter((child): child is string => typeof child === 'string')
     const repoChips = () =>
-      renderer!.root.findAll((node) => node.props.accessibilityLabel === 'Project orca')
+      renderer!.root.findAll((node) => node.props.accessibilityLabel === 'Project quirky')
     const render = async (
       props: Partial<{
         item: TestItem
@@ -437,11 +437,11 @@ describe('memoized worktree rows', () => {
 
     it('moves the repo into a title chip and drops the branch line, as the desktop does', async () => {
       await render()
-      expect(texts()).toEqual(expect.arrayContaining(['orca', 'feature/mobile-list']))
+      expect(texts()).toEqual(expect.arrayContaining(['quirky', 'feature/mobile-list']))
       expect(repoChips()).toHaveLength(0)
 
       await render({ cardDetails: COMPACT })
-      expect(texts()).not.toContain('orca')
+      expect(texts()).not.toContain('quirky')
       expect(texts()).not.toContain('feature/mobile-list')
       expect(texts()).toContain('mobile-list')
       expect(repoChips()).toHaveLength(1)
@@ -521,7 +521,7 @@ describe('memoized worktree rows', () => {
     it('uses the chip under the new card style but keeps the branch line', async () => {
       await render({ cardDetails: NEW_CARD_STYLE })
       expect(repoChips()).toHaveLength(1)
-      expect(texts()).not.toContain('orca')
+      expect(texts()).not.toContain('quirky')
       expect(texts()).toContain('feature/mobile-list')
     })
   })
@@ -531,7 +531,7 @@ describe('memoized worktree rows', () => {
       ...baseItem,
       automationCreated: true,
       cliCreated: true,
-      linkedItems: [{ provider: 'jira', type: 'issue', number: 12, jiraIdentifier: 'ORCA-12' }]
+      linkedItems: [{ provider: 'jira', type: 'issue', number: 12, jiraIdentifier: 'QUIRKY-12' }]
     }
     const lastPresence = () => metaGlyphsRender.mock.lastCall?.[0].presence
     await act(async () => {

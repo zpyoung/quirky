@@ -174,15 +174,15 @@ export function useTerminalPaneStartupActions(controller: TerminalPaneStoreContr
         return openLinksInAppPreferencePromiseRef.current
       }
       const preferencePromise = (async () => {
-        const openInOrca = await requestLinkRoutingPreference({
+        const openInQuirky = await requestLinkRoutingPreference({
           openLinksInAppDefault: settingsRef.current?.openLinksInApp === true,
           url
         })
         await updateSettings({
-          openLinksInApp: openInOrca,
+          openLinksInApp: openInQuirky,
           openLinksInAppPreferencePrompted: true
         })
-        return openInOrca
+        return openInQuirky
       })()
       openLinksInAppPreferencePromiseRef.current = preferencePromise
       void preferencePromise.finally(() => {

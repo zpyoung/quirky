@@ -8,7 +8,7 @@ import { resolveStructuredAgentCommand } from '../native-chat/structured-agent-c
 afterEach(() => vi.unstubAllEnvs())
 
 it('resolves a custom Claude command against the login shell PATH', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-shell-only-cli-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-shell-only-cli-'))
   try {
     const binary = join(root, process.platform === 'win32' ? 'claude-custom.cmd' : 'claude-custom')
     writeFileSync(binary, '#!/bin/sh\nexit 0\n')

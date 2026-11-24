@@ -200,21 +200,21 @@ export function DiffCommentDraftCard({
   return (
     <div
       ref={cardRef}
-      className="orca-diff-comment-popover orca-diff-comment-draft-card"
+      className="quirky-diff-comment-popover quirky-diff-comment-draft-card"
       role="region"
       aria-labelledby={labelId}
       onMouseDown={(ev) => ev.stopPropagation()}
       onClick={(ev) => ev.stopPropagation()}
     >
-      <div className="orca-diff-comment-content-col gap-2">
-        <div id={labelId} className="orca-diff-comment-popover-label">
+      <div className="quirky-diff-comment-content-col gap-2">
+        <div id={labelId} className="quirky-diff-comment-popover-label">
           {headerLabel}
         </div>
 
         {/* Textarea */}
         <ImeTextarea
           ref={focusTextareaRef}
-          className="orca-diff-comment-popover-textarea"
+          className="quirky-diff-comment-popover-textarea"
           placeholder={
             placeholder ??
             translate(
@@ -235,7 +235,7 @@ export function DiffCommentDraftCard({
         />
 
         {/* Footer */}
-        <div className="orca-diff-comment-popover-footer">
+        <div className="quirky-diff-comment-popover-footer">
           <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>
             {translate('auto.components.diff.comments.DiffCommentPopover.2b3ce6d394', 'Cancel')}
           </Button>

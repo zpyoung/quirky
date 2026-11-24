@@ -12,7 +12,7 @@ export function setupHostId(setup: ProjectHostSetup): string {
   return normalizeExecutionHostId(setup.hostId) ?? setup.hostId
 }
 
-// Why: `orca project list` shows display names, and the stored projectId is a provider-scoped
+// Why: `quirky project list` shows display names, and the stored projectId is a provider-scoped
 // string ("github:stablyai/orca") nobody keeps in their head — so the name is what gets typed.
 // Matching ids alone reported "not set up" for a project sitting right there in the listing.
 export async function findProjectSetups(

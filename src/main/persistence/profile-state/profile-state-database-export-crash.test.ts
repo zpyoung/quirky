@@ -1,4 +1,4 @@
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { build } from 'esbuild'
 import { tmpdir } from 'node:os'
@@ -76,7 +76,7 @@ async function killBeforePublication(sourcePath: string, targetPath: string): Pr
 
 describe('profile state database export crash recovery', () => {
   it('leaves the destination intact when the production backup dies before publication', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-profile-state-export-crash-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-state-export-crash-'))
     temporaryDirectories.push(directory)
     const sourcePath = profileStateDatabaseFile(directory)
     const source = openProfileStateDatabase(sourcePath, 'profile-a')

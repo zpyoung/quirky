@@ -60,7 +60,7 @@ describe('Claude Code ready prompt, decided by captured transcripts', () => {
 
 describe('Claude Code ready prompt on a worker screen', () => {
   it('needs no banner: hook output can push it off the visible screen', () => {
-    // The visible screen an Orca worker pane returned at cold start (paths scrubbed).
+    // The visible screen an Quirky worker pane returned at cold start (paths scrubbed).
     const screen = [
       '  \u23bf  SessionStart:startup says: [memsearch v0.4.21] embedding: onnx | milvus:',
       '     ~/.memsearch/milvus.db | collection: ms_sample_workspace_folder',
@@ -132,7 +132,7 @@ describe('Claude Code tui-idle wait at cold start', () => {
         foregroundProcess: 'claude',
         data: seed.data
       })
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test reaches the runtime's pty map to mark the pane as an Orca-launched Claude, as worker-start does.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test reaches the runtime's pty map to mark the pane as an Quirky-launched Claude, as worker-start does.
       const internals = runtime as unknown as { ptysById: Map<string, { launchAgent?: string }> }
       internals.ptysById.get(TRANSCRIPT_PANE_PTY_ID)!.launchAgent = 'claude'
       let reads = 0

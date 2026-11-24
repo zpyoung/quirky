@@ -49,10 +49,10 @@ async function writeCodeBuddySession(args: {
 
 describe('scanAiVaultSessions — CodeBuddy scope discovery', () => {
   it('lists an older in-scope CodeBuddy session the recency cap would drop', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-codebuddy-scope-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-codebuddy-scope-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
-    const workspace = '/home/ada/orca/workspaces/orca/feature'
+    const workspace = '/home/ada/quirky/workspaces/quirky/feature'
 
     await writeCodeBuddySession({
       sessionsDir: roots.codebuddyProjectsDir,
@@ -91,7 +91,7 @@ describe('scanAiVaultSessions — CodeBuddy scope discovery', () => {
   })
 
   it('finds an older session when another cwd shares its encoded bucket', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-codebuddy-collision-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-codebuddy-collision-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     for (const [cwd, id, timestamp] of [
@@ -112,7 +112,7 @@ describe('scanAiVaultSessions — CodeBuddy scope discovery', () => {
   })
 
   it('adds nothing when no scope is requested', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-codebuddy-noscope-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-codebuddy-noscope-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     await writeCodeBuddySession({

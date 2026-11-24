@@ -85,7 +85,7 @@ function getDelegatedCliRefreshProvider(
     return null
   }
   // Why: only these providers require a user-run CLI to rotate the read-only
-  // session Orca consumes; Claude handles the same failure kind in-app.
+  // session Quirky consumes; Claude handles the same failure kind in-app.
   return p.provider === 'grok' || p.provider === 'kimi' ? p.provider : null
 }
 
@@ -121,7 +121,7 @@ export function getProviderUsageStatusLabel(p: ProviderRateLimits): string {
           'auto.components.status.bar.tooltip.0d8d7cfe15',
           'Waiting for Claude session'
         )
-      // Why: Orca never refreshes a Claude login; only an older host that still does reports the other kinds.
+      // Why: Quirky never refreshes a Claude login; only an older host that still does reports the other kinds.
       case 'stale-token':
         return isClaudeUsageWaitingForClaude(p)
           ? translate(
@@ -160,7 +160,7 @@ export function getProviderUsageStatusLabel(p: ProviderRateLimits): string {
     return translate('auto.components.status.bar.tooltip.minimax.expired.label', 'Sign-in expired')
   }
   // Why: cursor-agent owns its own token rotation, so a lapsed Cursor session is
-  // fixed by signing in to the CLI, not by Orca retrying the fetch.
+  // fixed by signing in to the CLI, not by Quirky retrying the fetch.
   if (p.provider === 'cursor' && p.usageMetadata?.failureKind === 'stale-token') {
     return translate('auto.components.status.bar.tooltip.cursor.expired.label', 'Sign-in expired')
   }
@@ -197,19 +197,19 @@ export function getProviderUsageErrorMessage(p: ProviderRateLimits): string {
   if (delegatedCliProvider === 'grok') {
     return translate(
       'auto.components.status.bar.tooltip.d1b7f509ac',
-      'Run grok in a terminal on the computer running Orca and wait for it to start. If prompted, complete sign-in, then retry usage. You do not need to send a chat message.'
+      'Run grok in a terminal on the computer running Quirky and wait for it to start. If prompted, complete sign-in, then retry usage. You do not need to send a chat message.'
     )
   }
   if (delegatedCliProvider === 'kimi') {
     return translate(
       'auto.components.status.bar.tooltip.a37e8c15d4',
-      'Run kimi in a terminal on the computer running Orca and wait for it to start, then retry usage.'
+      'Run kimi in a terminal on the computer running Quirky and wait for it to start, then retry usage.'
     )
   }
   if (p.provider === 'cursor' && p.usageMetadata?.failureKind === 'stale-token') {
     return translate(
       'auto.components.status.bar.tooltip.cursor.expired.message',
-      'Run cursor-agent login in a terminal on the computer running Orca, then retry usage.'
+      'Run cursor-agent login in a terminal on the computer running Quirky, then retry usage.'
     )
   }
   if (p.provider === 'claude') {

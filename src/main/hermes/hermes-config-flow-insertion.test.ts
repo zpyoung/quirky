@@ -83,7 +83,7 @@ describe.each(['\n', '\r\n'])('Hermes flow insertion indentation (%j)', (eol) =>
         const source = `${prefix}${text}${suffix}${finalNewline ? '\n' : ''}`.replaceAll('\n', eol)
         expectInsertion(
           source,
-          { ...settings, plugins: { ...expected, enabled: ['orca-status'] } },
+          { ...settings, plugins: { ...expected, enabled: ['quirky-status'] } },
           eol
         )
       })
@@ -99,7 +99,7 @@ describe.each(['\n', '\r\n'])('Hermes flow insertion indentation (%j)', (eol) =>
       }
     ])('$name flow map', ({ text, expected }) => {
       const source = `${text}${finalNewline ? '\n' : ''}`.replaceAll('\n', eol)
-      expectInsertion(source, { ...expected, plugins: { enabled: ['orca-status'] } }, eol)
+      expectInsertion(source, { ...expected, plugins: { enabled: ['quirky-status'] } }, eol)
     })
   })
 })
@@ -107,7 +107,7 @@ describe.each(['\n', '\r\n'])('Hermes flow insertion indentation (%j)', (eol) =>
 describe.each(['\n', '\r\n'])('Hermes flow insertion with tab separation (%j)', (eol) => {
   it.each(pluginEntries.slice(0, 3))('$name map after a tab', ({ text, expected }) => {
     const source = `plugins: {${text}\t}`.replaceAll('\n', eol)
-    expectInsertion(source, { plugins: { ...expected, enabled: ['orca-status'] } }, eol)
+    expectInsertion(source, { plugins: { ...expected, enabled: ['quirky-status'] } }, eol)
   })
 
   it.each([
@@ -165,10 +165,10 @@ describe.each(['\n', '\r\n'])('Hermes flow insertion with tab separation (%j)', 
     const source = input.replaceAll('\n', eol)
     const output = expectInsertion(
       source,
-      { plugins: { custom: 'keep', enabled: ['orca-status'] } },
+      { plugins: { custom: 'keep', enabled: ['quirky-status'] } },
       eol
     )
-    const insertion = `${padding}, enabled: [ orca-status ]`.replaceAll('\n', eol)
+    const insertion = `${padding}, enabled: [ quirky-status ]`.replaceAll('\n', eol)
     expect(output).toBe(source.replace('}', `${insertion}}`))
   })
 

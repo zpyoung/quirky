@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useAppStore } from '../store'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { createSessionWriteSubscriber } from '../lib/session-write-subscriber'
 import { buildActiveViewUnloadPatch } from '../lib/active-view-persist'
 import {
@@ -26,12 +26,12 @@ import {
   isWindowCloseCheckpointInProgress
 } from '../components/window-close-request-coordinator'
 import {
-  ORCA_APP_RESTART_ABORTED_EVENT,
-  ORCA_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT
+  QUIRKY_APP_RESTART_ABORTED_EVENT,
+  QUIRKY_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT
 } from '../../../shared/updater-renderer-events'
 import {
-  ORCA_RENDERER_SHUTDOWN_CHECKPOINT_ABORTED_EVENT,
-  ORCA_RENDERER_UNLOAD_PREVENTED_EVENT
+  QUIRKY_RENDERER_SHUTDOWN_CHECKPOINT_ABORTED_EVENT,
+  QUIRKY_RENDERER_UNLOAD_PREVENTED_EVENT
 } from '../../../shared/renderer-shutdown-events'
 
 // Why: bound the resume-record loss window on a hard kill to ~1 min; capture skips unchanged records so per-tick cost is negligible.
@@ -83,7 +83,7 @@ export function useAppSessionPersistence(): void {
       // map so a daemon/session death while the app is closed can still
       // cold-restore via the agent's resume command (#5232).
       // Switch point: main captures its panes' agents itself as it stages the quit.
-      captureSleepingAgentSessions: ORCA_LAYOUT_OWNER_IS_MAIN
+      captureSleepingAgentSessions: QUIRKY_LAYOUT_OWNER_IS_MAIN
         ? () => {}
         : () => useAppStore.getState().captureAllSleepingAgentSessions('quit'),
       // Why: re-read state after capture() calls populated scrollback buffers
@@ -111,28 +111,34 @@ export function useAppSessionPersistence(): void {
     const persistBeforeUnload = createShutdownCheckpointBeforeUnloadHandler(shutdownCheckpoint)
     window.addEventListener('beforeunload', persistBeforeUnload)
     window.addEventListener(
-      ORCA_RENDERER_SHUTDOWN_CHECKPOINT_ABORTED_EVENT,
+      QUIRKY_RENDERER_SHUTDOWN_CHECKPOINT_ABORTED_EVENT,
       shutdownCheckpoint.abortAfterCheckpointFailure
     )
-    window.addEventListener(ORCA_APP_RESTART_ABORTED_EVENT, shutdownCheckpoint.abandonAttempt)
+    window.addEventListener(QUIRKY_APP_RESTART_ABORTED_EVENT, shutdownCheckpoint.abandonAttempt)
     window.addEventListener(
-      ORCA_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT,
+      QUIRKY_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT,
       shutdownCheckpoint.abandonAttempt
     )
-    window.addEventListener(ORCA_RENDERER_UNLOAD_PREVENTED_EVENT, shutdownCheckpoint.abandonAttempt)
+    window.addEventListener(
+      QUIRKY_RENDERER_UNLOAD_PREVENTED_EVENT,
+      shutdownCheckpoint.abandonAttempt
+    )
     return () => {
       window.removeEventListener('beforeunload', persistBeforeUnload)
       window.removeEventListener(
-        ORCA_RENDERER_SHUTDOWN_CHECKPOINT_ABORTED_EVENT,
+        QUIRKY_RENDERER_SHUTDOWN_CHECKPOINT_ABORTED_EVENT,
         shutdownCheckpoint.abortAfterCheckpointFailure
       )
-      window.removeEventListener(ORCA_APP_RESTART_ABORTED_EVENT, shutdownCheckpoint.abandonAttempt)
       window.removeEventListener(
-        ORCA_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT,
+        QUIRKY_APP_RESTART_ABORTED_EVENT,
         shutdownCheckpoint.abandonAttempt
       )
       window.removeEventListener(
-        ORCA_RENDERER_UNLOAD_PREVENTED_EVENT,
+        QUIRKY_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT,
+        shutdownCheckpoint.abandonAttempt
+      )
+      window.removeEventListener(
+        QUIRKY_RENDERER_UNLOAD_PREVENTED_EVENT,
         shutdownCheckpoint.abandonAttempt
       )
     }

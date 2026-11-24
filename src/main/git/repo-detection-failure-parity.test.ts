@@ -7,7 +7,7 @@ import { inspectGitRepoForRegistration, inspectGitRepoForRegistrationAsync } fro
 
 let fixture: string
 beforeEach(() => {
-  fixture = mkdtempSync(join(tmpdir(), 'orca-repo-failure-parity-'))
+  fixture = mkdtempSync(join(tmpdir(), 'quirky-repo-failure-parity-'))
   mkdirSync(join(fixture, '.git', 'objects'), { recursive: true })
   mkdirSync(join(fixture, '.git', 'refs'), { recursive: true })
   writeFileSync(join(fixture, '.git', 'HEAD'), 'ref: refs/heads/main\n')

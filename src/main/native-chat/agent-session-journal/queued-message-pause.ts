@@ -4,12 +4,12 @@
 //     and no turn sent after it and accepted. A later Stop of any reason supersedes it; only a
 //     person's pauses.
 //   - 'cleared': a card named by the latest clear mark waits, with no later accepted turn or Resume.
-//   - 'restarted': a card queued before this conversation last opened waits — Orca quit or
+//   - 'restarted': a card queued before this conversation last opened waits — Quirky quit or
 //     crashed, or the chat closed, while it waited — and no turn or Resume has happened since the
 //     open. The open marks itself with a row when it finds waiting cards (`queueReopen`), so a card
 //     queued after it is never mistaken for one from before. Never published: nothing sends by
 //     itself, and the next turn (the carry-on or the person's own message) runs first.
-// Any accepted turn lifts them, whoever sent it: a person, Orca's own messages, or the queue.
+// Any accepted turn lifts them, whoever sent it: a person, Quirky's own messages, or the queue.
 // A card held on its own (`hold_reason`, a failed conversion) is outside every pause: only an
 // action on it releases it.
 

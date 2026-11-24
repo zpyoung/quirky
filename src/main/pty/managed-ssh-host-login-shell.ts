@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs'
 import { win32 as pathWin32 } from 'node:path'
-import { ORCAD_MANAGED_ACTIVATION_ROOT_ENV } from '../../shared/orcad-managed-launch-env'
+import { QUIRKYD_MANAGED_ACTIVATION_ROOT_ENV } from '../../shared/quirkyd-managed-launch-env'
 import { readOpenSshDefaultShell } from '../../shared/openssh-default-shell'
 
 /**
- * The OpenSSH `DefaultShell` a Windows SSH login would get, but only for an orcad a client
+ * The OpenSSH `DefaultShell` a Windows SSH login would get, but only for an quirkyd a client
  * launched over SSH (#9327), matching the relay. Desktop and user-started servers never read it.
  */
 export function resolveManagedSshHostLoginShell(
@@ -12,7 +12,7 @@ export function resolveManagedSshHostLoginShell(
   existsPath: (path: string) => boolean = existsSync,
   readDefaultShell: () => string = readOpenSshDefaultShell
 ): string | undefined {
-  if (process.platform !== 'win32' || !env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV]) {
+  if (process.platform !== 'win32' || !env[QUIRKYD_MANAGED_ACTIVATION_ROOT_ENV]) {
     return undefined
   }
   const shell = readDefaultShell()

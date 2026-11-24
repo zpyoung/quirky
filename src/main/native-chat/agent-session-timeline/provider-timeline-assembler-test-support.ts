@@ -231,7 +231,7 @@ export function refusingSink(
 export async function openProviderTimelineRig(
   overrides: Partial<ProviderTimelineAssemblerDeps> = {}
 ): Promise<ProviderTimelineRig> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-provider-timeline-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-provider-timeline-'))
   roots.push(root)
   const journalOptions: TestJournalOptions = {
     identity: {

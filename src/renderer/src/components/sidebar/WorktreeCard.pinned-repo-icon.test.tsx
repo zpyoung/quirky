@@ -74,14 +74,14 @@ vi.mock('./WorktreeCardAgents', () => ({
 vi.mock('./WorktreeContextMenu', () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
   WORKTREE_NATIVE_CONTEXT_MENU_ATTR: 'data-worktree-native-context-menu',
-  WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-orca-context-menu-scope'
+  WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-quirky-context-menu-scope'
 }))
 
 function makeRepo(overrides: Partial<Repo> = {}): Repo {
   return {
     id: 'repo-1',
     path: '/repo',
-    displayName: 'orca',
+    displayName: 'quirky',
     badgeColor: '#999999',
     repoIcon: { type: 'emoji', emoji: '🦊' },
     addedAt: 1,
@@ -136,8 +136,8 @@ describe('WorktreeCard pinned repo icon', () => {
       )
 
       expect(markup).toContain('🦊')
-      expect(markup).toContain('Project orca')
-      expect(markup).toContain('>orca</span>')
+      expect(markup).toContain('Project quirky')
+      expect(markup).toContain('>quirky</span>')
     },
     WORKTREE_CARD_IMPORT_TIMEOUT_MS
   )
@@ -156,7 +156,7 @@ describe('WorktreeCard pinned repo icon', () => {
       )
 
       expect(markup).not.toContain('🦊')
-      expect(markup).not.toContain('Project orca')
+      expect(markup).not.toContain('Project quirky')
     },
     WORKTREE_CARD_IMPORT_TIMEOUT_MS
   )
@@ -177,8 +177,8 @@ describe('WorktreeCard pinned repo icon', () => {
       )
 
       expect(markup).toContain('🦊')
-      expect(markup).toContain('Project orca')
-      expect(markup).toContain('>orca</span>')
+      expect(markup).toContain('Project quirky')
+      expect(markup).toContain('>quirky</span>')
       expect(markup).not.toContain('data-worktree-card-meta-row=""')
     },
     WORKTREE_CARD_IMPORT_TIMEOUT_MS
@@ -194,14 +194,14 @@ describe('WorktreeCard pinned repo icon', () => {
       const ungrouped = renderToStaticMarkup(
         <WorktreeCard worktree={worktree} repo={makeRepo()} isActive={false} />
       )
-      expect(ungrouped).toContain('>orca</span>')
-      expect(ungrouped).toContain('Project orca')
+      expect(ungrouped).toContain('>quirky</span>')
+      expect(ungrouped).toContain('Project quirky')
 
       const groupedByProject = renderToStaticMarkup(
         <WorktreeCard worktree={worktree} repo={makeRepo()} isActive={false} hideRepoBadge />
       )
-      expect(groupedByProject).not.toContain('>orca</span>')
-      expect(groupedByProject).not.toContain('Project orca')
+      expect(groupedByProject).not.toContain('>quirky</span>')
+      expect(groupedByProject).not.toContain('Project quirky')
     },
     WORKTREE_CARD_IMPORT_TIMEOUT_MS
   )

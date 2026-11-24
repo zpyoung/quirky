@@ -86,7 +86,7 @@ describe('pruneTerminalDockPaneKeysEverywhere', () => {
     })
 
     expect(pruneStoreDockPaneKeys).toHaveBeenCalledExactlyOnceWith('unified-1', [PANE_KEY])
-    const raw = window.localStorage.getItem('orca.terminalDock.paneState.v1')
+    const raw = window.localStorage.getItem('quirky.terminalDock.paneState.v1')
     expect(raw ? JSON.parse(raw) : {}).not.toHaveProperty(PANE_KEY)
   })
 
@@ -105,7 +105,7 @@ describe('pruneTerminalDockPaneKeysEverywhere', () => {
     })
 
     expect(pruneStoreDockPaneKeys).not.toHaveBeenCalled()
-    const raw = window.localStorage.getItem('orca.terminalDock.paneState.v1')
+    const raw = window.localStorage.getItem('quirky.terminalDock.paneState.v1')
     expect(raw ? JSON.parse(raw) : {}).toHaveProperty(PANE_KEY)
   })
 })

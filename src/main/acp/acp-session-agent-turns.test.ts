@@ -55,7 +55,7 @@ describe('ACP turns the agent begins and the runtime contract around them', () =
     ])
   })
 
-  it('sends session/cancel with no prompt of Orca running, and _meta on every session call', async () => {
+  it('sends session/cancel with no prompt of Quirky running, and _meta on every session call', async () => {
     const { agent, runtime } = fixture()
     agent.on('session/prompt', (frame) => agent.reply(frame, { stopReason: 'end_turn' }))
     agent.on('session/set_mode', (frame) => agent.reply(frame, {}))
@@ -83,7 +83,7 @@ describe('ACP turns the agent begins and the runtime contract around them', () =
     }
   })
 
-  it("separates the agent's own errors from answers Orca could not read", async () => {
+  it("separates the agent's own errors from answers Quirky could not read", async () => {
     const { agent, runtime } = fixture()
     await runtime.start(startOptions)
     agent.on('session/set_mode', (frame) => agent.fail(frame, -32603, 'Agent broke', { why: 1 }))

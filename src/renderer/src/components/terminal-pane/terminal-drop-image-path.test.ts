@@ -43,8 +43,8 @@ describe('isImageDropPath', () => {
 
 describe('canPasteImageDropPathRaw', () => {
   it('pastes plain names raw', () => {
-    expect(canPasteImageDropPathRaw('/tmp/orca-paste-1-abc.png', 'posix')).toBe(true)
-    expect(canPasteImageDropPathRaw('C:\\Temp\\orca-paste-1-abc.png', 'windows')).toBe(true)
+    expect(canPasteImageDropPathRaw('/tmp/quirky-paste-1-abc.png', 'posix')).toBe(true)
+    expect(canPasteImageDropPathRaw('C:\\Temp\\quirky-paste-1-abc.png', 'windows')).toBe(true)
   })
 
   it('treats an ASCII space as unsafe but leaves U+202F alone', () => {

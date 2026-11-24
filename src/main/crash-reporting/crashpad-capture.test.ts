@@ -47,7 +47,7 @@ const CRASHED_AT = 1_700_000_000_000
 beforeEach(async () => {
   parseMinidumpCrashSignatureMock.mockReset()
   parseMinidumpCrashSignatureMock.mockReturnValue({ annotations: {} })
-  dumpDir = await mkdtemp(path.join(os.tmpdir(), 'orca-crashpad-'))
+  dumpDir = await mkdtemp(path.join(os.tmpdir(), 'quirky-crashpad-'))
   _setCrashpadCaptureStateForTest({ dumpDirectory: dumpDir, started: true })
 })
 

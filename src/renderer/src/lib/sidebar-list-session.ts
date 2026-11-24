@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 import { isPairedWebClientWindow } from './desktop-window-chrome'
 import { createBrowserUuid } from './browser-uuid'
 
@@ -9,7 +9,7 @@ import { createBrowserUuid } from './browser-uuid'
  */
 export function useSidebarListSession(): void {
   useEffect(() => {
-    if (!ORCA_SIDEBAR_INPUTS_IS_MAIN || isPairedWebClientWindow()) {
+    if (!QUIRKY_SIDEBAR_INPUTS_IS_MAIN || isPairedWebClientWindow()) {
       return
     }
     void window.api.runtime

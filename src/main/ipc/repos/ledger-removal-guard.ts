@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { LedgerError } from '../../../shared/ledger'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 
-export type RepoRemovalRuntime = Pick<OrcaRuntimeService, 'deleteProjectGroup' | 'removeProject'>
+export type RepoRemovalRuntime = Pick<QuirkyRuntimeService, 'deleteProjectGroup' | 'removeProject'>
 
 export const ExpectedLedgersArg = z
   .array(z.object({ ledgerId: z.string().min(1).max(256), revision: z.number().int().positive() }))

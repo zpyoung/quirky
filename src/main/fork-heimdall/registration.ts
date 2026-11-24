@@ -1,5 +1,5 @@
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import {
   bindHeimdallKernel,
   bindHeimdallTransport
@@ -13,7 +13,7 @@ import { HeimdallKernelServiceImpl, type HeimdallKernelService } from './kernel-
 import { HeimdallFleetTransport } from './fleet-transport'
 
 export function startHeimdall(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   isServeMode: boolean
 ): HeimdallKernelService {

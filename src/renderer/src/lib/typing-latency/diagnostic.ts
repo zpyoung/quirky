@@ -1,9 +1,9 @@
 /**
  * One-paste typing-latency self-diagnostic:
  *
- *   window.__orcaTypingDiagnostic.start()   // then type normally for ~20s
- *   window.__orcaTypingDiagnostic.report()  // logs + returns a JSON-safe object
- *   window.__orcaTypingDiagnostic.stop()
+ *   window.__quirkyTypingDiagnostic.start()   // then type normally for ~20s
+ *   window.__quirkyTypingDiagnostic.report()  // logs + returns a JSON-safe object
+ *   window.__quirkyTypingDiagnostic.stop()
  *
  * Why: keystroke-echo lag reproduces on one user's machine only, so the
  * measurement has to run THERE. The census answers what a user cannot: agent-row
@@ -203,7 +203,7 @@ function cacheAppVersion(): void {
 
 function startProbe(): string {
   if (active) {
-    return 'Typing diagnostic already running. Type for ~20s, then run __orcaTypingDiagnostic.report().'
+    return 'Typing diagnostic already running. Type for ~20s, then run __quirkyTypingDiagnostic.report().'
   }
   cacheAppVersion()
 
@@ -266,7 +266,7 @@ function startProbe(): string {
 
   active = state
   lastState = state
-  return `Typing diagnostic started on ${state.panes.length} pane(s). Click into the agent terminal, type normally for ~20 seconds, then run __orcaTypingDiagnostic.report().`
+  return `Typing diagnostic started on ${state.panes.length} pane(s). Click into the agent terminal, type normally for ~20 seconds, then run __quirkyTypingDiagnostic.report().`
 }
 
 function stopProbe(): string {
@@ -283,7 +283,7 @@ function stopProbe(): string {
     state.unmatchedKeystrokes += detachPaneEcho(entry)
   }
   state.panes = []
-  return 'Typing diagnostic stopped. Run __orcaTypingDiagnostic.report() to read the last samples.'
+  return 'Typing diagnostic stopped. Run __quirkyTypingDiagnostic.report() to read the last samples.'
 }
 
 function reportProbe(): TypingLatencyReport {
@@ -294,7 +294,7 @@ function reportProbe(): TypingLatencyReport {
     }
   }
   const report = buildReport(active ?? lastState, active !== null)
-  console.log('[orca] typing latency diagnostic', report)
+  console.log('[quirky] typing latency diagnostic', report)
   return report
 }
 
@@ -304,15 +304,15 @@ export type TypingDiagnosticBridge = {
   report: () => TypingLatencyReport
 }
 
-type TypingDiagnosticWindow = Window & { __orcaTypingDiagnostic?: TypingDiagnosticBridge }
+type TypingDiagnosticWindow = Window & { __quirkyTypingDiagnostic?: TypingDiagnosticBridge }
 
 export function installTypingLatencyDiagnostic(): void {
   if (typeof window === 'undefined') {
     return
   }
   const target = window as TypingDiagnosticWindow
-  if (target.__orcaTypingDiagnostic) {
+  if (target.__quirkyTypingDiagnostic) {
     return
   }
-  target.__orcaTypingDiagnostic = { start: startProbe, stop: stopProbe, report: reportProbe }
+  target.__quirkyTypingDiagnostic = { start: startProbe, stop: stopProbe, report: reportProbe }
 }

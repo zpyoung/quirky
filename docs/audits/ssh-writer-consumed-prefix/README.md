@@ -36,10 +36,10 @@ The scenarios assert FIFO order, isolation of ordinary/control counters, full-dr
 From the repository root after dependency installation:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/ssh-writer-consumed-prefix/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/ssh-writer-consumed-prefix/reproduce.cjs
 ```
 
-For Electron, run the installed Electron executable with `ELECTRON_RUN_AS_NODE=1` and `ORCA_BACKGROUND_LAUNCH=1`, passing the same flags and script path. This is a Node-mode process with no UI. The runner has a 20-second deadline.
+For Electron, run the installed Electron executable with `ELECTRON_RUN_AS_NODE=1` and `QUIRKY_BACKGROUND_LAUNCH=1`, passing the same flags and script path. This is a Node-mode process with no UI. The runner has a 20-second deadline.
 
 An optional final argument selects the report destination, for example `notes/ssh-writer-consumed-prefix/reviewer-node.json`. Without it, the runner refreshes the corresponding artifact `node-results.json` or `electron-results.json`.
 

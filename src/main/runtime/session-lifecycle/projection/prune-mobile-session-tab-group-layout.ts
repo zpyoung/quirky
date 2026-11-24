@@ -1,5 +1,5 @@
 import { selectFreshAgentRowForMobileTab } from '../../runtime-hook-agent-row-selection'
-import { OrcaRuntimeWithScheduleMobileSessionTabsChanged } from '../../session-tabs/session-tabs-change-publication'
+import { QuirkyRuntimeWithScheduleMobileSessionTabsChanged } from '../../session-tabs/session-tabs-change-publication'
 import type { TabGroupLayoutNode } from '../../../../shared/tab-types'
 import type {
   RuntimeMobileSessionSnapshotTab,
@@ -29,7 +29,7 @@ import {
   titleStructuredConversationTabs
 } from '../../structured-conversation-tab-title'
 
-export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends OrcaRuntimeWithScheduleMobileSessionTabsChanged {
+export abstract class QuirkyRuntimeWithPruneMobileSessionTabGroupLayout extends QuirkyRuntimeWithScheduleMobileSessionTabsChanged {
   protected pruneMobileSessionTabGroupLayout(
     layout: TabGroupLayoutNode | null | undefined,
     validGroupIds: ReadonlySet<string>

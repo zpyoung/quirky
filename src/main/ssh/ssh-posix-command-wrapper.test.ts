@@ -13,7 +13,7 @@ import {
 
 /** A PATH directory whose tools shadow the host's. */
 function shimDir(tools: Record<string, string>): string {
-  const bin = mkdtempSync(join(tmpdir(), 'orca-wrapper-shims-'))
+  const bin = mkdtempSync(join(tmpdir(), 'quirky-wrapper-shims-'))
   for (const [name, script] of Object.entries(tools)) {
     writeFileSync(join(bin, name), `#!/bin/sh\n${script}\n`)
     chmodSync(join(bin, name), 0o755)

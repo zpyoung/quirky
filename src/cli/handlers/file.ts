@@ -63,7 +63,7 @@ async function getFileWorktreeSelector({ flags, cwd, client }: HandlerContext): 
  */
 function toWorktreeRootPathFlavor(rootPath: string, cwd: string, path: string): string {
   // Why: WSL_DISTRO_NAME reaches this process only if interop forwards it, but the
-  // WSL launcher always sets ORCA_CLI_CWD, and its UNC form names the distro itself.
+  // WSL launcher always sets QUIRKY_CLI_CWD, and its UNC form names the distro itself.
   const distro = process.env.WSL_DISTRO_NAME || parseWslUncPath(cwd)?.distro
   if (
     !distro ||
@@ -198,8 +198,8 @@ function requireOpened(result: RuntimeFileOpenResult, target: string): void {
   if (!result.opened) {
     throw new RuntimeClientError(
       'file_not_opened',
-      `Did not open ${target}: the Orca app declined this ${result.kind} file.`,
-      { nextSteps: ['Update the Orca app, which opens every file type the File Explorer does.'] }
+      `Did not open ${target}: the Quirky app declined this ${result.kind} file.`,
+      { nextSteps: ['Update the Quirky app, which opens every file type the File Explorer does.'] }
     )
   }
 }

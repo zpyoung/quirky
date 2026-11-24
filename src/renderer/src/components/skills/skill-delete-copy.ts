@@ -11,7 +11,7 @@ export function skillDeleteBlockReasonLabel(reason: SkillDeleteBlockReason): str
     case 'bundled': {
       return translate(
         'auto.components.skills.SkillDelete.reasonBundled',
-        'Bundled with Orca — it would be restored'
+        'Bundled with Quirky — it would be restored'
       )
     }
     case 'plugin': {
@@ -23,7 +23,7 @@ export function skillDeleteBlockReasonLabel(reason: SkillDeleteBlockReason): str
     case 'unowned': {
       return translate(
         'auto.components.skills.SkillDelete.reasonUnowned',
-        'This skill lives outside Orca’s skill folders — delete it where it is stored'
+        'This skill lives outside Quirky’s skill folders — delete it where it is stored'
       )
     }
     case 'missing': {
@@ -102,7 +102,7 @@ function parentDirectory(path: string): string {
 }
 
 /**
- * A skill whose content lives outside every Orca root is removed by its links
+ * A skill whose content lives outside every Quirky root is removed by its links
  * only. Saying so is the difference between "deleted" and "gone" — the content
  * survives at its source, and the user has to be told which one happened.
  */

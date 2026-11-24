@@ -12,7 +12,7 @@ import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree
 import { closeRemoteBrowserPageInOwningEnvironment } from './browser-remote-close'
 import { releaseDocPreviewGrant } from '@/lib/doc-preview-grants'
 import { isLocalBrowserPageOwner } from './browser-host-state'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { recordLayoutApply } from '@/runtime/layout-apply-send'
 
 export function createBrowserPageConversionActions(
@@ -120,7 +120,7 @@ export function createBrowserPageConversionActions(
       }
       const workspaceAfter = findWorkspace(get().browserTabsByWorktree, newPage.workspaceId)
       // Switch point: main puts the new page in the old one's place.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN && workspaceAfter) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN && workspaceAfter) {
         recordLayoutApply(get(), workspaceAfter.worktreeId, {
           type: 'replaceBrowserPage',
           browserTabId: workspaceAfter.id,

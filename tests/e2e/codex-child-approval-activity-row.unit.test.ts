@@ -103,7 +103,7 @@ beforeEach(async () => {
   vi.clearAllMocks()
   resetStructuredAgentSessionStatusFeedsForTests()
   mocks.subscribeStatus.mockResolvedValue({ unsubscribe: mocks.unsubscribe })
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-child-approval-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-child-approval-'))
   const worktree = makeWorktree()
   store().setState({
     agentStatusByPaneKey: {},
@@ -224,7 +224,7 @@ describe("a Codex subagent's answered approval on the settled parent's Activity 
     const paneKey = (): string => Object.keys(store().getState().agentStatusByPaneKey)[0] ?? ''
 
     await host.journal.appendItem(
-      { provider: 'orca', clientMessageId: 'prompt-1' },
+      { provider: 'quirky', clientMessageId: 'prompt-1' },
       { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'fan out' }] },
       { fence: 1 }
     )

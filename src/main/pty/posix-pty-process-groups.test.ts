@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type * as NodeFs from 'node:fs'
 
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 
 const { readFileSyncMock, recordSelfInitiatedTreeKillMock, runProcessMock, runProcessSyncMock } =
   vi.hoisted(() => ({
@@ -18,7 +18,7 @@ vi.mock('node:fs', async (importOriginal) => ({
 vi.mock('../crash-reporting/self-initiated-tree-kill-log', () => ({
   recordSelfInitiatedTreeKill: recordSelfInitiatedTreeKillMock
 }))
-vi.mock('@orca/process-host', () => ({
+vi.mock('@quirky/process-host', () => ({
   runProcess: runProcessMock,
   runProcessSync: runProcessSyncMock
 }))
@@ -328,7 +328,7 @@ describe('POSIX PTY process-group termination', () => {
     expect(getPosixPtyProcessGroups(TABLE, 100, 999)).toEqual([101, 103, 100])
   })
 
-  it('refuses an unbound root or a PTY shared with Orca itself', () => {
+  it('refuses an unbound root or a PTY shared with Quirky itself', () => {
     expect(getPosixPtyProcessGroups(TABLE, 300, 999)).toBeNull()
     expect(getPosixPtyProcessGroups(TABLE, 100, 102)).toBeNull()
     expect(getPosixPtyProcessGroups(TABLE, 999, 998)).toBeNull()

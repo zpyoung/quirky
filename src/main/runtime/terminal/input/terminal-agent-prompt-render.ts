@@ -1,16 +1,16 @@
-import { OrcaRuntimeWithWriteTerminalAgentPrompt } from './terminal-agent-prompt'
+import { QuirkyRuntimeWithWriteTerminalAgentPrompt } from './terminal-agent-prompt'
 import {
   CLAUDE_AGENT_PROMPT_RENDER_MARKER,
   CLAUDE_AGENT_PROMPT_RENDER_QUIET_MS,
   CLAUDE_AGENT_PROMPT_RENDER_TIMEOUT_MS
-} from '../../orca-runtime-core'
+} from '../../quirky-runtime-core'
 import type {
   RuntimeTerminalWait,
   RuntimeTerminalWaitCondition
 } from '../../../../shared/runtime-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
-export abstract class OrcaRuntimeWithCreateAgentPromptRenderGate extends OrcaRuntimeWithWriteTerminalAgentPrompt {
+export abstract class QuirkyRuntimeWithCreateAgentPromptRenderGate extends QuirkyRuntimeWithWriteTerminalAgentPrompt {
   protected createAgentPromptRenderGate(
     ptyId: string,
     pasteIngestMs: number
@@ -141,7 +141,7 @@ export abstract class OrcaRuntimeWithCreateAgentPromptRenderGate extends OrcaRun
     }
   ): Promise<RuntimeTerminalWait> {
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
-    const starting = ORCA_LAYOUT_OWNER_IS_MAIN
+    const starting = QUIRKY_LAYOUT_OWNER_IS_MAIN
       ? this.startRestoredHandlePane(handle, options ?? {})
       : null
     if (starting) {

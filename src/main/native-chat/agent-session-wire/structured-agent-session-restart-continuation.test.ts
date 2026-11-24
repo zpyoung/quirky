@@ -112,14 +112,14 @@ it.each([
   expect(deps.note).toHaveBeenCalledExactlyOnceWith(...note)
 })
 
-// A newer Orca's refusal keeps its reason, as a reference without the wire prose.
-it('reports a newer-Orca send refusal with its reason', async () => {
+// A newer Quirky's refusal keeps its reason, as a reference without the wire prose.
+it('reports a newer-Quirky send refusal with its reason', async () => {
   const deps = dependencies('accepted')
   const refusal = {
     code: 'agent_session_journal_unreadable',
-    details: { reason: 'journalWrittenByNewerOrca' }
+    details: { reason: 'journalWrittenByNewerQuirky' }
   } as const
-  deps.send.mockResolvedValue({ ok: false, refusal: { ...refusal, message: 'Update Orca.' } })
+  deps.send.mockResolvedValue({ ok: false, refusal: { ...refusal, message: 'Update Quirky.' } })
 
   await expect(
     continueStructuredAgentSessionAfterRestart(deps, SESSION, marker(), 'operation-1')

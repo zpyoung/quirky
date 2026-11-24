@@ -29,7 +29,7 @@ import {
   waitForLaunchedAgentComposer,
   type LaunchedAgentReadinessRuntime
 } from '../../launched-agent-composer-readiness'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import {
   createLaunchedAgentWriteGuard,
   type LaunchedAgentWriteGuardRuntime
@@ -42,7 +42,7 @@ const BLOCKED_RECHECK_MS = 1_000
 
 type TerminalPromptRuntime = LaunchedAgentReadinessRuntime &
   LaunchedAgentWriteGuardRuntime &
-  Pick<OrcaRuntimeService, 'sendTerminalAgentPrompt'>
+  Pick<QuirkyRuntimeService, 'sendTerminalAgentPrompt'>
 
 type ReadinessClock = { now: () => number; sleep: (ms: number) => Promise<void> }
 

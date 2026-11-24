@@ -106,7 +106,7 @@ describe('recoverFromDegradedStartup', () => {
         abortSignal: pass.signal ?? new AbortController().signal,
         isCancelled: pass.isCancelled ?? (() => false),
         reconnectPersistedTerminals: async () => {
-          throw new Error('Could not connect to the remote Orca runtime.')
+          throw new Error('Could not connect to the remote Quirky runtime.')
         }
       })
     }
@@ -116,7 +116,7 @@ describe('recoverFromDegradedStartup', () => {
       relaunch.mockClear()
       statusListener = null
       currentTransport = 'disconnected'
-      Reflect.set(window, '__ORCA_WEB_CLIENT__', true)
+      Reflect.set(window, '__QUIRKY_WEB_CLIENT__', true)
       Object.defineProperty(window, 'api', {
         configurable: true,
         value: {
@@ -139,13 +139,13 @@ describe('recoverFromDegradedStartup', () => {
     })
 
     afterEach(() => {
-      Reflect.deleteProperty(window, '__ORCA_WEB_CLIENT__')
+      Reflect.deleteProperty(window, '__QUIRKY_WEB_CLIENT__')
     })
 
     it('says the host is unreachable and reloads once it answers', async () => {
-      await recoverFrom(new Error('Could not connect to the remote Orca runtime.'))
+      await recoverFrom(new Error('Could not connect to the remote Quirky runtime.'))
 
-      expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Couldn't reach your Orca host")
+      expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Couldn't reach your Quirky host")
       statusListener?.(snapshot('connecting'))
       expect(relaunch).not.toHaveBeenCalled()
       statusListener?.(snapshot('ready'))
@@ -154,17 +154,17 @@ describe('recoverFromDegradedStartup', () => {
     })
 
     it.each([
-      'Timed out while connecting to the remote Orca runtime.',
-      'Remote Orca runtime connection interrupted.'
+      'Timed out while connecting to the remote Quirky runtime.',
+      'Remote Quirky runtime connection interrupted.'
     ])('treats "%s" as an unreachable host', async (message) => {
       await recoverFrom(new Error(message))
 
-      expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Couldn't reach your Orca host")
+      expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Couldn't reach your Quirky host")
     })
 
     it('stops waiting to reload once its startup pass is torn down', async () => {
       const pass = new AbortController()
-      await recoverFrom(new Error('Could not connect to the remote Orca runtime.'), {
+      await recoverFrom(new Error('Could not connect to the remote Quirky runtime.'), {
         signal: pass.signal
       })
       pass.abort()
@@ -180,7 +180,7 @@ describe('recoverFromDegradedStartup', () => {
         cancelled = true
         return getStatusSnapshots()
       }
-      await recoverFrom(new Error('Could not connect to the remote Orca runtime.'), {
+      await recoverFrom(new Error('Could not connect to the remote Quirky runtime.'), {
         isCancelled: () => cancelled
       })
 
@@ -190,7 +190,7 @@ describe('recoverFromDegradedStartup', () => {
 
     it('keeps the session-restore warning when the host was connected', async () => {
       currentTransport = 'ready'
-      await recoverFrom(new Error('Timed out waiting for the remote Orca runtime.'))
+      await recoverFrom(new Error('Timed out waiting for the remote Quirky runtime.'))
 
       expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe('Session restore failed')
       expect(statusListener).toBeNull()
@@ -207,9 +207,9 @@ describe('recoverFromDegradedStartup', () => {
       await recoverFrom(refusal)
 
       const [title, options] = vi.mocked(toast.error).mock.calls[0] ?? []
-      expect(title).toBe('Orca refused this browser')
+      expect(title).toBe('Quirky refused this browser')
       expect(options?.description).toBe(refusal.message)
-      expect(refusal.message).toContain('ORCA_ALLOW_INSECURE_WEB_PAIRING=1')
+      expect(refusal.message).toContain('QUIRKY_ALLOW_INSECURE_WEB_PAIRING=1')
       expect(statusListener).toBeNull()
     })
   })

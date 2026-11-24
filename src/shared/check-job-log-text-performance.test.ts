@@ -12,13 +12,13 @@ import {
 const root = process.cwd()
 const manifest = selectRequiredDescriptors(
   createManifest({
-    capturePath: process.env.ORCA_CHECK_LOG_CAPTURE
+    capturePath: process.env.QUIRKY_CHECK_LOG_CAPTURE
   })
 ).filter((descriptor) => ['proposed', 'no-buffer', 'pinned'].includes(descriptor.arm))
 let context: Awaited<ReturnType<typeof prepareBenchmark>>
 const records: Awaited<ReturnType<typeof runDescriptor>>[] = []
-// Manual benchmark: opt in with ORCA_CHECK_LOG_PERF=1.
-const runPerformance = process.env.ORCA_CHECK_LOG_PERF === '1'
+// Manual benchmark: opt in with QUIRKY_CHECK_LOG_PERF=1.
+const runPerformance = process.env.QUIRKY_CHECK_LOG_PERF === '1'
 
 describe.runIf(runPerformance)(
   'current CI log performance regressions',

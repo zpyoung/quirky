@@ -28,13 +28,13 @@ import {
   resolveClaudeStructuredLaunchHome
 } from './claude-structured-launch-home'
 import type { StructuredAgentLaunchPartResolver } from '../runtime/structured-agent-launch-composition'
-import { claudeSessionIdForOrcaSession } from './claude-structured-session-id'
+import { claudeSessionIdForQuirkySession } from './claude-structured-session-id'
 import {
   pendingAgentSessionRewindFork,
   type AgentSessionRewindFork
 } from '../../shared/agent-session-rewind'
 
-export { claudeSessionIdForOrcaSession }
+export { claudeSessionIdForQuirkySession }
 
 export const CLAUDE_DEFAULT_SETTING_SOURCES = ['user', 'project', 'local'] as const
 export const CLAUDE_SESSION_STATE_EVENTS_ENV = 'CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS'
@@ -65,7 +65,7 @@ export type ClaudeStructuredSdkOptions = Pick<
  * `-p`, `--input-format`, `--output-format` and `--verbose` are implied by
  * `query()`; `--permission-prompt-tool stdio` is emitted because a `canUseTool`
  * callback is supplied. `--replay-user-messages` has no option — the SDK never
- * emits it — and Orca's send acknowledgement depends on the replay.
+ * emits it — and Quirky's send acknowledgement depends on the replay.
  */
 export const CLAUDE_STRUCTURED_BASE_OPTIONS: ClaudeStructuredSdkOptions = {
   includePartialMessages: true,
@@ -93,7 +93,7 @@ export function claudeStructuredPermissionOptions(
 }
 
 export type ClaudeStructuredLaunch = {
-  /** Always Orca's resolved user CLI: the SDK's bundled binaries are excluded from the install. */
+  /** Always Quirky's resolved user CLI: the SDK's bundled binaries are excluded from the install. */
   pathToClaudeCodeExecutable: string
   account?: ClaudeStructuredInvocation['account']
   options: ClaudeStructuredSdkOptions
@@ -187,7 +187,7 @@ export function claudeStructuredLaunchPart(
       ? fork.sessionId
       : head
         ? head.nativeId
-        : claudeSessionIdForOrcaSession(
+        : claudeSessionIdForQuirkySession(
             identity.sessionId,
             active.pendingClear ? record.providerContextBoundary?.operationId : undefined
           )
@@ -273,7 +273,7 @@ export function claudeStructuredLaunchPart(
             ...permission.extraArgs,
             ...thinkingDisplayArgs
           },
-          // Claude owns where a resumed conversation continues; the stored leaf is Orca's bookkeeping.
+          // Claude owns where a resumed conversation continues; the stored leaf is Quirky's bookkeeping.
           ...(resumesTranscript
             ? { resume: providerSessionId }
             : { sessionId: providerSessionId, ...(fork ? claudeRewindForkOptions(fork) : {}) })

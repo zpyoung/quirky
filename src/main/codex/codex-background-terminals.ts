@@ -99,7 +99,7 @@ async function stillRunning(
       return running
     }
   }
-  throw new Error('codex app-server listed more background terminals than Orca reads')
+  throw new Error('codex app-server listed more background terminals than Quirky reads')
 }
 
 /** Terminates each terminal, then confirms against the thread's own list. Resolves with how many

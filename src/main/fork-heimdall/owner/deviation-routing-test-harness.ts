@@ -158,7 +158,7 @@ export function baseDeps(ledgerStore: MemoryLedgerStore): TestRoutingDependencie
   vi.spyOn(actions, 'execute').mockResolvedValue(true)
   return {
     owner: {
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: OrcaRuntimeService is a large class; ensureOwnerSession/sendOwnerTurn are mocked via vi.mock, so this runtime handle is never dereferenced.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: QuirkyRuntimeService is a large class; ensureOwnerSession/sendOwnerTurn are mocked via vi.mock, so this runtime handle is never dereferenced.
       runtime: {} as never,
       resolveWorkspaceTarget: async () => ({
         kind: 'folder',

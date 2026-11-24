@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import { gitExecFileAsync, gitSpawnAfterWindowsEnvironmentReady } from './runner'
 
@@ -25,7 +25,7 @@ function sshCommand(identity: string): string {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-git-network-safety-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-git-network-safety-'))
   repo = join(root, 'repo')
   script = join(root, 'ssh wrapper.cjs')
   marker = join(root, 'ssh calls.jsonl')

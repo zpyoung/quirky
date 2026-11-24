@@ -46,7 +46,7 @@ const MOBILE_DYNAMIC_RPC_METHODS = [
   'agentSession.release'
 ]
 
-// Why: only a page built with ORCA_SIDEBAR_INPUTS=main calls these, and only such a host serves them.
+// Why: only a page built with QUIRKY_SIDEBAR_INPUTS=main calls these, and only such a host serves them.
 const MOBILE_SIDEBAR_INPUTS_RPC_METHODS = [
   'sidebarInputs.read',
   'sidebarInputs.repoIcons',
@@ -168,7 +168,7 @@ describe('mobile RPC allowlist', () => {
       expect(mobileRpcAllowlist().has(method)).toBe(false)
     }
     vi.resetModules()
-    vi.doMock('../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+    vi.doMock('../../shared/sidebar-inputs-switch', () => ({ QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true }))
     try {
       const { MOBILE_RPC_METHOD_ALLOWLIST: switchedOn } =
         await import('./runtime-rpc/runtime-rpc-mobile-method-allowlist')

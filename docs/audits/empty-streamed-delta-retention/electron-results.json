@@ -225,16 +225,16 @@
           },
           {
             "key": "two",
-            "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+            "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
             "snapshot": {
-              "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+              "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
               "observedBytes": 400,
               "truncated": true
             }
           }
         ],
         "truncated": {
-          "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+          "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
           "observedBytes": 400,
           "truncated": true
         }
@@ -427,16 +427,16 @@
           },
           {
             "key": "two",
-            "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+            "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
             "snapshot": {
-              "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+              "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
               "observedBytes": 400,
               "truncated": true
             }
           }
         ],
         "truncated": {
-          "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+          "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
           "observedBytes": 400,
           "truncated": true
         }
@@ -629,16 +629,16 @@
           },
           {
             "key": "two",
-            "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+            "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
             "snapshot": {
-              "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+              "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
               "observedBytes": 400,
               "truncated": true
             }
           }
         ],
         "truncated": {
-          "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+          "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
           "observedBytes": 400,
           "truncated": true
         }
@@ -831,16 +831,16 @@
           },
           {
             "key": "two",
-            "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+            "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
             "snapshot": {
-              "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+              "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
               "observedBytes": 400,
               "truncated": true
             }
           }
         ],
         "truncated": {
-          "text": "😀😀😀😀😀😀😀\n[Orca: streamed output truncated]",
+          "text": "😀😀😀😀😀😀😀\n[Quirky: streamed output truncated]",
           "observedBytes": 400,
           "truncated": true
         }

@@ -78,7 +78,7 @@ export async function readGeminiCredentials(): Promise<GeminiCredentials | null>
   }
 }
 
-// Why an explicit owner-only mode: the rename replaces Gemini's 0600 file, and orcad runs at the
+// Why an explicit owner-only mode: the rename replaces Gemini's 0600 file, and quirkyd runs at the
 // login umask (#31125).
 export async function saveGeminiCredentials(creds: GeminiCredentials): Promise<void> {
   writeCredentialFileAtomic(OAUTH_CREDS_PATH, Buffer.from(JSON.stringify(creds, null, 2), 'utf-8'))

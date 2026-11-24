@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { availableParallelism, totalmem } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { measurePreflightCommand } from './preflight-benchmark-command.mjs'
 import { buildCounterbalancedSchedule } from './counterbalanced-benchmark-schedule.mjs'
 import { summarizeBenchmarkSamples } from './benchmark-sample-summary.mjs'
@@ -22,7 +22,7 @@ const output = path.join(root, '.build/preflight-benchmark')
 mkdirSync(output, { recursive: true })
 const env = {
   ...process.env,
-  ORCA_BACKGROUND_LAUNCH: '1',
+  QUIRKY_BACKGROUND_LAUNCH: '1',
   GOMEMLIMIT: NATIVE_COMPILER_MEMORY_LIMIT
 }
 const report = {
@@ -124,18 +124,18 @@ try {
     const steps = [
       [process.execPath, ['config/scripts/ensure-native-runtime.mjs', '--runtime=node']],
       ['pnpm', ['run', 'build:cli']],
-      ['pnpm', ['run', 'build:orcad']],
-      [process.execPath, [baselineFile, '--target', 'orcad']]
+      ['pnpm', ['run', 'build:quirkyd']],
+      [process.execPath, [baselineFile, '--target', 'quirkyd']]
     ]
     writeFileSync(
       runnerFile,
-      `import { runProcessSync } from '@orca/process-host';
+      `import { runProcessSync } from '@quirky/process-host';
 for (const [program, args] of ${JSON.stringify(steps)}) {
   const result = runProcessSync({ program, args, cwd: ${JSON.stringify(root)}, stdio: 'inherit', timeoutMs: null });
   if (result.code !== 0 || result.signal) process.exit(result.code || 1);
 }\n`
     )
-    await command('pnpm', ['run', 'build:orcad'], 'critical-path-smoke-warmup')
+    await command('pnpm', ['run', 'build:quirkyd'], 'critical-path-smoke-warmup')
     report.parity =
       'Both clients must pass pairing, worktree, PTY and execution-host CLI round trips.'
   } else {
@@ -152,7 +152,7 @@ for (const [program, args] of ${JSON.stringify(steps)}) {
         result =
           arm === 'baseline'
             ? await command(process.execPath, [runnerFile], `smoke-${pair}-${arm}`)
-            : await command('pnpm', ['run', 'smoke:orcad-terminal'], `smoke-${pair}-${arm}`)
+            : await command('pnpm', ['run', 'smoke:quirkyd-terminal'], `smoke-${pair}-${arm}`)
         for (const marker of [
           'terminal round trip OK',
           'execution host CLI round trip OK',

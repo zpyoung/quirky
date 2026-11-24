@@ -3,7 +3,7 @@
 // published from the partition that owns it.
 
 import type { ExecutionHostId } from '../../shared/execution-host'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { loadWorkspaceLayoutWithoutReport } from '../../shared/workspace-layout/workspace-layout-load'
 import { stableJson } from '../../shared/workspace-layout/workspace-layout-load-report'
 import type {
@@ -34,7 +34,7 @@ export function runtimeLayoutLoadContext(
 ): WorkspaceLayoutLoadContext {
   const generationOf = store?.getPtyBindingGeneration
   // Switch point: a window-owned build publishes no generation.
-  return ORCA_LAYOUT_OWNER_IS_MAIN && generationOf
+  return QUIRKY_LAYOUT_OWNER_IS_MAIN && generationOf
     ? {
         ...nameBasedLoadContext(),
         ptyGenerationOf: (leafId) => generationOf.call(store, hostId, leafId)
@@ -183,7 +183,7 @@ export class WorkspaceLayoutProjection {
       return this.deps.homeHostId(key)
     } catch (error) {
       // Switch point: a window-owned build keeps failing the whole projection, as today.
-      if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (!QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         throw error
       }
       unroutable.add(key)

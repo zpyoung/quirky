@@ -10,7 +10,7 @@ export const SESSION_INFO_SECTION_IDS = [
 ] as const
 export type SessionInfoSectionId = (typeof SESSION_INFO_SECTION_IDS)[number]
 
-const STORAGE_KEY = 'orca:session-info:open-sections:v1'
+const STORAGE_KEY = 'quirky:session-info:open-sections:v1'
 const DEFAULT_OPEN_SECTIONS: SessionInfoSectionId[] = ['live']
 const SECTION_ID_SET = new Set<string>(SESSION_INFO_SECTION_IDS)
 

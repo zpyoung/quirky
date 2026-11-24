@@ -13,7 +13,7 @@ let directory: string
 let filePath: string
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-jsonl-snapshot-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-jsonl-snapshot-'))
   filePath = join(directory, 'transcript.jsonl')
   await writeFile(filePath, 'one\n')
 })

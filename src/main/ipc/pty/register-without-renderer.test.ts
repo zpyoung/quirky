@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { setupPtyIpcSuite } from '../pty-ipc-test-harness'
 import { getLocalPtyProvider } from './provider/registry'
 import { getPtyRendererDeliveryDebugSnapshot } from './delivery/debug'
@@ -31,7 +31,7 @@ vi.mock('../../pwsh', () => import('../pty-ipc-mock-registry').then((m) => m.pws
 vi.mock('../../wsl', async (importOriginal) =>
   (await import('../pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../../cli/linux-terminal-quirky-cli-shim', () =>
   import('../pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../../memory/pty-registry', () =>
@@ -59,7 +59,7 @@ describe('PTY registration without renderer delivery', () => {
   it('keeps daemon output and exits flowing to the runtime without renderer work', async () => {
     vi.useFakeTimers()
     const daemon = installObservableDaemonTestProvider()
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const setController = vi.spyOn(runtime, 'setPtyController')
     const onData = vi.spyOn(runtime, 'onPtyData').mockReturnValue(6)
     const onExit = vi.spyOn(runtime, 'onPtyExit').mockImplementation(() => {})
@@ -103,7 +103,7 @@ describe('PTY registration without renderer delivery', () => {
     const localProvider = getLocalPtyProvider()
     const localClear = vi.spyOn(localProvider, 'clearBuffer')
     const attach = vi.spyOn(localProvider, 'attach').mockResolvedValue({})
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const setController = vi.spyOn(runtime, 'setPtyController')
     const remoteId = 'ssh:ssh-a@@remote-pty'
     local.getBufferSnapshot.mockResolvedValue({
@@ -136,7 +136,7 @@ describe('PTY registration without renderer delivery', () => {
 
   it('rejects renderer input when no renderer owns the registration', async () => {
     const daemon = installObservableDaemonTestProvider()
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     setPtyOwnership('daemon-pty', 'local')
     await registerHeadlessPtyRuntime(runtime)
 
@@ -167,7 +167,7 @@ describe('PTY registration without renderer delivery', () => {
         dispose()
       }
     })
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const onData = vi.spyOn(runtime, 'onPtyData').mockReturnValue(6)
     const rendererEvents = new EventEmitter()
     mainWindow.webContents.on.mockImplementation((event, listener) =>

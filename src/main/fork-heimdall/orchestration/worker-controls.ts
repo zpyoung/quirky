@@ -5,7 +5,7 @@ import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { parseWorkerTerminalHostScope } from '../../../shared/worker-terminal-host-scope'
 import type { WatcherEnrollment } from '../../../shared/fork-heimdall/watcher-types'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../shared/protocol-version'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { OrchestrationDb, RunRow } from '../../runtime/orchestration/db'
 import { exposeUtcTimestamp } from '../../runtime/orchestration/db/utc-timestamp'
 import { OrchestrationError } from '../../runtime/orchestration/orchestration-error'
@@ -71,7 +71,7 @@ const WORKER_RELEASE_METHOD = ORCHESTRATION_WORKER_RELEASE_METHODS.find(
 )
 
 export async function listWatcherWorkers(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   enrollment: WatcherEnrollment,
   run: RunRow
 ): Promise<WatcherWorker[]> {
@@ -151,7 +151,7 @@ function watcherWorkerNavigation(
 }
 
 async function listActiveWorkerRows(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   runId: string
 ): Promise<OrchestrationWorkerListRow[]> {
   const active: OrchestrationWorkerListRow[] = []
@@ -187,7 +187,7 @@ async function listActiveWorkerRows(
 }
 
 export async function stopWatcherWorker(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   enrollment: WatcherEnrollment,
   run: RunRow,
   dispatchId: string,
@@ -267,7 +267,7 @@ export async function stopWatcherWorker(
 }
 
 export async function releaseWatcherWorker(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   enrollment: WatcherEnrollment,
   run: RunRow,
   dispatchId: string,

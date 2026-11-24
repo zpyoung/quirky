@@ -20,7 +20,7 @@ describe('cancelledShellNavigationTarget', () => {
     expect(cancelledShellNavigationTarget('javascript:alert(1)')).toBeNull()
     expect(cancelledShellNavigationTarget('data:text/html,<b>x')).toBeNull()
     expect(cancelledShellNavigationTarget('file:///etc/passwd')).toBeNull()
-    expect(cancelledShellNavigationTarget('orca-mobile-web://sess/')).toBeNull()
+    expect(cancelledShellNavigationTarget('quirky-mobile-web://sess/')).toBeNull()
   })
 
   it('opens nothing for a relative target, which is a route rather than a link out', () => {

@@ -8,7 +8,7 @@
  * Counting passes patch `Map`/`Set`/`Object.assign`/`Object.values`, which deoptimizes them, so
  * counts and timings are taken in separate passes and never from the same run.
  *
- * Run: ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.agent-status-benchmark.config.ts
+ * Run: QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.agent-status-benchmark.config.ts
  *
  * Scale mirrors the reporting user rather than the 100-worktree fixture in
  * docs/reference/renderer-agent-status-performance.md: 423 worktrees, 634 terminal tabs.
@@ -288,7 +288,7 @@ describe('agent-status hot path benchmark', () => {
     }
 
     const outputPath =
-      process.env.ORCA_AGENT_STATUS_BENCH_OUTPUT ??
+      process.env.QUIRKY_AGENT_STATUS_BENCH_OUTPUT ??
       join(tmpdir(), 'agent-status-hot-path-benchmark.json')
     writeFileSync(
       outputPath,

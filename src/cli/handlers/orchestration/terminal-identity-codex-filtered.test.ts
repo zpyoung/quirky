@@ -20,8 +20,8 @@ function refusal(): RuntimeClientError {
 describe('no_active_sender_terminal inside a Codex command', () => {
   it("names Codex's shell_environment_policy when Codex dropped the terminal identity", () => {
     vi.stubEnv('CODEX_THREAD_ID', 'thread-1')
-    vi.stubEnv('ORCA_TERMINAL_HANDLE', '')
-    vi.stubEnv('ORCA_STRUCTURED_SESSION', '')
+    vi.stubEnv('QUIRKY_TERMINAL_HANDLE', '')
+    vi.stubEnv('QUIRKY_STRUCTURED_SESSION', '')
 
     const err = refusal()
 
@@ -32,8 +32,8 @@ describe('no_active_sender_terminal inside a Codex command', () => {
 
   it('keeps the generic advice outside Codex', () => {
     vi.stubEnv('CODEX_THREAD_ID', '')
-    vi.stubEnv('ORCA_TERMINAL_HANDLE', '')
-    vi.stubEnv('ORCA_STRUCTURED_SESSION', '')
+    vi.stubEnv('QUIRKY_TERMINAL_HANDLE', '')
+    vi.stubEnv('QUIRKY_STRUCTURED_SESSION', '')
 
     const err = refusal()
 

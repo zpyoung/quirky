@@ -6,7 +6,7 @@ import type {
 } from '../../../shared/runtime-types'
 import { worktreeIdsEqual } from '../../../shared/worktree/id'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 
 /** The exact surface the execution host records as owning a live PTY. */
 export type LiveTerminalSurfaceOwner = {
@@ -128,7 +128,7 @@ export async function readWorktreeLiveTerminalSurfaceOwners(
       includeVisualLayouts: false,
       // Switch point: main shows the workspace's unshown live terminals first, so the listing
       // names main's panes for them and this sweep only reads it.
-      ...(ORCA_LAYOUT_OWNER_IS_MAIN ? { placeUnshownLiveTerminals: true } : {})
+      ...(QUIRKY_LAYOUT_OWNER_IS_MAIN ? { placeUnshownLiveTerminals: true } : {})
     }
   })
   if (!response.ok || !isScopedTerminalListResult(response.result)) {

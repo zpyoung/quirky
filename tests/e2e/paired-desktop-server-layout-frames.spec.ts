@@ -1,10 +1,10 @@
 /**
- * A switch-on desktop paired to a switch-on `orca serve` draws the server's workspace from the
+ * A switch-on desktop paired to a switch-on `quirky serve` draws the server's workspace from the
  * server's layout stream (H5b), not the session.tabs mirror: its tree equals the server's own by
  * tab and pane ids and order, its terminal panes bind the session.tabs handle, and both hold
  * through a serve restart and a layout change made on the server's side.
  *
- * Run (switch-on build: ORCA_LAYOUT_OWNER=main ... --mode e2e):
+ * Run (switch-on build: QUIRKY_LAYOUT_OWNER=main ... --mode e2e):
  *   pnpm exec playwright test tests/e2e/paired-desktop-server-layout-frames.spec.ts \
  *     --config tests/playwright.config.ts --project electron-headless --workers=2
  */
@@ -21,7 +21,7 @@ import {
 import { LAYOUT_INTENTS_RUNTIME_CAPABILITY } from '../../src/shared/workspace-layout/layout-intents-capability'
 import type { PublishedWorkspaceLayout } from '../../src/shared/workspace-layout/workspace-layout-published'
 import { readWorkspaceLayoutStreamFrame } from '../../src/shared/workspace-layout/workspace-layout-stream-frames'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   launchHeadlessPairedRuntimeHost,
   type HeadlessPairedRuntimeHost
@@ -44,7 +44,7 @@ import {
 } from './helpers/paired-desktop-server-terminal-tab'
 
 const LAYOUT_OWNER_BUILD = existsSync(
-  path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')
+  path.join(process.cwd(), 'out', 'main', 'QUIRKY_LAYOUT_OWNER_MAIN')
 )
 
 /** Groups in order, each tab in tab order with its pane ids in tree order. */
@@ -236,7 +236,7 @@ async function readPaneText(page: Page, webTabId: string, leafId: string): Promi
 }
 
 test.describe('paired desktop draws a switch-on server from its layout frames', () => {
-  test.skip(!LAYOUT_OWNER_BUILD, 'Needs a layout-owner build (ORCA_LAYOUT_OWNER=main)')
+  test.skip(!LAYOUT_OWNER_BUILD, 'Needs a layout-owner build (QUIRKY_LAYOUT_OWNER=main)')
 
   test('frames draw the server workspace; handles attach; restart and server changes keep it', async ({
     testRepoPath

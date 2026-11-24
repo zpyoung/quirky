@@ -26,8 +26,11 @@ describe('live-remote-bulk-open-freeze-metrics', () => {
 
   it('builds worktree selectors from id/path', () => {
     expect(
-      worktreeSelector({ id: 'repo::C:/Users/neil/orca/orca', path: 'C:/Users/neil/orca/orca' })
-    ).toBe('id:repo::C:/Users/neil/orca/orca')
+      worktreeSelector({
+        id: 'repo::C:/Users/neil/quirky/quirky',
+        path: 'C:/Users/neil/quirky/quirky'
+      })
+    ).toBe('id:repo::C:/Users/neil/quirky/quirky')
     expect(worktreeSelector({ path: '/tmp/x' })).toBe('path:/tmp/x')
     expect(worktreeSelector({})).toBeNull()
   })
@@ -145,12 +148,12 @@ describe('live-remote-bulk-open-freeze-metrics', () => {
   })
 
   it('rejects invalid numeric environment values', () => {
-    process.env.ORCA_FREEZE_TEST_NUMBER = 'not-a-number'
-    expect(() => readFreezeNumberEnv('ORCA_FREEZE_TEST_NUMBER', 5)).toThrow(
-      'Invalid ORCA_FREEZE_TEST_NUMBER'
+    process.env.QUIRKY_FREEZE_TEST_NUMBER = 'not-a-number'
+    expect(() => readFreezeNumberEnv('QUIRKY_FREEZE_TEST_NUMBER', 5)).toThrow(
+      'Invalid QUIRKY_FREEZE_TEST_NUMBER'
     )
-    delete process.env.ORCA_FREEZE_TEST_NUMBER
-    expect(readFreezeNumberEnv('ORCA_FREEZE_TEST_NUMBER', 5)).toBe(5)
+    delete process.env.QUIRKY_FREEZE_TEST_NUMBER
+    expect(readFreezeNumberEnv('QUIRKY_FREEZE_TEST_NUMBER', 5)).toBe(5)
   })
 
   it('distinguishes recovered hard stall from permanent lockup', () => {

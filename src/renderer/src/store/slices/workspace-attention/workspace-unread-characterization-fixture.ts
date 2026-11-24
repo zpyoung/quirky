@@ -98,7 +98,7 @@ export function installAttentionScreen(
 
 export function createAttentionStore(options?: {
   experimental?: boolean
-  /** Orca's window starts visible and focused unless false. */
+  /** Quirky's window starts visible and focused unless false. */
   windowOnScreen?: boolean
   desktopAway?: boolean | (() => boolean)
 }): {

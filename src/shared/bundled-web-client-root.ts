@@ -6,7 +6,7 @@ export const WEB_CLIENT_INDEX_FILENAME = 'web-index.html'
 
 /**
  * The browser client a paired server serves, found beside an app root. Shared so Electron
- * `--serve` and the CLI handing orcad its root look in the same places.
+ * `--serve` and the CLI handing quirkyd its root look in the same places.
  */
 export function findBundledWebClientRoot(appPath: string): string | undefined {
   const roots = [

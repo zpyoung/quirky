@@ -10,8 +10,8 @@ import {
   sweepExpiredOwnedDirectories
 } from './owned-temp-staging-root'
 
-const REMOTE_CLIPBOARD_STAGING_ROOT_NAME = 'orca-clipboard-files'
-const REMOTE_CLIPBOARD_LEGACY_PREFIX = 'orca-clipboard-file-'
+const REMOTE_CLIPBOARD_STAGING_ROOT_NAME = 'quirky-clipboard-files'
+const REMOTE_CLIPBOARD_LEGACY_PREFIX = 'quirky-clipboard-file-'
 const REMOTE_CLIPBOARD_MIGRATION_MARKER = '.legacy-cleanup-complete'
 const REMOTE_CLIPBOARD_FILE_TTL_MS = 60 * 60 * 1000
 const REMOTE_CLIPBOARD_CLEANUP_RETRY_MS = 60 * 1000

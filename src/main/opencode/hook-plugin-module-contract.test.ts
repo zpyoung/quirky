@@ -28,18 +28,18 @@ describe('OpenCode status plugin module contract', () => {
       server?: (ctx: unknown) => Promise<PluginHooks>
       setup?: (ctx: unknown) => Promise<() => Promise<void>>
     }
-    OrcaOpenCodeStatusPlugin?: (ctx: unknown) => Promise<PluginHooks>
+    QuirkyOpenCodeStatusPlugin?: (ctx: unknown) => Promise<PluginHooks>
   }
 
   // Why: the plugin resolves hook coords from the endpoint file first and only then from
-  // env. Pin every input here so the run does not depend on the developer's Orca session
-  // (an inherited ORCA_AGENT_HOOK_ENDPOINT would otherwise redirect the post to a live app).
+  // env. Pin every input here so the run does not depend on the developer's Quirky session
+  // (an inherited QUIRKY_AGENT_HOOK_ENDPOINT would otherwise redirect the post to a live app).
   const ENV_KEYS = [
-    'ORCA_OPENCODE_PLUGIN_API',
-    'ORCA_PANE_KEY',
-    'ORCA_AGENT_HOOK_ENDPOINT',
-    'ORCA_AGENT_HOOK_PORT',
-    'ORCA_AGENT_HOOK_TOKEN'
+    'QUIRKY_OPENCODE_PLUGIN_API',
+    'QUIRKY_PANE_KEY',
+    'QUIRKY_AGENT_HOOK_ENDPOINT',
+    'QUIRKY_AGENT_HOOK_PORT',
+    'QUIRKY_AGENT_HOOK_TOKEN'
   ] as const
 
   let tempDir: string
@@ -47,20 +47,20 @@ describe('OpenCode status plugin module contract', () => {
   let savedEnv: Record<string, string | undefined>
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'orca-opencode-plugin-contract-'))
+    tempDir = mkdtempSync(join(tmpdir(), 'quirky-opencode-plugin-contract-'))
     savedFetch = globalThis.fetch
     savedEnv = {}
     for (const key of ENV_KEYS) {
       savedEnv[key] = process.env[key]
     }
     // Why: the generated plugin self-disables when this names a different major,
-    // so an inherited value from the developer's own Orca pane would leave
+    // so an inherited value from the developer's own Quirky pane would leave
     // `hooks.event` undefined and fail the contract for the wrong reason.
-    delete process.env.ORCA_OPENCODE_PLUGIN_API
-    delete process.env.ORCA_OPENCODE_AGENT
-    delete process.env.ORCA_AGENT_HOOK_ENDPOINT
-    process.env.ORCA_AGENT_HOOK_PORT = '59999'
-    process.env.ORCA_AGENT_HOOK_TOKEN = 'test-token'
+    delete process.env.QUIRKY_OPENCODE_PLUGIN_API
+    delete process.env.QUIRKY_OPENCODE_AGENT
+    delete process.env.QUIRKY_AGENT_HOOK_ENDPOINT
+    process.env.QUIRKY_AGENT_HOOK_PORT = '59999'
+    process.env.QUIRKY_AGENT_HOOK_TOKEN = 'test-token'
   })
 
   afterEach(() => {
@@ -81,7 +81,7 @@ describe('OpenCode status plugin module contract', () => {
     // Why: a unique basename per load defeats the ESM module cache between cases.
     const pluginPath = join(
       tempDir,
-      `orca-opencode-status-${Math.random().toString(36).slice(2)}.mjs`
+      `quirky-opencode-status-${Math.random().toString(36).slice(2)}.mjs`
     )
     writeFileSync(pluginPath, source)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
@@ -89,10 +89,10 @@ describe('OpenCode status plugin module contract', () => {
   }
 
   it('selects the same factory for a v1 execution host', async () => {
-    process.env.ORCA_OPENCODE_PLUGIN_API = 'v1'
+    process.env.QUIRKY_OPENCODE_PLUGIN_API = 'v1'
     const module = await loadPluginModule()
     expect(module.default).toBeTypeOf('function')
-    expect(module.default).toBe(module.OrcaOpenCodeStatusPlugin)
+    expect(module.default).toBe(module.QuirkyOpenCodeStatusPlugin)
   })
 
   it('exposes a default export carrying a string id and a callable server()', async () => {
@@ -100,28 +100,28 @@ describe('OpenCode status plugin module contract', () => {
 
     expect(module.default).toBeTypeOf('object')
     expect(typeof module.default?.id).toBe('string')
-    expect(module.default?.id).toBe('orca-opencode-status')
+    expect(module.default?.id).toBe('quirky-opencode-status')
     expect(module.default?.server).toBeTypeOf('function')
   })
 
   it('keeps the named factory export so the factory-based loader still resolves', async () => {
     const module = await loadPluginModule()
 
-    expect(module.OrcaOpenCodeStatusPlugin).toBeTypeOf('function')
+    expect(module.QuirkyOpenCodeStatusPlugin).toBeTypeOf('function')
   })
 
   it('returns an event handler from the default export server(), like the named factory', async () => {
     const module = await loadPluginModule()
 
     const fromDefault = await module.default?.server?.({})
-    const fromNamed = await module.OrcaOpenCodeStatusPlugin?.({})
+    const fromNamed = await module.QuirkyOpenCodeStatusPlugin?.({})
 
     expect(fromDefault?.event).toBeTypeOf('function')
     expect(fromNamed?.event).toBeTypeOf('function')
   })
 
   it('reports a session lifecycle event through the hook endpoint when driven via the default export', async () => {
-    process.env.ORCA_PANE_KEY = 'tab-1:leaf-1'
+    process.env.QUIRKY_PANE_KEY = 'tab-1:leaf-1'
     const posts: { url: string; body: unknown }[] = []
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The mocked fetch is assigned to the standard Fetch API shape.
     globalThis.fetch = vi.fn(async (input: unknown, init?: { body?: unknown }) => {
@@ -160,7 +160,7 @@ describe('OpenCode status plugin module contract', () => {
   })
 
   it('keeps OpenCode 2 busy across steps until the session becomes idle', async () => {
-    process.env.ORCA_PANE_KEY = 'tab-1:leaf-1'
+    process.env.QUIRKY_PANE_KEY = 'tab-1:leaf-1'
     const posts: { body: Record<string, unknown> }[] = []
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The mocked fetch is assigned to the standard Fetch API shape.
     globalThis.fetch = vi.fn(async (_input: unknown, init?: { body?: unknown }) => {
@@ -207,7 +207,7 @@ describe('OpenCode status plugin module contract', () => {
   })
 
   it('maps OpenCode 2 permission.v2 events to the existing permission card contract', async () => {
-    process.env.ORCA_PANE_KEY = 'tab-1:leaf-1'
+    process.env.QUIRKY_PANE_KEY = 'tab-1:leaf-1'
     const posts: { body: Record<string, unknown> }[] = []
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The mocked fetch is assigned to the standard Fetch API shape.
     globalThis.fetch = vi.fn(async (_input: unknown, init?: { body?: unknown }) => {
@@ -260,7 +260,7 @@ describe('OpenCode status plugin module contract', () => {
   })
 
   it('forwards admitted prompts and completed streamed text once', async () => {
-    process.env.ORCA_PANE_KEY = 'tab-1:leaf-1'
+    process.env.QUIRKY_PANE_KEY = 'tab-1:leaf-1'
     const posts: { body: Record<string, unknown> }[] = []
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The mocked fetch is assigned to the standard Fetch API shape.
     globalThis.fetch = vi.fn(async (_input: unknown, init?: { body?: unknown }) => {
@@ -310,7 +310,7 @@ describe('OpenCode status plugin module contract', () => {
   })
 
   it('maps question.v2 blockers and replies through the waiting lifecycle', async () => {
-    process.env.ORCA_PANE_KEY = 'tab-1:leaf-1'
+    process.env.QUIRKY_PANE_KEY = 'tab-1:leaf-1'
     const posts: { body: Record<string, unknown> }[] = []
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The mocked fetch is assigned to the standard Fetch API shape.
     globalThis.fetch = vi.fn(async (_input: unknown, init?: { body?: unknown }) => {

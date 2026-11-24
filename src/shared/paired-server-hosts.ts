@@ -2,8 +2,8 @@ import { parseExecutionHostId, type ExecutionHostId } from './execution-host'
 import { buildExecutionHostRegistry, type ExecutionHostHealth } from './execution-host-registry'
 import {
   pickerExecutionHosts,
-  type ManagedOrcadDeploymentSummary
-} from './managed-orcad-execution-host'
+  type ManagedQuirkydDeploymentSummary
+} from './managed-quirkyd-execution-host'
 import type { RuntimeCompatVerdict } from './protocol-compat'
 import type { RuntimeEnvironmentSource } from './runtime-environments'
 import type { RuntimeEnvironmentStatus } from './runtime-host-status'
@@ -15,7 +15,7 @@ export type PairedServerHostInputs = {
     id: string
     name?: string | null
     source?: RuntimeEnvironmentSource
-    orcadDeployment?: ManagedOrcadDeploymentSummary | null
+    quirkydDeployment?: ManagedQuirkydDeploymentSummary | null
     pairedDeviceId?: string
   }[]
   statusByEnvironmentId: ReadonlyMap<string, RuntimeEnvironmentStatus>

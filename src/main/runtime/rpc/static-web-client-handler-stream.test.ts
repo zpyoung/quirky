@@ -53,7 +53,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 let root: string
 const servers: Server[] = []
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-static-web-stream-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-static-web-stream-'))
   mkdirSync(join(root, 'assets'))
   writeFileSync(join(root, 'assets', 'fixture.js'), Buffer.alloc(1024 * 1024, 1))
   writeFileSync(join(root, 'web-index.html'), '<html>web</html>')

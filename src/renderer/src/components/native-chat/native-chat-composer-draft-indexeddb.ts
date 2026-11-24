@@ -6,7 +6,7 @@ import type {
   StoredNativeChatComposerDraft
 } from './native-chat-composer-draft-storage'
 
-const DATABASE_NAME = 'orca-native-chat-composer-drafts'
+const DATABASE_NAME = 'quirky-native-chat-composer-drafts'
 const DATABASE_VERSION = 1
 const DRAFTS = 'drafts'
 
@@ -40,7 +40,7 @@ export function createIndexedDbNativeChatComposerDraftStorage(
       }
       request.onsuccess = () => {
         const db = request.result
-        // Why: a newer Orca upgrading the database, or the browser closing it, must not leave
+        // Why: a newer Quirky upgrading the database, or the browser closing it, must not leave
         // every later write failing against a dead connection.
         db.onversionchange = () => db.close()
         db.onclose = () => {

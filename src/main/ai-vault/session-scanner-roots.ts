@@ -12,7 +12,7 @@ import { resolveOmpSessionsDir } from './omp-session-root'
 /** Where each transcript agent's session tree sits under a home dir (host or WSL guest). */
 export const AGENT_SESSION_HOME_SEGMENTS = {
   claude: [['.claude', 'projects']],
-  // Orca's retired WSL CODEX_HOME first: Orca-launched sessions were filed there.
+  // Quirky's retired WSL CODEX_HOME first: Quirky-launched sessions were filed there.
   codex: [
     [...WSL_CODEX_RUNTIME_HOME_SEGMENTS, 'sessions'],
     ['.codex', 'sessions']

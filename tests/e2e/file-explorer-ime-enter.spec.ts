@@ -1,7 +1,7 @@
 import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 
 test.use({ seedTestRepo: false })
 
@@ -11,10 +11,10 @@ const cases = (['New File', 'New Folder', 'Rename'] as const).flatMap((operation
 
 for (const { operation, redispatch } of cases) {
   test(`IME confirmation keeps File Explorer ${operation} open (${redispatch ? 'redispatch' : 'continued typing'})`, async ({
-    orcaPage: page,
+    quirkyPage: page,
     registerPostElectronShutdownCleanup
   }) => {
-    const folder = await mkdtemp(path.join(os.tmpdir(), 'orca-ime-names-'))
+    const folder = await mkdtemp(path.join(os.tmpdir(), 'quirky-ime-names-'))
     registerPostElectronShutdownCleanup(() => rm(folder, { recursive: true, force: true }))
     await writeFile(path.join(folder, 'original.md'), 'Keep this content\n')
     await page.evaluate(async (folder) => {
@@ -24,7 +24,7 @@ for (const { operation, redispatch } of cases) {
       .getByRole('option')
       .filter({ hasText: path.basename(folder) })
       .click()
-    const explorer = page.locator('[data-orca-explorer-shell]')
+    const explorer = page.locator('[data-quirky-explorer-shell]')
     await explorer
       .getByRole('button', { name: 'original.md', exact: true })
       .click({ button: 'right' })

@@ -28,7 +28,7 @@ export const MOBILE_WEB_PAGE_ROUTES = [
   // The worktree list. `navigate` because every row opens a session screen that is still native.
   // `storage` because its pins and its last-visited repo are the app's, not the document's.
   // `externalLink` for the one opener the census finds in this closure: `app/h/_layout.tsx` wraps
-  // every `/h` route in `HostProtocolGate`, so without the grant the wall's Update Orca tap posts a
+  // every `/h` route in `HostProtocolGate`, so without the grant the wall's Update Quirky tap posts a
   // notify the shell refuses, with nothing on screen to say why.
   // `canOwnHostArea`: on wide layouts it draws the sidebar itself, given `ownsHostArea` in `init`.
   {

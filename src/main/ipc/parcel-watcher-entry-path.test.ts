@@ -26,12 +26,12 @@ describe('resolveWatcherProcessEntryPath', () => {
   })
 
   it('uses the unpacked nested entry for packaged apps', () => {
-    const appPath = path.join('C:', 'Orca', 'resources', 'app.asar')
+    const appPath = path.join('C:', 'Quirky', 'resources', 'app.asar')
 
     expect(resolveWatcherProcessEntryPath(appPath, true, () => true)).toBe(
       path.join(
         'C:',
-        'Orca',
+        'Quirky',
         'resources',
         'app.asar.unpacked',
         'out',
@@ -42,26 +42,26 @@ describe('resolveWatcherProcessEntryPath', () => {
   })
 
   it('uses the adjacent entry for a packaged host whose app root is not an asar', () => {
-    // orcad: a packaged Node bundle that ships this child beside orcad.js. Gating the
+    // quirkyd: a packaged Node bundle that ships this child beside quirkyd.js. Gating the
     // adjacent probe on isPackaged sent it to a desktop out/main that never exists here.
-    const orcadRoot = path.join(path.sep, 'opt', 'orca')
-    const adjacentEntry = path.join(orcadRoot, 'parcel-watcher-process-entry.js')
+    const quirkydRoot = path.join(path.sep, 'opt', 'quirky')
+    const adjacentEntry = path.join(quirkydRoot, 'parcel-watcher-process-entry.js')
 
     expect(
-      resolveWatcherProcessEntryPath(orcadRoot, true, (candidate) => candidate === adjacentEntry)
+      resolveWatcherProcessEntryPath(quirkydRoot, true, (candidate) => candidate === adjacentEntry)
     ).toBe(adjacentEntry)
   })
 
   it('falls back to the nested entry when a non-asar packaged host ships no adjacent child', () => {
-    const orcadRoot = path.join(path.sep, 'opt', 'orca')
+    const quirkydRoot = path.join(path.sep, 'opt', 'quirky')
 
-    expect(resolveWatcherProcessEntryPath(orcadRoot, true, () => false)).toBe(
-      path.join(orcadRoot, 'out', 'main', 'parcel-watcher-process-entry.js')
+    expect(resolveWatcherProcessEntryPath(quirkydRoot, true, () => false)).toBe(
+      path.join(quirkydRoot, 'out', 'main', 'parcel-watcher-process-entry.js')
     )
   })
 
   it('uses resourcesPath for packaged Electron-as-Node serve processes', () => {
-    const resourcesPath = path.join('Applications', 'Orca.app', 'Contents', 'Resources')
+    const resourcesPath = path.join('Applications', 'Quirky.app', 'Contents', 'Resources')
     const packagedEntry = path.join(
       resourcesPath,
       'app.asar.unpacked',
@@ -80,7 +80,7 @@ describe('resolveWatcherProcessEntryPath', () => {
   })
 
   it('keeps the cwd build fallback when resourcesPath has no packaged entry', () => {
-    const appRoot = path.join('workspace', 'orca')
+    const appRoot = path.join('workspace', 'quirky')
 
     expect(
       resolveWatcherProcessEntryPathWithoutApp(

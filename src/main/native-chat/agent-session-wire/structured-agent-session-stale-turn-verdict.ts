@@ -2,7 +2,7 @@
 //
 // `interrupted` requires proof that the turn is over: death evidence naming that turn's owner by
 // fence (a watched exit, or a local probe that found the recorded pid gone or reused), or the
-// replacement of the Orca runtime that held the owner's pipes, which this host proves by holding its
+// replacement of the Quirky runtime that held the owner's pipes, which this host proves by holding its
 // lock. A release nothing proved within one runtime (an unverifiable identity, a stop that outlived
 // the ladder) carries none, and neither does a later owner's death; the turn is then `unverifiable`
 // with no end at all, until a proof naming its owner is written and revises it.
@@ -56,7 +56,7 @@ export function turnVerdictFromDeathEvidence(
     return interruptedTurnVerdict(evidence.observedAt)
   }
   // A probe finds a dead child long after it died; its last renewal bounds the end, so the turn never
-  // counts the time Orca was down. Saved provider output and a Stop that found the turn running can
+  // counts the time Quirky was down. Saved provider output and a Stop that found the turn running can
   // prove life after that renewal; a client's later send or a recovery write cannot.
   const lastAlive = Math.max(evidence.lastProvenAliveAt ?? evidence.observedAt, liveAt ?? 0)
   return interruptedTurnVerdict(Math.min(lastAlive, evidence.observedAt))

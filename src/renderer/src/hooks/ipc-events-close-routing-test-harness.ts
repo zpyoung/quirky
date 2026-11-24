@@ -270,7 +270,7 @@ export async function useIpcEventsForCloseRouting({
       },
       browser: {
         onGuestLoadFailed: () => () => {},
-        onOpenLinkInOrcaTab: () => () => {},
+        onOpenLinkInQuirkyTab: () => () => {},
         onNavigationUpdate: () => () => {},
         onActivateView: () => () => {},
         onPaneFocus: () => () => {}

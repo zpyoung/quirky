@@ -1,6 +1,6 @@
 import type { AgentStartupShell } from '../../shared/tui-agent-startup-shell'
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { resolveConfiguredWorkerAgent } from './orchestration/configured-worker-agent-selector'
 
 export function registerOrchestrationConfiguredAgentTargetTests(): void {
@@ -25,7 +25,7 @@ export function registerOrchestrationConfiguredAgentTargetTests(): void {
         )
       }
       const result =
-        await OrcaRuntimeService.prototype.resolveOrchestrationAgentLauncherForTarget.call(
+        await QuirkyRuntimeService.prototype.resolveOrchestrationAgentLauncherForTarget.call(
           context,
           'opencode-private',
           { worktree: 'id:workspace' }
@@ -44,7 +44,7 @@ export function registerOrchestrationConfiguredAgentTargetTests(): void {
     it('keeps canonical selectors authoritative without probing another host', async () => {
       const resolve = vi.fn()
       expect(
-        await OrcaRuntimeService.prototype.resolveOrchestrationAgentLauncherForTarget.call(
+        await QuirkyRuntimeService.prototype.resolveOrchestrationAgentLauncherForTarget.call(
           { resolveTerminalWorkspaceLaunchScope: resolve },
           'opencode',
           { worktree: 'id:remote' }
@@ -73,7 +73,7 @@ export function registerOrchestrationConfiguredAgentTargetTests(): void {
       )
     }
     expect(
-      await OrcaRuntimeService.prototype.resolveOrchestrationAgentLauncherForTarget.call(
+      await QuirkyRuntimeService.prototype.resolveOrchestrationAgentLauncherForTarget.call(
         context,
         'opencode-private',
         { worktree: 'id:workspace' }

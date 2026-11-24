@@ -17,7 +17,7 @@ let canonical: string
 let linked: string
 
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), 'orca-claude-keychain-alias-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-claude-keychain-alias-'))
   canonical = join(directory, 'canonical')
   linked = join(directory, 'linked')
   mkdirSync(canonical)

@@ -9,7 +9,7 @@ import {
 } from './release-checkout'
 
 /**
- * The web client marks its WebSocket upgrade with `?orca-client=web`. Released hosts and this host
+ * The web client marks its WebSocket upgrade with `?quirky-client=web`. Released hosts and this host
  * must both accept the marked upgrade from a plain-http LAN page, as they accept a phone's.
  */
 const SUITE_TIMEOUT_MS = 180_000

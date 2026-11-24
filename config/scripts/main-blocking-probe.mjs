@@ -1,5 +1,5 @@
 export function installMainBlockingProbe() {
-  if (globalThis.__orcaMainBlockingProbe) {
+  if (globalThis.__quirkyMainBlockingProbe) {
     throw new Error('Main blocking probe already exists')
   }
   const events = []
@@ -56,13 +56,13 @@ export function installMainBlockingProbe() {
     }
   }, 25)
   timer.unref()
-  globalThis.__orcaMainBlockingProbe = {
+  globalThis.__quirkyMainBlockingProbe = {
     stop() {
       clearInterval(timer)
       for (const restore of cleanup.toReversed()) {
         restore()
       }
-      delete globalThis.__orcaMainBlockingProbe
+      delete globalThis.__quirkyMainBlockingProbe
       return { startedAt, endedAt: Date.now(), events, timerGaps }
     }
   }
@@ -70,7 +70,7 @@ export function installMainBlockingProbe() {
 }
 
 export function installRendererIpcProbe() {
-  if (window.__orcaIpcTimingProbe) {
+  if (window.__quirkyIpcTimingProbe) {
     throw new Error('Renderer IPC probe already exists')
   }
   const requests = []
@@ -108,12 +108,12 @@ export function installRendererIpcProbe() {
     }
   }
   document.addEventListener('keydown', keydown, true)
-  window.__orcaIpcTimingProbe = {
+  window.__quirkyIpcTimingProbe = {
     stop() {
       stopped = true
       clearInterval(timer)
       document.removeEventListener('keydown', keydown, true)
-      delete window.__orcaIpcTimingProbe
+      delete window.__quirkyIpcTimingProbe
       return { requests, keys }
     }
   }

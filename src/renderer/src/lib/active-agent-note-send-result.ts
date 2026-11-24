@@ -78,8 +78,8 @@ export function activeAgentNotesSendFailureMessage(
       break
     case 'partial-submit-failed':
       message = options.explicitTarget
-        ? 'The notes may already be pasted in the selected terminal, but Orca could not submit them.'
-        : 'The notes may already be pasted in the active terminal, but Orca could not submit them.'
+        ? 'The notes may already be pasted in the selected terminal, but Quirky could not submit them.'
+        : 'The notes may already be pasted in the active terminal, but Quirky could not submit them.'
       break
     case 'unconfirmed':
       message = agentSessionWriteNoticeEnglish(['sendOutcomeLost'])

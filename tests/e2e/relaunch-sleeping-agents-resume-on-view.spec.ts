@@ -1,7 +1,7 @@
 /**
  * After a relaunch, a workspace's sleeping agents resume only when the user can see them.
  *
- * Every agent's PTY dies while Orca is closed (the daemon is killed, as a reboot would), so each
+ * Every agent's PTY dies while Quirky is closed (the daemon is killed, as a reboot would), so each
  * agent tab holds a resumable record and no live session. Opening the workspace must resume the
  * agents in the panes on screen; every other tab resumes when the user switches to it, and a
  * phone opening the workspace still wakes them immediately.
@@ -13,7 +13,7 @@
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 import { mutateStoppedProfileState } from './helpers/persisted-profile-state'
 import {
@@ -22,7 +22,7 @@ import {
   waitForPaneCount
 } from './helpers/terminal'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import { createHostRendererTerminalTab } from './helpers/host-created-terminal-retention-oracle'
 import { PROTOCOL_VERSION } from '../../src/main/daemon/types'
 
@@ -51,7 +51,7 @@ function writeFakeAgent(dir: string): { command: string; log: string } {
   writeFileSync(log, '')
   writeFileSync(
     command,
-    `#!/bin/sh\nprintf '%s\\n' "$ORCA_PANE_KEY" >> '${log}'\nexec sleep 3600\n`
+    `#!/bin/sh\nprintf '%s\\n' "$QUIRKY_PANE_KEY" >> '${log}'\nexec sleep 3600\n`
   )
   chmodSync(command, 0o755)
   return { command, log }
@@ -236,7 +236,7 @@ async function relaunchWithSleepingAgents(
     await session.close(firstApp)
     firstApp = null
     pointRecordsAtFakeAgent(session.userDataDir, fakeAgent.command, panes.length)
-    // Why: every agent dies with the daemon while Orca is closed, as on a reboot.
+    // Why: every agent dies with the daemon while Quirky is closed, as on a reboot.
     process.kill(daemonPid, 'SIGKILL')
 
     const secondLaunch = await session.launch()

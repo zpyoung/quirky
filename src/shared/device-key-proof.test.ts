@@ -21,7 +21,7 @@ function proof(purpose: 'auth' | 'register', transcript = hash): string {
 describe('device key proof', () => {
   it('domain-separates the purpose and binds the transcript', () => {
     const message = new TextDecoder().decode(encodeDeviceProofMessage('auth', hash).slice(0, 26))
-    expect(message).toBe('orca-device-proof/v1\0auth\0')
+    expect(message).toBe('quirky-device-proof/v1\0auth\0')
     expect(
       verifyDeviceProof({
         devicePublicKeyB64,

@@ -13,7 +13,7 @@ export function reconcileStartupManagedAgentHooks(host: {
   shouldHydrateShellPath: boolean
 }): void {
   // Why skip rather than remove when the off switch is set: the hook files are user-global but this
-  // decision reads only THIS profile's settings, so removing here deletes the hooks every other Orca
+  // decision reads only THIS profile's settings, so removing here deletes the hooks every other Quirky
   // instance depends on (STA-5679). Skipping already keeps removed hooks from reappearing on launch.
   if (resolveStartupManagedHookAction(host.getSettings()) !== 'install') {
     return

@@ -24,7 +24,7 @@ let processIdentityModulePath: string
 let exceptionModulePath: string
 
 beforeAll(async () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-wire-identity-modules-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-wire-identity-modules-'))
   fixtureRoots.push(root)
   processIdentityModulePath = join(root, 'browser-process-user-agent.cjs')
   exceptionModulePath = join(root, 'browser-session-ua.cjs')
@@ -191,7 +191,7 @@ describe('browser session wire identity under Electron', () => {
 })
 
 async function runProbe(arm: ProbeArm): Promise<ProbeResult> {
-  const root = mkdtempSync(join(tmpdir(), `orca-wire-identity-${arm}-`))
+  const root = mkdtempSync(join(tmpdir(), `quirky-wire-identity-${arm}-`))
   fixtureRoots.push(root)
   const server = await startBrowserSessionUaWireProbeServer()
   const resultPath = join(root, 'result.json')
@@ -289,7 +289,7 @@ function launchFixture(fixturePath: string, root: string, cdpPort: number): Chil
           `--remote-debugging-port=${cdpPort}`
         ],
     {
-      env: { ...env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       stdio: ['ignore', 'pipe', 'pipe']
     }
   )
@@ -310,7 +310,7 @@ const processIdentity = require(${JSON.stringify(options.processIdentityModulePa
 const { cleanElectronUserAgent } = require(${JSON.stringify(options.exceptionModulePath)})
 const arm = ${JSON.stringify(options.arm)}
 const startupMarks = []
-app.setName('OrcaWireIdentityFixture')
+app.setName('QuirkyWireIdentityFixture')
 const preReadyNativeUserAgent = app.userAgentFallback
 let identity
 if (arm !== 'late-session-setter') {
@@ -334,7 +334,7 @@ async function run() {
   const timeout = setTimeout(() => { writeFileSync(${JSON.stringify(options.resultPath)}, JSON.stringify({ error: 'timeout', startupMarks })); app.exit(2) }, 10000)
   await app.whenReady()
   startupMarks.push('ready')
-  app.setName('OrcaWireIdentityFixtureAfterReady')
+  app.setName('QuirkyWireIdentityFixtureAfterReady')
   const fallbackAfterReadyNameChange = app.userAgentFallback
   await waitForBarrier()
   const sess = session.fromPartition('persist:wire-identity-test')

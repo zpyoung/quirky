@@ -5,7 +5,7 @@
 // only; layout-owner builds only.
 
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type { StoreRuntimeState } from './store-runtime-state'
 
 type GenerationRuntime = Pick<StoreRuntimeState, 'ptyBindingGenerations'>
@@ -18,7 +18,7 @@ export function bumpPtyBindingGeneration(
   leafId: string
 ): void {
   // Switch point: a window-owned build publishes no generation, so it counts none.
-  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (!QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     return
   }
   const key = generationKey(hostId, leafId)

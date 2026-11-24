@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { parse } from 'yaml'
 import { describe, expect, it } from 'vitest'
 import { classifyPrJobs } from './pr-code-change-scope.mjs'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 
 const installerPath = '.github/actions/install-node-dependencies/action.yml'
 const nativePath = '.github/actions/prepare-native-runtime/action.yml'
@@ -30,7 +30,7 @@ function resolveIdentity({
   libc = null,
   sourceDigest = 'a'.repeat(64)
 } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-native-identity-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-native-identity-'))
   try {
     const output = join(directory, 'output')
     const osRelease = join(directory, 'os-release')
@@ -60,7 +60,7 @@ function resolveIdentity({
     return {
       key: /^key=(.+)$/m.exec(result)?.[1],
       scope: /^scope=(.+)$/m.exec(result)?.[1],
-      path: /path<<ORCA_NATIVE_BUILD_DIRECTORIES\n([\s\S]+?)\nORCA_NATIVE_BUILD_DIRECTORIES/.exec(
+      path: /path<<QUIRKY_NATIVE_BUILD_DIRECTORIES\n([\s\S]+?)\nQUIRKY_NATIVE_BUILD_DIRECTORIES/.exec(
         result
       )?.[1]
     }
@@ -197,7 +197,7 @@ describe('CI native cache ownership', () => {
       'native-runtime': 'electron',
       'node-version': '${{ steps.deps.outputs.node-version }}'
     })
-    for (const name of ['e2e', 'changed-e2e', 'orcad-serve-mode-switch', 'orcad-ssh-docker']) {
+    for (const name of ['e2e', 'changed-e2e', 'quirkyd-serve-mode-switch', 'quirkyd-ssh-docker']) {
       expect(e2e.jobs[name].needs, name).toEqual(['build'])
       expect(
         e2e.jobs[name].steps.find(
@@ -211,7 +211,7 @@ describe('CI native cache ownership', () => {
   it.skipIf(process.platform === 'win32').each([false, true])(
     'detects shared native action availability=%s for older dispatch refs',
     (available) => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-e2e-native-action-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-e2e-native-action-'))
       try {
         const output = join(directory, 'output')
         if (available) {
@@ -253,7 +253,7 @@ describe('CI native cache ownership', () => {
   ])(
     'tools=%s packages=%s failure=%s retains bounded setup',
     (present, packages, failure, status, installs) => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-e2e-native-tools-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-e2e-native-tools-'))
       try {
         const log = join(directory, 'commands')
         writeFileSync(log, '')
@@ -279,7 +279,7 @@ describe('CI native cache ownership', () => {
           env: {
             ...process.env,
             TOOLS_PRESENT: present,
-            ORCA_E2E_APT_PACKAGES: packages,
+            QUIRKY_E2E_APT_PACKAGES: packages,
             FAIL_OPERATION: failure,
             COMMAND_LOG: log
           },

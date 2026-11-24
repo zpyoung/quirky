@@ -10,8 +10,8 @@ const WEB_SCHEME_PATTERN = /^(?:https?|mailto):/i
 const SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/
 // Why: `README.md:5` is a file location; the scheme pattern alone reads `README.md:` as a scheme.
 const BARE_FILE_LOCATION_PATTERN = /^[^\s:/\\?#]+\.[\p{L}\p{N}_+-]+:\d+(?::\d+)?$/u
-export const NATIVE_CHAT_FILE_HREF_PREFIX = '#orca-native-chat-file='
-const NATIVE_CHAT_LITERAL_FILE_HREF_PREFIX = '#orca-native-chat-file-path='
+export const NATIVE_CHAT_FILE_HREF_PREFIX = '#quirky-native-chat-file='
+const NATIVE_CHAT_LITERAL_FILE_HREF_PREFIX = '#quirky-native-chat-file-path='
 const MAX_NATIVE_CHAT_FILE_HREF_DECODES = 4
 
 /** Location text keeps reply parsing; known tool paths retain every filename character. */

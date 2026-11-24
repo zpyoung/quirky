@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { expect, it, vi } from 'vitest'
 import { startDevStorageReclaim } from './dev-storage-reclaim.mjs'
 
@@ -33,7 +33,7 @@ it('starts one non-interactive worker without waiting for its exit', () => {
 
 it('allows tests and developers to skip the repository-wide sweep', () => {
   const options = fixture()
-  startDevStorageReclaim({ ...options, env: { ORCA_SKIP_DEV_STORAGE_RECLAIM: '1' } })
+  startDevStorageReclaim({ ...options, env: { QUIRKY_SKIP_DEV_STORAGE_RECLAIM: '1' } })
   expect(options.spawn).not.toHaveBeenCalled()
 })
 
@@ -61,21 +61,21 @@ it.each([true, false])('handles both sync and async spawn errors (sync: %j)', (s
 it('closes captured dev output before the detached worker exits', async () => {
   const entry = pathToFileURL(resolve(import.meta.dirname, 'dev-storage-reclaim.mjs')).href
   const result = await runProcess({
-    program: process.env.ORCA_TEST_NODE_EXECUTABLE ?? process.execPath,
+    program: process.env.QUIRKY_TEST_NODE_EXECUTABLE ?? process.execPath,
     args: [
       '--input-type=module',
       '-e',
       `import { startDevStorageReclaim } from ${JSON.stringify(entry)};
-       import { spawnProcess } from '@orca/process-host';
+       import { spawnProcess } from '@quirky/process-host';
        startDevStorageReclaim({
          repoRoot: ${JSON.stringify(tmpdir())},
-         env: { ...process.env, ORCA_SKIP_DEV_STORAGE_RECLAIM: '0' },
+         env: { ...process.env, QUIRKY_SKIP_DEV_STORAGE_RECLAIM: '0' },
          spawn: (spec) => spawnProcess({ ...spec, args: ['-e', 'setTimeout(() => {}, 5000)'] })
        });
        process.exit(0);`
     ],
     cwd: resolve(import.meta.dirname, '../..'),
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
     timeoutMs: 2_000,
     terminationBarrier: true
   })

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { getDefaultWorkspaceSession } from '../../../../../shared/constants'
 import type { Tab } from '../../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../../shared/terminal-tab-types'
@@ -63,7 +63,7 @@ describe('persistHeadlessSessionTabProps dock persistence for legacy sessions (r
       tabsByWorktree: { [WORKTREE_ID]: [makeLegacyTerminalTab()] }
     }
     const { store, read } = makeMutableSessionStore(legacySession)
-    const runtime = new OrcaRuntimeService(store as never)
+    const runtime = new QuirkyRuntimeService(store as never)
 
     await expect(
       runtime.setMobileSessionTabProps(`id:${WORKTREE_ID}`, {
@@ -84,7 +84,7 @@ describe('persistHeadlessSessionTabProps dock persistence for legacy sessions (r
     expect(saved.tabsByWorktree[WORKTREE_ID]?.[0]).not.toHaveProperty('terminalDockByPaneKey')
 
     // Simulate a restart: a fresh runtime hydrating from exactly what got saved.
-    const restarted = new OrcaRuntimeService({ getWorkspaceSession: () => saved } as never)
+    const restarted = new QuirkyRuntimeService({ getWorkspaceSession: () => saved } as never)
     const result = await restarted.listMobileSessionTabs(`id:${WORKTREE_ID}`)
     expect(result.tabs[0]).toMatchObject({
       terminalDockByPaneKey: { [PANE_KEY]: { docked: true, gutterRows: 6 } }
@@ -97,7 +97,7 @@ describe('persistHeadlessSessionTabProps dock persistence for legacy sessions (r
       tabsByWorktree: { [WORKTREE_ID]: [makeLegacyTerminalTab()] }
     }
     const { store, read } = makeMutableSessionStore(legacySession)
-    const runtime = new OrcaRuntimeService(store as never)
+    const runtime = new QuirkyRuntimeService(store as never)
 
     await runtime.setMobileSessionTabProps(`id:${WORKTREE_ID}`, {
       tabId: TAB_ID,
@@ -126,7 +126,7 @@ describe('persistHeadlessSessionTabProps dock persistence for legacy sessions (r
       unifiedTabs: { [WORKTREE_ID]: [unifiedTab] }
     }
     const { store, read } = makeMutableSessionStore(modernSession)
-    const runtime = new OrcaRuntimeService(store as never)
+    const runtime = new QuirkyRuntimeService(store as never)
 
     await runtime.setMobileSessionTabProps(`id:${WORKTREE_ID}`, {
       tabId: TAB_ID,

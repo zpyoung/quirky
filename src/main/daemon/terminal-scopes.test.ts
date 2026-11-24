@@ -38,8 +38,8 @@ vi.mock('./daemon-cgroup-scope', async (importOriginal) => {
 })
 
 const SLICE_CGROUP =
-  '/user.slice/user-1000.slice/user@1000.service/orca_ptys_orca_daemon_1f_2e.slice'
-const SCOPE_ON = { on: expect.objectContaining({ slice: 'orca_ptys_orca_daemon_1f_2e.slice' }) }
+  '/user.slice/user-1000.slice/user@1000.service/quirky_ptys_quirky_daemon_1f_2e.slice'
+const SCOPE_ON = { on: expect.objectContaining({ slice: 'quirky_ptys_quirky_daemon_1f_2e.slice' }) }
 
 type Call = { program: string; args: string[] }
 
@@ -96,7 +96,7 @@ function linuxInput(
   return {
     env: {},
     platform: 'linux',
-    daemonScope: 'orca-daemon-1f-2e.scope',
+    daemonScope: 'quirky-daemon-1f-2e.scope',
     unifiedCgroup: () => true,
     findExecutable: (name: string) => `/usr/bin/${name}`,
     run: manager.run,
@@ -111,11 +111,11 @@ describe('resolveTerminalScopes', () => {
     expect(resolved.ceiling).toEqual({ state: 'off', reason: 'disabled' })
     expect(resolved.scopes).toEqual({
       on: {
-        slice: 'orca_ptys_orca_daemon_1f_2e.slice',
+        slice: 'quirky_ptys_quirky_daemon_1f_2e.slice',
         sliceCgroupPath: `/sys/fs/cgroup${SLICE_CGROUP}`,
         systemdRun: '/usr/bin/systemd-run',
         envBinary: '/usr/bin/env',
-        launchId: 'orca_daemon_1f_2e',
+        launchId: 'quirky_daemon_1f_2e',
         properties: ['OOMPolicy=continue', 'TimeoutStopSec=5s']
       }
     })
@@ -129,17 +129,17 @@ describe('resolveTerminalScopes', () => {
         'org.freedesktop.systemd1.Manager',
         'StartTransientUnit',
         'ssa(sv)a(sa(sv))',
-        'orca_ptys_orca_daemon_1f_2e.slice',
+        'quirky_ptys_quirky_daemon_1f_2e.slice',
         'fail',
         '2',
         'BindsTo',
         'as',
         '1',
-        'orca-daemon-1f-2e.scope',
+        'quirky-daemon-1f-2e.scope',
         'After',
         'as',
         '1',
-        'orca-daemon-1f-2e.scope',
+        'quirky-daemon-1f-2e.scope',
         '0'
       ]
     })
@@ -148,7 +148,7 @@ describe('resolveTerminalScopes', () => {
       '--scope',
       '--quiet',
       '--collect',
-      '--slice=orca_ptys_orca_daemon_1f_2e.slice',
+      '--slice=quirky_ptys_quirky_daemon_1f_2e.slice',
       '--property=OOMPolicy=continue',
       '--property=TimeoutStopSec=5s'
     ])
@@ -196,7 +196,7 @@ describe('resolveTerminalScopes', () => {
       '--user',
       '--no-block',
       'stop',
-      'orca_ptys_orca_daemon_1f_2e.slice'
+      'quirky_ptys_quirky_daemon_1f_2e.slice'
     ])
   })
 
@@ -228,7 +228,7 @@ describe('resolveTerminalScopes', () => {
       state: 'on',
       limit: 2048,
       mechanism: 'systemd-slice',
-      unit: 'orca_ptys_orca_daemon_1f_2e.slice',
+      unit: 'quirky_ptys_quirky_daemon_1f_2e.slice',
       controlGroup: SLICE_CGROUP
     })
     expect(resolved.scopes).toMatchObject({
@@ -389,8 +389,8 @@ describe('terminal memory limits', () => {
 
 describe('wrapPtySpawnInTerminalScope', () => {
   const runtime: TerminalScopeRuntime = {
-    slice: 'orca_ptys_a.slice',
-    sliceCgroupPath: '/sys/fs/cgroup/x/orca_ptys_a.slice',
+    slice: 'quirky_ptys_a.slice',
+    sliceCgroupPath: '/sys/fs/cgroup/x/quirky_ptys_a.slice',
     systemdRun: '/usr/bin/systemd-run',
     envBinary: '/usr/bin/env',
     launchId: 'a',
@@ -423,7 +423,7 @@ describe('wrapPtySpawnInTerminalScope', () => {
       expect.arrayContaining([
         '--user',
         '--scope',
-        '--slice=orca_ptys_a.slice',
+        '--slice=quirky_ptys_a.slice',
         '--property=OOMPolicy=continue',
         '--property=TasksMax=2048'
       ])
@@ -476,8 +476,8 @@ describe('ceiling report', () => {
       state: 'on' as const,
       limit: 2048,
       mechanism: 'systemd-slice' as const,
-      unit: 'orca_ptys_a.slice',
-      controlGroup: '/u/orca_ptys_a.slice'
+      unit: 'quirky_ptys_a.slice',
+      controlGroup: '/u/quirky_ptys_a.slice'
     }
     expect(confirmPtyProcessCeiling(on, () => true)).toBe(on)
     expect(confirmPtyProcessCeiling(on, () => false)).toEqual({

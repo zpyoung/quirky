@@ -33,7 +33,7 @@ const request = {
   entryRelativePath: '',
   expected: { byteLength: 1, inode: 1, deviceId: 1, modifiedAtMs: 1 },
   worktree: 'wt-1',
-  relativePath: '.file.bin.orca-upload-x',
+  relativePath: '.file.bin.quirky-upload-x',
   expectedEnvironmentPairingRevision: 3,
   expectedEnvironmentRuntimeId: 'rt-1'
 }

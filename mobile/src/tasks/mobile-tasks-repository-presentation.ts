@@ -53,8 +53,8 @@ export function getRepoBadgeColor(repo: RepoSummary | undefined, fallbackName: s
 // `undefined` as well as `null`: a checked `repo.hooks` reader does not require `source`, and the
 // recorded reply for a repo with no hooks file carries none.
 export function setupSourceLabel(source: string | null | undefined): string {
-  if (source === 'orca.yaml') {
-    return 'orca.yaml'
+  if (source === 'quirky.yaml') {
+    return 'quirky.yaml'
   }
   if (source === 'legacy') {
     return 'local hooks'

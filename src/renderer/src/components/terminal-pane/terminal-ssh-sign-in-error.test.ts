@@ -5,7 +5,7 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const environmentMocks = vi.hoisted(() => ({
-  resolveFooter: vi.fn(async () => '---\nOrca: test')
+  resolveFooter: vi.fn(async () => '---\nQuirky: test')
 }))
 
 vi.mock('@/lib/client-environment-info', () => ({

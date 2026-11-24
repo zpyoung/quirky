@@ -3,7 +3,7 @@
 // differential serialize fuzz (src/main/daemon/serialize-grid.differential.fuzz.test.ts):
 //
 //   node config/scripts/build-serialize-addon-at-ref.mjs --ref origin/main --out-dir /tmp/serialize-old
-//   ORCA_OLD_SERIALIZE_ADDON=<printed path> pnpm exec vitest run --config config/vitest.config.ts src/main/daemon/serialize-grid.differential.fuzz.test.ts
+//   QUIRKY_OLD_SERIALIZE_ADDON=<printed path> pnpm exec vitest run --config config/vitest.config.ts src/main/daemon/serialize-grid.differential.fuzz.test.ts
 //
 // It resolves the ref's serialize version and patch from the ref's own
 // pnpm-workspace.yaml. The pristine dist comes from reverse-applying whichever patch

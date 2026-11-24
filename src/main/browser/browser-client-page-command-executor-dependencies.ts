@@ -38,7 +38,7 @@ export function pageAuthorityIdentity(
 }
 
 export type BrowserClientPageCommandExecutorDependencies = BrowserClientPageAuthorityIdentity & {
-  orcaProfileId: string
+  quirkyProfileId: string
   /** Environment record that owns this host's partitions for storage lifecycle. */
   storageScope: string
   retainNetworkRoute(

@@ -19,7 +19,7 @@ import {
   type AppEnvironment
 } from '../shared/app-environment'
 import { installMainProcessTreeKillGate } from './own-chromium-tree-kill-guard'
-import { setProcessTreeKillGate } from '@orca/process-host/process-tree-kill-gate'
+import { setProcessTreeKillGate } from '@quirky/process-host/process-tree-kill-gate'
 import { resetSelfInitiatedTreeKillLogForTest } from './crash-reporting/self-initiated-tree-kill-log'
 import {
   clearCrashBreadcrumbsForTest,
@@ -30,7 +30,7 @@ import { killLocalPrecheckProcessTree } from './automations/precheck-runner'
 import { killRecipeProcess } from '../shared/ephemeral-vm-recipe-process'
 import { killSpawnedCommandTree } from './git/command-runner/spawned-command-tree-kill'
 import { killCodexAppServerProcessTree } from './codex/codex-app-server-process-tree-kill'
-import { signalProcessTree } from '@orca/process-host/process-tree-termination'
+import { signalProcessTree } from '@quirky/process-host/process-tree-termination'
 import { killSourceControlAgentProcess } from './text-generation/source-control-local-process'
 
 /** A pid Electron reports as one of ours: every gate below must refuse it. */
@@ -149,7 +149,7 @@ describe('a refused tree-kill still terminates the root it owns', () => {
     expect(windowsChild.kill).toHaveBeenCalledWith('SIGKILL')
   })
 
-  it('still signals the POSIX process group: a group only holds what Orca put in it', async () => {
+  it('still signals the POSIX process group: a group only holds what Quirky put in it', async () => {
     // Same contract as main and as the other three POSIX group arms in main
     // (claude-login, codex teardown, PTY sweep): record, never refuse. A stale
     // `getAppMetrics()` entry must not orphan a macOS/Linux tree.

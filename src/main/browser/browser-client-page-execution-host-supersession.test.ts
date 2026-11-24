@@ -69,7 +69,7 @@ function createHarness() {
   })
 
   const dependencies = {
-    orcaProfileId: 'orca-profile-a',
+    quirkyProfileId: 'quirky-profile-a',
     authorityConnectionIdentity: 'authority-record-a',
     pairingAuthorityConnectionIdentity: 'pairing-authority-record-a',
     legacyAuthorityConnectionIdentity: 'legacy-authority-record-a',

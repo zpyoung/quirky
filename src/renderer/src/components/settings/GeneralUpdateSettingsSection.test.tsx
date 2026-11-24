@@ -45,7 +45,7 @@ it('retries installation from the settings panel when a staged update is blocked
     updateStatus: {
       state: 'error',
       version: '1.4.200',
-      message: 'Close the other Orca instances before installing this update.',
+      message: 'Close the other Quirky instances before installing this update.',
       retryAction: 'install'
     }
   })

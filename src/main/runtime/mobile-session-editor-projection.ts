@@ -9,7 +9,7 @@ import type {
   RuntimeMobileSessionTabsSnapshot
 } from '../../shared/runtime-types'
 import type { Tab } from '../../shared/tab-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import {
   editorTabNamesFile,
   sameEditorFile
@@ -116,7 +116,7 @@ export function retireHeadlessEditorTab(
   force = false
 ): WorkspaceSessionState | null {
   const files = session.openFilesByWorktree?.[worktreeId] ?? []
-  const file = ORCA_LAYOUT_OWNER_IS_MAIN
+  const file = QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? findListedEditorFile(files, session, worktreeId, tab)
     : files.find((candidate) => candidate.filePath === tab.filePath)
   if (!file) {

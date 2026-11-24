@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import type {
   RuntimeMobileSessionSnapshotTab,
   RuntimeMobileSessionTabsSnapshot,
@@ -7,7 +7,7 @@ import type {
 } from '../../shared/runtime-types'
 
 export function registerHeadlessTabOrderStabilityTests(): void {
-  const WT = 'repo-1::/home/orca/worktree'
+  const WT = 'repo-1::/home/quirky/worktree'
   const GROUP = `headless-terminals:${WT}`
 
   const terminalTab = (n: number, isActive = false): RuntimeMobileSessionTerminalTab => ({
@@ -37,7 +37,7 @@ export function registerHeadlessTabOrderStabilityTests(): void {
 
   describe('headless tab order stability', () => {
     it('retains order when activating a re-appended surface', () => {
-      const runtime = new OrcaRuntimeService(null) as unknown as {
+      const runtime = new QuirkyRuntimeService(null) as unknown as {
         mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
         activateHeadlessMobileSessionTerminalTab: (
           worktreeId: string,
@@ -65,7 +65,7 @@ export function registerHeadlessTabOrderStabilityTests(): void {
     })
 
     it('retains stored order when a materialized surface is re-appended', () => {
-      const runtime = new OrcaRuntimeService(null) as unknown as {
+      const runtime = new QuirkyRuntimeService(null) as unknown as {
         mergeMobileSessionTabGroups: (
           worktreeId: string,
           groups: { id: string; activeTabId: string | null; tabOrder: string[] }[],
@@ -84,7 +84,7 @@ export function registerHeadlessTabOrderStabilityTests(): void {
     })
 
     it('appends only genuinely new tabs after retained order', () => {
-      const runtime = new OrcaRuntimeService(null) as unknown as {
+      const runtime = new QuirkyRuntimeService(null) as unknown as {
         mergeMobileSessionTabGroups: (
           worktreeId: string,
           groups: { id: string; activeTabId: string | null; tabOrder: string[] }[],
@@ -103,7 +103,7 @@ export function registerHeadlessTabOrderStabilityTests(): void {
     })
 
     it('retains order independently in split groups', () => {
-      const runtime = new OrcaRuntimeService(null) as unknown as {
+      const runtime = new QuirkyRuntimeService(null) as unknown as {
         buildHeadlessMobileSessionTabGroups: (
           worktreeId: string,
           tabs: RuntimeMobileSessionSnapshotTab[],

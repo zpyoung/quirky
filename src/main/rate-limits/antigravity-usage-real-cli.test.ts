@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { stdoutShowsModelTurn } from './antigravity-usage-response'
 import { fetchAntigravityRateLimits } from './antigravity-usage-fetcher'
 
 /**
  * Runs the real Antigravity CLI against the developer's own signed-in account.
  *
- * Opt in with `ORCA_REAL_AGY_CLI_TEST=1`, the same shape as the real Claude CLI suite. It is off by
+ * Opt in with `QUIRKY_REAL_AGY_CLI_TEST=1`, the same shape as the real Claude CLI suite. It is off by
  * default because it spawns `agy`, needs a live sign-in, and takes seconds — but it is the only
  * check that catches agy changing the payload the parser is written against.
  *
- * `ORCA_REAL_AGY_CLI_TEST=1 pnpm test src/main/rate-limits/antigravity-usage-real-cli.test.ts`
+ * `QUIRKY_REAL_AGY_CLI_TEST=1 pnpm test src/main/rate-limits/antigravity-usage-real-cli.test.ts`
  */
-const enabled = process.env.ORCA_REAL_AGY_CLI_TEST === '1'
+const enabled = process.env.QUIRKY_REAL_AGY_CLI_TEST === '1'
 
 describe.skipIf(!enabled)('Antigravity usage against the real agy CLI', () => {
   it('reports quota with at least one named pool', async () => {

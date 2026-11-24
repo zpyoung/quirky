@@ -3,7 +3,7 @@ import {
   AGENT_LAUNCH_OVERRIDES_RUNTIME_CAPABILITY,
   RUNTIME_CAPABILITIES
 } from '../../../../../shared/protocol-version'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 import type { RpcRequest } from '../../core'
 import { RpcDispatcher } from '../../dispatcher'
 import { AGENT_SESSION_METHODS } from '../agent-session'
@@ -25,7 +25,7 @@ describe('agent session launch settings RPC', () => {
     const runtime = runtimeStub()
     const dispatcher = new RpcDispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub implements every runtime method these RPC cases reach.
-      runtime: runtime as unknown as OrcaRuntimeService,
+      runtime: runtime as unknown as QuirkyRuntimeService,
       methods: AGENT_SESSION_METHODS
     })
 
@@ -59,7 +59,7 @@ describe('agent session launch settings RPC', () => {
     const runtime = runtimeStub()
     const dispatcher = new RpcDispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub implements every runtime method these RPC cases reach.
-      runtime: runtime as unknown as OrcaRuntimeService,
+      runtime: runtime as unknown as QuirkyRuntimeService,
       methods: AGENT_SESSION_METHODS
     })
     const optionValues = Object.fromEntries(

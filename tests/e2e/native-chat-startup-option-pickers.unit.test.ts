@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createElement } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../src/shared/agent-session-mutation-envelope'
-import { claudeSessionIdForOrcaSession } from '../../src/main/claude/claude-structured-launch-resolution'
+import { claudeSessionIdForQuirkySession } from '../../src/main/claude/claude-structured-launch-resolution'
 import { hostTestMessage } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-host-test-data'
 import { StructuredAgentSessionStartupAttempts } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-startup-attempt'
 import { createScriptedClaudeRuntime } from '../../src/main/runtime/structured-claude-scripted-runtime-test-support'
@@ -63,7 +63,7 @@ it('picks model then effort through the menus during startup and uses both in th
       firstReply = { model: replyModel, effort: replyEffort }
       child.handlers.onMessage?.({
         type: 'assistant',
-        session_id: claudeSessionIdForOrcaSession(SESSION),
+        session_id: claudeSessionIdForQuirkySession(SESSION),
         uuid: 'first-reply',
         message: {
           role: 'assistant',

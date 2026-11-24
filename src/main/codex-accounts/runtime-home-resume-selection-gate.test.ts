@@ -142,7 +142,7 @@ describe('CodexRuntimeHomeService.resolveSelectedHostAccountCodexHomePathForResu
     // Anchor: a readable marker resolves the selected account's own home.
     expect(service.resolveSelectedHostAccountCodexHomePathForResume()).toBe(managedHomePath)
 
-    const markerPath = join(realpathSync(managedHomePath), '.orca-managed-home')
+    const markerPath = join(realpathSync(managedHomePath), '.quirky-managed-home')
     lstatFaults.hold(markerPath)
 
     expect(() => service.resolveSelectedHostAccountCodexHomePathForResume()).toThrow(
@@ -168,7 +168,7 @@ describe('CodexRuntimeHomeService.resolveSelectedHostAccountCodexHomePathForResu
 
     // A successful observation that fails a trust check: the marker names
     // another account. The resume must proceed on the system/default ranking.
-    writeFileSync(join(managedHomePath, '.orca-managed-home'), 'someone-else\n', 'utf-8')
+    writeFileSync(join(managedHomePath, '.quirky-managed-home'), 'someone-else\n', 'utf-8')
 
     expect(service.resolveSelectedHostAccountCodexHomePathForResume()).toBeNull()
     expect(store.getSettings().activeCodexManagedAccountId).toBeNull()

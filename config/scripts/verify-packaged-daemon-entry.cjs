@@ -178,7 +178,7 @@ async function runTerminalHostRoundTrip({
   const scratch = mkdtempSync(scratchPrefix)
   const socketPath = join(scratch, 'd.sock')
   const tokenPath = join(scratch, 'token')
-  const env = { ...process.env, ORCA_USER_DATA_PATH: join(scratch, 'user-data') }
+  const env = { ...process.env, QUIRKY_USER_DATA_PATH: join(scratch, 'user-data') }
   delete env.ELECTRON_RUN_AS_NODE
   const daemon = spawn(
     command[0],
@@ -282,8 +282,8 @@ async function verifyPackagedMacTerminalHostBoots(appPath, { arch, required }) {
   const stderr = []
   // Boot a clone outside the build tree, as installs do, so no ancestor node_modules can
   // satisfy a require the helper lacks.
-  const isolated = mkdtempSync(join(tmpdir(), 'orca-terminal-host-boot-'))
-  const clone = join(isolated, 'Orca Terminal Host.app')
+  const isolated = mkdtempSync(join(tmpdir(), 'quirky-terminal-host-boot-'))
+  const clone = join(isolated, 'Quirky Terminal Host.app')
   try {
     const cloned = spawnSync('/bin/cp', ['-cR', paths.bundle, clone], { encoding: 'utf8' })
     if (cloned.status !== 0) {

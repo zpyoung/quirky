@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   RemoteNodeRuntimeSecurityModifiedError,
   RemoteNodeRuntimeSelfTestError
-} from '../orcad-remote-node-runtime-report'
+} from '../quirkyd-remote-node-runtime-report'
 import { isAnsweredHostFailure, RelayHostAnsweredError } from './remote-host-answered-failure'
 import { SSH_EXEC_TIMEOUT_CODE } from './remote-exec-command'
 import { SystemSshCommandExitError } from '../system-transport/system-ssh-operation-lifecycle'
@@ -13,8 +13,8 @@ const exitError = (code: number, message: string): Error =>
 describe('isAnsweredHostFailure', () => {
   it.each([
     ['tar ENOSPC', exitError(2, 'tar: write error: No space left on device')],
-    ['extract marker', exitError(1, 'ORCA_NODE_RUNTIME_EXTRACT_FAILED')],
-    ['hash mismatch marker', exitError(1, 'ORCA_NODE_RUNTIME_HASH_MISMATCH')],
+    ['extract marker', exitError(1, 'QUIRKY_NODE_RUNTIME_EXTRACT_FAILED')],
+    ['hash mismatch marker', exitError(1, 'QUIRKY_NODE_RUNTIME_HASH_MISMATCH')],
     ['SFTP write failure', Object.assign(new Error('Failure'), { code: 4 })],
     ['SFTP permission denied', Object.assign(new Error('Permission denied'), { code: 3 })],
     ['unverified promote', new RelayHostAnsweredError('The host did not verify the runtime')],

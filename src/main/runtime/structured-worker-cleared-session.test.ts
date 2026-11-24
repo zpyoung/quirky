@@ -42,7 +42,7 @@ const { applyAgentSessionRestartAdjudication } =
   await import('./agent-session-restart-lease-transitions')
 const { openTestAgentSessionRecordStore } =
   await import('./agent-session-record-store-test-harness')
-const { OrcaRuntimeService } = await import('./orca-runtime')
+const { QuirkyRuntimeService } = await import('./quirky-runtime')
 const { OrchestrationDb } = await import('./orchestration/db')
 const { ORCHESTRATION_METHODS } = await import('./rpc/methods/orchestration')
 const { eraseRpcMethods } = await import('./rpc/core')
@@ -57,7 +57,7 @@ const {
 } = await import('./structured-worker-identity')
 
 type Db = InstanceType<typeof OrchestrationDb>
-type Runtime = InstanceType<typeof OrcaRuntimeService>
+type Runtime = InstanceType<typeof QuirkyRuntimeService>
 
 const MINTED = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
 const SUCCESSOR = 'clear-a1b2c3d4e5f60718293a4b5c6d7e8f9012345678'
@@ -65,7 +65,7 @@ const SECOND = 'clear-ffeeddccbbaa99887766554433221100ffeeddcc'
 const LOCAL_SCOPE = { kind: 'local', hostId: 'local' } as const
 
 /** Opens the protected mail resolver and the orchestration database a real runtime holds. */
-class RuntimeProbe extends OrcaRuntimeService {
+class RuntimeProbe extends QuirkyRuntimeService {
   withDb(db: Db | null): this {
     this._orchestrationDb = db
     return this
@@ -308,7 +308,7 @@ function rpcRuntime(db: Db): {
   runtime: Runtime
   call: (name: string, params: Record<string, unknown>) => Promise<unknown>
 } {
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   runtime.setOrchestrationDb(db)
   vi.spyOn(runtime, 'ensureStructuredAgentSessionHost').mockResolvedValue(undefined)
   return {
@@ -389,7 +389,7 @@ describe.each(['live', 'at-rest'] as const)(
       // The settlement probe holds only the incarnation, and no registry entry.
       structuredWorkerIdentities.clear()
       return expect(
-        new OrcaRuntimeService().inspectTerminalProcessIncarnationLiveness(
+        new QuirkyRuntimeService().inspectTerminalProcessIncarnationLiveness(
           structuredWorkerProcessIncarnation(MINTED),
           JSON.stringify(LOCAL_SCOPE)
         )
@@ -431,7 +431,7 @@ describe.each(['live', 'at-rest'] as const)(
     it('shows the worker through the successor in worker-show', async () => {
       const identity = registerWorker()
       const dispatchId = startWorkerDispatch(db, identity)
-      const shown = await inspectWorkerTerminal(new OrcaRuntimeService(), db, dispatchId)
+      const shown = await inspectWorkerTerminal(new QuirkyRuntimeService(), db, dispatchId)
       expect(shown).toMatchObject({
         exact: true,
         status: successor === 'live' ? 'live' : 'unverifiable',
@@ -448,7 +448,7 @@ describe.each(['live', 'at-rest'] as const)(
       // ran gets no death evidence from its close, and must not read `unverifiable` forever.
       structuredWorkerIdentities.clear()
       await expect(
-        new OrcaRuntimeService().inspectTerminalProcessIncarnationLiveness(
+        new QuirkyRuntimeService().inspectTerminalProcessIncarnationLiveness(
           identity.processIncarnation,
           JSON.stringify(LOCAL_SCOPE)
         )
@@ -457,9 +457,9 @@ describe.each(['live', 'at-rest'] as const)(
 
     it("reports the successor's status to @idle", async () => {
       const identity = registerWorker()
-      await expect(new OrcaRuntimeService().getAgentStatusForHandle(identity.handle)).resolves.toBe(
-        'idle'
-      )
+      await expect(
+        new QuirkyRuntimeService().getAgentStatusForHandle(identity.handle)
+      ).resolves.toBe('idle')
       expect(journalAsked).toEqual([SUCCESSOR])
     })
 
@@ -490,7 +490,7 @@ describe.each(['live', 'at-rest'] as const)(
 
     it("gives the successor's child the worker's handle", () => {
       const identity = registerWorker()
-      expect(sealedChildEnv(SUCCESSOR).ORCA_TERMINAL_HANDLE).toBe(identity.handle)
+      expect(sealedChildEnv(SUCCESSOR).QUIRKY_TERMINAL_HANDLE).toBe(identity.handle)
     })
 
     it("records the user's takeover when they type into the successor", () => {
@@ -598,7 +598,7 @@ describe('a released session whose start was attempted stays unverifiable withou
   let directory: string
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'orca-cleared-successor-'))
+    directory = await mkdtemp(join(tmpdir(), 'quirky-cleared-successor-'))
     installClearedWorker('at-rest')
     visibleTabs = []
   })
@@ -852,7 +852,7 @@ describe('a running session that cannot be verified is refused, never declared e
     const identity = registerWorker()
     expect(observeStructuredWorker(identity).status).toBe('unverifiable')
     await expect(
-      new OrcaRuntimeService().inspectTerminalProcessIncarnationLiveness(
+      new QuirkyRuntimeService().inspectTerminalProcessIncarnationLiveness(
         identity.processIncarnation,
         JSON.stringify(LOCAL_SCOPE)
       )

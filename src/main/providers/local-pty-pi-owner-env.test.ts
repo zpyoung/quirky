@@ -6,14 +6,14 @@ import {
 import type { LocalPtyLaunchPlan } from './local-pty-launch-plan'
 
 const ownerEnv = {
-  ORCA_PI_STATUS_OWNED: '1234',
-  ORCA_PRIME_AGENT_STATUS_OWNED: '1234',
-  ORCA_PI_TITLE_MARKER_OWNED: '1234'
+  QUIRKY_PI_STATUS_OWNED: '1234',
+  QUIRKY_PRIME_AGENT_STATUS_OWNED: '1234',
+  QUIRKY_PI_TITLE_MARKER_OWNED: '1234'
 }
 const terminalEnv = {
-  ORCA_PANE_KEY: 'new-tab:new-leaf',
-  ORCA_AGENT_LAUNCH_TOKEN: 'new-launch',
-  ORCA_AGENT_HOOK_TOKEN: 'receiver-token',
+  QUIRKY_PANE_KEY: 'new-tab:new-leaf',
+  QUIRKY_AGENT_LAUNCH_TOKEN: 'new-launch',
+  QUIRKY_AGENT_HOOK_TOKEN: 'receiver-token',
   KEEP_ME: 'terminal-value'
 }
 const plan: LocalPtyLaunchPlan = {

@@ -79,7 +79,7 @@ export async function acquireAcpStructuredSession(input: {
     reattaching: false
   }
   const options = new AcpStructuredOptions(launch.spec.dialect)
-  // Only Orca's own prompt may ask the person, as with permissions: a turn the agent began itself
+  // Only Quirky's own prompt may ask the person, as with permissions: a turn the agent began itself
   // has nobody waiting on it. What a settled request carries still shows in that turn.
   const prompts = new AcpStructuredPrompts(
     () => slot.lane,
@@ -110,18 +110,18 @@ export async function acquireAcpStructuredSession(input: {
       envToDelete: launch.envToDelete
     },
     {
-      clientInfo: { name: 'orca', version: '1' },
+      clientInfo: { name: 'quirky', version: '1' },
       ...(spec.signIn ? { signIn: spec.signIn } : {}),
       onPermission: (request, context) => {
         if (!isAcpReadySession(session) || !session.turns?.acceptsRequests) {
-          // No prompt of Orca's runs (a turn the agent began itself included), or a Stop or steer
+          // No prompt of Quirky's runs (a turn the agent began itself included), or a Stop or steer
           // is cutting it short: nobody is there to ask.
           return { outcome: { outcome: 'cancelled' } }
         }
         // Full access never answers a dialect's question, nor an agent that enforces the mode itself.
         const claimed = spec.dialect.request?.('session/request_permission', request)
         if (launch.fullAccess && !spec.permissionModeConfig && !claimed) {
-          // Full access: Orca answers yes for the person, as the agent's own bypass flag would.
+          // Full access: Quirky answers yes for the person, as the agent's own bypass flag would.
           const allow = request.options.find((option) => option.kind === 'allow_once')
           if (allow) {
             return { outcome: { outcome: 'selected', optionId: allow.optionId } }

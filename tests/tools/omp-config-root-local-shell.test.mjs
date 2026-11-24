@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { inheritOmpLaunchEnvironment } from '../../src/main/ipc/pty/host-env/omp-launch-environment'
 import { resetLoginShellEnvironmentCacheForTests } from '../../src/main/startup/login-shell-environment'
 import { PiTitlebarExtensionService } from '../../src/main/pi/titlebar-extension-service'
@@ -65,7 +65,7 @@ for (const shell of shells) {
         if (config === '') {
           expect(actual).toBe('.omp')
         }
-        expect(managed.ORCA_OMP_SOURCE_AGENT_DIR).toBe(
+        expect(managed.QUIRKY_OMP_SOURCE_AGENT_DIR).toBe(
           join(fixture.home, actual || '.omp', 'agent')
         )
       }

@@ -139,7 +139,7 @@ export abstract class BrowserManagerDownloadCreation extends BrowserManagerQueri
       download.receivedBytes = this.getDownloadReceivedBytes(download.item)
       if (state === 'interrupted' && this.isAwaitingManualResume(download.item)) {
         // Why: Chromium's automatic retries run before observers hear 'interrupted', so a resumable
-        // interruption here waits for a resume Orca never offers; end it instead of showing "paused".
+        // interruption here waits for a resume Quirky never offers; end it instead of showing "paused".
         // Deferred because canceling inside a native updated callback nests observer updates.
         setImmediate(() => {
           if (

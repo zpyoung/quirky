@@ -35,7 +35,7 @@ import { closeStructuredAgentSessionChild } from './structured-agent-session-clo
 import { retireSettledStructuredWorkerTab } from './structured-agent-session-tab-retirement'
 import type { WorktreePtyHostFence } from './worktree-pty-host-fence'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 
 export type StructuredSessionInWorkspace = {
@@ -49,7 +49,7 @@ export type UnclosedStructuredSession = StructuredSessionInWorkspace & {
 }
 
 export type StructuredWorktreeSweepRuntime = Pick<
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   'forgetStructuredSessionMail' | 'retireStructuredAgentSessionTabFromSnapshot'
 >
 
@@ -180,7 +180,7 @@ function countStructuredSessions(sessions: readonly UnclosedStructuredSession[])
  * Both groups are named, though, which is where this differs from the PTY sibling: there, the
  * verdict is a fresh inventory, so anything absent from the live list is PROVEN exited and
  * rightly dropped. Here an `unverifiable` session is unclosed too — folding it into the live
- * count would overstate what Orca watched, and dropping it said "1 agent session" while three
+ * count would overstate what Quirky watched, and dropping it said "1 agent session" while three
  * were about to be discarded.
  */
 export function describeUnclosedStructuredSessions(

@@ -40,7 +40,7 @@ describe('CodexHookService', () => {
       linkedUserDataDir,
       process.platform === 'win32' ? 'junction' : 'dir'
     )
-    process.env.ORCA_USER_DATA_PATH = linkedUserDataDir
+    process.env.QUIRKY_USER_DATA_PATH = linkedUserDataDir
 
     const service = new CodexHookService()
     expect((await service.install()).state).toBe('installed')
@@ -208,7 +208,7 @@ describe('CodexHookService', () => {
     )
     expect(readFileSync(runtimeTomlPath, 'utf-8').split(permissionRequestHeader)).toHaveLength(3)
 
-    // Why enabled: Orca's own entry is re-enabled, since its setting is the only off switch.
+    // Why enabled: Quirky's own entry is re-enabled, since its setting is the only off switch.
     expect((await service.install()).state).toBe('installed')
 
     const repairedToml = readFileSync(runtimeTomlPath, 'utf-8')

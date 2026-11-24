@@ -18,7 +18,7 @@ import {
   toSshExecutionHostId
 } from '../../../../shared/execution-host'
 import { buildExecutionHostRegistry } from '../../../../shared/execution-host-registry'
-import { pickerExecutionHosts } from '../../../../shared/managed-orcad-execution-host'
+import { pickerExecutionHosts } from '../../../../shared/managed-quirkyd-execution-host'
 import {
   isListedRemoteServer,
   runtimePairingRepairRoute

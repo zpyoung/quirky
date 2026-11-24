@@ -1,9 +1,9 @@
 // Panes main closed or took back, kept in memory so a terminal start already under way cannot bring
 // one back by its late binding (pty-binding-session-update.ts mints a missing pane). Layout-owner
-// build only: every caller is behind ORCA_LAYOUT_OWNER_IS_MAIN.
+// build only: every caller is behind QUIRKY_LAYOUT_OWNER_IS_MAIN.
 
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { collectLayoutLeafIdsInOrder } from '../../../shared/workspace-layout/terminal-pane-tree'
 import type { LayoutCommand } from '../../../shared/workspace-layout/workspace-layout-command-types'
@@ -54,7 +54,7 @@ export function fencedIfLayoutOwner<V>(
   fence: () => Fence | null,
   mutate: () => DurableProfileStateMutation<V>
 ): () => DurableProfileStateMutation<V> {
-  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (!QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     return mutate
   }
   return () => {

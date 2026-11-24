@@ -6,10 +6,10 @@ import {
 } from './pty-connection-test-environment'
 
 // Deterministic reproduction for issue2-hidden-output-skip:
-//   "[Orca skipped hidden terminal output because main recovery was unavailable.]"
+//   "[Quirky skipped hidden terminal output because main recovery was unavailable.]"
 //   printed into a live remote-runtime agent pane.
 //
-// Topology modeled (renderer contract level, per reproduce-orca-remote-server-issues):
+// Topology modeled (renderer contract level, per reproduce-quirky-remote-server-issues):
 //   remote-runtime-owned PTY ("remote:" id) -> transport.serializeBuffer is the ONLY
 //   recovery for hidden-time output (canUseMainBufferSnapshot is structurally false;
 //   the host DROPS paused/hidden stream output, so the reveal snapshot is the sole
@@ -496,7 +496,7 @@ describe('remote hidden-output restore abandonment (issue2-hidden-output-skip)',
         repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/tmp/wt-1', displayName: 'feat/notis' }]
       },
       runtimeStatusByEnvironmentId: new Map(),
-      repos: [{ id: 'repo1', connectionId: null, displayName: 'orca' }],
+      repos: [{ id: 'repo1', connectionId: null, displayName: 'quirky' }],
       projects: [],
       sshConnectionStates: new Map(),
       transientClearedAgentStatusConnectionIds: {},

@@ -6,7 +6,7 @@ import type { VoiceSettings } from '../../shared/speech-types'
  * Lazy accessors for the speech services.
  *
  * Why the construction is injected: each host picks how `ModelManager` downloads (Chromium's
- * `net` on the desktop, Node's `https` on orcad). Both the desktop and orcad install factories;
+ * `net` on the desktop, Node's `https` on quirkyd). Both the desktop and quirkyd install factories;
  * a host without them rejects per call rather than returning a stub that appears to transcribe.
  */
 

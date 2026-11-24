@@ -9,7 +9,7 @@ import {
 } from '../slices/store-test-helpers'
 import { createStoreCascadesMockApi } from '../slices/store-cascades-test-harness'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
   (
@@ -23,7 +23,7 @@ type CloseReason = 'user' | 'cleanup'
 function sentCloses(
   closeTerminalSurface: ReturnType<typeof vi.fn>
 ): { worktreeId: string; tabId: string; reason: CloseReason }[] {
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     // Main hears each close once: never also through today's call.
     expect(closeTerminalSurface).not.toHaveBeenCalled()
     return layoutApplyTestTransport.sentOfType('closeTabs').map((command) => ({

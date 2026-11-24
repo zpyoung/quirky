@@ -97,6 +97,9 @@ function renderAnswerValue(answer: AskAnswer): string {
 export function buildResultSummary(spec: AskSpec, answers: AskAnswers): string {
   return spec.questions
     .filter((question) => question.id in answers)
-    .map((question) => `${question.header ?? question.question}: ${renderAnswerValue(answers[question.id])}`)
+    .map(
+      (question) =>
+        `${question.header ?? question.question}: ${renderAnswerValue(answers[question.id])}`
+    )
     .join('\n')
 }

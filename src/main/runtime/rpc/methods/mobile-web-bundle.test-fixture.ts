@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { installFakeAppEnvironment } from '../../../../../config/scripts/vitest-host-ports-setup'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RpcDispatcher } from '../dispatcher'
 import { MOBILE_WEB_BUNDLE_METHODS } from './mobile-web-bundle'
 import { MOBILE_WEB_BUNDLE_CHUNK_BYTES } from '../../../../shared/mobile-web-bundle/bundle-rpc-contract'
@@ -96,7 +96,7 @@ export function writeSyntheticMobileWebBundle(
  *  read off the install, so the dispatcher's one call into it is the envelope's runtime id. */
 export function mobileWebBundleDispatcher(): RpcDispatcher {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: neither mobileWeb.bundle method takes a runtime argument, so getRuntimeId (read once, to stamp the envelope) is the only member this dispatcher can reach.
-  const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+  const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as QuirkyRuntimeService
   return new RpcDispatcher({ runtime, methods: MOBILE_WEB_BUNDLE_METHODS })
 }
 

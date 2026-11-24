@@ -86,7 +86,7 @@ export function normalizeClaudeEvent(
   const isTurnBoundary = eventName === 'Stop' || eventName === 'StopFailure'
   // Why: absent means unknown — a plain Stop never becomes `success`, so a cancel can never read as a
   // success. Current Claude sends NO hook on a cancel and no `is_interrupt` on Stop, so the
-  // cancellation normally arrives through Orca's own inferred interrupt
+  // cancellation normally arrives through Quirky's own inferred interrupt
   // (`markClaudeLeadTurnInterrupted`) and is carried forward here; `is_interrupt` on a turn
   // boundary is kept as the secondary source for builds that do send it.
   const outcome = !isTurnBoundary

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { runInNewContext } from 'node:vm'
 import { installRendererIpcProbe } from './main-blocking-probe.mjs'
-import { connectOrcaMainInspector } from './orca-main-inspector-connection.mjs'
+import { connectQuirkyMainInspector } from './quirky-main-inspector-connection.mjs'
 
 test('IPC polling records a rejection and permits the next poll', async () => {
   let poll
@@ -31,7 +31,7 @@ test('IPC polling records a rejection and permits the next poll', async () => {
   })
   await poll()
   await poll()
-  const { requests } = window.__orcaIpcTimingProbe.stop()
+  const { requests } = window.__quirkyIpcTimingProbe.stop()
   assert.equal(requests.length, 2)
   assert.match(requests[0].failed, /IPC disconnected/)
   assert.equal(requests[1].failed, undefined)
@@ -60,7 +60,7 @@ test('socket closure rejects outstanding and subsequent requests without timeout
       this.onclose()
     }
   }
-  const connect = runInNewContext(`(${String(connectOrcaMainInspector)})`, {
+  const connect = runInNewContext(`(${String(connectQuirkyMainInspector)})`, {
     fetch: async () => ({ json: async () => [{ webSocketDebuggerUrl: 'ws://fixture' }] }),
     WebSocket: FakeSocket,
     setTimeout(callback) {

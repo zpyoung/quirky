@@ -56,7 +56,7 @@ describe('E2EE v2 host latch', () => {
     await hydrateE2EEV2HostLatch()
     await vi.waitFor(() =>
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-        'orca:e2ee-v2-hosts',
+        'quirky:e2ee-v2-hosts',
         JSON.stringify(['host-key'])
       )
     )

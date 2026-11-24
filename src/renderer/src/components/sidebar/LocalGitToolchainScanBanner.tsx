@@ -22,7 +22,7 @@ const FIXES: Record<
     body: () =>
       translate(
         'auto.components.sidebar.LocalGitToolchainScanBanner.xcodeLicenseBody',
-        'macOS blocks Git until you accept it. Run this in Terminal, then switch back to Orca. It will check again automatically.'
+        'macOS blocks Git until you accept it. Run this in Terminal, then switch back to Quirky. It will check again automatically.'
       )
   },
   'developer-tools': {
@@ -35,7 +35,7 @@ const FIXES: Record<
     body: () =>
       translate(
         'auto.components.sidebar.LocalGitToolchainScanBanner.developerToolsBody',
-        "Git needs Apple's developer tools. Run this in Terminal, then switch back to Orca. It will check again automatically."
+        "Git needs Apple's developer tools. Run this in Terminal, then switch back to Quirky. It will check again automatically."
       )
   }
 }
@@ -80,7 +80,7 @@ export function LocalGitToolchainScanBanner(): React.JSX.Element | null {
     if (!isBlocked) {
       return
     }
-    // Why: the fix happens in Terminal, so returning to Orca is the moment to check again.
+    // Why: the fix happens in Terminal, so returning to Quirky is the moment to check again.
     const onFocus = (): void => void rescan()
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)

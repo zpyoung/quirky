@@ -47,7 +47,7 @@ function persistedTabIds(session: WorkspaceSessionState, worktreeId: string): st
   return (session.tabsByWorktree?.[worktreeId] ?? []).map((tab) => tab.id)
 }
 
-/** `orca terminal create`: the runtime writes the pane, then binds the terminal it started. */
+/** `quirky terminal create`: the runtime writes the pane, then binds the terminal it started. */
 async function startRuntimePane(
   store: Awaited<ReturnType<typeof createStore>>,
   pane: { worktreeId: string; tabId: string; leafId: string; ptyId: string; incarnationId?: string }
@@ -65,7 +65,7 @@ async function startRuntimePane(
 
 describe('runtime-admitted terminal membership survives a stale renderer replay', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-host-membership-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-host-membership-'))
   })
 
   afterEach(async () => {

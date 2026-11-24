@@ -25,7 +25,7 @@ import {
 
 export type GuestCdpSender = GuestSessionCdpSender
 
-// Why: getType() is 'webview' only for guests hosted in an Orca window; offscreen and
+// Why: getType() is 'webview' only for guests hosted in an Quirky window; offscreen and
 // headless pages have no host frame tree, so CDP input already reaches them.
 export function isEmbeddedGuest(webContents: WebContents): boolean {
   return webContents.getType() === 'webview'
@@ -115,7 +115,7 @@ export async function dispatchPageKeyEvent(
   }
   const route = await resolveFocusedFrameRoute(webContents, send)
   if (route.kind === 'session') {
-    // Why: Tab from a frame's last field can move focus out of the guest into Orca's window.
+    // Why: Tab from a frame's last field can move focus out of the guest into Quirky's window.
     const isTabDown =
       params.key === 'Tab' && (params.type === 'keyDown' || params.type === 'rawKeyDown')
     const release = isTabDown ? await guardFocus() : () => {}
@@ -133,7 +133,7 @@ export async function dispatchPageKeyEvent(
   }
   const plan = planCdpKeyEvent(params)
   if (plan && route.kind === 'widget') {
-    // Why: Tab from the page's last field moves focus out of the guest into Orca's window.
+    // Why: Tab from the page's last field moves focus out of the guest into Quirky's window.
     const release = plan.events.some((event) => event.type === 'keyDown' && event.keyCode === 'Tab')
       ? await guardFocus()
       : () => {}

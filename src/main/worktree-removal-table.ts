@@ -6,7 +6,7 @@ import { writeWorktreeRemovalRecords, type WorktreeRemovalRecord } from './workt
 // The accepted removals, mirrored to disk on every change; listings and joins read only this.
 export const pendingWorktreeRemovals = new Map<string, WorktreeRemovalRecord>()
 // Deletes that failed after Git dropped the registration: listed with their error until the
-// checkout disappears or is replaced, Delete finds Git registering it, or the repo leaves Orca.
+// checkout disappears or is replaced, Delete finds Git registering it, or the repo leaves Quirky.
 // Never retried unasked.
 export const failedWorktreeRemovals = new Map<string, WorktreeRemovalRecord>()
 // Why weak: a listing that read Git before a delete finished holds the record until it replies.
@@ -71,7 +71,7 @@ export function assertNoPendingWorktreeRemovalConflict(
   const removal = findPendingWorktreeRemovalConflict(repoPath, target)
   if (removal) {
     throw new Error(
-      `Orca is still deleting the workspace at ${removal.worktreePath}. Cleanup is pending; try again shortly.`
+      `Quirky is still deleting the workspace at ${removal.worktreePath}. Cleanup is pending; try again shortly.`
     )
   }
 }

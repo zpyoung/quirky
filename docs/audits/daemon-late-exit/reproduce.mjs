@@ -6,8 +6,8 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { startVitest } from 'vitest/node'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1.')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1.')
 }
 const root = fileURLToPath(new URL('../../../', import.meta.url))
 const sourcePath = join(root, 'src/main/ipc/pty/provider/bind-listeners.ts')
@@ -27,7 +27,7 @@ const before = source
   .replace(restoreIntent, '')
   .replace(declaration, `${declaration}\n      if (syntheticExit) {\n        return\n      }`)
 const fixturePath = join(root, 'src/main/ipc/pty/daemon-late-exit-test-fixture.ts')
-const scratch = await mkdtemp(join(tmpdir(), 'orca-daemon-late-exit-proof-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-daemon-late-exit-proof-'))
 const phases = []
 try {
   for (const phase of ['before', 'after']) {

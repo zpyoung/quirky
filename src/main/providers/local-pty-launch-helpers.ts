@@ -2,16 +2,16 @@ import { basename, delimiter, win32 as pathWin32 } from 'node:path'
 import { resolvePathEnvKey } from '../pty/windows-path-segment-merge'
 import { expandWindowsEnvironmentVariables } from '../../shared/windows-environment-expansion'
 import { resolveSafePtyDefaultCwd } from './pty-default-cwd'
-import { ORCAD_MANAGED_ACTIVATION_ROOT_ENV } from '../../shared/orcad-managed-launch-env'
+import { QUIRKYD_MANAGED_ACTIVATION_ROOT_ENV } from '../../shared/quirkyd-managed-launch-env'
 
 const PANE_IDENTITY_ENV_KEYS = [
-  'ORCA_PANE_KEY',
-  'ORCA_TAB_ID',
-  'ORCA_WORKTREE_ID',
-  'ORCA_AGENT_LAUNCH_TOKEN',
+  'QUIRKY_PANE_KEY',
+  'QUIRKY_TAB_ID',
+  'QUIRKY_WORKTREE_ID',
+  'QUIRKY_AGENT_LAUNCH_TOKEN',
   'JCODE_RUNTIME_DIR',
-  // A server's own launch marker; a user's `orcad` in this shell is not client-managed.
-  ORCAD_MANAGED_ACTIVATION_ROOT_ENV
+  // A server's own launch marker; a user's `quirkyd` in this shell is not client-managed.
+  QUIRKYD_MANAGED_ACTIVATION_ROOT_ENV
 ] as const
 
 export function getDefaultCwd(): string {
@@ -33,7 +33,7 @@ export function promoteAgentTeamsShimPath(
   env: Record<string, string>,
   requestedPath: string | undefined
 ): void {
-  if (!env.ORCA_AGENT_TEAMS_TEAM_ID || !requestedPath) {
+  if (!env.QUIRKY_AGENT_TEAMS_TEAM_ID || !requestedPath) {
     return
   }
   const normalizedRequestedPath =

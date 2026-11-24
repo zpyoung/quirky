@@ -15,7 +15,7 @@ export type KeybindingContext = 'app' | 'terminal' | 'browser'
 
 export type KeybindingPlatform = 'darwin' | 'linux' | 'win32'
 
-export type TerminalShortcutPolicy = 'orca-first' | 'terminal-first'
+export type TerminalShortcutPolicy = 'quirky-first' | 'terminal-first'
 
 export type KeybindingMatchOptions = {
   context?: KeybindingContext

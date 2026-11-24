@@ -66,7 +66,10 @@ function buildDefaultAnswer(question: AskQuestion): AskAnswer | null {
   }
 }
 
-function buildDraftAnswer(question: AskQuestion, draft: AskPartialQuestionDraft | undefined): AskAnswer | null {
+function buildDraftAnswer(
+  question: AskQuestion,
+  draft: AskPartialQuestionDraft | undefined
+): AskAnswer | null {
   if (!draft) {
     return null
   }
@@ -95,18 +98,31 @@ function buildDraftAnswer(question: AskQuestion, draft: AskPartialQuestionDraft 
   }
 }
 
-function buildSelectDraftAnswer(question: AskSelectQuestion, draft: AskPartialQuestionDraft): AskAnswer | null {
+function buildSelectDraftAnswer(
+  question: AskSelectQuestion,
+  draft: AskPartialQuestionDraft
+): AskAnswer | null {
   const selectedValue = draft.selected?.[0]
   const option =
-    selectedValue === undefined ? undefined : question.options.find((candidate) => candidate.value === selectedValue)
+    selectedValue === undefined
+      ? undefined
+      : question.options.find((candidate) => candidate.value === selectedValue)
   if (option) {
-    return { value: option.value, label: option.label, note: nonBlank(draft.note), source: 'option' }
+    return {
+      value: option.value,
+      label: option.label,
+      note: nonBlank(draft.note),
+      source: 'option'
+    }
   }
   const other = nonBlank(draft.other)
   return other ? { value: other, note: nonBlank(draft.note), source: 'other' } : null
 }
 
-function buildMultiselectDraftAnswer(question: AskMultiselectQuestion, draft: AskPartialQuestionDraft): AskAnswer | null {
+function buildMultiselectDraftAnswer(
+  question: AskMultiselectQuestion,
+  draft: AskPartialQuestionDraft
+): AskAnswer | null {
   const matched = (draft.selected ?? [])
     .map((value) => question.options.find((candidate) => candidate.value === value))
     .filter((option) => option !== undefined)

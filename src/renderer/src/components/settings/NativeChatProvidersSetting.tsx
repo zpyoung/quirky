@@ -78,7 +78,7 @@ function ProviderStatus({
 }
 
 /** The agent's name and status line, plus any install button, which sits beside the switch.
- *  An agent whose chats run a program Orca downloads shows that program's install state as its
+ *  An agent whose chats run a program Quirky downloads shows that program's install state as its
  *  status line, since its CLI's install state says nothing about whether its chats can start. */
 function ProviderDetail(props: {
   agent: TuiAgent

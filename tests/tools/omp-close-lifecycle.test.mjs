@@ -6,7 +6,7 @@ import { createDaemonPtySubprocessHandle } from '../../src/main/daemon/pty-subpr
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   captureDescendantSnapshot,
   readProcessTable
@@ -24,9 +24,9 @@ import {
   clearPtyState
 } from '../../src/main/providers/local-pty-provider-state.ts'
 
-const binary = process.env.ORCA_OMP_PROBE_BINARY
-const externalTool = process.env.ORCA_OMP_PROBE_EXTERNAL_TOOL === '1'
-const daemonBackend = process.env.ORCA_OMP_PROBE_BACKEND === 'daemon'
+const binary = process.env.QUIRKY_OMP_PROBE_BINARY
+const externalTool = process.env.QUIRKY_OMP_PROBE_EXTERNAL_TOOL === '1'
+const daemonBackend = process.env.QUIRKY_OMP_PROBE_BACKEND === 'daemon'
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`
 const ownedPidRows = async (pids) => {
@@ -54,7 +54,7 @@ it.skipIf(!binary || process.platform === 'win32')(
     for (const launch of ['recognized', 'typed']) {
       for (const close of externalTool || daemonBackend ? ['explicit'] : ['explicit', 'quit']) {
         expect(ptyProcesses.size).toBe(0)
-        const home = mkdtempSync(join(tmpdir(), 'orca-omp-close-home-'))
+        const home = mkdtempSync(join(tmpdir(), 'quirky-omp-close-home-'))
         const agentHome = join(home, 'agent')
         mkdirSync(agentHome)
         const config = join(home, 'probe.yml')
@@ -66,7 +66,7 @@ it.skipIf(!binary || process.platform === 'win32')(
         let transcript = ''
         let nativeExit = null
         const shell =
-          process.env.ORCA_OMP_PROBE_SHELL ??
+          process.env.QUIRKY_OMP_PROBE_SHELL ??
           (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
         const shellArgs = shell.endsWith('zsh') ? ['-f', '-i'] : ['--noprofile', '--norc', '-i']
         const proc = pty.spawn(shell, shellArgs, {
@@ -89,7 +89,7 @@ it.skipIf(!binary || process.platform === 'win32')(
             PI_PROFILE: '',
             PI_CONFIG_DIR: '.omp',
             PI_CONFIG_FILES: '',
-            ORCA_BACKGROUND_LAUNCH: '1'
+            QUIRKY_BACKGROUND_LAUNCH: '1'
           }
         })
         const daemonSession = daemonBackend

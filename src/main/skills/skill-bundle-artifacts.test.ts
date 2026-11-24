@@ -11,7 +11,7 @@ afterEach(async () => {
 })
 
 async function resourceRootWith(manifest: string): Promise<string> {
-  const resourceRoot = await mkdtemp(join(tmpdir(), 'orca-skill-artifacts-'))
+  const resourceRoot = await mkdtemp(join(tmpdir(), 'quirky-skill-artifacts-'))
   temporaryDirectories.push(resourceRoot)
   await mkdir(join(resourceRoot, 'skills'), { recursive: true })
   await writeFile(join(resourceRoot, 'skills', 'current-manifest.json'), manifest)

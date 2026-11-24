@@ -84,7 +84,7 @@ describe('worktree create preparation registry', () => {
       await prepareWorktreeCreateForRepo(store, { ...repo, path: 'C:\\repo' }, 'origin/main')
 
       expect(mocks.mkdir).toHaveBeenCalledWith(
-        expect.stringMatching(/^\\\\\?\\C:\\workspace\\\.orca-preparing/),
+        expect.stringMatching(/^\\\\\?\\C:\\workspace\\\.quirky-preparing/),
         { recursive: true }
       )
     } finally {
@@ -354,7 +354,7 @@ describe('worktree create preparation registry', () => {
   })
 
   it('prepares while stale removal is stalled, shares its scan, and settles removal on reset', async () => {
-    const stalePath = '/workspace/.orca-preparing/999999999-11111111-1111-4111-8111-111111111111'
+    const stalePath = '/workspace/.quirky-preparing/999999999-11111111-1111-4111-8111-111111111111'
     let releaseRemoval!: () => void
     const removal = new Promise<void>((resolve) => {
       releaseRemoval = resolve
@@ -363,7 +363,7 @@ describe('worktree create preparation registry', () => {
       {
         path: stalePath,
         branch: undefined,
-        lockReason: 'orca-create-preparation:v1:999999999:stale',
+        lockReason: 'quirky-create-preparation:v1:999999999:stale',
         head: 'deadbeef',
         isBare: false,
         isMainWorktree: false
@@ -385,7 +385,7 @@ describe('worktree create preparation registry', () => {
         {
           admissionTier: 'background'
         },
-        'orca-create-preparation:v1:999999999:stale'
+        'quirky-create-preparation:v1:999999999:stale'
       )
       expect(ready).toBe(true)
       await prepareWorktreeCreateForRepo(store, repo, 'origin/release')
@@ -419,7 +419,7 @@ describe('worktree create preparation registry', () => {
       {
         path: '/workspace/final',
         branch: 'refs/heads/feature/test',
-        lockReason: 'orca-create-preparation:v1:999999999:stale',
+        lockReason: 'quirky-create-preparation:v1:999999999:stale',
         head: 'deadbeef',
         isBare: false,
         isMainWorktree: false
@@ -432,7 +432,7 @@ describe('worktree create preparation registry', () => {
       repo.path,
       '/workspace/final',
       { admissionTier: 'background' },
-      'orca-create-preparation:v1:999999999:stale'
+      'quirky-create-preparation:v1:999999999:stale'
     )
     expect(mocks.discard).not.toHaveBeenCalledWith(repo.path, '/workspace/final', expect.anything())
   })
@@ -440,7 +440,7 @@ describe('worktree create preparation registry', () => {
   it('does not classify a user branch worktree under the preparation directory as stale', async () => {
     mocks.listWorktreeGraph.mockResolvedValueOnce([
       {
-        path: '/workspace/.orca-preparing/999999999-user-worktree',
+        path: '/workspace/.quirky-preparing/999999999-user-worktree',
         branch: 'refs/heads/user-worktree',
         lockReason: undefined,
         head: 'deadbeef',
@@ -460,7 +460,7 @@ describe('worktree create preparation registry', () => {
       {
         path: `/workspace/${WORKTREE_CREATE_PREPARATION_DIRECTORY}/999-checkout`,
         branch: undefined,
-        lockReason: 'orca-create-preparation:v1:999999999:spoofed',
+        lockReason: 'quirky-create-preparation:v1:999999999:spoofed',
         head: 'deadbeef',
         isBare: false,
         isMainWorktree: false

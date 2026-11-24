@@ -8,7 +8,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { buildSync } from 'esbuild'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -43,7 +43,7 @@ function quota() {
   )
 }
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-zcode-v2-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-zcode-v2-'))
   host = {
     home: dir,
     platform: 'linux',
@@ -225,15 +225,15 @@ describe('upstream-written ZCode v2 stores', () => {
     ).toEqual({ status: 'absent' })
   })
 
-  it('preserves the protected Orca key priority even if v2 is corrupt', async () => {
+  it('preserves the protected Quirky key priority even if v2 is corrupt', async () => {
     install()
     writeFileSync(join(dir, '.zcode', 'v2', 'credentials.json'), 'broken')
     const result = await fetchZcodeRateLimits({
       credentialHost: host,
-      planCredential: { apiKey: 'synthetic-orca-key', baseUrl: 'https://open.bigmodel.cn' }
+      planCredential: { apiKey: 'synthetic-quirky-key', baseUrl: 'https://open.bigmodel.cn' }
     })
     expect(result.status).toBe('ok')
-    expect(result.usageMetadata?.credentialSource).toBe('orca-plan')
+    expect(result.usageMetadata?.credentialSource).toBe('quirky-plan')
   })
 
   it.each(['site', 'account', 'corrupt', 'network-error'])(
@@ -410,7 +410,7 @@ describe('external v2 file boundaries', () => {
           await fetchZcodeRateLimits({
             credentialHost: host,
             planCredential: {
-              apiKey: 'synthetic-orca-key',
+              apiKey: 'synthetic-quirky-key',
               baseUrl: 'https://api.z.ai'
             }
           })

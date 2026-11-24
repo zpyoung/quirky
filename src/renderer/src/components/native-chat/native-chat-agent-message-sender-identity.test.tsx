@@ -6,7 +6,7 @@ import { useAppStore } from '@/store'
 import type { AgentSessionStatusSummary } from '../../../../shared/agent-session-wire'
 import type { AgentMessageSource } from '../../../../shared/agent-session-message-source'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
-import { testOrcaSessionId } from '../../../../shared/orca-session-address-test-fixture'
+import { testQuirkySessionId } from '../../../../shared/quirky-session-address-test-fixture'
 import type { Tab } from '../../../../shared/tab-types'
 import { NativeChatAgentMessageSenders } from './NativeChatAgentMessageSenders'
 
@@ -46,7 +46,7 @@ vi.mock('@/runtime/structured-agent-session-status-feed', () => ({
 const openAgentMessageSender = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/open-agent-message-sender', () => ({ openAgentMessageSender }))
 
-const ROOT = testOrcaSessionId('root-chat')
+const ROOT = testQuirkySessionId('root-chat')
 const RECIPIENT = 'recipient'
 const SENDER = 'sender'
 const PANE = 'terminal:11111111-1111-4111-8111-111111111111'
@@ -85,9 +85,9 @@ function source(terminal = false): AgentMessageSource {
     senders: [
       {
         party: {
-          address: terminal ? 'term-a' : `orca_session_id:${ROOT}`,
+          address: terminal ? 'term-a' : `quirky_session_id:${ROOT}`,
           terminalHandle: terminal ? 'term-a' : null,
-          orcaSessionId: terminal ? null : ROOT
+          quirkySessionId: terminal ? null : ROOT
         },
         name: 'Original sender'
       }

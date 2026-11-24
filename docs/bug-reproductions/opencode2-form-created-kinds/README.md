@@ -1,7 +1,7 @@
 # OpenCode 2 `form.created` is not always a question (#22371)
 
-OpenCode 2 has one form primitive and several producers. Orca's setup bridge mapped every
-`form.created` to `question.asked`, which is Orca's un-evictable "the pane owner must answer
+OpenCode 2 has one form primitive and several producers. Quirky's setup bridge mapped every
+`form.created` to `question.asked`, which is Quirky's un-evictable "the pane owner must answer
 this" blocker — including forms owned by a sentinel that is not a session.
 
 Captured against the shipped `opencode v2.0.12` binary on macOS, driving the real TUI in a PTY
@@ -33,13 +33,13 @@ it can never be retired by that session going idle — only by an exact `form.re
 `form.cancelled`. `websearch.provider` passes the real `context.sessionID`, so session idle retires
 it normally, and while it is pending the agent genuinely is waiting on the user.
 
-So Orca blocks on every session-owned form and drops only the non-session sentinel. Upstream notes
+So Quirky blocks on every session-owned form and drops only the non-session sentinel. Upstream notes
 in `form.ts:122-129` that `"global"` is temporary and elicitations will get real session ids; when
-that lands the exclusion stops matching and Orca starts blocking on them correctly.
+that lands the exclusion stops matching and Quirky starts blocking on them correctly.
 
 `form-created-question.json` and `form-replied-question.json` are the live capture of the
 `question` tool's form being raised and answered. Note `metadata.tool` is `{ messageID, id }`,
-not the `{ messageID, callID }` that Orca's `clearQuestionForToolPart` matches on, and OpenCode 2
+not the `{ messageID, callID }` that Quirky's `clearQuestionForToolPart` matches on, and OpenCode 2
 never emits `message.part.updated` at all — so that retirement path is dead for OpenCode 2 and
 `form.replied` / `form.cancelled` is the only reply-side retirement it has.
 
@@ -51,7 +51,7 @@ The whole time that dock was opened, paged and dismissed, the server's `/api/eve
 carried nothing but `server.connected`, heartbeats, and unrelated `skill.updated` filewatcher
 noise from another checkout. Same result for the `shift+tab` agent picker and the `ctrl+p`
 command palette. The TUI's pickers are local Solid components; they never call `Form.ask`, so
-they produce no server event of any kind and cannot be the thing Orca saw.
+they produce no server event of any kind and cannot be the thing Quirky saw.
 
 So this capture proves the mapping was wrong and which field fixes it; it does not reproduce
 the exact frame in the issue screenshot.

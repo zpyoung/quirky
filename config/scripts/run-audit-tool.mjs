@@ -1,4 +1,4 @@
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { resolvePnpmCliInvocation } from './pnpm-cli-invocation.mjs'

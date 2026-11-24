@@ -157,7 +157,7 @@ it('keeps blocked installs accessible as waiting rather than a failed download',
   useAppStore.setState({ updateCardCollapsed: true })
   renderUpdateControls()
   const toggle = screen.getByRole('button', {
-    name: 'Update waiting for other Orca instances. Click to expand.'
+    name: 'Update waiting for other Quirky instances. Click to expand.'
   })
   expect(screen.queryByText('Update failed')).toBeNull()
   fireEvent.click(toggle)

@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { getBrowserHostLeaseRegistry } from '../../browser-host/browser-host-lease-registry-instance'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RpcDispatcher } from '../dispatcher'
 import { BROWSER_CLIENT_HOST_METHODS } from './browser-client-host'
 
@@ -29,7 +29,7 @@ function request(
   }
 }
 
-function runtime(cleanups = new Map<string, () => void>()): OrcaRuntimeService {
+function runtime(cleanups = new Map<string, () => void>()): QuirkyRuntimeService {
   return {
     getRuntimeId: () => 'runtime-a',
     getStartedAt: () => 1,
@@ -38,7 +38,7 @@ function runtime(cleanups = new Map<string, () => void>()): OrcaRuntimeService {
     markClientHostedPagesReconciled: () => {},
     notifyMobileSessionTabsChanged: () => {},
     registerSubscriptionCleanup: (id: string, cleanup: () => void) => cleanups.set(id, cleanup)
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 }
 
 describe('browser.clientHost.attach RPC', () => {

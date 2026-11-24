@@ -348,14 +348,14 @@ describe('init and state', () => {
     const bridge = harness()
     bridge.host.receive(clientFrame({ type: 'ready' }))
     bridge.host.receive(
-      clientFrame({ type: 'notify', name: 'storage', key: 'orca:pins:host-a', value: '["wt-1"]' })
+      clientFrame({ type: 'notify', name: 'storage', key: 'quirky:pins:host-a', value: '["wt-1"]' })
     )
     bridge.host.receive(
-      clientFrame({ type: 'notify', name: 'storage', key: 'orca:pins:host-a', value: null })
+      clientFrame({ type: 'notify', name: 'storage', key: 'quirky:pins:host-a', value: null })
     )
     expect(bridge.storageWrites).toEqual([
-      { key: 'orca:pins:host-a', value: '["wt-1"]' },
-      { key: 'orca:pins:host-a', value: null }
+      { key: 'quirky:pins:host-a', value: '["wt-1"]' },
+      { key: 'quirky:pins:host-a', value: null }
     ])
     expect(bridge.client.requests).toEqual([])
   })
@@ -365,7 +365,7 @@ describe('init and state', () => {
     // what stands between a page and state the native app owns.
     const bridge = harness()
     bridge.host.receive(clientFrame({ type: 'ready' }))
-    for (const key of ['orca:pins:', 'orca:hosts']) {
+    for (const key of ['quirky:pins:', 'quirky:hosts']) {
       bridge.host.receive(clientFrame({ type: 'notify', name: 'storage', key, value: 'x' }))
     }
     expect(bridge.storageWrites).toEqual([])
@@ -377,12 +377,17 @@ describe('init and state', () => {
   it("refuses a write for another host's pinned list, which the envelope lets through", () => {
     const bridge = harness()
     bridge.host.receive(clientFrame({ type: 'ready' }))
-    // `orca:pins:<any host>` is the right shape, so only the host knows this one is not the page's.
+    // `quirky:pins:<any host>` is the right shape, so only the host knows this one is not the page's.
     bridge.host.receive(
-      clientFrame({ type: 'notify', name: 'storage', key: 'orca:pins:other-host', value: '["x"]' })
+      clientFrame({
+        type: 'notify',
+        name: 'storage',
+        key: 'quirky:pins:other-host',
+        value: '["x"]'
+      })
     )
     expect(bridge.storageWrites).toEqual([])
-    expect(bridge.diagnostics).toEqual([{ kind: 'storage-refused', key: 'orca:pins:other-host' }])
+    expect(bridge.diagnostics).toEqual([{ kind: 'storage-refused', key: 'quirky:pins:other-host' }])
   })
 
   /**
@@ -394,10 +399,10 @@ describe('init and state', () => {
    * an old page is refused as well.
    */
   it('refuses a write for a key it could not hand the page, whatever the page believes', () => {
-    const journal = 'orca:mobileStructuredSendOperations:v1'
+    const journal = 'quirky:mobileStructuredSendOperations:v1'
     const bridge = harness({
       readStorage: () => ({
-        storage: { 'orca:pins:host-a': '["one"]' },
+        storage: { 'quirky:pins:host-a': '["one"]' },
         storageOversize: [journal]
       })
     })
@@ -410,15 +415,15 @@ describe('init and state', () => {
     expect(bridge.diagnostics).toEqual([{ kind: 'storage-refused', key: journal }])
     // And a key it did hand over is still writable, so the refusal is the size and not the path.
     bridge.host.receive(
-      clientFrame({ type: 'notify', name: 'storage', key: 'orca:pins:host-a', value: '["two"]' })
+      clientFrame({ type: 'notify', name: 'storage', key: 'quirky:pins:host-a', value: '["two"]' })
     )
-    expect(bridge.storageWrites).toEqual([{ key: 'orca:pins:host-a', value: '["two"]' }])
+    expect(bridge.storageWrites).toEqual([{ key: 'quirky:pins:host-a', value: '["two"]' }])
   })
 
   it('reads the keys again for each init, rather than replaying what it started with', () => {
     let pins = '["one"]'
     const bridge = harness({
-      readStorage: () => ({ storage: { 'orca:pins:host-a': pins }, storageOversize: [] })
+      readStorage: () => ({ storage: { 'quirky:pins:host-a': pins }, storageOversize: [] })
     })
     bridge.host.receive(clientFrame({ type: 'ready' }))
     pins = '["one","two"]'
@@ -427,16 +432,16 @@ describe('init and state', () => {
     bridge.host.receive(clientFrame({ type: 'ready' }))
     const inits = bridge.frames().filter((frame) => frame.type === 'init')
     expect(inits.map((frame) => (frame.type === 'init' ? frame.storage : null))).toEqual([
-      { 'orca:pins:host-a': '["one"]' },
-      { 'orca:pins:host-a': '["one","two"]' }
+      { 'quirky:pins:host-a': '["one"]' },
+      { 'quirky:pins:host-a': '["one","two"]' }
     ])
   })
 
   it('hands the page what the app holds for the keys it may read', () => {
-    const bridge = harness({ storage: { 'orca:pins:host-a': '["wt-1"]' } })
+    const bridge = harness({ storage: { 'quirky:pins:host-a': '["wt-1"]' } })
     bridge.host.receive(clientFrame({ type: 'ready' }))
     const init = bridge.last()
-    expect(init.type === 'init' && init.storage).toEqual({ 'orca:pins:host-a': '["wt-1"]' })
+    expect(init.type === 'init' && init.storage).toEqual({ 'quirky:pins:host-a': '["wt-1"]' })
     expect(init.type === 'init' && init.host).toEqual(HOST)
   })
 

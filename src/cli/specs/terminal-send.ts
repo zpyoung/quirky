@@ -5,7 +5,7 @@ export const TERMINAL_SEND_COMMAND_SPEC: CommandSpec = {
   path: ['terminal', 'send'],
   summary: 'Send input to a live terminal',
   usage:
-    'orca terminal send [--terminal <handle>] [--text <text>] [--enter] [--interrupt] [--wait-submit <seconds>] [--retry-request <id>] [--json]',
+    'quirky terminal send [--terminal <handle>] [--text <text>] [--enter] [--interrupt] [--wait-submit <seconds>] [--retry-request <id>] [--json]',
   allowedFlags: [
     ...GLOBAL_FLAGS,
     'terminal',

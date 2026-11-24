@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { removeTree } from '../../shared/windows-transient-lock-removal'
 import { getWindowsManagedLifecycleHook } from '../claude/hook-settings'
 import { wrapWindowsHookCommand } from './installer-utils'
@@ -25,7 +25,7 @@ describe('batch hook policy setup', () => {
   it.each(['.cmd', '.CMD', '.ps1', '.PS1', '.cmd.ps1'])(
     'preserves policy setup for scripts that require it: %s',
     (extension) => {
-      const path = `C:\\Users\\测试用户\\.orca\\agent-hooks\\hook${extension}`
+      const path = `C:\\Users\\测试用户\\.quirky\\agent-hooks\\hook${extension}`
       const commands = [
         wrapWindowsBatchHookCommand(path),
         getWindowsManagedLifecycleHook(path).command
@@ -64,18 +64,18 @@ describe.skipIf(process.platform !== 'win32')('guarded Windows batch hook comman
   it.each(['测试用户', 'rene\u0301', "测试 用户 O'Brien"])(
     'keeps present and deleted %s entries compatible with every host',
     async (profile) => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-batch-launcher-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-batch-launcher-'))
       const home = join(root, profile)
-      const scriptPath = join(home, '.orca', 'agent-hooks', 'claude-hook.cmd')
-      mkdirSync(join(home, '.orca', 'agent-hooks'), { recursive: true })
+      const scriptPath = join(home, '.quirky', 'agent-hooks', 'claude-hook.cmd')
+      mkdirSync(join(home, '.quirky', 'agent-hooks'), { recursive: true })
       const env = {
         ...Object.fromEntries(
-          Object.entries(process.env).filter(([key]) => !key.startsWith('ORCA_'))
+          Object.entries(process.env).filter(([key]) => !key.startsWith('QUIRKY_'))
         ),
-        ORCA_BACKGROUND_LAUNCH: '1',
-        ORCA_AGENT_HOOK_PORT: '1',
-        ORCA_AGENT_HOOK_TOKEN: 'batch-launcher-test',
-        ORCA_PANE_KEY: 'tab:leaf',
+        QUIRKY_BACKGROUND_LAUNCH: '1',
+        QUIRKY_AGENT_HOOK_PORT: '1',
+        QUIRKY_AGENT_HOOK_TOKEN: 'batch-launcher-test',
+        QUIRKY_PANE_KEY: 'tab:leaf',
         PSExecutionPolicyPreference: 'Restricted'
       }
       const input = JSON.stringify({ prompt: '한국어 日本語 😀 & %PATH% !'.repeat(4096) })
@@ -149,7 +149,7 @@ describe.skipIf(process.platform !== 'win32')('guarded Windows batch hook comman
   )
 
   it('still runs a PowerShell hook under an AllSigned process policy', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-ps1-policy-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-ps1-policy-'))
     const scriptPath = join(root, '测试-hook.ps1')
     try {
       writeFileSync(scriptPath, "Write-Output '{}'; exit 0")
@@ -160,7 +160,7 @@ describe.skipIf(process.platform !== 'win32')('guarded Windows batch hook comman
         args,
         env: {
           ...process.env,
-          ORCA_BACKGROUND_LAUNCH: '1',
+          QUIRKY_BACKGROUND_LAUNCH: '1',
           PSExecutionPolicyPreference: 'AllSigned'
         },
         input: '{}',
@@ -175,7 +175,7 @@ describe.skipIf(process.platform !== 'win32')('guarded Windows batch hook comman
   })
 
   it('preserves the process policy inherited by a batch hook and its PowerShell child', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-policy-测试-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-policy-测试-'))
     const scriptPath = join(root, 'hook.cmd')
     try {
       writeFileSync(join(root, 'child.ps1'), "Write-Output '{}'; exit 0")
@@ -189,7 +189,7 @@ describe.skipIf(process.platform !== 'win32')('guarded Windows batch hook comman
         args,
         env: {
           ...process.env,
-          ORCA_BACKGROUND_LAUNCH: '1',
+          QUIRKY_BACKGROUND_LAUNCH: '1',
           PSExecutionPolicyPreference: 'Restricted'
         },
         input: '{}',

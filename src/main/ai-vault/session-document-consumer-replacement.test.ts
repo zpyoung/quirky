@@ -10,7 +10,7 @@ import { openSessionSearchIndexFile } from '../ai-vault-search/session-search-in
 it.each(['hermes', 'gemini', 'devin', 'cline'] as const)(
   'indexes only the final %s message array, preserving JSON last-field semantics',
   async (agent) => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-document-replacement-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-document-replacement-'))
     const index = await openSessionSearchIndexFile('ss-document-replacement')
     const writer = new SessionSearchIndexWriter(index.db, 1)
     const unregister = registerTranscriptConsumer({
@@ -75,7 +75,7 @@ it.each(['hermes', 'gemini', 'devin', 'cline'] as const)(
 )
 
 it('discards partially emitted messages from a malformed Cline sidecar', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-cline-incomplete-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-cline-incomplete-'))
   const published: string[] = []
   const unregister = registerTranscriptConsumer({
     beginRead: () => {

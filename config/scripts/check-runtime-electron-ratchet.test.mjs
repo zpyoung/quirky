@@ -19,7 +19,7 @@ describe('structured chat coverage', () => {
   })
 
   function fixture(files) {
-    const root = mkdtempSync(path.join(tmpdir(), 'orca-electron-ratchet-'))
+    const root = mkdtempSync(path.join(tmpdir(), 'quirky-electron-ratchet-'))
     roots.push(root)
     for (const [file, source] of Object.entries(files)) {
       const absolute = path.join(root, file)
@@ -73,7 +73,7 @@ describe('structured chat coverage', () => {
       'src/main/codex/codex-session-backfill-fs-mocks.ts',
       'src/main/native-chat/__fixtures__/reader.ts',
       'src/main/native-chat/test-support/reader.ts',
-      'src/main/runtime/orca-runtime-tests/structured-agent-session-host.ts',
+      'src/main/runtime/quirky-runtime-tests/structured-agent-session-host.ts',
       'src/shared/types.d.ts',
       'src/packages/process-host/src/run-process.test.ts',
       'src/packages/process-host/src/__fixtures__/spawned-child.ts',
@@ -145,7 +145,7 @@ describe('structured chat coverage', () => {
   )
 
   it('checks public workspace imports against source without requiring a built package', async () => {
-    const root = fixture({ 'entry.ts': "import '@orca/process-host'" })
+    const root = fixture({ 'entry.ts': "import '@quirky/process-host'" })
     const target = path.join(process.cwd(), 'src/packages/process-host/src/run-process.ts')
     const current = await collectElectronImporters([path.join(root, 'entry.ts')], {
       plugins: [
@@ -202,9 +202,9 @@ describe('the default entry points', () => {
       path.relative(process.cwd(), file).split(path.sep).join('/')
     )
     expect(entries.slice(0, 4)).toEqual([
-      'src/main/runtime/orca-runtime.ts',
+      'src/main/runtime/quirky-runtime.ts',
       'src/main/runtime/runtime-rpc.ts',
-      'src/main/orcad/main.ts',
+      'src/main/quirkyd/main.ts',
       'src/cli/index.ts'
     ])
     for (const lane of [...lanes, 'src/shared/', 'src/packages/process-host/src/']) {

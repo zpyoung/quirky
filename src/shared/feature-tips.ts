@@ -7,7 +7,7 @@ import {
 export type FeatureTipId =
   | 'native-chat-upgrade'
   | 'voice-dictation'
-  | 'orca-cli'
+  | 'quirky-cli'
   | 'cmd-j-palette'
   | 'agent-session-search'
 
@@ -67,10 +67,10 @@ export const FEATURE_TIPS = [
     completedByFeatureInteractions: []
   },
   {
-    id: 'orca-cli',
+    id: 'quirky-cli',
     priority: 'new',
     eyebrow: 'Tip',
-    title: 'Let agents drive Orca with the Orca CLI',
+    title: 'Let agents drive Quirky with the Quirky CLI',
     description: 'Enable agents to coordinate child worktrees and communicate between worktrees.',
     action: 'setup-cli',
     ctaLabel: 'Install CLI & Skills',
@@ -124,7 +124,7 @@ export function normalizeFeatureTipIds(value: unknown): FeatureTipId[] {
 export function getCompletedFeatureTipIds(state: CompletedFeatureTipState): Set<FeatureTipId> {
   const completedIds = new Set<FeatureTipId>()
   if (state.cliInstalled) {
-    completedIds.add('orca-cli')
+    completedIds.add('quirky-cli')
   }
   if (state.voiceDictationEnabled) {
     completedIds.add('voice-dictation')

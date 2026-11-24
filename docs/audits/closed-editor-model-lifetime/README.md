@@ -51,10 +51,10 @@ The registry-transition regression is covered by four new cases. The uninformati
 From the repository root with its installed dependencies:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/closed-editor-model-lifetime/vitest.config.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/closed-editor-model-lifetime/vitest.config.mjs
 node docs/audits/closed-editor-model-lifetime/loader-controls.cjs
 ```
 
-The default is `ORCA_CLOSED_MODEL_GRAPH=worktree` and `ORCA_CLOSED_MODEL_VARIANT=fixed`. Repeat with each graph (`worktree`, `main`) and variant (`before`, `fixed`). Set these environment variables using the syntax of your shell; the runner and path handling are platform-neutral. Set `ORCA_CLOSED_MODEL_OUTPUT` or `ORCA_CLOSED_MODEL_LOADER_OUTPUT` to an output path to avoid replacing checked-in reports.
+The default is `QUIRKY_CLOSED_MODEL_GRAPH=worktree` and `QUIRKY_CLOSED_MODEL_VARIANT=fixed`. Repeat with each graph (`worktree`, `main`) and variant (`before`, `fixed`). Set these environment variables using the syntax of your shell; the runner and path handling are platform-neutral. Set `QUIRKY_CLOSED_MODEL_OUTPUT` or `QUIRKY_CLOSED_MODEL_LOADER_OUTPUT` to an output path to avoid replacing checked-in reports.
 
-For Electron, run the installed Electron binary with `ELECTRON_RUN_AS_NODE=1`, `ORCA_BACKGROUND_LAUNCH=1`, `--no-experimental-webstorage --expose-gc`, followed by `node_modules/vitest/vitest.mjs run --config docs/audits/closed-editor-model-lifetime/vitest.config.mjs` and the same graph/variant environment. This uses Electron's Node runtime without creating a window.
+For Electron, run the installed Electron binary with `ELECTRON_RUN_AS_NODE=1`, `QUIRKY_BACKGROUND_LAUNCH=1`, `--no-experimental-webstorage --expose-gc`, followed by `node_modules/vitest/vitest.mjs run --config docs/audits/closed-editor-model-lifetime/vitest.config.mjs` and the same graph/variant environment. This uses Electron's Node runtime without creating a window.

@@ -140,7 +140,7 @@ export class PtyStartupIngress {
         return
       case 'close-query':
         // Why only Kitty: colour authority never hands off, and the echo hold survives
-        // too, because a reply already on the wire is still Orca's to swallow.
+        // too, because a reply already on the wire is still Quirky's to swallow.
         this.kittyQueryOpen = false
         if (this.queryPending?.data.startsWith('\x1b[')) {
           this.releaseQueryPending()

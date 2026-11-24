@@ -1,6 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RpcDispatcher } from '../dispatcher'
 import { SESSION_TAB_METHODS } from './session-tabs'
 import { UpdatePaneLayout } from '../../../../shared/rpc-contract/session-tabs-schemas-params'
@@ -26,7 +26,7 @@ async function dispatchUpdatePaneLayout(params: Record<string, unknown>) {
   const runtime = {
     getRuntimeId: () => 'test-runtime',
     updateMobileSessionPaneLayout
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
   const replies: string[] = []
   await dispatcher.dispatchStreaming(

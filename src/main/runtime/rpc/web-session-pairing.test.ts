@@ -42,7 +42,7 @@ class FakeTransport implements MobileSocketTransport {
 const desktop = generateKeyPair()
 
 function harness() {
-  const registry = new DeviceRegistry(mkdtempSync(join(tmpdir(), 'orca-web-session-')))
+  const registry = new DeviceRegistry(mkdtempSync(join(tmpdir(), 'quirky-web-session-')))
   const transport = new FakeTransport()
   const ready: AuthenticatedMobileSocket[] = []
   const wiring = new MobileSocketWiring({

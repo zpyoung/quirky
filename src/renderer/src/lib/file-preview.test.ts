@@ -158,7 +158,7 @@ describe('openFileInBrowserTab', () => {
       ...docPreviewCall('/srv/repo/docs/report.html', { activate: true, targetGroupId: 'group-2' })
     )
   })
-  it('opens a local file URL in the Orca browser with the filename as title', () => {
+  it('opens a local file URL in the Quirky browser with the filename as title', () => {
     openFileInBrowserTab({
       filePath: '/tmp/example file.html',
       worktreeId: 'wt-1'
@@ -590,8 +590,8 @@ describe('convertBrowserPageToWorkspaceDoc', () => {
 // #22618: the doc preview is a desktop webview, so a web client must not create a tab it can
 // never materialize; the action hides instead of failing silently.
 describe('document previews in a paired web client', () => {
-  it('hides Open in Orca Browser and refuses with a reason instead of a silent no-op', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+  it('hides Open in Quirky Browser and refuses with a reason instead of a silent no-op', () => {
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     try {
       mocks.environmentId = 'runtime-1'
       mocks.browserAvailability = { state: 'enabled', provider: 'paired-runtime' }

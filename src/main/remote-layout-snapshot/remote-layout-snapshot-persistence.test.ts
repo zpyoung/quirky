@@ -12,7 +12,7 @@ import { Store } from '../persistence/loading-store/store'
 vi.mock('electron', () => ({
   app: {
     getPath: () => tmpdir(),
-    getName: () => 'orca-test',
+    getName: () => 'quirky-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
     on: () => {},
@@ -51,7 +51,7 @@ afterEach(async () => {
 })
 
 function profile(seeded: Record<string, unknown> = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-remote-layout-snapshot-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-remote-layout-snapshot-'))
   directories.push(directory)
   const databasePath = join(directory, 'profile-state.db')
   const profileId = 'remote-layout-snapshot'
@@ -60,7 +60,7 @@ function profile(seeded: Record<string, unknown> = {}) {
   )
   const open = () => {
     const store = new Store({
-      dataFile: join(directory, 'orca-data.json'),
+      dataFile: join(directory, 'quirky-data.json'),
       profileStateAuthority: new ProfileStateSqliteAuthority(databasePath, profileId)
     })
     stores.push(store)

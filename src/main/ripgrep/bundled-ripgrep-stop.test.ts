@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { stopBundledRipgrep } from './bundled-ripgrep-stop'
 
 const { signalTree, killChild } = vi.hoisted(() => ({ signalTree: vi.fn(), killChild: vi.fn() }))
-vi.mock('@orca/process-host/process-tree-termination', () => ({
+vi.mock('@quirky/process-host/process-tree-termination', () => ({
   signalProcessTree: signalTree
 }))
 vi.mock('../../shared/ripgrep-process-availability', () => ({

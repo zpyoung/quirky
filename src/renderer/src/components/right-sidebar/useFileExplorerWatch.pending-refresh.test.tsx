@@ -2,7 +2,7 @@
 
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ORCA_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
+import { QUIRKY_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
 import type { FsChangedPayload } from '../../../../shared/filesystem-entry-types'
 import type {
   FileExplorerOperationOwner,
@@ -106,7 +106,7 @@ describe('useFileExplorerWatch pending refreshes', () => {
   function emitRuntimeBatch(): void {
     emit((payload) =>
       window.dispatchEvent(
-        new CustomEvent(ORCA_WORKTREE_FILE_CHANGE_EVENT, {
+        new CustomEvent(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, {
           detail: { payload, runtimeEnvironmentId: 'runtime-1' }
         })
       )

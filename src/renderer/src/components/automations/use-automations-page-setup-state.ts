@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import type { OrcaHooks } from '../../../../shared/orca-yaml-hook-types'
+import type { QuirkyHooks } from '../../../../shared/quirky-yaml-hook-types'
 import { getRuntimeEnvironmentIdForRepo } from '@/lib/repo-runtime-owner'
 import { checkRuntimeHooks } from '@/runtime/runtime-hooks-client'
 import type { AutomationDraft } from './AutomationEditorDialog'
@@ -100,7 +100,7 @@ export function useAutomationsPageSetupState({
     [repos, settings]
   )
   const loadAutomationYamlHooksForRepo = useCallback(
-    async (repoId: string, hostId?: ExecutionHostId): Promise<OrcaHooks | null> => {
+    async (repoId: string, hostId?: ExecutionHostId): Promise<QuirkyHooks | null> => {
       const key = getAutomationHooksCacheKey(repoId, hostId)
       if (Object.hasOwn(automationYamlHooksByRepoKey, key)) {
         return automationYamlHooksByRepoKey[key] ?? null
@@ -119,7 +119,7 @@ export function useAutomationsPageSetupState({
           : Promise.reject(new Error('The project host is unknown.'))
       )
         .then((result) => ({
-          hooks: result.status === 'error' ? null : ((result.hooks as OrcaHooks | null) ?? null),
+          hooks: result.status === 'error' ? null : ((result.hooks as QuirkyHooks | null) ?? null),
           ok: result.status !== 'error'
         }))
         .catch(() => ({ hooks: null, ok: false }))

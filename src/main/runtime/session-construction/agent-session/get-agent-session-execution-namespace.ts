@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithResolveWorktreeRemovalTarget } from '../../workspaces/workspace-removal-target'
+import { QuirkyRuntimeWithResolveWorktreeRemovalTarget } from '../../workspaces/workspace-removal-target'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { parseWslUncPath } from '../../../../shared/wsl-paths'
@@ -23,7 +23,7 @@ import {
   resolveTuiAgentLaunchEnv
 } from '../../../../shared/tui-agent-launch-defaults'
 
-export abstract class OrcaRuntimeWithGetAgentSessionExecutionNamespace extends OrcaRuntimeWithResolveWorktreeRemovalTarget {
+export abstract class QuirkyRuntimeWithGetAgentSessionExecutionNamespace extends QuirkyRuntimeWithResolveWorktreeRemovalTarget {
   protected getAgentSessionExecutionNamespace(
     workspace: TerminalWorkspaceLaunchScope,
     agent: TuiAgent

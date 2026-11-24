@@ -1,4 +1,4 @@
-// Today's graph mirror, captured from OrcaRuntimeService.syncWindowGraph: tab-1 splits a live
+// Today's graph mirror, captured from QuirkyRuntimeService.syncWindowGraph: tab-1 splits a live
 // terminal (output and an OSC title) beside one that exited 1; tab-2 has one unbound pane. Step 2
 // restarts the exited pane on a new terminal. Step 3: pane 1's agent title is reset to neutral by
 // the window after its agent exits, pty-c's host is lost, and pane 3 names a PTY nobody registered.
@@ -9,7 +9,7 @@ import type { RuntimeSyncedLeaf, RuntimeSyncedTab } from '../../shared/runtime-t
 import type { RuntimeLeafPtyFacts } from './runtime-leaf-record-projection'
 import type { RuntimeLeafRecord } from './runtime-terminal-state-records'
 
-export const WORKTREE_ID = 'repo-1::/Users/dev/orca'
+export const WORKTREE_ID = 'repo-1::/Users/dev/quirky'
 export const LEAF_1 = '11111111-1111-4111-8111-111111111111'
 export const LEAF_2 = '22222222-2222-4222-8222-222222222222'
 export const LEAF_3 = '33333333-3333-4333-8333-333333333333'

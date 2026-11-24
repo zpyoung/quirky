@@ -1,4 +1,4 @@
-import type { ChildProcessHandle as ChildProcess } from '@orca/process-host/process-spec'
+import type { ChildProcessHandle as ChildProcess } from '@quirky/process-host/process-spec'
 
 export const PROVIDER_SIGKILL_GRACE_MS = 2_000
 

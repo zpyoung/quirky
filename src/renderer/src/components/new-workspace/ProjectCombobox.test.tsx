@@ -36,7 +36,7 @@ const projects: NewWorkspaceProjectOption[] = [
     kind: 'project',
     id: 'github:stablyai/orca',
     projectId: 'github:stablyai/orca',
-    displayName: 'orca',
+    displayName: 'quirky',
     badgeColor: '#111111',
     detail: 'stablyai/orca'
   },
@@ -117,7 +117,7 @@ describe('ProjectCombobox', () => {
     })
 
     const shell = container.querySelector('[data-project-combobox-root="true"]')
-    expect(shell?.textContent).toContain('orca')
+    expect(shell?.textContent).toContain('quirky')
     expect(shell?.textContent).not.toContain('SSH')
   })
 
@@ -361,7 +361,7 @@ describe('ProjectCombobox', () => {
 
     expect(field().value).toBe('')
     const shell = container.querySelector('[data-project-combobox-root="true"]')
-    expect(shell?.textContent).toContain('orca')
+    expect(shell?.textContent).toContain('quirky')
   })
 
   it('drops an uncommitted query when the list closes, so junk text never persists', () => {
@@ -383,7 +383,7 @@ describe('ProjectCombobox', () => {
 
     expect(field().value).toBe('')
     const shell = container.querySelector('[data-project-combobox-root="true"]')
-    expect(shell?.textContent).toContain('orca')
+    expect(shell?.textContent).toContain('quirky')
   })
 
   it('marks the field invalid so a failed create press can turn it red', () => {

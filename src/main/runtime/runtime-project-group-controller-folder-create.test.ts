@@ -5,7 +5,7 @@ import { RuntimeProjectGroupController } from './runtime-project-group-controlle
 import type { RuntimeStore } from './runtime-store-contract'
 import { FolderWorkspaceCreateRefusedError } from '../project-groups/folder-workspace-create-refusal'
 
-const MISSING_PATH = join(tmpdir(), 'orca-folder-create-missing-9c1f')
+const MISSING_PATH = join(tmpdir(), 'quirky-folder-create-missing-9c1f')
 
 // The store members a folder create never reaches.
 const unused = (): never => {

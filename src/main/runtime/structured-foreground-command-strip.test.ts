@@ -23,7 +23,7 @@ describe('foreground commands in the background-task channel', () => {
 
   beforeEach(async () => {
     _internals.resetCachesForTests()
-    root = await mkdtemp(join(tmpdir(), 'orca-foreground-command-strip-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-foreground-command-strip-'))
     server = new AgentHookServer()
   })
 

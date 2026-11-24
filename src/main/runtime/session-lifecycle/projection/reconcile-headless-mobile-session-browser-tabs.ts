@@ -1,10 +1,10 @@
-import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout as MobileSessionProjection } from './prune-mobile-session-tab-group-layout'
-import type { OrcaRuntimeWithCloseStructuredAgentSessionTab as StructuredSessionClose } from '../../session-tabs/structured-session-tab-close'
-import type { OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh as MobileSessionRefresh } from './perform-mobile-session-pty-records-refresh'
+import type { QuirkyRuntimeWithPruneMobileSessionTabGroupLayout as MobileSessionProjection } from './prune-mobile-session-tab-group-layout'
+import type { QuirkyRuntimeWithCloseStructuredAgentSessionTab as StructuredSessionClose } from '../../session-tabs/structured-session-tab-close'
+import type { QuirkyRuntimeWithPerformMobileSessionPtyRecordsRefresh as MobileSessionRefresh } from './perform-mobile-session-pty-records-refresh'
 import type { RuntimeWorkspaceCatalog as WorkspaceCatalog } from '../../workspaces/workspace-catalog'
-import type { OrcaRuntimeWithResolveMobileSessionTerminalCommand as MobileTerminalStartup } from '../../terminal/launch/mobile-terminal-startup'
-import type { OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal as OwnedMobileTerminalCreate } from '../../terminal/launch/mobile-terminal-owned-create'
-import { OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession } from '../../session-tabs/mobile-session-hydration'
+import type { QuirkyRuntimeWithResolveMobileSessionTerminalCommand as MobileTerminalStartup } from '../../terminal/launch/mobile-terminal-startup'
+import type { QuirkyRuntimeWithCreateRuntimeOwnedMobileSessionTerminal as OwnedMobileTerminalCreate } from '../../terminal/launch/mobile-terminal-owned-create'
+import { QuirkyRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession } from '../../session-tabs/mobile-session-hydration'
 import type {
   RuntimeMobileSessionBrowserTab,
   RuntimeMobileSessionSnapshotTab,
@@ -19,10 +19,10 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { sshRemotePtyLeaseAllowsReattach } from '../../../../shared/ssh-types'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import type { RuntimeStore } from '../../runtime-store-contract'
-import { SSH_PANE_RECOVERY_GRACE_MS } from '../../orca-runtime-core'
+import { SSH_PANE_RECOVERY_GRACE_MS } from '../../quirky-runtime-core'
 import { findTerminalTabIdForLeaf } from '../../../persistence/terminal-topology/terminal-topology-membership'
 
-export abstract class OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs extends OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession {
+export abstract class QuirkyRuntimeWithReconcileHeadlessMobileSessionBrowserTabs extends QuirkyRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession {
   protected abstract findPtyForMobileTerminalTab(
     ...args: Parameters<MobileSessionProjection['findPtyForMobileTerminalTab']>
   ): ReturnType<MobileSessionProjection['findPtyForMobileTerminalTab']>

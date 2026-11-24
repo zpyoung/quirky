@@ -11,9 +11,9 @@ const roots: string[] = []
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })))
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-selected-profile-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-selected-profile-'))
   roots.push(root)
-  const indexPath = join(root, 'orca-profile-index.json')
+  const indexPath = join(root, 'quirky-profile-index.json')
   writeFileSync(
     indexPath,
     JSON.stringify({ activeProfileId: 'active', profiles: [{ id: 'active' }, { id: 'inactive' }] })
@@ -21,7 +21,7 @@ function fixture() {
   const profiles = ['active', 'inactive'].map((profileId) => {
     const directory = join(root, 'profiles', profileId)
     mkdirSync(directory, { recursive: true })
-    const dataFile = join(directory, 'orca-data.json')
+    const dataFile = join(directory, 'quirky-data.json')
     const databaseFile = join(directory, 'profile-state.db')
     const legacy = JSON.stringify({ settings: { theme: 'legacy' } })
     writeFileSync(dataFile, legacy)

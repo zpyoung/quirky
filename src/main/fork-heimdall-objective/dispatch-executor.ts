@@ -26,7 +26,7 @@ import type {
 } from '../../shared/fork-heimdall-objective/detail-types'
 import { deriveObjectiveBudgetBucket } from '../../shared/fork-heimdall-objective/pacing'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import {
   buildObjectiveRolePrompt,
   resolveObjectiveRoleAgent,
@@ -265,7 +265,7 @@ export async function executeObjectiveDispatch(args: {
   binding: ObjectiveSnapshotBinding
   context: ExecuteContext<ObjectiveWorld>
   objectiveStore: ObjectiveStore
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   store: Store
 }): Promise<ActionOutcome> {
   const fingerprint = makeAttemptFingerprint(

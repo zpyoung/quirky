@@ -129,7 +129,7 @@ async function acceptPersonSend(
 }
 
 test('an older build lists a kept card first, holds it, and sends it first once a turn there lifts its pause', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-kept-card-downgrade-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-kept-card-downgrade-'))
   const journals = createTrackedJournalOpener()
   try {
     const earlier = await journals.open({ identity: IDENTITY, stateDirectory: directory })
@@ -190,7 +190,7 @@ test('an older build lists a kept card first, holds it, and sends it first once 
 }, 120_000)
 
 test("an older build reads the send this build's quit left queued, its source included, and settles it", async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-kept-leftover-downgrade-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-kept-leftover-downgrade-'))
   const journals = createTrackedJournalOpener()
   try {
     const quitting = await journals.open({ identity: IDENTITY, stateDirectory: directory })

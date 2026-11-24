@@ -28,7 +28,7 @@ function MobileNativeChatPermissionImpl({
 }): React.JSX.Element {
   const [submitting, setSubmitting] = useState(false)
   const submittingRef = useRef(false)
-  // A newer Orca's subject: its detail is shown, and only the card's cancel answers.
+  // A newer Quirky's subject: its detail is shown, and only the card's cancel answers.
   const newerSubject = isNewerApprovalSubject(permission.subject)
   const respond = async (send: string): Promise<void> => {
     if (submittingRef.current) {
@@ -139,8 +139,8 @@ function MobileNativeChatPermissionContext({
         <Text style={styles.detail}>{permission.detail}</Text>
       ) : null}
       {newerSubject ? (
-        <Text testID="native-chat-approval-needs-newer-orca" style={styles.detail}>
-          This request needs a newer version of Orca.
+        <Text testID="native-chat-approval-needs-newer-quirky" style={styles.detail}>
+          This request needs a newer version of Quirky.
         </Text>
       ) : null}
     </ScrollView>

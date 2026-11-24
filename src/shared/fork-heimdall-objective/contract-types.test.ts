@@ -178,7 +178,7 @@ describe('objective enrollment payload', () => {
     '/tmp/**',
     'C:/repo/**',
     '.git/**',
-    '.orca/**',
+    '.quirky/**',
     '*/**',
     'src/../secrets/**',
     'src\\**'

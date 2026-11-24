@@ -90,7 +90,7 @@ describe('DaemonPtyAdapter startup delivery', () => {
       expect(lastSpawnOpts).toEqual(
         expect.objectContaining({ startupCommandDelivery: 'shell-ready' })
       )
-      lastSubprocess._simulateData('\x1b]777;orca-shell-ready\x07\r\nuser@host $ ')
+      lastSubprocess._simulateData('\x1b]777;quirky-shell-ready\x07\r\nuser@host $ ')
       await waitFor(() => vi.mocked(lastSubprocess.write).mock.calls.length > 0)
       expect(lastSubprocess.write).toHaveBeenCalledExactlyOnceWith('codex\r')
     }
@@ -112,7 +112,7 @@ describe('DaemonPtyAdapter startup delivery', () => {
     expect(lastSpawnOpts).toEqual(
       expect.objectContaining({ startupCommandDelivery: 'shell-ready' })
     )
-    lastSubprocess._simulateData('\x1b]777;orca-shell-ready\x07')
+    lastSubprocess._simulateData('\x1b]777;quirky-shell-ready\x07')
     lastSubprocess._simulateData('\r\nuser@host $ ')
 
     await waitFor(() => vi.mocked(lastSubprocess.write).mock.calls.length > 0)
@@ -132,7 +132,7 @@ describe('DaemonPtyAdapter startup delivery', () => {
         command,
         env: { SHELL: '/bin/zsh' }
       })
-      lastSubprocess._simulateData('\x1b]777;orca-shell-ready\x07\r\nuser@host $ ')
+      lastSubprocess._simulateData('\x1b]777;quirky-shell-ready\x07\r\nuser@host $ ')
       await waitFor(() => vi.mocked(lastSubprocess.write).mock.calls.length > 0)
       const [script] = readdirSync(stagingDir)
       expect(lastSubprocess.write).toHaveBeenCalledExactlyOnceWith(

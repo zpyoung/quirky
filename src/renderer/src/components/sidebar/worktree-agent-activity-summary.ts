@@ -21,7 +21,7 @@ export type WorktreeAgentActivitySummary = {
   hasFailed: boolean
   /** Fresh interrupted completion, kept separate from clean done outcomes. */
   hasInterrupted: boolean
-  /** A fresh end Orca cannot prove, likewise never a clean done. */
+  /** A fresh end Quirky cannot prove, likewise never a clean done. */
   hasUnconfirmed: boolean
   hasLiveDone: boolean
   hasRetainedDone: boolean
@@ -135,7 +135,7 @@ function getWorktreeAgentActivitySummaries(
     }
     if (!isExplicitAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)) {
       // Why: staleness ends this row's authority but not the pane's identity — see
-      // `stalePaneIdsByTabId`. Dropping both let Orca's self-authored permission title outlive
+      // `stalePaneIdsByTabId`. Dropping both let Quirky's self-authored permission title outlive
       // the row it came from and pin the card to a question nobody was asking.
       addStalePaneId(summary, paneIdentity.tabId, paneIdentity.paneId)
       continue

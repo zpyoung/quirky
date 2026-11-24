@@ -1,9 +1,9 @@
 # macOS installer scheduling
 
 Electron's Squirrel launcher submits ShipIt to launchd without `ProcessType`.
-The default `Standard` service receives daemon CPU and I/O limits. After Orca
+The default `Standard` service receives daemon CPU and I/O limits. After Quirky
 quits, preparing thousands of bundle files can take minutes before any window
-returns. Reopening Orca during that interval makes ShipIt cancel the update.
+returns. Reopening Quirky during that interval makes ShipIt cancel the update.
 
 This N-API addon wraps `+[SQRLShipItLauncher shipItJobDictionary]`, adding only
 `ProcessType: Interactive` to each emitted dictionary. Squirrel still submits
@@ -24,7 +24,7 @@ This hook avoids rebuilding or replacing that dependency and can be removed once
 Electron sets the service type itself. Changing a running PID with `taskpolicy`
 did not reproduce the improvement from setting the launchd job type.
 
-On macOS arm64, a real unmodified update took 75 seconds. Signed Orca 1.4.230
+On macOS arm64, a real unmodified update took 75 seconds. Signed Quirky 1.4.230
 clone installs with Interactive scheduling took 8 seconds with a patched job
 dictionary and 6 seconds through Squirrel's native job submission. These runs
 used different cache conditions; they are local observations, not a controlled

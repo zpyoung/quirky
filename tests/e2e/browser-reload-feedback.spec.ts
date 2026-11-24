@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   ensureTerminalVisible,
   getBrowserTabs,
@@ -15,7 +15,7 @@ function closeServer(server: Server): Promise<void> {
 }
 
 test('shows Stop and a spinner during a held reload, then returns to Reload', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   let requestCount = 0
   const reloadResolvers: (() => void)[] = []
@@ -49,10 +49,10 @@ test('shows Stop and a spinner during a held reload, then returns to Reload', as
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/held`
   try {
-    await waitForSessionReady(orcaPage)
-    await ensureTerminalVisible(orcaPage)
-    const worktreeId = await waitForActiveWorktree(orcaPage)
-    const tab = await orcaPage.evaluate(
+    await waitForSessionReady(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
+    const worktreeId = await waitForActiveWorktree(quirkyPage)
+    const tab = await quirkyPage.evaluate(
       ({ worktreeId, url }) => {
         const created = window.__store?.getState().createBrowserTab(worktreeId, url, {
           title: 'Held reload',
@@ -65,18 +65,18 @@ test('shows Stop and a spinner during a held reload, then returns to Reload', as
     if (!tab) {
       throw new Error('browser tab was not created')
     }
-    const pane = orcaPage.locator(`[data-browser-overlay-tab-id="${tab.id}"]`)
+    const pane = quirkyPage.locator(`[data-browser-overlay-tab-id="${tab.id}"]`)
     const reload = pane.getByRole('button', { name: 'Reload' })
     await expect(reload).toBeVisible({ timeout: 20_000 })
     await reload.click()
     await secondRequest
     await expect
-      .poll(async () => (await getBrowserTabs(orcaPage, worktreeId)).at(-1)?.url, {
+      .poll(async () => (await getBrowserTabs(quirkyPage, worktreeId)).at(-1)?.url, {
         timeout: 20_000
       })
       .toBe(url)
     const getLoading = (): Promise<boolean | null> =>
-      orcaPage.evaluate(
+      quirkyPage.evaluate(
         ({ worktreeId, tabId }) => {
           const tab = window.__store
             ?.getState()
@@ -89,7 +89,7 @@ test('shows Stop and a spinner during a held reload, then returns to Reload', as
     const stop = pane.getByRole('button', { name: 'Stop' })
     await expect(stop).toBeVisible({ timeout: 10_000 })
     await expect(stop.locator('svg')).toHaveAttribute('class', /animate-spin/)
-    await orcaPage.screenshot({ path: testInfo.outputPath('reload-held.png') })
+    await quirkyPage.screenshot({ path: testInfo.outputPath('reload-held.png') })
     reloadReleased = true
     reloadResolvers.splice(0).forEach((resolve) => resolve())
     await expect(pane.getByRole('button', { name: 'Reload' })).toBeVisible({ timeout: 20_000 })

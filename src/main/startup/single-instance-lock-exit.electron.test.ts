@@ -19,7 +19,7 @@ const electronBinary = createRequire(import.meta.url)('electron') as string
 const GATE_ENTERED = 'GATE_ENTERED'
 const CONTINUED_INTO_STARTUP = 'CONTINUED_INTO_STARTUP'
 const REACHED_TAIL = 'REACHED_TAIL'
-const MARKER_ENV = 'ORCA_PRE_READY_EXIT_FIXTURE_MARKER'
+const MARKER_ENV = 'QUIRKY_PRE_READY_EXIT_FIXTURE_MARKER'
 
 const fixtureRoots: string[] = []
 
@@ -68,14 +68,14 @@ function buildFixtureMain(termination: string): string {
 type FixtureRun = { status: number | null; markers: string[] }
 
 function runPreReadyGate(termination: string): FixtureRun {
-  const root = mkdtempSync(join(tmpdir(), 'orca-pre-ready-exit-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-pre-ready-exit-'))
   fixtureRoots.push(root)
   const dir = join(root, 'fixture')
   const marker = join(root, 'markers.log')
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     join(dir, 'package.json'),
-    '{ "name": "orca-pre-ready-exit-fixture", "main": "main.js" }'
+    '{ "name": "quirky-pre-ready-exit-fixture", "main": "main.js" }'
   )
   writeFileSync(join(dir, 'main.js'), buildFixtureMain(termination))
   writeFileSync(marker, '')

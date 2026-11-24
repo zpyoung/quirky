@@ -113,7 +113,7 @@ export function registerQueuedMessageDeliveredEchoTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-queued-echo-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-queued-echo-'))
     clock = 1_000
   })
 

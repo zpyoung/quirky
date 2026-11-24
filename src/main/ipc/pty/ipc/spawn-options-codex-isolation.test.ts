@@ -46,7 +46,7 @@ async function runtimeSpawnEnv(
 }
 
 // Why both hosts: SSH panes reach the relay with this env untouched, local ones reach
-// node-pty or the daemon; WSL forwarding is covered by wsl-orca-env.test.ts.
+// node-pty or the daemon; WSL forwarding is covered by wsl-quirky-env.test.ts.
 describe.each([
   ['renderer spawn', ipcSpawnEnv],
   ['runtime spawn', runtimeSpawnEnv]
@@ -60,9 +60,9 @@ describe.each([
   )
 
   it.each([null, 'ssh-1'])(
-    'opts new terminals out with ORCA_CODEX_ISOLATE=0 when off (connection %s)',
+    'opts new terminals out with QUIRKY_CODEX_ISOLATE=0 when off (connection %s)',
     async (id) => {
-      expect(await spawnEnv(false, id)).toEqual({ KEEP: '1', ORCA_CODEX_ISOLATE: '0' })
+      expect(await spawnEnv(false, id)).toEqual({ KEEP: '1', QUIRKY_CODEX_ISOLATE: '0' })
     }
   )
 })

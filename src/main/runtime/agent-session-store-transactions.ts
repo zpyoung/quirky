@@ -70,12 +70,12 @@ function freezeRows(
   }
 }
 
-/** What every write gets on a database a newer Orca wrote: the refusal clients print as "update". */
+/** What every write gets on a database a newer Quirky wrote: the refusal clients print as "update". */
 function readOnlyStoreRefusal(): Error {
   return journalOpenRefusalError(
     new AgentSessionJournalError(
       'journal_read_only',
-      'the chat records were saved by a newer Orca; this host reads them and never writes'
+      'the chat records were saved by a newer Quirky; this host reads them and never writes'
     )
   )
 }
@@ -133,7 +133,7 @@ export class AgentSessionStoreTransactions {
   }
 
   /**
-   * `apply` changes only the draft it is given. On a database a newer Orca wrote every transaction
+   * `apply` changes only the draft it is given. On a database a newer Quirky wrote every transaction
    * is refused, except one marked `inMemoryWhenReadOnly`: it is published without a write, for a
    * verdict re-derived at every start.
    */

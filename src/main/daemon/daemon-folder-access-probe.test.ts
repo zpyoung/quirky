@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { runProcessMock } = vi.hoisted(() => ({ runProcessMock: vi.fn() }))
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 
 import { probeFolderAccessForFreshDaemon } from './daemon-folder-access-probe'
 
@@ -57,7 +57,7 @@ describe('probeFolderAccessForFreshDaemon', () => {
 
   it('scrubs the environment down to the child’s own needs', async () => {
     settled('{"outcome":"ok"}\n')
-    vi.stubEnv('ORCA_SECRET_TOKEN', 'do-not-leak')
+    vi.stubEnv('QUIRKY_SECRET_TOKEN', 'do-not-leak')
     await probeFolderAccessForFreshDaemon(DOCUMENTS)
     vi.unstubAllEnvs()
 
@@ -65,7 +65,7 @@ describe('probeFolderAccessForFreshDaemon', () => {
     expect(
       names.every((name) => ['ELECTRON_RUN_AS_NODE', 'PATH', 'HOME', 'TMPDIR'].includes(name))
     ).toBe(true)
-    expect(names).not.toContain('ORCA_SECRET_TOKEN')
+    expect(names).not.toContain('QUIRKY_SECRET_TOKEN')
   })
 
   it('bounds the child by a deadline and an output cap', async () => {

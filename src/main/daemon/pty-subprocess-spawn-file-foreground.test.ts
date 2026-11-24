@@ -28,7 +28,7 @@ function table(command: string | null, loginWrapper = false): ProcessTableRow[] 
     tty: 'ttys004',
     startTime: 'Thu Sep  3 16:02:01 2026',
     stat: tpgid === 100 ? 'Ss+' : 'Ss',
-    command: loginWrapper ? '"/Applications/Orca shell login" -fp user' : '/bin/zsh'
+    command: loginWrapper ? '"/Applications/Quirky shell login" -fp user' : '/bin/zsh'
   }
   return [
     root,
@@ -56,7 +56,7 @@ function createHandle(loginWrapper = false, shellPath = '/bin/zsh') {
     cols: 80,
     rows: 24,
     handleFlowControl: false,
-    process: loginWrapper ? '/Applications/Orca shell login' : '/bin/zsh',
+    process: loginWrapper ? '/Applications/Quirky shell login' : '/bin/zsh',
     processNameIsSpawnFile: true,
     onData: () => ({ dispose() {} }),
     onExit: () => ({ dispose() {} }),

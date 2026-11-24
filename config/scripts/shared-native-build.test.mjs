@@ -13,7 +13,7 @@ afterEach(() => {
 })
 
 function makePackage() {
-  const root = mkdtempSync(path.join(tmpdir(), 'orca-shared-native-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'quirky-shared-native-'))
   roots.push(root)
   return realpathSync(root)
 }
@@ -21,7 +21,7 @@ function makePackage() {
 describe('ensureSharedNativeBuild', () => {
   it('reuses a usable published entry without compiling, even when forced', () => {
     const packageDir = makePackage()
-    const entryDir = path.join(packageDir, 'build', 'orca-napi-linux-x64')
+    const entryDir = path.join(packageDir, 'build', 'quirky-napi-linux-x64')
     mkdirSync(entryDir, { recursive: true })
     const checked = []
     const result = ensureSharedNativeBuild({
@@ -42,7 +42,7 @@ describe('ensureSharedNativeBuild', () => {
 
   it('publishes beside the physical package dir, not through the project link', () => {
     const packageDir = makePackage()
-    const entryDir = path.join(packageDir, 'build', 'orca-napi-linux-x64')
+    const entryDir = path.join(packageDir, 'build', 'quirky-napi-linux-x64')
     mkdirSync(entryDir, { recursive: true })
     const link = path.join(makePackage(), 'node-pty')
     symlinkSync(packageDir, link, 'junction')

@@ -13,7 +13,7 @@ import type { ClaudeStructuredLaunch } from './claude-structured-launch-resoluti
 import type { StructuredLaunchRequest } from '../runtime/structured-agent-launch-composition'
 import type { ClaudeJournalTranslator } from './claude-journal-translator-contract'
 import type { ClaudePendingPrompt, ClaudePromptRegistry } from './claude-structured-prompt-replies'
-import { cancelProcessAcquisition } from '@orca/process-host/cancel-process-acquisition'
+import { cancelProcessAcquisition } from '@quirky/process-host/cancel-process-acquisition'
 import { randomUUID } from 'node:crypto'
 import type { AgentSessionFastModeState } from '../../shared/agent-session-wire'
 import type { AgentChildWorkEvidence } from '../../shared/agent-status-child-work-evidence'
@@ -37,7 +37,7 @@ export type ClaudeStructuredSessionEvent =
       type: 'message'
       sessionId: string
       message: Record<string, unknown>
-      /** Present only when this replay acknowledged Orca's in-flight dispatch
+      /** Present only when this replay acknowledged Quirky's in-flight dispatch
        *  AND opens a turn; a replay folded into the running turn settles
        *  delivery without one. */
       startsTurn?: true
@@ -364,7 +364,7 @@ export type ClaudeAcquireCallbacks = {
     event: ClaudeStructuredSessionEvent
   ) => void
   handleExit: (sessionId: string, attempt: ClaudeAcquisitionAttempt, error: Error) => void
-  /** The root exited during a close Orca began: finishes that close for this exact child. */
+  /** The root exited during a close Quirky began: finishes that close for this exact child. */
   finishClose: (sessionId: string, attempt: ClaudeAcquisitionAttempt) => void
   settleExit: (sessionId: string, exit: ClaudeSessionExit) => Promise<void>
 }

@@ -35,7 +35,7 @@ export type SourceControlActionVariableInfo = {
 export const SOURCE_CONTROL_ACTION_VARIABLE_INFO = {
   basePrompt: {
     description:
-      'Orca’s built-in prompt for this action, including the context Orca knows how to gather safely.',
+      'Quirky’s built-in prompt for this action, including the context Quirky knows how to gather safely.',
     example:
       'Commit messages include staged diff guidance; PR details include branch comparison guidance; fix actions include the failure summary.'
   },
@@ -81,7 +81,7 @@ export const SOURCE_CONTROL_ACTION_VARIABLE_INFO = {
     example: 'Fix CI and commit the result'
   },
   assistantMessage: {
-    description: 'The initial agent response, when Orca has one available.',
+    description: 'The initial agent response, when Quirky has one available.',
     example: 'I will inspect the failing check, patch the issue, and run tests.'
   },
   linkedIssue: {

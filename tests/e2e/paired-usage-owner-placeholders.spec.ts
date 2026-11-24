@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   createRuntimeDesktopPairingOffer,
   launchPairedElectronClient,
@@ -13,11 +13,11 @@ const LONG_HOST_NAME = 'Shared GPU build server in us-east-1'
 const STATUS_BAR_HEIGHT = 28
 // Why: Claude's System Default login is a macOS Keychain item keyed by $USER, which HOME
 // isolation does not cover; an account name with no item keeps the runner's real login out.
-const NO_CLAUDE_LOGIN_USER = 'orca-e2e-no-claude-login'
+const NO_CLAUDE_LOGIN_USER = 'quirky-e2e-no-claude-login'
 
-test.use({ orcaAppExtraEnv: { USER: NO_CLAUDE_LOGIN_USER } })
+test.use({ quirkyAppExtraEnv: { USER: NO_CLAUDE_LOGIN_USER } })
 
-// Why: screenshots are the proof artifact; ORCA_E2E_SCREENSHOT_DIR collects them outside test output.
+// Why: screenshots are the proof artifact; QUIRKY_E2E_SCREENSHOT_DIR collects them outside test output.
 // Why cropped: the full window shows the terminal prompt, which carries the machine's user name.
 async function shootStatusBar(
   page: Page,
@@ -41,8 +41,8 @@ async function shootStatusBar(
 }
 
 function outputPathFor(name: string, outputPath: (name: string) => string): string {
-  return process.env.ORCA_E2E_SCREENSHOT_DIR
-    ? path.join(process.env.ORCA_E2E_SCREENSHOT_DIR, name)
+  return process.env.QUIRKY_E2E_SCREENSHOT_DIR
+    ? path.join(process.env.QUIRKY_E2E_SCREENSHOT_DIR, name)
     : outputPath(name)
 }
 

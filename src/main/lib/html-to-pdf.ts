@@ -32,7 +32,7 @@ new Promise((resolve) => {
 
 export async function htmlToPdf(html: string): Promise<Buffer> {
   const tempDir = app.getPath('temp')
-  const tempPath = path.join(tempDir, `orca-export-${randomUUID()}.html`)
+  const tempPath = path.join(tempDir, `quirky-export-${randomUUID()}.html`)
 
   // Why: 'wx' is an exclusive create, so the shared temp dir cannot pre-seat this
   // path as a symlink and have the export write through it. EEXIST is the one

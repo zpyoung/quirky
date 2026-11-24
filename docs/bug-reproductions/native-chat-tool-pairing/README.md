@@ -40,7 +40,7 @@ Run the production benchmark with the original module on stdin:
 
 ```sh
 git show 51e7181850b:src/shared/native-chat-tool-fold.ts |
-  ORCA_BACKGROUND_LAUNCH=1 node config/scripts/native-chat-tool-pairing-benchmark.mjs
+  QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/native-chat-tool-pairing-benchmark.mjs
 ```
 
 [benchmark.json](./benchmark.json) records eight counterbalanced sample pairs
@@ -72,8 +72,8 @@ Run the three-version production-module benchmark and its retained-allocation
 control with:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc config/scripts/native-chat-fold-benchmark.mjs --memory-control
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc config/scripts/native-chat-fold-benchmark.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc config/scripts/native-chat-fold-benchmark.mjs --memory-control
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc config/scripts/native-chat-fold-benchmark.mjs
 ```
 
 [full-fold-benchmark.json](./full-fold-benchmark.json) compares original

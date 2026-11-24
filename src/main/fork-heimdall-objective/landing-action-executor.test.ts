@@ -63,7 +63,7 @@ async function repositoryFixture(): Promise<RepositoryFixture> {
   const { parent, root, remote, target } = await createLandingRepositoryFixture(
     temporaryDirectories,
     {
-      tempPrefix: 'orca-objective-landing-',
+      tempPrefix: 'quirky-objective-landing-',
       userName: 'Objective Landing Test',
       userEmail: 'objective@example.test',
       extraFiles: { 'outside.txt': 'outside initial\n' }
@@ -350,7 +350,7 @@ describe('landing action executor Git effects', () => {
     expect(committedNames).toEqual(['src/result.txt'])
     expect(await gitText(fixture.root, ['diff', '--cached', '--name-only'])).toBe('outside.txt')
     expect(await gitText(fixture.root, ['log', '-1', '--format=%B'])).toContain(
-      `Orca-Heimdall-Attempt: ${action.evidenceKey}`
+      `Quirky-Heimdall-Attempt: ${action.evidenceKey}`
     )
     const contentIdentity = await computeWorkspaceContentIdentity(fixture.target)
     expect(contentIdentity).not.toBe(beforeIdentity)
@@ -437,7 +437,7 @@ describe('landing action executor Git effects', () => {
     const action = await commitAction(fixture, contentIdentity)
     const hook = join(fixture.root, '.git', 'hooks', 'pre-commit')
     const title = 'Land the objective change safely.'
-    const trailer = `Orca-Heimdall-Attempt: ${action.attemptTrailer}`
+    const trailer = `Quirky-Heimdall-Attempt: ${action.attemptTrailer}`
     await writeFile(
       hook,
       `#!/bin/sh\nset -e\ntree="$(git write-tree)"\nparent="$(git rev-parse HEAD)"\ncommit="$(git commit-tree "$tree" -p "$parent" -m ${JSON.stringify(title)} -m ${JSON.stringify(trailer)})"\ngit update-ref HEAD "$commit" "$parent"\necho "transport closed after commit" >&2\nexit 17\n`

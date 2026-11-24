@@ -19,12 +19,12 @@ afterEach(async () => {
 })
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-release-cache-cleanup-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-release-cache-cleanup-'))
   roots.push(root)
   const worktree = join(root, 'worktree')
   const commonDirectory = join(root, 'git')
   const cache = join(worktree, 'tests', 'e2e', '.cross-version-checkouts')
-  const shared = join(commonDirectory, 'orca-cache', 'release-source')
+  const shared = join(commonDirectory, 'quirky-cache', 'release-source')
   await mkdir(cache, { recursive: true })
   await mkdir(shared, { recursive: true })
   const targets = { commonDirectory, worktrees: [worktree, worktree] }

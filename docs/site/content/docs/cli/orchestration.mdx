@@ -5,19 +5,19 @@ description: Coordinate agents with Runs, tasks, supervised workers, messages, a
 
 import { Callout } from '@/components/docs/prose'
 
-Orchestration is Orca's structured multi-agent layer: a **Run** (namespace + coordinator inbox), **Tasks**, **Dispatches**, supervised **workers**, messages, and decision gates.
+Orchestration is Quirky's structured multi-agent layer: a **Run** (namespace + coordinator inbox), **Tasks**, **Dispatches**, supervised **workers**, messages, and decision gates.
 
-Use it when you need ownership, completion tracking, or a DAG. For one-off prompts, use `orca terminal send`. For full ownership handoffs without supervision, use worktree/terminal commands from the `orca-cli` skill.
+Use it when you need ownership, completion tracking, or a DAG. For one-off prompts, use `quirky terminal send`. For full ownership handoffs without supervision, use worktree/terminal commands from the `quirky-cli` skill.
 
 <Callout title="Experimental">
   Enable orchestration under Settings → Experimental before using these commands. The CLI talks to
-  the running Orca runtime, so `orca status --json` should succeed first.
+  the running Quirky runtime, so `quirky status --json` should succeed first.
 </Callout>
 
 <Callout title="Legacy commands retired">
-  `orca orchestration run` and `run-stop` (and `coordinator-start` / `coordinator-stop`) perform
-  **no effects**. They return recovery text pointing at `orca skills get orchestration --full`. Use
-  the Run + worker-start flow below.
+  `quirky orchestration run` and `run-stop` (and `coordinator-start` / `coordinator-stop`) perform
+  **no effects**. They return recovery text pointing at `quirky skills get orchestration --full`.
+  Use the Run + worker-start flow below.
 </Callout>
 
 ## Core model
@@ -30,33 +30,33 @@ Use it when you need ownership, completion tracking, or a DAG. For one-off promp
 
 Completion authority comes from the active dispatch context. Worker completion and heartbeat messages should include both `taskId` and `dispatchId`.
 
-Task IDs printed in terminals, such as `task_...`, are clickable links. Clicking one asks the Orca runtime for the task's current dispatch and focuses the assigned terminal, including when the task lives in a remote or SSH runtime.
+Task IDs printed in terminals, such as `task_...`, are clickable links. Clicking one asks the Quirky runtime for the task's current dispatch and focuses the assigned terminal, including when the task lives in a remote or SSH runtime.
 
 ## Preferred supervised loop
 
 ```bash
-orca orchestration run-create --objective "Split checkout QA and summarize blockers" --json
-orca orchestration task-create --spec "Audit billing settings for mobile layout" --task-title "Billing audit" --json
-orca orchestration worker-start --task <taskId> --worktree current --agent codex --json
+quirky orchestration run-create --objective "Split checkout QA and summarize blockers" --json
+quirky orchestration task-create --spec "Audit billing settings for mobile layout" --task-title "Billing audit" --json
+quirky orchestration worker-start --task <taskId> --worktree current --agent codex --json
 # or new worktree:
-orca orchestration worker-start --task <taskId> --worktree new-child --name billing-audit --agent codex --setup run --json
+quirky orchestration worker-start --task <taskId> --worktree new-child --name billing-audit --agent codex --setup run --json
 # optional per-worker model / effort (Claude, Codex, Cursor, Antigravity, Muse; not with --terminal):
-orca orchestration worker-start --task <taskId> --worktree current --agent claude --model <opaque-model-id> --effort high --json
+quirky orchestration worker-start --task <taskId> --worktree current --agent claude --model <opaque-model-id> --effort high --json
 ```
 
-`--agent` takes any Orca agent ID enabled on the worker server, for example `claude`, `codex`, `cursor`, `antigravity`, `muse`, `opencode`, or `opencode2`. `--model` accepts opaque provider model IDs for Claude, Codex, Cursor, Antigravity, and Muse (for example `--agent muse --model muse-spark-1.3`); OpenCode accepts a per-launch model only in an existing worktree, when the execution host verifies its CLI version and model availability; OpenCode effort remains unsupported. Other agents run the model from their own config. `--effort` requires `--model` and only applies when that agent/model supports the level. Neither flag can combine with `--terminal` (reuse an existing pane). Overrides apply to that launch only and show under `launch.requested` / `launch.effective` in the start receipt. Federated starts need a worker host that advertises launch-preference support.
+`--agent` takes any Quirky agent ID enabled on the worker server, for example `claude`, `codex`, `cursor`, `antigravity`, `muse`, `opencode`, or `opencode2`. `--model` accepts opaque provider model IDs for Claude, Codex, Cursor, Antigravity, and Muse (for example `--agent muse --model muse-spark-1.3`); OpenCode accepts a per-launch model only in an existing worktree, when the execution host verifies its CLI version and model availability; OpenCode effort remains unsupported. Other agents run the model from their own config. `--effort` requires `--model` and only applies when that agent/model supports the level. Neither flag can combine with `--terminal` (reuse an existing pane). Overrides apply to that launch only and show under `launch.requested` / `launch.effective` in the start receipt. Federated starts need a worker host that advertises launch-preference support.
 
 Wait for completions (process every message in a Delivery, then ack):
 
 ```bash
-orca orchestration check --wait --types worker_done,escalation,question --timeout-ms 900000 --json
-orca orchestration check --ack <deliveryId> --wait --types worker_done,escalation,question --timeout-ms 900000 --json
+quirky orchestration check --wait --types worker_done,escalation,question --timeout-ms 900000 --json
+quirky orchestration check --ack <deliveryId> --wait --types worker_done,escalation,question --timeout-ms 900000 --json
 ```
 
 Worker completion (from the worker pane; include injected IDs):
 
 ```bash
-orca orchestration send \
+quirky orchestration send \
   --type worker_done \
   --subject "Completed mobile audit" \
   --body "Fixed footer overlap; no follow-ups." \
@@ -72,16 +72,16 @@ orca orchestration send \
 Inspect / recover:
 
 ```bash
-orca orchestration worker-show --dispatch <dispatchId> --json
-orca orchestration worker-read --dispatch <dispatchId> --limit 50 --json
-orca orchestration worker-stop --dispatch <dispatchId> --json
+quirky orchestration worker-show --dispatch <dispatchId> --json
+quirky orchestration worker-read --dispatch <dispatchId> --limit 50 --json
+quirky orchestration worker-stop --dispatch <dispatchId> --json
 # After an accepted worker_done: reuse the same terminal for a follow-up Dispatch, or release it
 # (archives inspectable output, then closes only that coordinator-owned agent terminal):
-orca orchestration worker-release --dispatch <dispatchId> --json
+quirky orchestration worker-release --dispatch <dispatchId> --json
 # Keep a settled worker live for debugging when the user asked to retain it:
-orca orchestration worker-retain --dispatch <dispatchId> --json
+quirky orchestration worker-retain --dispatch <dispatchId> --json
 # retry placement is explicit — --retry-of does not inherit --on/worktree:
-orca orchestration worker-start --task <taskId> --retry-of <dispatchId> --worktree current --agent codex --json
+quirky orchestration worker-start --task <taskId> --retry-of <dispatchId> --worktree current --agent codex --json
 ```
 
 Do not leave completed worker terminals open just to re-read output — use `worker-read` after `worker-release`. Do not substitute a broad `terminal close` when release returns `release_pending` or `release_unknown`; follow the receipt's recovery action.
@@ -89,7 +89,7 @@ Do not leave completed worker terminals open just to re-read output — use `wor
 ## Federated workers (optional)
 
 ```bash
-orca orchestration worker-start \
+quirky orchestration worker-start \
   --task <taskId> \
   --on windows \
   --worktree new-top-level \
@@ -98,7 +98,7 @@ orca orchestration worker-start \
   --agent codex \
   --setup run \
   --json
-orca orchestration send --to dispatch:<dispatchId> --subject "Follow-up" --body "…" --json
+quirky orchestration send --to dispatch:<dispatchId> --subject "Follow-up" --body "…" --json
 ```
 
 Later commands route by Dispatch ID; do not repeat `--on`.
@@ -106,9 +106,9 @@ Later commands route by Dispatch ID; do not repeat `--on`.
 ## Low-level dispatch (custom topology)
 
 ```bash
-orca worktree create --name billing-audit --agent codex --json
-orca terminal wait --terminal <workerHandle> --for tui-idle --timeout-ms 60000 --json
-orca orchestration dispatch --task <taskId> --to <workerHandle> --inject --json
+quirky worktree create --name billing-audit --agent codex --json
+quirky terminal wait --terminal <workerHandle> --for tui-idle --timeout-ms 60000 --json
+quirky orchestration dispatch --task <taskId> --to <workerHandle> --inject --json
 ```
 
 ## Messaging notes
@@ -121,9 +121,9 @@ orca orchestration dispatch --task <taskId> --to <workerHandle> --inject --json
 - Quote PowerShell group addresses: `--to "@all"`.
 
 ```bash
-orca orchestration send --to @all --subject "Heads up" --body "Pausing dispatches for a review." --json
-orca orchestration send --to @idle --subject "Anyone free?" --json
-orca orchestration send --to @codex --subject "Codex workers in this Run only" --json
+quirky orchestration send --to @all --subject "Heads up" --body "Pausing dispatches for a review." --json
+quirky orchestration send --to @idle --subject "Anyone free?" --json
+quirky orchestration send --to @codex --subject "Codex workers in this Run only" --json
 ```
 
 While a wait is active, the CLI emits small JSON heartbeat lines to stderr every 15 seconds. Stdout remains the final command result.
@@ -136,10 +136,10 @@ Dispatched workers receive a preamble that tells them how to communicate with th
 - Include a short `--body` summary: what was done, what was found, and what remains.
 - Include both task and dispatch IDs so stale retries cannot complete the wrong dispatch.
 - Send `heartbeat` messages during long active work.
-- Use `orca orchestration ask` for blocking questions instead of local TUI prompts.
+- Use `quirky orchestration ask` for blocking questions instead of local TUI prompts.
 
 ```bash
-orca orchestration ask \
+quirky orchestration ask \
   --to <coordinatorHandle> \
   --question "Should I update the shared component or only this page?" \
   --options "shared,page-only" \
@@ -154,46 +154,46 @@ With `--json`, `ask` prints the standard `{id, ok, result, _meta}` envelope, so 
 Use `ask` for worker-to-coordinator questions. Use explicit gates when the coordinator has created a task DAG and wants to block a task until a decision is recorded:
 
 ```bash
-orca orchestration gate-create \
+quirky orchestration gate-create \
   --task <taskId> \
   --question "Merge the shared button change into the task branch?" \
   --options '["yes","no"]' \
   --json
 
-orca orchestration gate-resolve --id <gateId> --resolution "yes" --json
+quirky orchestration gate-resolve --id <gateId> --resolution "yes" --json
 ```
 
 ## Recovery
 
 ```bash
-orca orchestration dispatch-show --task <taskId> --json
-orca orchestration dispatch-show --task <taskId> --preamble --json
-orca orchestration task-list --json
-orca orchestration task-update --id <taskId> --status blocked --result '{"reason":"waiting on credentials"}' --json
+quirky orchestration dispatch-show --task <taskId> --json
+quirky orchestration dispatch-show --task <taskId> --preamble --json
+quirky orchestration task-list --json
+quirky orchestration task-update --id <taskId> --status blocked --result '{"reason":"waiting on credentials"}' --json
 ```
 
 Reset only when you are intentionally abandoning orchestration state:
 
 ```bash
-orca orchestration reset --tasks --json
-orca orchestration reset --messages --json
-orca orchestration reset --all --json
+quirky orchestration reset --tasks --json
+quirky orchestration reset --messages --json
+quirky orchestration reset --all --json
 ```
 
 `reset` affects runtime-global orchestration state. Do not run it while another coordinator is active unless that is the intended cleanup.
 
 ## Choosing the right command
 
-Use `orca terminal send` for a lightweight prompt to an agent you are watching.
+Use `quirky terminal send` for a lightweight prompt to an agent you are watching.
 
-Use `orca orchestration worker-start` (or `dispatch --inject`) when a worker must report `worker_done`, ask questions through the coordinator, and be tracked by task ID.
+Use `quirky orchestration worker-start` (or `dispatch --inject`) when a worker must report `worker_done`, ask questions through the coordinator, and be tracked by task ID.
 
-Use `orca orchestration run-create` + tasks + workers when you want a durable Run namespace and supervised multi-agent loop — not the retired `orchestration run` command.
+Use `quirky orchestration run-create` + tasks + workers when you want a durable Run namespace and supervised multi-agent loop — not the retired `orchestration run` command.
 
 ## Full guide
 
 Command flags evolve with the app. After install, agents should run:
 
 ```bash
-orca skills get orchestration --full
+quirky skills get orchestration --full
 ```

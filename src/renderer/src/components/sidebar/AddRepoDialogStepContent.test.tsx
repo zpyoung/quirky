@@ -168,7 +168,7 @@ describe('AddRepoDialogStepContent nested imports', () => {
     expect(html).not.toContain('Host path')
   })
 
-  it('uses the standard add step for remote Orca server hosts', () => {
+  it('uses the standard add step for remote Quirky server hosts', () => {
     const html = renderStepContent({
       step: 'add',
       isRuntimeEnvironmentActive: true,

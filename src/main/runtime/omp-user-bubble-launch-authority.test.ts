@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { makeStore } from './runtime-rpc-worktree-store-fixtures'
 import { spawnedPtyEnv } from './spawned-pty-env-fixtures'
 
@@ -24,14 +24,14 @@ vi.mock('../git/worktree', () => {
 })
 
 async function launchOmpPane(): Promise<{
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   retire: ReturnType<typeof vi.fn>
   paneKey: string
 }> {
   const retire = vi.fn()
   const spawn = vi.fn().mockResolvedValue({ id: 'pty-omp', incarnationId: 'incarnation-1' })
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: makeStore serves the repo reads terminal creation makes; the rest of Store is unreached.
-  const runtime = new OrcaRuntimeService(makeStore() as never, undefined, {
+  const runtime = new QuirkyRuntimeService(makeStore() as never, undefined, {
     attestAgentHookCompatibilityAuthority: (candidate) => ({
       paneKey: candidate.paneKey,
       source: 'current_hook' as const
@@ -49,7 +49,7 @@ async function launchOmpPane(): Promise<{
     launchConfig: { agentCommand: 'omp', agentArgs: '', agentEnv: {} },
     launchAgent: 'omp'
   })
-  return { runtime, retire, paneKey: spawnedPtyEnv(spawn.mock.calls[0]?.[0]).ORCA_PANE_KEY }
+  return { runtime, retire, paneKey: spawnedPtyEnv(spawn.mock.calls[0]?.[0]).QUIRKY_PANE_KEY }
 }
 
 describe('OMP user bubbles and launch authority (#10923)', () => {

@@ -188,7 +188,7 @@ describe('OMP completion delivery', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('bounds retries when Orca stays unreachable', async () => {
+  it('bounds retries when Quirky stays unreachable', async () => {
     const harness = createAgentStatusExtensionHarness({
       kind: 'omp',
       fetchImpl: async () => {

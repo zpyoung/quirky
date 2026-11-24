@@ -2,8 +2,8 @@ import { useCallback, useMemo, type KeyboardEventHandler, type RefObject } from 
 import { useAppStore } from '@/store'
 import { formatShortcutLabel } from '@/hooks/useShortcutLabel'
 import { getShortcutPlatform } from '@/lib/shortcut-platform'
-import { isOrcaSessionId } from '../../../../shared/orca-session-address'
-import { resolveStructuredSessionOrcaSessionId } from '../../runtime/structured-session-orca-session-id'
+import { isQuirkySessionId } from '../../../../shared/quirky-session-address'
+import { resolveStructuredSessionQuirkySessionId } from '../../runtime/structured-session-quirky-session-id'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type { NativeChatComposerHandle } from './NativeChatComposer'
 import { useNativeChatPasteBridge } from './use-native-chat-paste-bridge'
@@ -39,10 +39,10 @@ export function useStructuredNativeChatPaneCommands({
   target: RuntimeClientTarget
 } & NativeChatContextMenuTargetArgs) {
   const keybindings = useAppStore((state) => state.keybindings)
-  const resolveOrcaSessionId = useMemo(
+  const resolveQuirkySessionId = useMemo(
     () =>
-      isOrcaSessionId(sessionId)
-        ? () => resolveStructuredSessionOrcaSessionId(target, sessionId)
+      isQuirkySessionId(sessionId)
+        ? () => resolveStructuredSessionQuirkySessionId(target, sessionId)
         : undefined,
     [sessionId, target]
   )
@@ -60,7 +60,7 @@ export function useStructuredNativeChatPaneCommands({
       onPaste: pasteClipboardIntoComposer
     },
     enabled: isVisible,
-    resolveOrcaSessionId,
+    resolveQuirkySessionId,
     composerRef,
     showTerminalPaneActions: terminalPaneActions !== undefined,
     splitShortcutLabels: {

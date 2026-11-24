@@ -205,7 +205,7 @@ export function useNativeChatQueuedEditImageIntake(
     }
     const input = owner ? field.current : null
     input?.addEventListener(NATIVE_CHAT_PASTE_REQUEST_EVENT, paste)
-    // A file dragged from Orca's own tree: the chat box's claim checks it, then hands it here.
+    // A file dragged from Quirky's own tree: the chat box's claim checks it, then hands it here.
     const hover = (active: boolean): void => setIsDragActive(active && !disabled)
     const unregister = owner
       ? registerNestedWorkspaceDropSink(owner, attachResolvedPaths, hover)

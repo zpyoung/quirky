@@ -69,7 +69,7 @@ describe('owner intervention submission preflight', () => {
   let reportPath: string
 
   beforeEach(async () => {
-    workspacePath = await mkdtemp(join(tmpdir(), 'orca-owner-preflight-'))
+    workspacePath = await mkdtemp(join(tmpdir(), 'quirky-owner-preflight-'))
     target = {
       kind: 'folder',
       executionHostId: 'local',

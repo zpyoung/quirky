@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  ORCAD_RECOVERY_CHANGED_STATE_CODE,
-  type OrcadManagedRuntimeStatus
-} from '../../../../shared/orcad-managed-runtime'
+  QUIRKYD_RECOVERY_CHANGED_STATE_CODE,
+  type QuirkydManagedRuntimeStatus
+} from '../../../../shared/quirkyd-managed-runtime'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
-import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
+import type { ManagedQuirkydPreloadApi } from '../../../../preload/api/managed-quirkyd-api'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { managedServerOutcomeLabel } from './managed-server-copy'
 
@@ -19,9 +19,9 @@ export type ManagedServerAction =
   | 'forget'
 
 export type ManagedServerLifecycle = {
-  status: OrcadManagedRuntimeStatus | null
+  status: QuirkydManagedRuntimeStatus | null
   statusError: string | null
-  recovery: OrcadManagedRuntimeStatus['recovery']
+  recovery: QuirkydManagedRuntimeStatus['recovery']
   busy: ManagedServerAction | 'status' | null
   confirmingStop: boolean
   confirmingForget: boolean
@@ -42,18 +42,18 @@ function outcomeMessage(result: Parameters<typeof managedServerOutcomeLabel>[0])
     : null
 }
 
-/** Status and lifecycle actions for a server Orca deployed and owns over SSH. */
+/** Status and lifecycle actions for a server Quirky deployed and owns over SSH. */
 export function useManagedServerLifecycle({
   api,
   environment,
   onChanged
 }: {
-  api: ManagedOrcadPreloadApi
+  api: ManagedQuirkydPreloadApi
   environment: Pick<PublicKnownRuntimeEnvironment, 'id'>
   onChanged: () => void
 }): ManagedServerLifecycle {
   const mountedRef = useMountedRef()
-  const [status, setStatus] = useState<OrcadManagedRuntimeStatus | null>(null)
+  const [status, setStatus] = useState<QuirkydManagedRuntimeStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
   const [busy, setBusy] = useState<ManagedServerAction | 'status' | null>(null)
   const [confirmingStop, setConfirmingStop] = useState(false)
@@ -111,7 +111,7 @@ export function useManagedServerLifecycle({
         action === 'recover' &&
         result.outcome === 'refused' &&
         'code' in result &&
-        result.code === ORCAD_RECOVERY_CHANGED_STATE_CODE
+        result.code === QUIRKYD_RECOVERY_CHANGED_STATE_CODE
       ) {
         setConfirmingRestore(true)
       }

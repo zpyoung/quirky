@@ -148,7 +148,7 @@ export class UnixSocketTransport implements RpcTransport {
       buffer += chunk
       // setEncoding('utf8') keeps split codepoints intact, so chunk byte lengths add exactly.
       retainedBytes += Buffer.byteLength(chunk, 'utf8')
-      // Why: the Orca runtime lives in Electron main, so it must reject
+      // Why: the Quirky runtime lives in Electron main, so it must reject
       // oversized local RPC frames instead of letting a local client grow an
       // unbounded buffer and stall the app.
       if (retainedBytes > MAX_RUNTIME_RPC_MESSAGE_BYTES) {

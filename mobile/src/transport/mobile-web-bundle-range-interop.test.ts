@@ -6,7 +6,7 @@ import { MOBILE_WEB_BUNDLE_RANGE_BYTES } from '../../../src/shared/mobile-web-bu
 
 /** Script-like and a full range long, so the host's level-6 deflate emits dynamic Huffman blocks. */
 function scriptRange(): Buffer {
-  const words = ['const ', 'function ', 'return ', 'export ', '=> ', '{', '}', ';\n', 'orca']
+  const words = ['const ', 'function ', 'return ', 'export ', '=> ', '{', '}', ';\n', 'quirky']
   let text = ''
   for (let index = 0; text.length < MOBILE_WEB_BUNDLE_RANGE_BYTES; index += 1) {
     text += words[(index * 7) % words.length] + String(index % 1000)

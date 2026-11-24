@@ -68,7 +68,7 @@ export function useMiniMaxCredentials(owner: RuntimeClientTarget) {
     miniMaxCookieProtection: status?.cookieProtection ?? null,
     miniMaxApiKeyConfigured: status?.apiKeyConfigured === true,
     miniMaxApiKeyProtection: status?.apiKeyProtection ?? null,
-    // Why `!== false`: older hosts and this desktop omit or set it; only orcad says it cannot.
+    // Why `!== false`: older hosts and this desktop omit or set it; only quirkyd says it cannot.
     sessionCookieSupported: status?.sessionCookieSupported !== false,
     miniMaxCookieUnreadable: status?.cookieUnreadable,
     miniMaxApiKeyUnreadable: status?.apiKeyUnreadable,

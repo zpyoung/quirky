@@ -26,7 +26,7 @@ export async function publishMultiplexInitialSnapshot(
   const { ptyId } = stream
   const isMobile = stream.isMobile
   const forcedInitialSnapshotTruncated =
-    process.env.ORCA_E2E_FORCE_REMOTE_TERMINAL_INITIAL_SNAPSHOT_TRUNCATED === '1'
+    process.env.QUIRKY_E2E_FORCE_REMOTE_TERMINAL_INITIAL_SNAPSHOT_TRUNCATED === '1'
   let read = await runtime.readTerminal(request.terminal)
   let serialized = await serializeBudgetedMobileSnapshot(runtime, ptyId)
   if (!isMultiplexStreamAttached(state, stream)) {

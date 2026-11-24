@@ -4,14 +4,14 @@
  * and asserts the output comes back — then shuts down.
  *
  * Why this exists: "the server started" proves almost nothing. The runtime dispatches
- * terminal creation into OrcaRuntimeService, and without an installed headless PTY
+ * terminal creation into QuirkyRuntimeService, and without an installed headless PTY
  * controller that path falls through to a renderer reply that never arrives and times
  * out after ten seconds. A boot probe, a port bind, and a `host.platform` call all pass
  * against a server whose terminals are dead. Only a PTY round trip catches it.
  *
  * This is also the acceptance gate for a future Node-only backend
  * (docs/design/node-only-runtime-backend.html): the same script should pass against
- * `orcad` unchanged, because it drives nothing but the public pairing + RPC surface.
+ * `quirkyd` unchanged, because it drives nothing but the public pairing + RPC surface.
  *
  * Hard assertions (fail the job):
  *   - the server emits its ready payload with a pairing offer,
@@ -29,21 +29,21 @@ import { pathToFileURL } from 'node:url'
 import { randomBytes } from 'node:crypto'
 import process from 'node:process'
 import {
-  ORCAD_CLI_ENTRY_FILENAME,
-  ORCAD_SERVER_ENTRY_FILENAME
-} from '../../src/shared/orcad-artifacts.ts'
-import { packagedNodeRuntimePath } from './build-orcad-node.mjs'
+  QUIRKYD_CLI_ENTRY_FILENAME,
+  QUIRKYD_SERVER_ENTRY_FILENAME
+} from '../../src/shared/quirkyd-artifacts.ts'
+import { packagedNodeRuntimePath } from './build-quirkyd-node.mjs'
 import { currentTarget } from './server-build-target.mjs'
 
 const projectDir = resolve(import.meta.dirname, '../..')
 const serveEntry = join(projectDir, 'out', 'main', 'index.js')
-const ORCAD_DIR = join(projectDir, 'out', 'orcad')
-const ORCAD_ENTRY = join(ORCAD_DIR, ORCAD_SERVER_ENTRY_FILENAME)
+const QUIRKYD_DIR = join(projectDir, 'out', 'quirkyd')
+const QUIRKYD_ENTRY = join(QUIRKYD_DIR, QUIRKYD_SERVER_ENTRY_FILENAME)
 const READY_TIMEOUT_MS = 120_000
 const OUTPUT_TIMEOUT_MS = 30_000
 const SHUTDOWN_TIMEOUT_MS = 15_000
-// Why a random high port: a fixed one collides with a developer's own `orca serve`.
-const PORT = 6800 + Math.floor(Number(process.env.ORCA_SMOKE_PORT_OFFSET ?? '0'))
+// Why a random high port: a fixed one collides with a developer's own `quirky serve`.
+const PORT = 6800 + Math.floor(Number(process.env.QUIRKY_SMOKE_PORT_OFFSET ?? '0'))
 
 function log(message) {
   process.stdout.write(`[serve-terminal-smoke] ${message}\n`)
@@ -55,14 +55,14 @@ function fail(message) {
 }
 
 /**
- * Orcad uses its packaged CLI and Node; Electron prefers the checkout's desktop CLI.
+ * Quirkyd uses its packaged CLI and Node; Electron prefers the checkout's desktop CLI.
  */
 export function resolveCli(target, root = projectDir) {
-  if (target === 'orcad') {
-    const directory = join(root, 'out', 'orcad')
-    const built = join(directory, ORCAD_CLI_ENTRY_FILENAME)
+  if (target === 'quirkyd') {
+    const directory = join(root, 'out', 'quirkyd')
+    const built = join(directory, QUIRKYD_CLI_ENTRY_FILENAME)
     if (!existsSync(built)) {
-      throw new Error(`Missing packaged Orcad CLI at ${built}; run pnpm build:orcad`)
+      throw new Error(`Missing packaged Quirkyd CLI at ${built}; run pnpm build:quirkyd`)
     }
     return {
       command: packagedNodeRuntimePath(directory, currentTarget()),
@@ -72,11 +72,11 @@ export function resolveCli(target, root = projectDir) {
   const built = join(root, 'out', 'cli', 'index.js')
   return existsSync(built)
     ? { command: process.execPath, prefix: [built] }
-    : { command: 'orca', prefix: [] }
+    : { command: 'quirky', prefix: [] }
 }
 
-/** The `orca` CLI, driven with an explicit pairing code so it targets this server only. */
-function orca(pairingCode, args) {
+/** The `quirky` CLI, driven with an explicit pairing code so it targets this server only. */
+function quirky(pairingCode, args) {
   const cli = resolveCli(smokeTarget())
   const result = spawnSync(
     cli.command,
@@ -89,16 +89,18 @@ function orca(pairingCode, args) {
     }
   )
   if (result.error) {
-    throw new Error(`orca ${args[0]} failed to spawn: ${result.error.message}`)
+    throw new Error(`quirky ${args[0]} failed to spawn: ${result.error.message}`)
   }
   const line = (result.stdout ?? '').trim()
   if (!line.startsWith('{')) {
-    throw new Error(`orca ${args.join(' ')} produced no JSON:\n${result.stdout}\n${result.stderr}`)
+    throw new Error(
+      `quirky ${args.join(' ')} produced no JSON:\n${result.stdout}\n${result.stderr}`
+    )
   }
   const parsed = JSON.parse(line)
   if (parsed.ok === false) {
     throw new Error(
-      `orca ${args.join(' ')} returned ${parsed.error?.code}: ${parsed.error?.message}`
+      `quirky ${args.join(' ')} returned ${parsed.error?.code}: ${parsed.error?.message}`
     )
   }
   return parsed.result
@@ -127,7 +129,7 @@ function waitForReady(child) {
         }
         try {
           const payload = JSON.parse(line)
-          if (payload.type === 'orca_server_ready') {
+          if (payload.type === 'quirky_server_ready') {
             clearTimeout(timer)
             resolvePromise(payload)
             return
@@ -165,7 +167,7 @@ function pairingCodeFrom(payload) {
 async function waitForNonce(pairingCode, terminalHandle, nonce) {
   const deadline = Date.now() + OUTPUT_TIMEOUT_MS
   while (Date.now() < deadline) {
-    const read = orca(pairingCode, ['terminal', 'read', '--terminal', terminalHandle])
+    const read = quirky(pairingCode, ['terminal', 'read', '--terminal', terminalHandle])
     const tail = (read?.terminal?.tail ?? []).map((entry) => String(entry)).join('\n')
     if (tail.includes(nonce)) {
       return true
@@ -189,22 +191,22 @@ function smokeTarget() {
   const flagIndex = process.argv.indexOf('--target')
   return flagIndex !== -1
     ? process.argv[flagIndex + 1]
-    : (process.env.ORCA_SMOKE_TARGET ?? 'electron')
+    : (process.env.QUIRKY_SMOKE_TARGET ?? 'electron')
 }
 
 function resolveLaunch(userDataDir) {
   const target = smokeTarget()
-  if (target === 'orcad') {
+  if (target === 'quirkyd') {
     return {
-      label: `orcad (${ORCAD_ENTRY})`,
-      command: packagedNodeRuntimePath(ORCAD_DIR, currentTarget()),
-      args: [ORCAD_ENTRY, '--port', String(PORT), '--json'],
-      env: { ORCA_USER_DATA: userDataDir }
+      label: `quirkyd (${QUIRKYD_ENTRY})`,
+      command: packagedNodeRuntimePath(QUIRKYD_DIR, currentTarget()),
+      args: [QUIRKYD_ENTRY, '--port', String(PORT), '--json'],
+      env: { QUIRKY_USER_DATA: userDataDir }
     }
   }
   if (target !== 'electron') {
     throw new Error(
-      `--target (or ORCA_SMOKE_TARGET) must be 'electron' or 'orcad', got '${target}'`
+      `--target (or QUIRKY_SMOKE_TARGET) must be 'electron' or 'quirkyd', got '${target}'`
     )
   }
   const serveArgs = [
@@ -215,19 +217,19 @@ function resolveLaunch(userDataDir) {
     '--serve-json',
     `--user-data-dir=${userDataDir}`
   ]
-  const override = process.env.ORCA_SMOKE_ELECTRON
+  const override = process.env.QUIRKY_SMOKE_ELECTRON
   return {
     label: `electron (${serveEntry})`,
     command: override ?? 'npx',
     args: override ? serveArgs : ['electron', ...serveArgs],
-    env: { ORCA_DEV_USER_DATA_PATH: userDataDir }
+    env: { QUIRKY_DEV_USER_DATA_PATH: userDataDir }
   }
 }
 
 /** A throwaway git repo with one commit, so `repo add` has something real to register. */
 function seedGitRepo() {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-smoke-repo-'))
-  writeFileSync(join(dir, 'README.md'), '# orca smoke\n')
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-smoke-repo-'))
+  writeFileSync(join(dir, 'README.md'), '# quirky smoke\n')
   const git = (...args) => {
     const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' })
     if (result.status !== 0) {
@@ -235,15 +237,15 @@ function seedGitRepo() {
     }
   }
   git('init', '-b', 'main')
-  git('config', 'user.email', 'smoke@orca.test')
-  git('config', 'user.name', 'Orca Smoke')
+  git('config', 'user.email', 'smoke@quirky.test')
+  git('config', 'user.name', 'Quirky Smoke')
   git('add', '-A')
   git('commit', '-m', 'seed')
   return dir
 }
 
 async function main() {
-  const userDataDir = mkdtempSync(join(tmpdir(), 'orca-serve-smoke-'))
+  const userDataDir = mkdtempSync(join(tmpdir(), 'quirky-serve-smoke-'))
   const launch = resolveLaunch(userDataDir)
   log(`booting ${launch.label} on port ${PORT} with userData ${userDataDir}`)
 
@@ -269,13 +271,13 @@ async function main() {
     const repoPath = seedGitRepo()
     seeded = { repoPath }
     log(`seeded repo at ${repoPath}`)
-    const repo = orca(pairingCode, ['repo', 'add', '--path', repoPath])?.repo
+    const repo = quirky(pairingCode, ['repo', 'add', '--path', repoPath])?.repo
     if (!repo?.id) {
       throw new Error('repo.add returned no repo id')
     }
 
     const worktreeName = `smoke-${randomBytes(4).toString('hex')}`
-    const created = orca(pairingCode, [
+    const created = quirky(pairingCode, [
       'worktree',
       'create',
       '--repo',
@@ -294,13 +296,13 @@ async function main() {
     // Why `show` and not membership in `list`: list is capped, and the Electron target
     // reads a shared dev profile that can already hold more worktrees than the cap. The
     // point is that the server persisted and can resolve THIS worktree.
-    const shown = orca(pairingCode, ['worktree', 'show', '--worktree', created.id])?.worktree
+    const shown = quirky(pairingCode, ['worktree', 'show', '--worktree', created.id])?.worktree
     if (shown?.id !== created.id) {
       throw new Error('worktree.create succeeded but worktree.show cannot resolve it')
     }
     log(`server resolves ${shown.id}`)
     if (process.argv.includes('--browser')) {
-      const status = orca(pairingCode, ['status'])
+      const status = quirky(pairingCode, ['status'])
       if (!status?.runtime?.capabilities?.includes('browser.headless.v1')) {
         throw new Error(
           `status omitted browser.headless.v1: ${JSON.stringify(status?.runtime?.capabilities)}`
@@ -309,9 +311,9 @@ async function main() {
       const fixturePath = join(userDataDir, 'browser-smoke.html')
       writeFileSync(
         fixturePath,
-        '<!doctype html><title>Orcad Browser Smoke</title><main>browser-ready</main>'
+        '<!doctype html><title>Quirkyd Browser Smoke</title><main>browser-ready</main>'
       )
-      const browserPageId = orca(pairingCode, [
+      const browserPageId = quirky(pairingCode, [
         'tab',
         'create',
         '--worktree',
@@ -324,11 +326,11 @@ async function main() {
       }
       const targetFlags = ['--worktree', created.id, '--page', browserPageId]
       const targetUrl = pathToFileURL(fixturePath).href
-      const navigation = orca(pairingCode, ['goto', ...targetFlags, '--url', targetUrl])
-      if (navigation?.url !== targetUrl || navigation?.title !== 'Orcad Browser Smoke') {
+      const navigation = quirky(pairingCode, ['goto', ...targetFlags, '--url', targetUrl])
+      if (navigation?.url !== targetUrl || navigation?.title !== 'Quirkyd Browser Smoke') {
         throw new Error(`browser.goto returned the wrong page: ${JSON.stringify(navigation)}`)
       }
-      const evaluated = orca(pairingCode, [
+      const evaluated = quirky(pairingCode, [
         'eval',
         ...targetFlags,
         '--expression',
@@ -337,22 +339,22 @@ async function main() {
       if (evaluated?.result !== 'browser-ready') {
         throw new Error(`browser.eval returned ${JSON.stringify(evaluated)}`)
       }
-      const screenshot = orca(pairingCode, ['screenshot', ...targetFlags])
+      const screenshot = quirky(pairingCode, ['screenshot', ...targetFlags])
       if (screenshot?.format !== 'png' || typeof screenshot.data !== 'string' || !screenshot.data) {
         throw new Error('browser.screenshot returned no PNG data')
       }
       log('browser navigate/evaluate/screenshot round trip OK')
     }
 
-    const terminal = orca(pairingCode, ['terminal', 'create', '--worktree', created.id])?.terminal
+    const terminal = quirky(pairingCode, ['terminal', 'create', '--worktree', created.id])?.terminal
     if (!terminal?.handle) {
       throw new Error('terminal.create returned no handle')
     }
     log(`created ${terminal.handle}`)
 
     // Why invoke node rather than `echo`: the shell differs per platform, node does not.
-    const nonce = `ORCA_SMOKE_${randomBytes(8).toString('hex')}`
-    orca(pairingCode, [
+    const nonce = `QUIRKY_SMOKE_${randomBytes(8).toString('hex')}`
+    quirky(pairingCode, [
       'terminal',
       'send',
       '--terminal',
@@ -369,18 +371,18 @@ async function main() {
       )
     }
     log('terminal round trip OK')
-    if (launch.env.ORCA_USER_DATA && process.platform !== 'win32') {
+    if (launch.env.QUIRKY_USER_DATA && process.platform !== 'win32') {
       const cliNonce = randomBytes(8).toString('hex')
-      orca(pairingCode, [
+      quirky(pairingCode, [
         'terminal',
         'send',
         '--terminal',
         terminal.handle,
         '--text',
-        `orca status && orca worktree ps --json && printf 'ORCA_CLI_%s\\n' '${cliNonce}'`,
+        `quirky status && quirky worktree ps --json && printf 'QUIRKY_CLI_%s\\n' '${cliNonce}'`,
         '--enter'
       ])
-      if (!(await waitForNonce(pairingCode, terminal.handle, `ORCA_CLI_${cliNonce}`))) {
+      if (!(await waitForNonce(pairingCode, terminal.handle, `QUIRKY_CLI_${cliNonce}`))) {
         throw new Error('The managed terminal could not run the execution host CLI')
       }
       log('execution host CLI round trip OK')

@@ -55,7 +55,7 @@ describe('repoIconId', () => {
   })
 })
 
-describe('RepoIconDataUrls without an encoder (orcad)', () => {
+describe('RepoIconDataUrls without an encoder (quirkyd)', () => {
   it('passes a small fetched image through as a data URL', async () => {
     const bytes = pngHeader(64, 64)
     const { icons } = setup([repo('a', AVATAR)])
@@ -128,7 +128,7 @@ describe('RepoIconDataUrls with an encoder (desktop)', () => {
     expect(encoder.mock.calls.map(([, edge]) => edge)).toEqual([64, 32])
   })
 
-  it('passes a small image the decoder cannot read through, as orcad would', async () => {
+  it('passes a small image the decoder cannot read through, as quirkyd would', async () => {
     const { icons } = setup([repo('a', AVATAR)], { encoder: () => null })
     expect((await icons.read([repoIconId(AVATAR)!])).icons[0].dataUrl).toMatch(
       /^data:image\/png;base64,/

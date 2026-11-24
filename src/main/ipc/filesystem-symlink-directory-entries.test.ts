@@ -5,7 +5,7 @@ import { expect, it, vi } from 'vitest'
 import { classifyFilesystemDirectoryEntries } from './filesystem-symlink-directory-entries'
 
 it('keeps passive listings free of target probes and classifies opted-in authorized targets', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-directory-links-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-directory-links-'))
   try {
     await mkdir(join(root, 'inside'))
     const linkType = process.platform === 'win32' ? 'junction' : 'dir'

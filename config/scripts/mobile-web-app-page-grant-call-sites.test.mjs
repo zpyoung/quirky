@@ -51,7 +51,7 @@ describe('the call-site reader', () => {
   const storage = PAGE_GRANT_CALL_SITES[1]
 
   it('reuses parsed references across rows while observing source and row changes', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'orca-grant-reader-'))
+    const directory = await mkdtemp(join(tmpdir(), 'quirky-grant-reader-'))
     const file = join(directory, 'route.tsx')
     const readModule = createGrantCallSiteReader()
     const closure = { local: ['route.tsx'] }

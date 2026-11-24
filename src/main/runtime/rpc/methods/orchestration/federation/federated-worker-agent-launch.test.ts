@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import type { WorkerSetupReceipt } from '../worker/worker-topology'
 import { launchFederatedWorkerAgent } from './federated-worker-agent-launch'
@@ -56,7 +56,7 @@ function launch(f: ReturnType<typeof fakes>, worktree?: { id: string }) {
   const stagesSeen: string[] = []
   const done = launchFederatedWorkerAgent({
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch calls only the methods faked here.
-    runtime: f.runtime as unknown as OrcaRuntimeService,
+    runtime: f.runtime as unknown as QuirkyRuntimeService,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch records only attachment stages.
     db: f.db as unknown as OrchestrationDb,
     params: PARAMS,

@@ -15,16 +15,17 @@ afterEach(() => {
 })
 
 function cgroupFile(contents: string): string {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-cgroup-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-cgroup-'))
   dirs.push(dir)
   const path = join(dir, 'cgroup')
   writeFileSync(path, contents)
   return path
 }
 
-const SYSTEM_SERVICE = '0::/system.slice/orca-serve.service\n'
+const SYSTEM_SERVICE = '0::/system.slice/quirky-serve.service\n'
 const SSH_SESSION = '0::/user.slice/user-1000.slice/session-4.scope\n'
-const DESKTOP_APP = '0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-orca-12.scope\n'
+const DESKTOP_APP =
+  '0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-quirky-12.scope\n'
 
 describe('cgroupIsInsideUserManager', () => {
   it.each([

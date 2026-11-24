@@ -1,9 +1,9 @@
 /**
  * The path-rewrite stage of a local WSL move: a UNC path of the moved distro becomes the Linux path
- * orcad sees for the same file. Anything else is returned unchanged, as the stage contract requires.
+ * quirkyd sees for the same file. Anything else is returned unchanged, as the stage contract requires.
  */
 import { parseWslUncPath } from '../../../shared/wsl-paths'
-import type { OrcadMigrationPathRewriter } from '../../ssh/orcad-migration-path-rewrite'
+import type { QuirkydMigrationPathRewriter } from '../../ssh/quirkyd-migration-path-rewrite'
 
 /** Linux form of `value` when it is a UNC path of `distro` (either spelling, either slash). */
 export function wslUncPathToLinux(value: string, distro: string): string | null {
@@ -12,7 +12,7 @@ export function wslUncPathToLinux(value: string, distro: string): string | null 
   return parsed && parsed.distro.toLowerCase() === distro.toLowerCase() ? parsed.linuxPath : null
 }
 
-export function createUncToLinuxPathRewriter(distro: string): OrcadMigrationPathRewriter {
+export function createUncToLinuxPathRewriter(distro: string): QuirkydMigrationPathRewriter {
   const fileUrl = new RegExp(`^file://(?:wsl\\.localhost|wsl\\$)/([^/]+)(/.*)?$`, 'i')
   return {
     path: (value, form) => {

@@ -23,18 +23,52 @@ export function AskFieldControl({
   switch (question.type) {
     case 'select':
     case 'multiselect':
-      return <AskOptionQuestion question={question} draft={draft} onChange={onChange} disabled={disabled} />
+      return (
+        <AskOptionQuestion
+          question={question}
+          draft={draft}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      )
     case 'text':
       return (
-        <AskTextQuestion question={question} draft={draft} onChange={onChange} disabled={disabled} invalid={invalid} />
+        <AskTextQuestion
+          question={question}
+          draft={draft}
+          onChange={onChange}
+          disabled={disabled}
+          invalid={invalid}
+        />
       )
     case 'number':
       return (
-        <AskNumberQuestion question={question} draft={draft} onChange={onChange} disabled={disabled} invalid={invalid} />
+        <AskNumberQuestion
+          question={question}
+          draft={draft}
+          onChange={onChange}
+          disabled={disabled}
+          invalid={invalid}
+        />
       )
     case 'date':
-      return <AskDateQuestion question={question} draft={draft} onChange={onChange} disabled={disabled} invalid={invalid} />
+      return (
+        <AskDateQuestion
+          question={question}
+          draft={draft}
+          onChange={onChange}
+          disabled={disabled}
+          invalid={invalid}
+        />
+      )
     case 'confirm':
-      return <AskConfirmQuestion question={question} draft={draft} onChange={onChange} disabled={disabled} />
+      return (
+        <AskConfirmQuestion
+          question={question}
+          draft={draft}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      )
   }
 }

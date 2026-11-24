@@ -62,9 +62,9 @@ function readBundleIdentity(bundlePath: string): string {
 }
 
 /**
- * Only a launchd service whose label `orca serve service install` wrote takes part: the installer
+ * Only a launchd service whose label `quirky serve service install` wrote takes part: the installer
  * stops a server only when a service manager it can name keeps the supervisor running. Everyone
- * else keeps today's refusal. `label` is for an owner that restarts its own child, like orcad.
+ * else keeps today's refusal. `label` is for an owner that restarts its own child, like quirkyd.
  */
 export function openServeBundlePark(input: {
   executable: string

@@ -1,9 +1,9 @@
 import './unused-default-rpc-methods.test-fixture'
 // Why: the stale-handle survival suite doubles subscribeToPtyExit, so it pins the wiring but
 // not the predicate that decides whether a PTY counts as exited. This wires that one call to
-// a real OrcaRuntimeService, because a relay drop reaches the phone through the predicate.
+// a real QuirkyRuntimeService, because a relay drop reaches the phone through the predicate.
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import type { RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
 import { TERMINAL_METHODS } from './methods/terminal'
@@ -40,8 +40,8 @@ type PtyInternals = {
 }
 
 /** A PTY whose relay dropped: connection lost, no exit code, process possibly still running. */
-function makeRelayDroppedRuntime(): OrcaRuntimeService {
-  const real = new OrcaRuntimeService()
+function makeRelayDroppedRuntime(): QuirkyRuntimeService {
+  const real = new QuirkyRuntimeService()
   const internals = real as unknown as PtyInternals
   internals.recordPtyWorktree(PTY_ID, 'wt-1', { connected: true })
   const pty = internals.ptysById.get(PTY_ID)!
@@ -50,9 +50,9 @@ function makeRelayDroppedRuntime(): OrcaRuntimeService {
   return real
 }
 
-function createRuntime(real: OrcaRuntimeService): {
+function createRuntime(real: QuirkyRuntimeService): {
   registry: ReturnType<typeof createSubscriptionRegistryDouble>
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
 } {
   const registry = createSubscriptionRegistryDouble()
   const runtime = {
@@ -80,7 +80,7 @@ function createRuntime(real: OrcaRuntimeService): {
     // The one call under test: the real exit predicate, not a double's opinion of it.
     subscribeToPtyExit: (ptyId: string, listener: () => void) =>
       real.subscribeToPtyExit(ptyId, listener)
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   return { registry, runtime }
 }
 

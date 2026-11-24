@@ -9,7 +9,7 @@ const OUTPUT = [
   "tests/e2e/a.spec.ts(22,10): error TS2305: Module './helpers/flow' has no exported member 'convertThenRetire'.",
   "tests/e2e/a.spec.ts(30,1): error TS2339: Property 'x' does not exist on type 'Y'.",
   "tests/e2e/helpers/b.ts(5,3): error TS2322: Type 'string' is not assignable to type 'number'.",
-  "cloud/apps/relay/src/app.ts(18,8): error TS2307: Cannot find module '@orca-cloud/relay-contract'.",
+  "cloud/apps/relay/src/app.ts(18,8): error TS2307: Cannot find module '@quirky-cloud/relay-contract'.",
   '  Continuation line of a multi-line diagnostic.'
 ].join('\n')
 

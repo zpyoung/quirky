@@ -1,4 +1,4 @@
 provider: github
 owner: zpyoung
 repo: quirky
-updaterCacheDirName: orca-dev-updater
+updaterCacheDirName: quirky-dev-updater

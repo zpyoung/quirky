@@ -12,7 +12,7 @@ const originalAsset = { ...NODE_RUNTIME_ASSETS[TARGET] }
 let root = ''
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-node-runtime-http-client-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-node-runtime-http-client-'))
 })
 
 afterEach(async () => {
@@ -22,7 +22,7 @@ afterEach(async () => {
 })
 
 // Why it matters: the desktop installs Chromium's session-backed client, so the download follows
-// system, PAC and Orca proxy settings (and proxy login). A plain undici fetch would bypass them.
+// system, PAC and Quirky proxy settings (and proxy login). A plain undici fetch would bypass them.
 describe('pinned Node runtime download', () => {
   it('goes through the installed main HTTP client when the deploy passes no fetcher', async () => {
     const body = new TextEncoder().encode('node runtime archive bytes')

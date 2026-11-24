@@ -167,9 +167,9 @@ describe('ClaudeProfileRouter', () => {
       provenance: 'system'
     })
     expect(f.router.preparation().envPatch).not.toHaveProperty('CLAUDE_CONFIG_DIR')
-    expect(f.router.terminalEnv()).toEqual({ ORCA_CLAUDE_PROFILE_POINTER: f.router.pointerPath })
+    expect(f.router.terminalEnv()).toEqual({ QUIRKY_CLAUDE_PROFILE_POINTER: f.router.pointerPath })
     expect(f.router.routedHome()).toBeNull()
-    // The pointer names the folder actually chosen, so a typed claude agrees with Orca's launches.
+    // The pointer names the folder actually chosen, so a typed claude agrees with Quirky's launches.
     expect(readFileSync(f.router.pointerPath, 'utf8')).toBe('')
     expect(f.router.coveredBySystemDefault('a')).toBe(true)
 
@@ -255,7 +255,7 @@ describe('ClaudeProfileRouter', () => {
     await expect(refused).rejects.toThrow(CLAUDE_PROFILE_SETUP_FAILED_MESSAGE)
   })
 
-  it("reads an older Orca's copy-based switching from the System default snapshot it left", () => {
+  it("reads an older Quirky's copy-based switching from the System default snapshot it left", () => {
     const f = fixture()
     expect(f.router.copiedLoginIntoSystemDefault()).toBe(false)
     mkdirSync(join(f.dataRoot, 'claude-runtime-auth'), { recursive: true })
@@ -382,7 +382,7 @@ describe('ClaudeProfileRouter', () => {
     f.settings.activeClaudeManagedAccountId = 'b'
     // Before its setup, a terminal still opens; its claude function creates the folder itself.
     expect(() => f.router.preparation()).toThrow(CLAUDE_PROFILE_MISSING_MESSAGE)
-    expect(f.router.terminalEnv()).toEqual({ ORCA_CLAUDE_PROFILE_POINTER: f.router.pointerPath })
+    expect(f.router.terminalEnv()).toEqual({ QUIRKY_CLAUDE_PROFILE_POINTER: f.router.pointerPath })
     f.router.publish()
     expect(readFileSync(f.router.pointerPath, 'utf8')).toBe(f.home('b'))
     await vi.waitFor(() => expect(f.setup.calls).toBe(1))
@@ -409,15 +409,15 @@ describe('ClaudeProfileRouter', () => {
     expect(f.router.preparation()).toMatchObject({
       configDir: f.home('a'),
       envPatch: {
-        ORCA_CLAUDE_PROFILE_POINTER: f.router.pointerPath,
+        QUIRKY_CLAUDE_PROFILE_POINTER: f.router.pointerPath,
         CLAUDE_CONFIG_DIR: f.home('a'),
-        ORCA_CLAUDE_INJECTED_CONFIG_DIR: f.home('a')
+        QUIRKY_CLAUDE_INJECTED_CONFIG_DIR: f.home('a')
       }
     })
     f.settings.activeClaudeManagedAccountId = null
     expect(f.router.preparation()).toMatchObject({
       configDir: resolve('/user/own'),
-      envPatch: { ORCA_CLAUDE_PROFILE_POINTER: f.router.pointerPath }
+      envPatch: { QUIRKY_CLAUDE_PROFILE_POINTER: f.router.pointerPath }
     })
     expect(f.router.preparation().envPatch).not.toHaveProperty('CLAUDE_CONFIG_DIR')
   })
@@ -426,7 +426,7 @@ describe('ClaudeProfileRouter', () => {
     const f = fixture({ CLAUDE_CONFIG_DIR: 'C:/Claude Config/' })
     f.settings.activeClaudeManagedAccountId = null
     expect(f.router.terminalEnv()).toMatchObject({
-      ORCA_CLAUDE_USER_CONFIG_DIR: 'C:/Claude Config/'
+      QUIRKY_CLAUDE_USER_CONFIG_DIR: 'C:/Claude Config/'
     })
   })
 
@@ -434,20 +434,20 @@ describe('ClaudeProfileRouter', () => {
     const f = fixture({ CLAUDE_CONFIG_DIR: resolve('/user/own') })
     mkdirSync(f.home('a'), { recursive: true })
     expect(f.router.terminalEnv()).toEqual({
-      ORCA_CLAUDE_PROFILE_POINTER: f.router.pointerPath,
+      QUIRKY_CLAUDE_PROFILE_POINTER: f.router.pointerPath,
       CLAUDE_CONFIG_DIR: f.home('a'),
-      ORCA_CLAUDE_INJECTED_CONFIG_DIR: f.home('a'),
-      ORCA_CLAUDE_USER_CONFIG_DIR: resolve('/user/own')
+      QUIRKY_CLAUDE_INJECTED_CONFIG_DIR: f.home('a'),
+      QUIRKY_CLAUDE_USER_CONFIG_DIR: resolve('/user/own')
     })
-    expect(f.router.preparation().envPatch).not.toHaveProperty('ORCA_CLAUDE_USER_CONFIG_DIR')
+    expect(f.router.preparation().envPatch).not.toHaveProperty('QUIRKY_CLAUDE_USER_CONFIG_DIR')
     f.settings.activeClaudeManagedAccountId = null
     expect(f.router.terminalEnv()).toEqual({
-      ORCA_CLAUDE_PROFILE_POINTER: f.router.pointerPath,
-      ORCA_CLAUDE_USER_CONFIG_DIR: resolve('/user/own')
+      QUIRKY_CLAUDE_PROFILE_POINTER: f.router.pointerPath,
+      QUIRKY_CLAUDE_USER_CONFIG_DIR: resolve('/user/own')
     })
     const none = fixture()
     mkdirSync(none.home('a'), { recursive: true })
-    expect(none.router.terminalEnv()).not.toHaveProperty('ORCA_CLAUDE_USER_CONFIG_DIR')
+    expect(none.router.terminalEnv()).not.toHaveProperty('QUIRKY_CLAUDE_USER_CONFIG_DIR')
   })
 
   // Why not win32: runs the POSIX claude function under bash.
@@ -458,7 +458,7 @@ describe('ClaudeProfileRouter', () => {
         const f = fixture(inherited)
         mkdirSync(f.home('a'), { recursive: true })
         const claude = claudeShellProbe(f.root)
-        // The pane opens while account A is selected, so Orca replaces the inherited value.
+        // The pane opens while account A is selected, so Quirky replaces the inherited value.
         f.router.publish()
         const pane = { ...inherited, ...f.router.terminalEnv() }
         expect(claude(pane)).toBe(f.home('a'))
@@ -484,7 +484,7 @@ describe('ClaudeProfileRouter', () => {
       f.settings.activeClaudeManagedAccountId = 'a'
       f.router.publish()
       expect(claude(pane)).toBe(f.home('a'))
-      // An rc export lands after Orca's injected value, and a pane's own folder still wins.
+      // An rc export lands after Quirky's injected value, and a pane's own folder still wins.
       const injected = { ...f.router.terminalEnv() }
       expect(claude(injected, `export CLAUDE_CONFIG_DIR='${own}'\n`)).toBe(f.home('a'))
       expect(claude(injected, "export CLAUDE_CONFIG_DIR='/somewhere/else'\n")).toBe(
@@ -518,7 +518,7 @@ describe('ClaudeProfileRouter', () => {
       userHome: f.userHome,
       runSetup: async () => ({ outcome: 'prepared', warnings: [], surfaces: {} })
     })
-    expect(router.terminalEnv()).toEqual({ ORCA_CLAUDE_PROFILE_POINTER: router.pointerPath })
+    expect(router.terminalEnv()).toEqual({ QUIRKY_CLAUDE_PROFILE_POINTER: router.pointerPath })
     await vi.waitFor(() => expect(readFileSync(router.pointerPath, 'utf8')).toBe(f.home('a')))
     expect(router.terminalEnv()).toMatchObject({ CLAUDE_CONFIG_DIR: f.home('a') })
   })
@@ -537,16 +537,16 @@ describe('ClaudeProfileRouter', () => {
     })
   })
 
-  it('treats a CLAUDE_CONFIG_DIR an outer Orca injected as not the user’s', () => {
+  it('treats a CLAUDE_CONFIG_DIR an outer Quirky injected as not the user’s', () => {
     const f = fixture({
       CLAUDE_CONFIG_DIR: '/outer/profile',
-      ORCA_CLAUDE_INJECTED_CONFIG_DIR: '/outer/profile'
+      QUIRKY_CLAUDE_INJECTED_CONFIG_DIR: '/outer/profile'
     })
     expect(f.router.systemDefaultHome()).toBe(join(f.userHome, '.claude'))
     const carried = fixture({
       CLAUDE_CONFIG_DIR: '/outer/profile',
-      ORCA_CLAUDE_INJECTED_CONFIG_DIR: '/outer/profile',
-      ORCA_CLAUDE_USER_CONFIG_DIR: '/user/own'
+      QUIRKY_CLAUDE_INJECTED_CONFIG_DIR: '/outer/profile',
+      QUIRKY_CLAUDE_USER_CONFIG_DIR: '/user/own'
     })
     expect(carried.router.systemDefaultHome()).toBe(resolve('/user/own'))
   })

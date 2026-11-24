@@ -34,7 +34,7 @@ function modeOf(path: string): number {
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-codex-config-modes-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-codex-config-modes-'))
   runtimeHomePath = join(root, 'runtime')
   systemHomePath = join(root, '.codex')
   mkdirSync(runtimeHomePath, { recursive: true })

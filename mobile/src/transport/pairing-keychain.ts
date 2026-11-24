@@ -7,9 +7,9 @@ const BASE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY
 }
 
-const GENERATION_STORAGE_KEY = 'orca:pairing-keychain-generation'
-const PRESENCE_STORAGE_PREFIX = 'orca:pairing-keychain-presence:'
-const SERVICE_PREFIX = 'orca.pairing.v'
+const GENERATION_STORAGE_KEY = 'quirky:pairing-keychain-generation'
+const PRESENCE_STORAGE_PREFIX = 'quirky:pairing-keychain-presence:'
+const SERVICE_PREFIX = 'quirky.pairing.v'
 // Why: every generation adds one read probe per miss; bound pathological recovery cost.
 const MAX_GENERATION = 8
 

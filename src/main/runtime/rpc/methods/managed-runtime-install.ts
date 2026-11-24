@@ -1,9 +1,9 @@
-// The runtime Orca installs for an agent, on the host that receives the call: the one that runs
+// The runtime Quirky installs for an agent, on the host that receives the call: the one that runs
 // that agent's chats. Needs no workspace. Negotiated by `managed-runtime.install.v1`; Remove by
 // `managed-runtime.remove.v1`. Status is pushed: a snapshot on subscribe, then one per state
 // revision.
 
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import {
   ManagedRuntimeAgentParams,
   ManagedRuntimeCancelParams
@@ -12,7 +12,7 @@ import { acpLaunchSpecFor } from '../../../acp/acp-launch-specs'
 import { resolveAcpLaunchCommand } from '../../../acp/acp-structured-launch-resolution'
 import { ManagedRuntimeInstallation } from '../../../node-runtime/managed-runtime-installation'
 import { isAgentSessionPreSpawnError } from '../../../native-chat/agent-session-wire/structured-agent-session-adapter'
-import { getProfileUserDataPath } from '../../../orca-profiles/profile-storage-paths'
+import { getProfileUserDataPath } from '../../../quirky-profiles/profile-storage-paths'
 import { stopStructuredAgentChats } from '../../structured-agent-chat-stop'
 import { resolveHostStructuredAgentLaunchEnvironment } from '../../structured-agent-launch-support'
 import { isPathInsideOrEqual } from '../../../../shared/cross-platform-path'
@@ -21,14 +21,14 @@ import { bindStructuredAgentSessionStream } from './structured-agent-session-sta
 
 const installations = new Map<string, ManagedRuntimeInstallation>()
 
-function installationFor(agent: string, runtime: OrcaRuntimeService): ManagedRuntimeInstallation {
+function installationFor(agent: string, runtime: QuirkyRuntimeService): ManagedRuntimeInstallation {
   const spec = acpLaunchSpecFor(agent)
   if (!spec?.managedRuntime) {
-    throw new Error(`Orca installs no runtime for ${agent}.`)
+    throw new Error(`Quirky installs no runtime for ${agent}.`)
   }
   const dataDirectory = getProfileUserDataPath()
   const releases = spec.managedRuntime.root(dataDirectory)
-  // What a start would run, outside Orca's releases: the launch's own lookup decides.
+  // What a start would run, outside Quirky's releases: the launch's own lookup decides.
   const findExternal = async (): Promise<boolean> => {
     const settings = runtime.requireStore().getSettings()
     const env = {

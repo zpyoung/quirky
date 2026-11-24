@@ -22,7 +22,7 @@ afterEach(async () => {
   await closeProviderTimelineRigs()
 })
 
-/** What Orca had written, and whether the turn had ended, when it first asked the child to close. */
+/** What Quirky had written, and whether the turn had ended, when it first asked the child to close. */
 function watchClose(child: FakeAcpChild, turn: { ended: boolean }) {
   const atClose: { cancels: number | null; turnEnded: boolean | null } = {
     cancels: null,
@@ -37,7 +37,7 @@ function watchClose(child: FakeAcpChild, turn: { ended: boolean }) {
   return atClose
 }
 
-/** The agent ends the cancelled turn a moment after Orca asks. */
+/** The agent ends the cancelled turn a moment after Quirky asks. */
 function answerCancel(child: FakeAcpChild, prompt: FakeFrame, turn: { ended: boolean }) {
   child.agent.on('session/cancel', () =>
     setTimeout(() => {

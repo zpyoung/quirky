@@ -1,5 +1,8 @@
 import { translate } from '@/i18n/i18n'
-import type { AskAnswer, AskAnswers } from '../../../../shared/fork-ask-question-tool/ask-answer-envelope'
+import type {
+  AskAnswer,
+  AskAnswers
+} from '../../../../shared/fork-ask-question-tool/ask-answer-envelope'
 import type { AskQuestion } from '../../../../shared/fork-ask-question-tool/ask-question-schema'
 import type { AskQuestionDraft } from './ask-question-draft'
 
@@ -13,16 +16,33 @@ export type AskFieldOutcome =
 
 function requiredOrSkip(question: AskQuestion): AskFieldOutcome {
   return question.required
-    ? { kind: 'error', message: translate('components.fork-ask-question-tool.askCard.requiredError', 'This question is required.') }
+    ? {
+        kind: 'error',
+        message: translate(
+          'components.fork-ask-question-tool.askCard.requiredError',
+          'This question is required.'
+        )
+      }
     : { kind: 'skipped' }
 }
 
-function resolveOptionQuestion(question: AskQuestion & { type: 'select' | 'multiselect' }, draft: AskQuestionDraft): AskFieldOutcome {
+function resolveOptionQuestion(
+  question: AskQuestion & { type: 'select' | 'multiselect' },
+  draft: AskQuestionDraft
+): AskFieldOutcome {
   const freeText = draft.freeText.trim()
   if (question.type === 'select') {
     const picked = question.options.find((option) => option.value === draft.selected[0])
     if (picked) {
-      return { kind: 'answer', answer: { value: picked.value, label: picked.label, note: freeText || undefined, source: 'option' } }
+      return {
+        kind: 'answer',
+        answer: {
+          value: picked.value,
+          label: picked.label,
+          note: freeText || undefined,
+          source: 'option'
+        }
+      }
     }
     if (freeText) {
       return { kind: 'answer', answer: { value: freeText, source: 'other' } }
@@ -47,19 +67,34 @@ function resolveOptionQuestion(question: AskQuestion & { type: 'select' | 'multi
   }
 }
 
-function resolveTextQuestion(question: AskQuestion & { type: 'text' }, draft: AskQuestionDraft): AskFieldOutcome {
+function resolveTextQuestion(
+  question: AskQuestion & { type: 'text' },
+  draft: AskQuestionDraft
+): AskFieldOutcome {
   const value = draft.text
   if (value.trim().length === 0) {
     return requiredOrSkip(question)
   }
   if (question.format === 'email' && !EMAIL_RE.test(value)) {
-    return { kind: 'error', message: translate('components.fork-ask-question-tool.askCard.textEmailError', 'Enter a valid email address.') }
+    return {
+      kind: 'error',
+      message: translate(
+        'components.fork-ask-question-tool.askCard.textEmailError',
+        'Enter a valid email address.'
+      )
+    }
   }
   if (question.format === 'url') {
     try {
       new URL(value)
     } catch {
-      return { kind: 'error', message: translate('components.fork-ask-question-tool.askCard.textUrlError', 'Enter a valid URL.') }
+      return {
+        kind: 'error',
+        message: translate(
+          'components.fork-ask-question-tool.askCard.textUrlError',
+          'Enter a valid URL.'
+        )
+      }
     }
   }
   if (question.pattern) {
@@ -70,52 +105,93 @@ function resolveTextQuestion(question: AskQuestion & { type: 'text' }, draft: As
       matches = true // an unparseable pattern was already rejected at spec validation; never block submit on it here
     }
     if (!matches) {
-      return { kind: 'error', message: translate('components.fork-ask-question-tool.askCard.textPatternError', "Doesn't match the expected format.") }
+      return {
+        kind: 'error',
+        message: translate(
+          'components.fork-ask-question-tool.askCard.textPatternError',
+          "Doesn't match the expected format."
+        )
+      }
     }
   }
   return { kind: 'answer', answer: { value, source: 'input' } }
 }
 
-function resolveNumberQuestion(question: AskQuestion & { type: 'number' }, draft: AskQuestionDraft): AskFieldOutcome {
+function resolveNumberQuestion(
+  question: AskQuestion & { type: 'number' },
+  draft: AskQuestionDraft
+): AskFieldOutcome {
   const raw = draft.text.trim()
   if (raw.length === 0) {
     return requiredOrSkip(question)
   }
   const value = Number(raw)
   if (!Number.isFinite(value)) {
-    return { kind: 'error', message: translate('components.fork-ask-question-tool.askCard.numberInvalidError', 'Enter a number.') }
+    return {
+      kind: 'error',
+      message: translate(
+        'components.fork-ask-question-tool.askCard.numberInvalidError',
+        'Enter a number.'
+      )
+    }
   }
   if (question.integer && !Number.isInteger(value)) {
-    return { kind: 'error', message: translate('components.fork-ask-question-tool.askCard.numberIntegerError', 'Enter a whole number.') }
+    return {
+      kind: 'error',
+      message: translate(
+        'components.fork-ask-question-tool.askCard.numberIntegerError',
+        'Enter a whole number.'
+      )
+    }
   }
   if (question.min !== undefined && value < question.min) {
     return {
       kind: 'error',
-      message: translate('components.fork-ask-question-tool.askCard.numberMinError', 'Enter a number of at least {{value0}}.', { value0: question.min })
+      message: translate(
+        'components.fork-ask-question-tool.askCard.numberMinError',
+        'Enter a number of at least {{value0}}.',
+        { value0: question.min }
+      )
     }
   }
   if (question.max !== undefined && value > question.max) {
     return {
       kind: 'error',
-      message: translate('components.fork-ask-question-tool.askCard.numberMaxError', 'Enter a number of at most {{value0}}.', { value0: question.max })
+      message: translate(
+        'components.fork-ask-question-tool.askCard.numberMaxError',
+        'Enter a number of at most {{value0}}.',
+        { value0: question.max }
+      )
     }
   }
   return { kind: 'answer', answer: { value, source: 'input' } }
 }
 
-function resolveDateQuestion(question: AskQuestion & { type: 'date' }, draft: AskQuestionDraft): AskFieldOutcome {
+function resolveDateQuestion(
+  question: AskQuestion & { type: 'date' },
+  draft: AskQuestionDraft
+): AskFieldOutcome {
   const raw = draft.text.trim()
   if (raw.length === 0) {
     return requiredOrSkip(question)
   }
   const parsed = ISO_DATE_RE.test(raw) ? new Date(`${raw}T00:00:00Z`) : null
   if (!parsed || Number.isNaN(parsed.getTime())) {
-    return { kind: 'error', message: translate('components.fork-ask-question-tool.askCard.dateInvalidError', 'Enter a valid date.') }
+    return {
+      kind: 'error',
+      message: translate(
+        'components.fork-ask-question-tool.askCard.dateInvalidError',
+        'Enter a valid date.'
+      )
+    }
   }
   return { kind: 'answer', answer: { value: raw, source: 'input' } }
 }
 
-function resolveConfirmQuestion(question: AskQuestion & { type: 'confirm' }, draft: AskQuestionDraft): AskFieldOutcome {
+function resolveConfirmQuestion(
+  question: AskQuestion & { type: 'confirm' },
+  draft: AskQuestionDraft
+): AskFieldOutcome {
   if (draft.confirm === null) {
     return requiredOrSkip(question)
   }
@@ -123,7 +199,10 @@ function resolveConfirmQuestion(question: AskQuestion & { type: 'confirm' }, dra
 }
 
 /** Resolves one question's draft into an answer, a skip, or a blocking validation error. */
-export function resolveAskFieldOutcome(question: AskQuestion, draft: AskQuestionDraft): AskFieldOutcome {
+export function resolveAskFieldOutcome(
+  question: AskQuestion,
+  draft: AskQuestionDraft
+): AskFieldOutcome {
   switch (question.type) {
     case 'select':
     case 'multiselect':
@@ -144,7 +223,10 @@ export type AskSubmissionResult =
   | { ok: false; errors: Record<string, string> }
 
 /** Resolves every question's draft; blocks the whole submission on the first pass with any error. */
-export function buildAskSubmission(questions: AskQuestion[], drafts: Record<string, AskQuestionDraft>): AskSubmissionResult {
+export function buildAskSubmission(
+  questions: AskQuestion[],
+  drafts: Record<string, AskQuestionDraft>
+): AskSubmissionResult {
   const answers: AskAnswers = {}
   const skipped: string[] = []
   const errors: Record<string, string> = {}

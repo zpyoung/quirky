@@ -297,7 +297,11 @@ describe('gatherIterationEvidence checkpoint commits', () => {
 
     await gatherWith(
       gitContext(checkpointing(), runGit),
-      commitTools({ added: 1, removed: 0, files: ['a.ts', '.orca/loops/loop/notes.md', 'b/c.ts'] })
+      commitTools({
+        added: 1,
+        removed: 0,
+        files: ['a.ts', '.quirky/loops/loop/notes.md', 'b/c.ts']
+      })
     )
 
     const paths = [':(top,literal)a.ts', ':(top,literal)b/c.ts']
@@ -310,7 +314,7 @@ describe('gatherIterationEvidence checkpoint commits', () => {
 
     const evidence = await gatherWith(
       gitContext(checkpointing(), runGit),
-      commitTools({ added: 1, removed: 0, files: ['.orca/loops/loop/notes.md'] })
+      commitTools({ added: 1, removed: 0, files: ['.quirky/loops/loop/notes.md'] })
     )
 
     expect(runGit).not.toHaveBeenCalled()
@@ -375,7 +379,7 @@ describe('gatherIterationEvidence checkpoint commits', () => {
     })
 
     async function openRepository() {
-      root = await mkdtemp(join(tmpdir(), 'orca-loop-evidence-'))
+      root = await mkdtemp(join(tmpdir(), 'quirky-loop-evidence-'))
       const env: NodeJS.ProcessEnv = {}
       for (const [key, value] of Object.entries(process.env)) {
         if (!key.startsWith('GIT_')) {
@@ -419,8 +423,8 @@ describe('gatherIterationEvidence checkpoint commits', () => {
       const repo = await openRepository()
       const before = await repo.before()
       await writeFile(join(root, 'tracked.txt'), 'one\ntwo\n')
-      await mkdir(join(root, '.orca', 'loops', 'loop'), { recursive: true })
-      await writeFile(join(root, '.orca', 'loops', 'loop', 'notes.md'), 'notes\n')
+      await mkdir(join(root, '.quirky', 'loops', 'loop'), { recursive: true })
+      await writeFile(join(root, '.quirky', 'loops', 'loop', 'notes.md'), 'notes\n')
 
       const evidence = await repo.gatherAfter(before)
 

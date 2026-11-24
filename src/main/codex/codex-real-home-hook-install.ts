@@ -21,12 +21,12 @@ import {
 } from './codex-hook-definition'
 import {
   type CodexHookHome,
-  findStopgapOrcaHashes,
+  findStopgapQuirkyHashes,
   getRealHomeCodexHookHome,
-  isKnownOrcaHash,
-  readKnownOrcaHashes
-} from './codex-hook-orca-approvals'
-import { getOrcaUserDataPath } from './codex-home-paths'
+  isKnownQuirkyHash,
+  readKnownQuirkyHashes
+} from './codex-hook-quirky-approvals'
+import { getQuirkyUserDataPath } from './codex-home-paths'
 import { mutateRealHomeHooksPreservingUserTrust } from './codex-user-hook-trust-moves'
 import { sweepRealHomeCodexHook } from './codex-real-home-hook-sweep'
 import { runExclusivelyForCodexTrustConfig } from './codex-trust-config-mutation-queue'
@@ -50,7 +50,7 @@ import {
 } from './config-toml-trust'
 
 type ReconcileArgs = {
-  /** Codex's hashes; null while Codex has not answered, when Orca keeps or computes its own. */
+  /** Codex's hashes; null while Codex has not answered, when Quirky keeps or computes its own. */
   hashes: CodexHookHashes | null
   isEnabled: () => boolean
   /** App start and the setting turning on; a launch never fights a running older build. */
@@ -59,11 +59,11 @@ type ReconcileArgs = {
 
 type SettlePlan = Extract<RealHomeCodexHookEntryPlan, { kind: 'settle' }>
 
-// Why a bound: each pass either prunes Orca's extra copies or settles; a concurrent save costs one more.
+// Why a bound: each pass either prunes Quirky's extra copies or settles; a concurrent save costs one more.
 const MAX_PASSES = 4
 
 /**
- * Makes ~/.codex hold Orca's entry alone, last unless already in place, in each
+ * Makes ~/.codex hold Quirky's entry alone, last unless already in place, in each
  * event Codex lists, with Codex's hash for it approved and enabled. Writes only
  * what differs; an approval goes in before its entry and is taken back if the
  * entry write fails. Never throws.
@@ -73,8 +73,8 @@ export async function reconcileRealHomeCodexHookEntries(args: ReconcileArgs): Pr
 }
 
 /**
- * The same for another home Orca edits in place, such as a managed account's on a WSL host:
- * only Orca's entry and its approvals change.
+ * The same for another home Quirky edits in place, such as a managed account's on a WSL host:
+ * only Quirky's entry and its approvals change.
  */
 export async function reconcileCodexHookEntriesInHome(
   home: CodexHookHome,
@@ -92,17 +92,17 @@ export async function reconcileCodexHookEntriesInHome(
             return
           }
         } catch (error) {
-          // Why: a user's save landed between Orca's read and write; the next pass reads it.
+          // Why: a user's save landed between Quirky's read and write; the next pass reads it.
           if (!(error instanceof HooksJsonChangedError)) {
             throw error
           }
         }
       }
-      throw new Error(`Orca entries in ${home.homePath} did not settle`)
+      throw new Error(`Quirky entries in ${home.homePath} did not settle`)
     })
   } catch (error) {
     console.warn(
-      `[codex-real-home-hooks] could not reconcile Orca entries in ${home.homePath}:`,
+      `[codex-real-home-hooks] could not reconcile Quirky entries in ${home.homePath}:`,
       error
     )
   }
@@ -133,12 +133,12 @@ function reconcilePass(
     hooks,
     sourcePath: sourcePaths[0],
     material: { events, command: material.command },
-    isOrcaCommand: createManagedCommandMatcher(getCodexManagedScriptFileName()),
+    isQuirkyCommand: createManagedCommandMatcher(getCodexManagedScriptFileName()),
     convertOlderForms: args.convertOlderForms
   })
   const writeHooks = (nextHooks: Record<string, HookDefinition[]>): void => {
     if (pristineBackup) {
-      backupRealHomeHooksJsonOnce(getOrcaUserDataPath(), previousRaw)
+      backupRealHomeHooksJsonOnce(getQuirkyUserDataPath(), previousRaw)
     }
     assertHooksJsonGeneration(hooksJsonPath, hooksWritePath, previousRaw)
     // Why: unknown fields inside the file belong to the user; preserve them verbatim.
@@ -146,7 +146,7 @@ function reconcilePass(
   }
   if (plan.kind === 'prune') {
     // Why its own write: dropping a copy shifts user hooks, whose approvals must move
-    // before Orca writes an approval at a slot one of them still holds.
+    // before Quirky writes an approval at a slot one of them still holds.
     mutateRealHomeHooksPreservingUserTrust({
       sourcePaths,
       tomlPath,
@@ -158,16 +158,16 @@ function reconcilePass(
   }
 
   const trustStates = readHookTrustEntries(tomlPath)
-  const knownOrcaHashes = readKnownOrcaHashes(home, material.command)
+  const knownQuirkyHashes = readKnownQuirkyHashes(home, material.command)
   // Why the stopgap: an entry already in place keeps its approval, so nothing changes.
   const hashes =
     args.hashes ??
-    findStopgapOrcaHashes({
+    findStopgapQuirkyHashes({
       trustStates,
       hooks,
       keySourcePaths: sourcePaths,
       command: material.command,
-      knownOrcaHashes
+      knownQuirkyHashes
     })
   const approvals = sourcePaths.flatMap((keySource) =>
     plan.managedEntries.flatMap((entry) => {
@@ -179,7 +179,7 @@ function reconcilePass(
     })
   )
   const findStale = (states: ReadonlyMap<string, CodexHookTrustState>): string[] =>
-    findStaleOrcaApprovals(states, events, sourcePaths, knownOrcaHashes, plan)
+    findStaleQuirkyApprovals(states, events, sourcePaths, knownQuirkyHashes, plan)
   const changed = plan.changedLabels.size > 0
   if (
     !changed &&
@@ -201,26 +201,26 @@ function reconcilePass(
     hooksJsonPath
   )
   try {
-    // Why read again: approvals Orca just wrote, or a user's moved one, may sit at a key read stale before.
+    // Why read again: approvals Quirky just wrote, or a user's moved one, may sit at a key read stale before.
     removeHookTrustEntries(tomlPath, findStale(readHookTrustEntries(tomlPath)))
   } catch (error) {
     // Why still written: the entry and its approval are in place; a leftover approval matches no hook.
-    console.warn('[codex-real-home-hooks] could not drop stale Orca approvals:', error)
+    console.warn('[codex-real-home-hooks] could not drop stale Quirky approvals:', error)
   }
   return 'settled'
 }
 
 /**
- * Approvals Orca left at a slot its entry no longer holds, such as a copy it
- * removed from a user's group. Owned only while they hold a hash Orca writes.
- * Never at a slot Orca's entry holds, whatever its hash, nor in an event this
+ * Approvals Quirky left at a slot its entry no longer holds, such as a copy it
+ * removed from a user's group. Owned only while they hold a hash Quirky writes.
+ * Never at a slot Quirky's entry holds, whatever its hash, nor in an event this
  * run did not plan or left alone: its entries keep theirs.
  */
-function findStaleOrcaApprovals(
+function findStaleQuirkyApprovals(
   trustStates: ReadonlyMap<string, CodexHookTrustState>,
   events: CodexManagedHookInstallMaterial['events'],
   sourcePaths: readonly string[],
-  knownOrcaHashes: readonly CodexHookHashes[],
+  knownQuirkyHashes: readonly CodexHookHashes[],
   plan: SettlePlan
 ): string[] {
   const plannedLabels = new Set(events.map((eventName) => CODEX_EVENT_LABEL[eventName]))
@@ -238,14 +238,14 @@ function findStaleOrcaApprovals(
       !plan.untouchedLabels.has(parts.eventLabel) &&
       !held.has(normalizeHookTrustKeyForLookup(key)) &&
       sourcePaths.some((sourcePath) => codexHookSourcePathsEqual(parts.sourcePath, sourcePath)) &&
-      isKnownOrcaHash(knownOrcaHashes, parts.eventLabel, state.trustedHash)
+      isKnownQuirkyHash(knownQuirkyHashes, parts.eventLabel, state.trustedHash)
       ? [key]
       : []
   })
 }
 
 /**
- * The user's explicit opt-out: strips Orca's entry and its approvals from the
+ * The user's explicit opt-out: strips Quirky's entry and its approvals from the
  * real ~/.codex, moving the approvals of user hooks whose positions shift.
  * Never throws.
  */
@@ -259,7 +259,7 @@ export async function removeRealHomeCodexHookForOptOut(
       // Why 'removed' only: an unread or malformed file may still hold the entry,
       // so its approvals and the ledger that proves ownership wait for a later pass.
       if (lane === 'removed') {
-        // Why: Codex's own hashes prove Orca's approvals, including ones a sweep with no entry left to remove skips.
+        // Why: Codex's own hashes prove Quirky's approvals, including ones a sweep with no entry left to remove skips.
         removeSystemManagedHookTrustEntries(
           home.homePath,
           home.keySourcePaths,

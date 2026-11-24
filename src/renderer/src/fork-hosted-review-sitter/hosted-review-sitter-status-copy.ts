@@ -52,14 +52,14 @@ export function hostedReviewSitterStatusReason(reason: string): string {
   if (reasonKind === 'same-failure-after-own-fix' && detail) {
     return translate(
       'fork.hostedReviewSitter.status.fixDidNotResolve',
-      'The same failure returned after Orca fixed {{check}}.',
+      'The same failure returned after Quirky fixed {{check}}.',
       { check: detail }
     )
   }
   if (reasonKind === 'action-outcome-indeterminate' && detail) {
     return translate(
       'fork.hostedReviewSitter.status.actionOutcomeIndeterminate',
-      'Orca could not verify the outcome of {{action}}.',
+      'Quirky could not verify the outcome of {{action}}.',
       { action: detail }
     )
   }
@@ -135,7 +135,7 @@ export function hostedReviewSitterStatusReason(reason: string): string {
     case 'stop-signature-repeated':
       return translate(
         'fork.hostedReviewSitter.status.repeatedFailure',
-        'The same failure returned after an Orca-authored fix.'
+        'The same failure returned after an Quirky-authored fix.'
       )
     case 'failure-signature-unavailable':
       return translate(

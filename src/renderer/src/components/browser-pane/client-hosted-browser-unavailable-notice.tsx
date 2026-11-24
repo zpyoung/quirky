@@ -44,7 +44,7 @@ export function ClientHostedBrowserUnavailableNotice({
           ?.name ?? null)
       : null
   })
-  // Why: a runtime known to have no browser of its own (orcad) cannot take the page back.
+  // Why: a runtime known to have no browser of its own (quirkyd) cannot take the page back.
   const runtimeCanHostPage = useAppStore((s) => {
     const capabilities =
       s.runtimeStatusByEnvironmentId.get(runtimeEnvironmentId)?.status?.capabilities

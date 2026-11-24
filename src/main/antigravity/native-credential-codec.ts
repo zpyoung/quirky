@@ -111,7 +111,7 @@ export function parseAntigravityNativeCredential(contents: string): AntigravityN
     throw invalidCredential()
   }
   return {
-    // Keep the exact native blob: a CLI upgrade may depend on fields Orca does not know.
+    // Keep the exact native blob: a CLI upgrade may depend on fields Quirky does not know.
     contents,
     authMethod: value.auth_method,
     identity: readIdentity(value.id_token ?? value.token.id_token)

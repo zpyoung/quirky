@@ -1,9 +1,9 @@
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
-import type { PipedChildProcess } from '@orca/process-host/process-spec'
+import type { PipedChildProcess } from '@quirky/process-host/process-spec'
 import { execFileSync } from 'node:child_process'
 import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 import type { DescendantSnapshot } from '../pty-descendant-termination'
 import {

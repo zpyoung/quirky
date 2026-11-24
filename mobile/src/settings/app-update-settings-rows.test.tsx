@@ -59,7 +59,7 @@ describe('AppUpdateSettingsRows', () => {
       lastCheckedAt: NOW - 2 * HOUR
     })
     expect(texts).toEqual([
-      'Update to Orca 0.0.51',
+      'Update to Quirky 0.0.51',
       'Update',
       'Check for updates',
       'Last checked 2h ago'

@@ -6,7 +6,7 @@ import {
   serializeStableMobileRendererSnapshot,
   type MobileSnapshotByteBudget
 } from './terminal-snapshot-publication'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 import type { SerializedSnapshot } from './terminal-stream-types'
 
 /**
@@ -44,7 +44,7 @@ function colourDenseScreen(rows: number): string {
  * Rows rather than a fixed string: the serializer walks [1000, 500, 250, 100, 25, 0] and a stub
  * that answered the same payload every time would prove the loop terminates and nothing else.
  */
-function denseRuntime(): Pick<OrcaRuntimeService, 'serializeTerminalBuffer'> {
+function denseRuntime(): Pick<QuirkyRuntimeService, 'serializeTerminalBuffer'> {
   return {
     serializeTerminalBuffer: vi.fn(
       async (_ptyId: string, options?: { scrollbackRows?: number }) => ({
@@ -120,7 +120,7 @@ const CWD = '/srv/checkouts/a-repository/packages/a-workspace/deeply/nested/leaf
  * the object's own braces. That is the frame the reviewer measured at 655,529 against a
  * 655,360-byte cap.
  */
-function exactlyAtRoundOnesBudgetRuntime(): Pick<OrcaRuntimeService, 'serializeTerminalBuffer'> {
+function exactlyAtRoundOnesBudgetRuntime(): Pick<QuirkyRuntimeService, 'serializeTerminalBuffer'> {
   const metaBytes = Buffer.byteLength(
     JSON.stringify({
       cwd: CWD,
@@ -156,7 +156,7 @@ function exactlyAtRoundOnesBudgetRuntime(): Pick<OrcaRuntimeService, 'serializeT
  * The same size at every candidate on purpose: what these cases separate is what the loop does
  * when trimming has run out, and a fixture that shrinks would never reach that state.
  */
-function alwaysOversizeRuntime(): Pick<OrcaRuntimeService, 'serializeTerminalBuffer'> {
+function alwaysOversizeRuntime(): Pick<QuirkyRuntimeService, 'serializeTerminalBuffer'> {
   return {
     serializeTerminalBuffer: vi.fn(async () => ({
       data: 'x'.repeat(MOBILE_SNAPSHOT_BYTE_BUDGET + 1024),
@@ -334,7 +334,7 @@ describe('a snapshot that round one accepted at exactly the budget', () => {
  * sequence on purpose: what is under test is the last candidate, not the retry.
  */
 function stableRendererRuntime(): Pick<
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   'getPtyOutputSequence' | 'serializeRendererTerminalBuffer'
 > {
   return {
@@ -402,7 +402,7 @@ describe('the publication fields the budget has to assume', () => {
   }
 
   /** A screen of a fixed size at every candidate, so the budget below is the whole of the margin. */
-  function fixedScreenRuntime(data: string): Pick<OrcaRuntimeService, 'serializeTerminalBuffer'> {
+  function fixedScreenRuntime(data: string): Pick<QuirkyRuntimeService, 'serializeTerminalBuffer'> {
     return {
       serializeTerminalBuffer: vi.fn(async () => ({
         data,

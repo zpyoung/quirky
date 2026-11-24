@@ -7,17 +7,17 @@ import type { LayoutApplyOutcome } from '../../shared/workspace-layout/workspace
 import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
 import type { WorktreeSleepResumeCapture } from './terminal/stop/worktree-sleep-resume-records'
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
-} = await import('./orca-runtime-test-fixtures.spec')
+} = await import('./quirky-runtime-test-fixtures.spec')
 
 const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
 const PTY_ID = 'pty-slept'
@@ -66,7 +66,7 @@ function makeRuntimeWithSlowFirstWrite() {
       return { ok: true, result: {} }
     }
   )
-  const runtime = new OrcaRuntimeService(
+  const runtime = new QuirkyRuntimeService(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
     Object.assign(runtimeStore, { applyLayoutCommand }) as never
   )

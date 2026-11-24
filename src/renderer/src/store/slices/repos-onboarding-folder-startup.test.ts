@@ -61,7 +61,7 @@ describe('repo slice skipped-onboarding folder startup', () => {
     const store = createTestStore()
     store.setState({
       settings: {
-        ...getDefaultSettings('/tmp/orca-workspaces'),
+        ...getDefaultSettings('/tmp/quirky-workspaces'),
         defaultTuiAgent: 'codex'
       }
     })
@@ -110,7 +110,7 @@ it.each(['paired-linux', 'local-bash', 'withheld', 'structured-withheld'] as con
       repos: [{ id: 'repo', path: '/folder', displayName: 'Folder', badgeColor: '', addedAt: 1 }],
       worktreesByRepo: { repo: [worktree] },
       settings: {
-        ...getDefaultSettings('/tmp/orca-workspaces'),
+        ...getDefaultSettings('/tmp/quirky-workspaces'),
         defaultTuiAgent: 'claude',
         experimentalNativeChat: true,
         nativeChatProviders: { claude: target === 'structured-withheld' },

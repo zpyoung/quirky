@@ -1,6 +1,6 @@
 // Who produced a Codex journal row, decided from the thread that carried it.
 //
-// Orca opens exactly one thread per app-server, so every other thread on the
+// Quirky opens exactly one thread per app-server, so every other thread on the
 // connection is one Codex spawned for a subagent. That settles WHETHER a row is
 // a child's without waiting on anything: there is no root arm for another
 // thread, announced or not, and its thread id is final from its first frame —

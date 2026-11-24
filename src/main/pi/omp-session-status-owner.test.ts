@@ -86,8 +86,8 @@ describe('OMP session status ownership', () => {
       sessionManager: { getSessionId: () => 'separate', getSessionFile: () => '/separate.jsonl' }
     }
     await harness.callHook('session_start', {}, parent)
-    harness.processEnv.ORCA_PANE_KEY = 'pane-2'
-    harness.processEnv.ORCA_AGENT_LAUNCH_TOKEN = 'launch-2'
+    harness.processEnv.QUIRKY_PANE_KEY = 'pane-2'
+    harness.processEnv.QUIRKY_AGENT_LAUNCH_TOKEN = 'launch-2'
     harness.reload()
     await harness.callHook('agent_start', {}, separate)
     await settle()
@@ -122,7 +122,7 @@ describe('OMP session status ownership', () => {
 
   it('normalizes Windows task transcript paths', async () => {
     const harness = createAgentStatusExtensionHarness({ kind: 'omp' })
-    const rootFile = 'C:\\Users\\orca\\root.jsonl'
+    const rootFile = 'C:\\Users\\quirky\\root.jsonl'
     const root = {
       sessionManager: {
         getSessionId: () => 'root-win',
@@ -135,7 +135,7 @@ describe('OMP session status ownership', () => {
     const child = {
       sessionManager: {
         getSessionId: () => 'child-win',
-        getSessionFile: () => 'c:\\users\\orca\\root\\child.jsonl',
+        getSessionFile: () => 'c:\\users\\quirky\\root\\child.jsonl',
         getHeader: () => ({})
       }
     }

@@ -58,7 +58,7 @@ import {
   type BrowserRouteElectronSession
 } from './browser-route-session-registry'
 
-const orcaProfileId = 'orca-profile-a'
+const quirkyProfileId = 'quirky-profile-a'
 const browserProfileId = 'default'
 const authorityConnectionIdentity = 'paired-runtime:authority-a'
 const authorityRuntimeId = 'runtime-a'
@@ -105,7 +105,7 @@ async function pagePartition(host: BrowserNetworkExecutionHost): Promise<string>
   })
   const handle = await sessions.preparePage({
     identity: {
-      orcaProfileId,
+      quirkyProfileId,
       browserProfileId,
       authorityConnectionIdentity,
       executionHostIdentity: route.executionHostIdentity
@@ -132,7 +132,7 @@ async function importPartition(): Promise<string> {
   ])
   importCookiesFromBrowserMock.mockResolvedValue({ ok: true, summary: { importedCookies: 1 } })
   getRouteIdentityMock.mockReturnValue({
-    orcaProfileId,
+    quirkyProfileId,
     authorityConnectionIdentity,
     // Why: mirrors startPairedRuntimeBrowserClientHost — settings-level operations target the
     // server's own machine, so the identity comes from the same helper the host uses.

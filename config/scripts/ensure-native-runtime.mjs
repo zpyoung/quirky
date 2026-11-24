@@ -12,7 +12,7 @@ import {
   stageWindowsProcessTreeNodeAddonApiHeaders,
   windowsProcessTreeAddonPath
 } from './windows-process-tree-gyp-rebuild.mjs'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { describeProcessFailure } from './process-failure-message.mjs'
 import {
   isSharedNativePackage,
@@ -39,7 +39,7 @@ const forceRebuild = process.argv.includes('--force')
 const NATIVE_MODULES = [
   'node-pty',
   ...(process.platform === 'win32'
-    ? ['@orca/windows-registry', '@orca/windows-security', '@vscode/windows-process-tree']
+    ? ['@quirky/windows-registry', '@quirky/windows-security', '@vscode/windows-process-tree']
     : [])
 ]
 const NODE_PTY_CONPTY_RUNTIME_FILES = ['conpty.dll', 'OpenConsole.exe']
@@ -294,13 +294,13 @@ function loadNativeModule(moduleName) {
     }
     return
   }
-  if (moduleName === '@orca/windows-registry') {
+  if (moduleName === '@quirky/windows-registry') {
     const registry = require(moduleName)
     // Why: the package defers loading its .node addon until the first registry call.
     registry.getRegistryKey(registry.HK.CU, 'Environment')
     return
   }
-  if (moduleName === '@orca/windows-security') {
+  if (moduleName === '@quirky/windows-security') {
     // Why: the package defers loading its .node addon until the first call.
     require(moduleName).currentUserSid()
     return
@@ -326,7 +326,7 @@ function loadNodePtyNativeModule() {
   assertNodePtyJobOwnership({ nativeName, native, addonPath })
   if (requiresPatchedNodePtySourceBuild() && !isSourceBuildDir(native?.dir)) {
     throw new Error(
-      `node-pty resolved to ${native.dir}; expected build/Release so Orca's node-pty patch is active`
+      `node-pty resolved to ${native.dir}; expected build/Release so Quirky's node-pty patch is active`
     )
   }
 }
@@ -349,7 +349,7 @@ function getPatchedNodePtyRebuildReason() {
     return null
   }
 
-  // Why: a loadable upstream node-pty prebuild is not enough; Orca's Unix and
+  // Why: a loadable upstream node-pty prebuild is not enough; Quirky's Unix and
   // Windows patches only land in the source-built build/Release artifacts.
   const nodePtyDir = resolve(projectDir, 'node_modules', 'node-pty')
   const artifactPaths = nodePtyBuildArtifactPaths(nodePtyDir)

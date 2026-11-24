@@ -1,15 +1,15 @@
 import type { IpcRenderer } from 'electron'
-import { ORCA_RENDERER_UNLOAD_PREVENTED_EVENT } from '../shared/renderer-shutdown-events'
+import { QUIRKY_RENDERER_UNLOAD_PREVENTED_EVENT } from '../shared/renderer-shutdown-events'
 import {
   prepareRendererForAppRestart,
   type UpdaterQuitAbortRelay
 } from '../shared/renderer-restart-preparation'
 import type { UpdateStatus } from '../shared/update-status-types'
 import {
-  ORCA_APP_RESTART_ABORTED_EVENT,
-  ORCA_APP_RESTART_STARTED_EVENT,
-  ORCA_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT,
-  ORCA_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT
+  QUIRKY_APP_RESTART_ABORTED_EVENT,
+  QUIRKY_APP_RESTART_STARTED_EVENT,
+  QUIRKY_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT,
+  QUIRKY_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT
 } from '../shared/updater-renderer-events'
 
 type AppRestartState = { committed: boolean; pending: boolean }
@@ -44,8 +44,8 @@ export function registerRendererRestartIpcRelays(
     if (appRestartState(eventTarget).committed) {
       return
     }
-    eventTarget.dispatchEvent(new Event(ORCA_RENDERER_UNLOAD_PREVENTED_EVENT))
-    eventTarget.dispatchEvent(new Event(ORCA_APP_RESTART_ABORTED_EVENT))
+    eventTarget.dispatchEvent(new Event(QUIRKY_RENDERER_UNLOAD_PREVENTED_EVENT))
+    eventTarget.dispatchEvent(new Event(QUIRKY_APP_RESTART_ABORTED_EVENT))
   })
 }
 
@@ -56,8 +56,8 @@ export async function prepareAndInvokeUpdaterInstall(
   awaitCheckpoint: () => Promise<void>
 ): Promise<void> {
   await prepareRendererForAppRestart(eventTarget, {
-    startedEventName: ORCA_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT,
-    abortedEventName: ORCA_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT,
+    startedEventName: QUIRKY_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT,
+    abortedEventName: QUIRKY_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT,
     awaitCheckpoint
   })
   relay.markPrepared()
@@ -83,21 +83,21 @@ export async function prepareAndInvokeAppRestart<T>(
   try {
     if (!state.committed) {
       await prepareRendererForAppRestart(eventTarget, {
-        startedEventName: ORCA_APP_RESTART_STARTED_EVENT,
-        abortedEventName: ORCA_APP_RESTART_ABORTED_EVENT,
+        startedEventName: QUIRKY_APP_RESTART_STARTED_EVENT,
+        abortedEventName: QUIRKY_APP_RESTART_ABORTED_EVENT,
         awaitCheckpoint
       })
     }
     try {
       const result = await invoke()
       if (!state.committed && !willRestart(result)) {
-        eventTarget.dispatchEvent(new Event(ORCA_APP_RESTART_ABORTED_EVENT))
+        eventTarget.dispatchEvent(new Event(QUIRKY_APP_RESTART_ABORTED_EVENT))
       }
       return result
     } catch (error) {
       // A failed profile move can require recovery after its writer has already closed.
       if (!state.committed) {
-        eventTarget.dispatchEvent(new Event(ORCA_APP_RESTART_ABORTED_EVENT))
+        eventTarget.dispatchEvent(new Event(QUIRKY_APP_RESTART_ABORTED_EVENT))
       }
       throw error
     }

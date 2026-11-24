@@ -420,7 +420,7 @@ describe('TerminalPaneDockMount', () => {
     // Stands in for xterm's real DOM: a descendant with xterm's own always-on MouseService
     // mousedown handler, which focuses its helper textarea before selection is handled —
     // this fires at the target phase, before data-pane-prevent-terminal-focus is ever
-    // consulted (that attribute only opts out of Orca's own pane-pointer-down focus call).
+    // consulted (that attribute only opts out of Quirky's own pane-pointer-down focus call).
     const xtermHelperTextarea = document.createElement('textarea')
     xtermContainer.appendChild(xtermHelperTextarea)
     let xtermMouseDownFired = false

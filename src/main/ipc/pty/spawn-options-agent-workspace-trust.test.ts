@@ -175,7 +175,7 @@ describe.each(['renderer', 'runtime'] as const)('%s spawn builder agent trust', 
   })
 
   it('keys on the declared agent even when setup sequencing rewrote the command', async () => {
-    await build(route, { launchAgent: 'claude', command: 'sh /tmp/orca-setup-runner.sh' })
+    await build(route, { launchAgent: 'claude', command: 'sh /tmp/quirky-setup-runner.sh' })
     expect(applyAgentWorkspaceTrust).toHaveBeenCalledWith('claude', '/repo/wt', expect.anything())
   })
 

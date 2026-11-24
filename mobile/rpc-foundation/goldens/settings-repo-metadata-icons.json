@@ -33,7 +33,7 @@
           "id": "repo-3",
           "path": "repo-3",
           "repoIcon": {
-            "label": "acme/orca",
+            "label": "acme/quirky",
             "source": "github",
             "src": "https://github.com/acme.png?size=64",
             "type": "image"
@@ -222,7 +222,7 @@
           "id": "repo-3",
           "path": "repo-3",
           "repoIcon": {
-            "label": "acme/orca",
+            "label": "acme/quirky",
             "source": "github",
             "src": "https://github.com/acme.png?size=64",
             "type": "image"
@@ -329,7 +329,7 @@
                 "executionHostId": "ssh:ssh-1",
                 "id": "repo-3",
                 "repoIcon": {
-                  "label": "acme/orca",
+                  "label": "acme/quirky",
                   "source": "github",
                   "src": "https://github.com/acme.png?size=64",
                   "type": "image"
@@ -408,7 +408,7 @@
           "id": "repo-3",
           "path": "repo-3",
           "repoIcon": {
-            "label": "acme/orca",
+            "label": "acme/quirky",
             "source": "github",
             "src": "https://github.com/acme.png?size=64",
             "type": "image"

@@ -74,10 +74,10 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     handleEditIssue,
     handleManageLinks,
     handleEditComment,
-    handleOpenGitHubIssueInOrca,
+    handleOpenGitHubIssueInQuirky,
     handleOpenIssueInBrowser,
-    handleOpenLinearIssueInOrca,
-    handleOpenReviewInOrca,
+    handleOpenLinearIssueInQuirky,
+    handleOpenReviewInQuirky,
     handleOpenReviewInBrowser,
     handleOpenAutomation,
     handleOpenAutomationRun,
@@ -229,15 +229,17 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
         hoverControl={detailsHoverControl}
         onEditIssue={affiliateListMode ? undefined : handleEditIssue}
         onEditComment={affiliateListMode ? undefined : handleEditComment}
-        onOpenGitHubIssueInOrca={
-          metaIssue && 'url' in metaIssue && metaIssue.url ? handleOpenGitHubIssueInOrca : undefined
+        onOpenGitHubIssueInQuirky={
+          metaIssue && 'url' in metaIssue && metaIssue.url
+            ? handleOpenGitHubIssueInQuirky
+            : undefined
         }
         onOpenIssueInBrowser={
           metaIssue && 'url' in metaIssue && metaIssue.url ? handleOpenIssueInBrowser : undefined
         }
-        onOpenLinearIssueInOrca={linearIssue?.url ? handleOpenLinearIssueInOrca : undefined}
-        onOpenReviewInOrca={
-          metaReview?.url && metaReview.provider === 'github' ? handleOpenReviewInOrca : undefined
+        onOpenLinearIssueInQuirky={linearIssue?.url ? handleOpenLinearIssueInQuirky : undefined}
+        onOpenReviewInQuirky={
+          metaReview?.url && metaReview.provider === 'github' ? handleOpenReviewInQuirky : undefined
         }
         onOpenReviewInBrowser={metaReview?.url ? handleOpenReviewInBrowser : undefined}
         onOpenAutomation={affiliateListMode ? undefined : handleOpenAutomation}

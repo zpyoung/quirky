@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -9,7 +9,7 @@ import { resolveElectronProbeLaunch } from '../browser/electron-probe-display-la
 
 describe('publication lease release during Electron guest destruction', () => {
   it('closes streamed guests without terminating the host', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-throttle-destruction-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-throttle-destruction-'))
     try {
       await build({
         configFile: false,
@@ -39,7 +39,7 @@ describe('publication lease release during Electron guest destruction', () => {
       const result = await runProcess({
         program: executable,
         args,
-        env: { ...env, ORCA_BACKGROUND_LAUNCH: '1' },
+        env: { ...env, QUIRKY_BACKGROUND_LAUNCH: '1' },
         timeoutMs: 45_000
       })
       expect(result.timedOut).toBe(false)

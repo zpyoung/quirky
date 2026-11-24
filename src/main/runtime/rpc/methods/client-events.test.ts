@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeClientEvent } from '../../../../shared/runtime-client-events'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import {
   eraseRpcMethods,
   isStreamingMethod,
@@ -15,7 +15,7 @@ const subscribeMethod = eraseRpcMethods(ALL_RPC_METHODS).find(
 ) as RpcStreamingMethod
 
 function makeRuntime(): {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   onClientEvent: ReturnType<typeof vi.fn>
   cleanups: (() => void)[]
 } {
@@ -32,7 +32,7 @@ function makeRuntime(): {
     registerSubscriptionCleanup: (_id: string, cleanup: () => void) => {
       cleanups.push(cleanup)
     }
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   return { runtime, onClientEvent, cleanups }
 }
 

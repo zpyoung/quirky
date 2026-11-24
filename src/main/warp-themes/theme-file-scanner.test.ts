@@ -5,7 +5,7 @@ import { expect, it, vi } from 'vitest'
 import { scanWarpThemeDirectory } from './theme-file-scanner'
 
 it('reuses one collator per directory while preserving capped scan order', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'orca-theme-order-'))
+  const directory = await mkdtemp(path.join(tmpdir(), 'quirky-theme-order-'))
   const names = ['éclair', 'item2', 'item10', 'Ångström', 'zebra', 'İstanbul']
   try {
     await Promise.all(names.map((name) => writeFile(path.join(directory, `${name}.yaml`), '')))

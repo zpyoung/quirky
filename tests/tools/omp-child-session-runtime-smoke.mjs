@@ -15,7 +15,7 @@ const { loadExtensions } = await import(source('extensibility/extensions/loader.
 const { ExtensionRunner } = await import(source('extensibility/extensions/runner.ts'))
 const { EventBus } = await import(source('utils/event-bus.ts'))
 const { SessionManager } = await import(source('session/session-manager.ts'))
-const scratch = await mkdtemp(join(tmpdir(), 'orca-omp-child-status-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-omp-child-status-'))
 const posts = []
 const errors = []
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -44,14 +44,14 @@ try {
   const { getPiAgentStatusExtensionSource } = await import(
     pathToFileURL(join(scratch, 'generator.mjs')).href
   )
-  const extensionPath = join(scratch, 'orca-agent-status.ts')
+  const extensionPath = join(scratch, 'quirky-agent-status.ts')
   await writeFile(extensionPath, getPiAgentStatusExtensionSource('omp'))
-  process.env.ORCA_PANE_KEY = 'test-parent-pane'
-  process.env.ORCA_AGENT_LAUNCH_TOKEN = 'test-parent-launch'
-  process.env.ORCA_AGENT_HOOK_PORT = String(server.address().port)
-  process.env.ORCA_AGENT_HOOK_TOKEN = 'test-token'
-  delete process.env.ORCA_AGENT_HOOK_ENDPOINT
-  delete process.env.ORCA_PI_STATUS_OWNED
+  process.env.QUIRKY_PANE_KEY = 'test-parent-pane'
+  process.env.QUIRKY_AGENT_LAUNCH_TOKEN = 'test-parent-launch'
+  process.env.QUIRKY_AGENT_HOOK_PORT = String(server.address().port)
+  process.env.QUIRKY_AGENT_HOOK_TOKEN = 'test-token'
+  delete process.env.QUIRKY_AGENT_HOOK_ENDPOINT
+  delete process.env.QUIRKY_PI_STATUS_OWNED
   const load = async (manager) => {
     const result = await loadExtensions([extensionPath], scratch, new EventBus())
     assert.deepEqual(result.errors, [])

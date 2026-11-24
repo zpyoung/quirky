@@ -13,8 +13,9 @@ vi.mock('../native-chat/agent-session-wire/structured-agent-session-registry', (
   getStructuredAgentSessionHost: () => hostRef.current
 }))
 
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-const { TEST_REPO_ID, TEST_WORKTREE_ID, store } = await import('./orca-runtime-test-fixtures.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+const { TEST_REPO_ID, TEST_WORKTREE_ID, store } =
+  await import('./quirky-runtime-test-fixtures.spec')
 
 type FakeRecord = {
   sessionId: string
@@ -71,7 +72,7 @@ function installHost(records: FakeRecord[], detached: string[] = []) {
 
 function createRuntime(rows: Repo[]) {
   let current = rows
-  const runtime = new OrcaRuntimeService({
+  const runtime = new QuirkyRuntimeService({
     ...store,
     getRepo: (id: string) => current.find((row) => row.id === id),
     getRepos: () => current,

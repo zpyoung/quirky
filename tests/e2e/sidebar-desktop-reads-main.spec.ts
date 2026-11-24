@@ -1,15 +1,18 @@
 /**
- * The desktop sidebar drawn from main's feed (ORCA_SIDEBAR_INPUTS=main): it follows main, not the
+ * The desktop sidebar drawn from main's feed (QUIRKY_SIDEBAR_INPUTS=main): it follows main, not the
  * window's own store, and a drag, create, open or collapse still lands in the frame it is made.
  */
 import type { Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { removeWorktreeViaStore } from './helpers/dead-terminal'
 import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { openSidebarWorkspaceComposer } from './helpers/sidebar-project-dialog'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
-test.skip(!SIDEBAR_INPUTS_BUILD, 'the window reads main only in an ORCA_SIDEBAR_INPUTS=main build')
+test.skip(
+  !SIDEBAR_INPUTS_BUILD,
+  'the window reads main only in an QUIRKY_SIDEBAR_INPUTS=main build'
+)
 
 const ROWS = '[data-worktree-sidebar] [role="option"][data-worktree-id]'
 
@@ -86,12 +89,12 @@ async function dragBefore(page: Page, sourceId: string, targetId: string): Promi
 }
 
 test('the sidebar lists main’s inputs and keeps drag, create, open and collapse instant', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   test.setTimeout(180_000)
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  const created = await orcaPage.evaluate(async () => {
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  const created = await quirkyPage.evaluate(async () => {
     const state = window.__store!.getState()
     state.setGroupBy('none')
     state.setSortBy('manual')
@@ -105,64 +108,66 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
   })
   try {
     const ours = async (): Promise<string[]> =>
-      (await renderedOrder(orcaPage)).filter((id) => created.includes(id))
+      (await renderedOrder(quirkyPage)).filter((id) => created.includes(id))
     await expect.poll(async () => (await ours()).length, { timeout: 30_000 }).toBe(3)
-    await orcaPage.screenshot({ path: testInfo.outputPath(`list.png`) })
+    await quirkyPage.screenshot({ path: testInfo.outputPath(`list.png`) })
 
     // Empty the window's own catalog for one frame: the rows still listed come from main. No
     // refetch can land within the frame.
-    const listedInEmptiedFrame = await orcaPage.evaluate(async (selector) => {
+    const listedInEmptiedFrame = await quirkyPage.evaluate(async (selector) => {
       window.__store!.setState({ worktreesByRepo: {} })
       await new Promise((resolve) => requestAnimationFrame(resolve))
       return document.querySelectorAll(selector).length
     }, ROWS)
     expect(listedInEmptiedFrame).toBeGreaterThan(0)
-    await orcaPage.evaluate(() => window.__store!.getState().fetchAllWorktrees())
+    await quirkyPage.evaluate(() => window.__store!.getState().fetchAllWorktrees())
     await expect.poll(async () => (await ours()).length).toBe(3)
 
     // Drag: every frame after the drop shows the new order; none snaps back.
     const before = await ours()
     const source = before[2]!
-    const dragLog = await startFrameLog(orcaPage)
-    await dragBefore(orcaPage, source, before[0]!)
+    const dragLog = await startFrameLog(quirkyPage)
+    await dragBefore(quirkyPage, source, before[0]!)
     const expected = [source, before[0]!, before[1]!]
     await expect.poll(ours).toEqual(expected)
-    await orcaPage.waitForTimeout(400)
+    await quirkyPage.waitForTimeout(400)
     // From the first frame painted after the drop, every frame shows the new order.
     const afterDrop = (await dragLog.stop())
       .filter(({ sinceInput }) => sinceInput !== null)
       .map(({ ids }) => ids.filter((id) => created.includes(id)).join())
     expect(afterDrop.length).toBeGreaterThan(0)
     expect(new Set(afterDrop)).toEqual(new Set([expected.join()]))
-    await orcaPage.screenshot({ path: testInfo.outputPath(`after-drag.png`) })
+    await quirkyPage.screenshot({ path: testInfo.outputPath(`after-drag.png`) })
 
     // Open: the clicked row is highlighted in the frame of the click.
     const openId = expected[1]!
-    await orcaPage
+    await quirkyPage
       .locator(`${ROWS}[data-worktree-id=${JSON.stringify(openId)}]`)
       .first()
       .click()
     await expect(
-      orcaPage.locator(`${ROWS}[data-worktree-id=${JSON.stringify(openId)}][aria-current="page"]`)
+      quirkyPage.locator(`${ROWS}[data-worktree-id=${JSON.stringify(openId)}][aria-current="page"]`)
     ).toHaveCount(1, { timeout: 1_000 })
 
     // Cmd/Ctrl+1–9 number the rendered rows.
-    const rendered = await renderedOrder(orcaPage)
+    const rendered = await renderedOrder(quirkyPage)
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
-    await orcaPage.keyboard.press(`${modifier}+2`)
+    await quirkyPage.keyboard.press(`${modifier}+2`)
     await expect
-      .poll(() => orcaPage.evaluate(() => window.__store!.getState().activeWorktreeId))
+      .poll(() => quirkyPage.evaluate(() => window.__store!.getState().activeWorktreeId))
       .toBe(rendered[1])
 
     // Collapse: the section's rows leave in the next frame, without waiting for main.
-    await orcaPage.evaluate(() => window.__store!.getState().setGroupBy('repo'))
+    await quirkyPage.evaluate(() => window.__store!.getState().setGroupBy('repo'))
     await expect.poll(async () => (await ours()).length).toBe(3)
-    const header = orcaPage.locator('[data-worktree-sidebar] [data-repo-header-id][aria-expanded]')
-    const collapseLog = await startFrameLog(orcaPage)
+    const header = quirkyPage.locator(
+      '[data-worktree-sidebar] [data-repo-header-id][aria-expanded]'
+    )
+    const collapseLog = await startFrameLog(quirkyPage)
     await header.first().click()
     await expect.poll(async () => (await ours()).length).toBe(0)
     // A slow runner can settle the poll before any frame after the click is painted.
-    await orcaPage.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+    await quirkyPage.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
     const collapseFrames = await collapseLog.stop()
     // The first frame painted after the click already has no rows.
     expect(
@@ -174,15 +179,15 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
     await expect.poll(async () => (await ours()).length).toBe(3)
 
     // Create: the pending row hands over to the new row with no frame showing neither.
-    await orcaPage.evaluate(() => window.__store!.getState().setGroupBy('none'))
+    await quirkyPage.evaluate(() => window.__store!.getState().setGroupBy('none'))
     const name = `reads-main-new-${Date.now()}`
-    const createLog = await startFrameLog(orcaPage, name)
-    await openSidebarWorkspaceComposer(orcaPage)
-    const dialog = orcaPage.getByRole('dialog', { name: /Create (Workspace|Worktree)/i })
+    const createLog = await startFrameLog(quirkyPage, name)
+    await openSidebarWorkspaceComposer(quirkyPage)
+    const dialog = quirkyPage.getByRole('dialog', { name: /Create (Workspace|Worktree)/i })
     await dialog.getByPlaceholder(/Type a name/i).fill(name)
     await dialog.getByRole('button', { name: /Create (Workspace|Worktree)/i }).click()
     const idOf = (wanted: string): Promise<string | null> =>
-      orcaPage.evaluate(
+      quirkyPage.evaluate(
         (suffix) =>
           window
             .__store!.getState()
@@ -193,8 +198,8 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
     await expect.poll(() => idOf(name), { timeout: 30_000 }).not.toBeNull()
     const newId = (await idOf(name))!
     created.push(newId)
-    await expect.poll(async () => (await renderedOrder(orcaPage)).includes(newId)).toBe(true)
-    await orcaPage.waitForTimeout(300)
+    await expect.poll(async () => (await renderedOrder(quirkyPage)).includes(newId)).toBe(true)
+    await quirkyPage.waitForTimeout(300)
     const createFrames = await createLog.stop()
     const pendingShown = createFrames.findIndex(({ shows }) => shows)
     expect(pendingShown).toBeGreaterThanOrEqual(0)
@@ -202,10 +207,10 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
     expect(handover.filter(({ ids, shows }) => !shows && !ids.includes(newId))).toEqual([])
     const appeared = handover.findIndex(({ ids }) => ids.includes(newId))
     expect(handover.slice(appeared).every(({ ids }) => ids.includes(newId))).toBe(true)
-    await orcaPage.screenshot({ path: testInfo.outputPath(`after-create.png`) })
+    await quirkyPage.screenshot({ path: testInfo.outputPath(`after-create.png`) })
 
     // Virtualized scroll and reveal over a list taller than the sidebar.
-    const many = await orcaPage.evaluate(async () => {
+    const many = await quirkyPage.evaluate(async () => {
       const state = window.__store!.getState()
       const repoId = state.allWorktrees()[0]!.repoId
       const ids: string[] = []
@@ -218,7 +223,7 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
       return ids
     })
     created.push(...many)
-    const scroller = orcaPage.locator('[data-worktree-sidebar]')
+    const scroller = quirkyPage.locator('[data-worktree-sidebar]')
     await expect
       .poll(async () => many.every((id) => created.includes(id)) && (await ours()).length, {
         timeout: 30_000
@@ -248,19 +253,19 @@ test('the sidebar lists main’s inputs and keeps drag, create, open and collaps
       }, ROWS)
     await expect.poll(lastFullyShown).not.toBe('')
     const bottomId = await lastFullyShown()
-    const bottomRow = orcaPage.locator(`${ROWS}[data-worktree-id=${JSON.stringify(bottomId)}]`)
+    const bottomRow = quirkyPage.locator(`${ROWS}[data-worktree-id=${JSON.stringify(bottomId)}]`)
     await expect(bottomRow).toBeInViewport()
     await scroller.evaluate((element) => element.scrollTo({ top: 0 }))
     await expect(bottomRow).toHaveCount(0)
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       (id) => window.__store!.getState().revealWorktreeInSidebar(id),
       bottomId
     )
     await expect(bottomRow).toBeInViewport()
-    await orcaPage.screenshot({ path: testInfo.outputPath(`after-reveal.png`) })
+    await quirkyPage.screenshot({ path: testInfo.outputPath(`after-reveal.png`) })
   } finally {
     for (const id of created) {
-      await removeWorktreeViaStore(orcaPage, id).catch(() => {})
+      await removeWorktreeViaStore(quirkyPage, id).catch(() => {})
     }
   }
 })

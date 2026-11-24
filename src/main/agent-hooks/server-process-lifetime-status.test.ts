@@ -9,7 +9,7 @@ let dir: string
 let server: AgentHookServer
 
 beforeEach(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-process-lifetime-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-process-lifetime-'))
   server = new AgentHookServer()
   await server.start({ env: 'production', userDataPath: dir })
 })
@@ -87,7 +87,7 @@ describe('process-lifetime status', () => {
     expect(paneState()).toBe('done')
   })
 
-  // Why: a pane where an Orca-launched agent exited is retired; a new `opencode run` there is a new run.
+  // Why: a pane where an Quirky-launched agent exited is retired; a new `opencode run` there is a new run.
   it('revives a retired pane on its Working, as a hook new-turn event does', () => {
     server.retirePaneAuthority(PANE)
     const commandStartedAt = Date.now()

@@ -10,7 +10,7 @@ export function getDiagLogPath(): string {
     try {
       _diagLog = join(app.getPath('userData'), 'cookie-import-diag.log')
     } catch {
-      _diagLog = join(tmpdir(), 'orca-cookie-import-diag.log')
+      _diagLog = join(tmpdir(), 'quirky-cookie-import-diag.log')
     }
   }
   return _diagLog

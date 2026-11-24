@@ -8,7 +8,7 @@ import { attempt, CONTRACT } from '../../shared/fork-heimdall-objective/decision
 import type { ObjectiveAction } from '../../shared/fork-heimdall-objective/objective-actions'
 import { OBJECTIVE_REPORT_SUMMARY_MAX_LENGTH } from '../../shared/fork-heimdall-objective/contract-types'
 import type { ObjectivePlanTask } from '../../shared/fork-heimdall-objective/plan-schema'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { ObjectiveWorkspaceTarget } from './content-identity'
 import type { ObjectiveStore } from './objective-store'
 import { createObjectiveSubmissionAdapter } from './report-submission-preflight'
@@ -63,8 +63,8 @@ const OBJECTIVE_STORE = {
   getTask: () => TASK,
   getDispatch: () => null
 } as unknown as ObjectiveStore
-// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: OrcaRuntimeService is a class with private fields; the submission preflight adapter never calls it in these tests.
-const RUNTIME = {} as OrcaRuntimeService
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: QuirkyRuntimeService is a class with private fields; the submission preflight adapter never calls it in these tests.
+const RUNTIME = {} as QuirkyRuntimeService
 
 const PLANNER_DISPATCH_ID = 'dispatch-planner-repair'
 const REPAIR_PLANNER_ACTION: ObjectiveAction = {
@@ -104,7 +104,7 @@ describe('objective report submission preflight', () => {
   let reportPath: string
 
   beforeEach(async () => {
-    workspacePath = await mkdtemp(join(tmpdir(), 'orca-objective-preflight-'))
+    workspacePath = await mkdtemp(join(tmpdir(), 'quirky-objective-preflight-'))
     target = {
       kind: 'folder',
       executionHostId: 'local',

@@ -1,5 +1,5 @@
 import { basename } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { rm } from './asar-transparent-fs'
 
 /**

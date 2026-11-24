@@ -155,7 +155,7 @@ export function installSleepingRecordAccess(session: ConnectPanePtySession): voi
   ): void => {
     if (!effectiveLaunchConfig) {
       if (metadata?.launchAgent) {
-        // Why: daemon launch identity can outlive the process while Orca is
+        // Why: daemon launch identity can outlive the process while Quirky is
         // closed. Use it to request confirmation, never as current byte authority.
         const state = useAppStore.getState()
         const current = state.paneForegroundAgentByPaneKey[session.cacheKey]

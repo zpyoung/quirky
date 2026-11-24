@@ -49,7 +49,7 @@ function serveFeed(tags: readonly string[]): void {
         status: 200,
         text: () =>
           Promise.resolve(
-            `version: ${version}\npath: Orca-${version}.zip\nfiles:\n  - url: Orca-${version}.zip\n`
+            `version: ${version}\npath: Quirky-${version}.zip\nfiles:\n  - url: Quirky-${version}.zip\n`
           )
       })
     }
@@ -69,9 +69,9 @@ function apiRelease(tag: string, assets: readonly string[]) {
 
 const APP_ASSETS = [
   'latest-mac.yml',
-  'orca-macos-arm64.dmg',
+  'quirky-macos-arm64.dmg',
   'latest.yml',
-  'orca-windows-setup.exe'
+  'quirky-windows-setup.exe'
 ]
 
 beforeEach(() => {

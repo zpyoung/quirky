@@ -12,7 +12,7 @@ export function isWebPairingRefusedAtStartup(error: unknown): error is Error {
 }
 
 export function announceWebPairingRefusedAtStartup(error: Error): void {
-  toast.error(translate('auto.startup.webPairingRefused.title', 'Orca refused this browser'), {
+  toast.error(translate('auto.startup.webPairingRefused.title', 'Quirky refused this browser'), {
     // The error already carries the reason-specific, translated guidance.
     description: error.message,
     duration: Infinity,

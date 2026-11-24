@@ -63,10 +63,10 @@ All per-source work belongs to the execution host. Public snapshots carry aggreg
 Run timing tools while builds, tests, apps and other benchmarks are idle:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persistence-cost-benchmark.mjs --usage-keys 16384 --maxima-pattern repeated --rounds 6
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persistence-cost-benchmark.mjs --usage-keys 100000 --maxima-pattern unique --rounds 6
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-readiness-cost-benchmark.mjs --usage-keys 100000 --large-report-mib 13 --rounds 6
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persisted-bytes-check.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persistence-cost-benchmark.mjs --usage-keys 16384 --maxima-pattern repeated --rounds 6
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persistence-cost-benchmark.mjs --usage-keys 100000 --maxima-pattern unique --rounds 6
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-readiness-cost-benchmark.mjs --usage-keys 100000 --large-report-mib 13 --rounds 6
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persisted-bytes-check.mjs
 ```
 
 Each accepts `--output`. Timing drivers accept `--published-ref` and `--main-ref`; defaults are the named immutable commits above. Equivalent environment-variable launchers work on Windows. The byte check uses fixed immutable refs and makes no timing claim.

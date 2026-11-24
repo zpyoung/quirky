@@ -1,4 +1,4 @@
-// Versioned-install plumbing for orcad on a remote host: each content-hashed bundle installs
+// Versioned-install plumbing for quirkyd on a remote host: each content-hashed bundle installs
 // into its own immutable dir, so an in-memory daemon never serves new clients off overwritten
 // on-disk code.
 
@@ -41,21 +41,21 @@ export function readLocalFullVersion(localRelayDir: string): string {
   const versionFile = join(localRelayDir, '.version')
   if (!existsSync(versionFile)) {
     throw new Error(
-      `Orca's local relay build is missing its version marker at ${versionFile}. ` +
-        `This usually indicates a packaging or build problem; reinstall Orca.`
+      `Quirky's local relay build is missing its version marker at ${versionFile}. ` +
+        `This usually indicates a packaging or build problem; reinstall Quirky.`
     )
   }
   const v = readFileSync(versionFile, 'utf-8').trim()
   if (!v) {
     throw new Error(
-      `Orca's local relay version marker at ${versionFile} is empty. ` +
-        `This usually indicates a packaging or build problem; reinstall Orca.`
+      `Quirky's local relay version marker at ${versionFile} is empty. ` +
+        `This usually indicates a packaging or build problem; reinstall Quirky.`
     )
   }
   return v
 }
 
-/** `${remoteHome}/.orca-remote/<prefix>-<fullVersion>` for one install model. */
+/** `${remoteHome}/.quirky-remote/<prefix>-<fullVersion>` for one install model. */
 export function computeRemoteInstallDir(
   model: RemoteInstallModel,
   remoteHome: string,

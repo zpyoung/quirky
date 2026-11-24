@@ -109,7 +109,7 @@ export function translateAcpRequest(
     options.dialect.request?.(method, params) ??
     (method === 'session/request_permission' ? acpPermissionPresentation(params) : undefined)
   if (!presentation) {
-    // A file system or terminal call Orca never advertised is the agent's own misstep (OpenCode 1.x
+    // A file system or terminal call Quirky never advertised is the agent's own misstep (OpenCode 1.x
     // repeats each approved edit as a file write it already made): refused, with no row.
     if (UNADVERTISED_CLIENT_METHOD.test(method)) {
       return { events: [] }

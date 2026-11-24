@@ -2,7 +2,7 @@ import { mutateStoppedProfileState } from './helpers/persisted-profile-state'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ElectronApplication } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 import {
   execInTerminal,
@@ -13,7 +13,7 @@ import {
   waitForTerminalOutput
 } from './helpers/terminal'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import { PROTOCOL_VERSION } from '../../src/main/daemon/types'
 
 const PROVIDER_SESSION_ID = 'e2e-quit-resume-session'

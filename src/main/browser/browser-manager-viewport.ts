@@ -13,7 +13,7 @@ import { sendGuestCdpCommand } from './guest-cdp-command'
 const TOUCH_EMULATION_DISABLED = { enabled: false } as const
 
 export abstract class BrowserManagerViewport extends BrowserManagerDownloadLifecycle {
-  // Why: guests are isolated from Orca's preload bridge, so main owns the devtools escape hatch after a tab→guest lookup.
+  // Why: guests are isolated from Quirky's preload bridge, so main owns the devtools escape hatch after a tab→guest lookup.
   async openDevTools(browserTabId: string): Promise<boolean> {
     const webContentsId = this.webContentsIdByTabId.get(browserTabId)
     if (!webContentsId) {

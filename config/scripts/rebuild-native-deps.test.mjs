@@ -25,7 +25,7 @@ describe('rebuild-native-deps Electron install fallback', () => {
 
       const result = runRebuildScript(projectDir, {
         npm_lifecycle_event: 'postinstall',
-        ORCA_STRICT_ELECTRON_INSTALL: ''
+        QUIRKY_STRICT_ELECTRON_INSTALL: ''
       })
 
       expect(result.status, result.stderr).toBe(0)
@@ -52,7 +52,7 @@ describe('rebuild-native-deps Electron install fallback', () => {
 
       const result = runRebuildScript(projectDir, {
         npm_lifecycle_event: 'postinstall',
-        ORCA_STRICT_ELECTRON_INSTALL: '1'
+        QUIRKY_STRICT_ELECTRON_INSTALL: '1'
       })
 
       expect(result.status).toBe(1)
@@ -104,7 +104,7 @@ describe('rebuild-native-deps Electron install fallback', () => {
       writeFileSync(join(projectDir, 'node_modules', 'electron', 'path.txt'), 'stale-path')
 
       const result = runRebuildScript(projectDir, {
-        ORCA_STRICT_ELECTRON_INSTALL: '1'
+        QUIRKY_STRICT_ELECTRON_INSTALL: '1'
       })
 
       expect(result.status).toBe(1)

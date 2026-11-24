@@ -155,7 +155,7 @@ export class JsonlRpcPeer {
     } catch (error) {
       return Promise.reject(error)
     }
-    const id = `orca-${++this.nextId}`
+    const id = `quirky-${++this.nextId}`
     const controller = new AbortController()
     return new Promise((resolve, reject) => {
       const timer =

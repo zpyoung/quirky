@@ -33,7 +33,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -346,7 +346,7 @@ describe('registerPtyHandlers', () => {
     const getSettings = vi.fn().mockReturnValue({ activeCodexManagedAccountId: 'account-a' })
     registerPtyHandlers(mainWindow as never, undefined, undefined, getSettings as never)
 
-    const nativeCodexEnv = { CODEX_HOME: '', ORCA_CODEX_HOME: '' }
+    const nativeCodexEnv = { CODEX_HOME: '', QUIRKY_CODEX_HOME: '' }
     await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24, env: nativeCodexEnv })
     await handlers.get('pty:spawn')!(null, {
       cols: 80,

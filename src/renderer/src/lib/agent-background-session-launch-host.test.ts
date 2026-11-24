@@ -187,7 +187,7 @@ describe('resolveAgentBackgroundLaunchHost', () => {
     expect(host).toMatchObject({ connectionId: 'nested', isRemote: true, platform: 'linux' })
   })
 
-  it('quotes for the Orca server that owns a repo, not the client (#22204)', () => {
+  it('quotes for the Quirky server that owns a repo, not the client (#22204)', () => {
     const host = resolveAgentBackgroundLaunchHost({
       ...asLaunchInputs(makeFolderHostState({ connectionId: null, folderPath: '/project' }), {
         id: 'repo-1',
@@ -228,11 +228,11 @@ describe('resolveAgentBackgroundLaunchHost', () => {
       worktreePath: '/srv/repo'
     })
 
-    // Why isRemote: the SSH target runs the relay shim as `orca`, not the Linux desktop `orca-ide`.
+    // Why isRemote: the SSH target runs the relay shim as `quirky`, not the Linux desktop `quirky-ide`.
     expect(host).toMatchObject({ platform: 'linux', isLocalHost: false, isRemote: true })
   })
 
-  it('quotes for the Orca server that owns a folder workspace', () => {
+  it('quotes for the Quirky server that owns a folder workspace', () => {
     const host = resolveAgentBackgroundLaunchHost({
       ...asLaunchInputs(
         makeFolderHostState({

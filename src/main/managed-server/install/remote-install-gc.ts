@@ -1,5 +1,5 @@
 /**
- * The version-directory garbage collector orcad runs. A pass only ever sees, and only ever
+ * The version-directory garbage collector quirkyd runs. A pass only ever sees, and only ever
  * deletes, directories belonging to `model`.
  *
  * Relay version dirs (`relay-<v>/`) are never reclaimed by this build: nothing deletes them
@@ -46,7 +46,7 @@ export type RemoteInstallGcOptions = {
   isDirLive: (dir: string) => Promise<boolean>
   /**
    * Directories this pass must never remove even when idle and complete, named by directory
-   * (not absolute path). orcad passes its active and previous versions: the previous one is
+   * (not absolute path). quirkyd passes its active and previous versions: the previous one is
    * the rollback target, and GC'ing it turns a recoverable bad update into a re-deploy.
    */
   pinnedDirNames?: readonly string[]

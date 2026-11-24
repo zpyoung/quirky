@@ -11,7 +11,7 @@ import type {
   RuntimeMarkdownReadTabResult,
   RuntimeMarkdownSaveTabResult
 } from '../../src/shared/mobile-markdown-document'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import {
   cleanupMarkdownFixture,
@@ -29,30 +29,30 @@ const PHONE = '# Shared notes\n\nSaved from the phone.\n'
 const BANNER = 'This file changed on disk while you have unsaved edits.'
 
 test('a phone saves a Markdown tab the desktop has unsaved edits in, without touching them', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   test.setTimeout(180_000)
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  const context = await getActiveWorktreeContext(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  const context = await getActiveWorktreeContext(quirkyPage)
   const filePath = await createMarkdownFixture(
     context,
-    '.orca-e2e-phone-markdown',
+    '.quirky-e2e-phone-markdown',
     'desktop-draft',
     testInfo.workerIndex,
     DISK
   )
-  const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
+  const phone = pairMobileClient(await createDesktopMobilePairingOffer(quirkyPage))
   try {
-    await openMarkdownFixture(orcaPage, context, filePath)
-    const editor = await waitForRichMarkdownEditor(orcaPage)
+    await openMarkdownFixture(quirkyPage, context, filePath)
+    const editor = await waitForRichMarkdownEditor(quirkyPage)
     await expect(editor).toContainText('On disk.')
     await editor.click()
-    await orcaPage.keyboard.press('ControlOrMeta+End')
-    await orcaPage.keyboard.press('Enter')
-    await orcaPage.keyboard.insertText(DRAFT_LINE)
+    await quirkyPage.keyboard.press('ControlOrMeta+End')
+    await quirkyPage.keyboard.press('Enter')
+    await quirkyPage.keyboard.insertText(DRAFT_LINE)
     const desktopDraft = () =>
-      orcaPage.evaluate((path) => {
+      quirkyPage.evaluate((path) => {
         const state = window.__store!.getState()
         const file = state.openFiles.find((entry) => entry.filePath === path)
         return {
@@ -116,9 +116,9 @@ test('a phone saves a Markdown tab the desktop has unsaved edits in, without tou
     expect(saved).toMatchObject({ tabId, isDirty: false, content: PHONE })
     expect(readFileSync(filePath, 'utf8')).toBe(PHONE)
 
-    await expect(orcaPage.getByText(BANNER)).toBeVisible({ timeout: 30_000 })
+    await expect(quirkyPage.getByText(BANNER)).toBeVisible({ timeout: 30_000 })
     await testInfo.attach('desktop-after-phone-save', {
-      body: await orcaPage.screenshot(),
+      body: await quirkyPage.screenshot(),
       contentType: 'image/png'
     })
     const after = await desktopDraft()
@@ -132,16 +132,16 @@ test('a phone saves a Markdown tab the desktop has unsaved edits in, without tou
 })
 
 test("a phone reads the desktop's unsaved untitled Markdown tab read-only and never saves it", async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   test.setTimeout(180_000)
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  const context = await getActiveWorktreeContext(orcaPage)
-  const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  const context = await getActiveWorktreeContext(quirkyPage)
+  const phone = pairMobileClient(await createDesktopMobilePairingOffer(quirkyPage))
   let untitledPath = ''
   try {
-    untitledPath = await orcaPage.evaluate(async (worktreeId) => {
+    untitledPath = await quirkyPage.evaluate(async (worktreeId) => {
       const store = window.__store!
       const before = new Set(store.getState().openFiles.map((file) => file.id))
       const groupId = store.getState().activeGroupIdByWorktree[worktreeId] ?? ''
@@ -154,12 +154,12 @@ test("a phone reads the desktop's unsaved untitled Markdown tab read-only and ne
       }
       return created.filePath
     }, context.worktreeId)
-    const editor = await waitForRichMarkdownEditor(orcaPage)
+    const editor = await waitForRichMarkdownEditor(quirkyPage)
     await editor.click()
-    await orcaPage.keyboard.insertText(DRAFT_LINE)
+    await quirkyPage.keyboard.insertText(DRAFT_LINE)
     await expect
       .poll(() =>
-        orcaPage.evaluate((path) => {
+        quirkyPage.evaluate((path) => {
           const state = window.__store!.getState()
           const file = state.openFiles.find((entry) => entry.filePath === path)
           return file?.isDirty === true && file.isUntitled === true

@@ -14,7 +14,7 @@ describe('the host-stamped turn end', () => {
 
   beforeEach(async () => {
     _internals.resetCachesForTests()
-    directory = mkdtempSync(join(tmpdir(), 'orca-turn-ended-at-'))
+    directory = mkdtempSync(join(tmpdir(), 'quirky-turn-ended-at-'))
     server = new AgentHookServer()
     await server.start({ env: 'production', userDataPath: directory })
   })
@@ -57,7 +57,7 @@ describe('the host-stamped turn end', () => {
     expect(row()).toMatchObject({ state: 'done', turnEndDisposition: 'ambiguous' })
     expect(row()).not.toHaveProperty('turnEndedAt')
 
-    // A cancel Orca inferred from Ctrl+C ends the turn, so the turn's late Stop is no second end.
+    // A cancel Quirky inferred from Ctrl+C ends the turn, so the turn's late Stop is no second end.
     await post({ hook_event_name: 'UserPromptSubmit', prompt: 'Fix it' })
     const working = row()!
     expect(

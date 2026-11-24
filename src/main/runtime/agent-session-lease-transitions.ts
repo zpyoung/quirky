@@ -112,7 +112,7 @@ export function commitAgentSessionProcessIdentity(
     })
   }
   if (record.lease.reservedSpawnToken !== args.process.spawnToken) {
-    // Why: a child that cannot echo the reserved token is not the process Orca started.
+    // Why: a child that cannot echo the reserved token is not the process Quirky started.
     throw agentSessionRefusalError('agent_session_ownership_unknown', {
       reason: 'spawnIdentityMismatch'
     })

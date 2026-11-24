@@ -1,6 +1,6 @@
-import type { PipedChildProcess, PipedProcessSpawner } from '@orca/process-host/process-spec'
-import { spawnProcess } from '@orca/process-host'
-import { RetryableProcessExitProof } from '@orca/process-host/retryable-process-exit-proof'
+import type { PipedChildProcess, PipedProcessSpawner } from '@quirky/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
+import { RetryableProcessExitProof } from '@quirky/process-host/retryable-process-exit-proof'
 import type { ProviderProcessLaunch } from './provider-process-launch'
 import {
   PROVIDER_SUPERVISOR_MAX_STOP_MS,

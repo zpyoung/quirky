@@ -129,7 +129,7 @@ describe('MobilePage pairing', () => {
       available: true,
       qrDataUrl: 'data:image/png;base64,qr',
       qrSize: 218,
-      pairingUrl: 'orca://pair#automatic'
+      pairingUrl: 'quirky://pair#automatic'
     })
     listNetworkInterfaces.mockReset().mockResolvedValue({ interfaces: [] })
     // The paired-device cache is module state shared by every surface; reset it so
@@ -202,7 +202,7 @@ describe('MobilePage pairing', () => {
       available: true,
       qrDataUrl: null,
       qrError: 'encoding_failed',
-      pairingUrl: 'orca://pair?code=copy-fallback',
+      pairingUrl: 'quirky://pair?code=copy-fallback',
       endpoint: 'wss://host.example/large'
     })
 
@@ -221,7 +221,7 @@ describe('MobilePage pairing', () => {
       available: true,
       qrDataUrl: null,
       qrError: 'encoding_failed',
-      pairingUrl: 'orca://pair?code=copy-fallback',
+      pairingUrl: 'quirky://pair?code=copy-fallback',
       endpoint: 'wss://custom.example/large'
     })
 

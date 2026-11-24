@@ -3,21 +3,21 @@ import { join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { globSync, readFileSync } from 'node:fs'
 import {
-  ORCAD_CLI_ENTRY_FILENAME,
-  ORCAD_SERVER_ENTRY_FILENAME,
-  ORCAD_VERSION_FILENAME
-} from '../../src/shared/orcad-artifacts.ts'
+  QUIRKYD_CLI_ENTRY_FILENAME,
+  QUIRKYD_SERVER_ENTRY_FILENAME,
+  QUIRKYD_VERSION_FILENAME
+} from '../../src/shared/quirkyd-artifacts.ts'
 import { NODE_RUNTIME_PIN } from '../../src/shared/node-runtime-pin.ts'
-import { ORCA_SKILLS_REPOSITORY_URL } from '../../src/shared/fork-skills-repository/skills-repository-url.ts'
+import { QUIRKY_SKILLS_REPOSITORY_URL } from '../../src/shared/fork-skills-repository/skills-repository-url.ts'
 import {
-  ORCAD_PROFILE_PREFLIGHT_FLAG,
-  parseOrcadProfilePreflight
-} from '../../src/shared/orcad-profile-preflight.ts'
-import { packagedNodeRuntimePath } from './build-orcad-node.mjs'
+  QUIRKYD_PROFILE_PREFLIGHT_FLAG,
+  parseQuirkydProfilePreflight
+} from '../../src/shared/quirkyd-profile-preflight.ts'
+import { packagedNodeRuntimePath } from './build-quirkyd-node.mjs'
 import { ensurePinnedNodeExecutable } from './pinned-node-downloads.mjs'
 import { currentTarget } from './server-build-target.mjs'
 import { UNIT_INCLUDE } from './ci-unit-files.mjs'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { describeProcessFailure } from './process-failure-message.mjs'
 import { resolveBuildSourceCommit } from './build-source-commit.mjs'
 import {
@@ -29,12 +29,12 @@ import {
 const root = resolve(import.meta.dirname, '../..')
 const target = currentTarget()
 const artifact = process.argv.includes('--artifact')
-// Lanes that provide the pinned Bun and the last Bun orcad slot (design D7 upgrade and rollback).
+// Lanes that provide the pinned Bun and the last Bun quirkyd slot (design D7 upgrade and rollback).
 const crossRuntime = process.argv.includes('--cross-runtime')
 const testArgs = process.argv
   .slice(2)
   .filter((arg) => arg !== '--artifact' && arg !== '--cross-runtime')
-const packageDir = join(root, 'out', 'orcad')
+const packageDir = join(root, 'out', 'quirkyd')
 const runtimePath = artifact
   ? packagedNodeRuntimePath(packageDir, target)
   : await ensurePinnedNodeExecutable({ target })
@@ -42,8 +42,8 @@ const runtimePath = artifact
 // required: their tests fail on a missing input instead of passing as a skip.
 const env = {
   ...process.env,
-  ORCA_BACKGROUND_LAUNCH: '1',
-  ORCA_PINNED_NODE: runtimePath,
+  QUIRKY_BACKGROUND_LAUNCH: '1',
+  QUIRKY_PINNED_NODE: runtimePath,
   [REQUIRED_TEST_INPUTS_ENV]: [artifact && 'artifact', crossRuntime && 'cross-runtime']
     .filter(Boolean)
     .join(',')
@@ -67,7 +67,7 @@ if (artifact) {
   const nonce = randomUUID()
   const result = runProcessSync({
     program: runtimePath,
-    args: [join(packageDir, ORCAD_SERVER_ENTRY_FILENAME), ORCAD_PROFILE_PREFLIGHT_FLAG, nonce],
+    args: [join(packageDir, QUIRKYD_SERVER_ENTRY_FILENAME), QUIRKYD_PROFILE_PREFLIGHT_FLAG, nonce],
     cwd: root,
     env,
     timeoutMs: 90_000
@@ -75,23 +75,23 @@ if (artifact) {
   if (result.code !== 0 || result.timedOut || result.outputTruncated) {
     throw new Error(`Bundled runtime readiness failed: ${describeProcessFailure(result)}`)
   }
-  const response = parseOrcadProfilePreflight(
+  const response = parseQuirkydProfilePreflight(
     result.stdout,
     nonce,
     { runtime: 'node', runtimeVersion: NODE_RUNTIME_PIN.version },
-    readFileSync(join(packageDir, ORCAD_VERSION_FILENAME), 'utf8').trim()
+    readFileSync(join(packageDir, QUIRKYD_VERSION_FILENAME), 'utf8').trim()
   )
   process.stdout.write(`${JSON.stringify({ target, ...response })}\n`)
 
-  const source = `${ORCA_SKILLS_REPOSITORY_URL}/tree/${resolveBuildSourceCommit()}`
+  const source = `${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${resolveBuildSourceCommit()}`
   const cli = runProcessSync({
     program: runtimePath,
     args: [
-      join(packageDir, ORCAD_CLI_ENTRY_FILENAME),
+      join(packageDir, QUIRKYD_CLI_ENTRY_FILENAME),
       'skills',
       'install',
       '--skill',
-      'orca-cli',
+      'quirky-cli',
       '--agent',
       'universal',
       '--dry-run'

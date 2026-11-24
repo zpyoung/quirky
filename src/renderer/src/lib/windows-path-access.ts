@@ -3,7 +3,10 @@ import { windowsPathAccess, type WindowsPathAccess } from '../../../shared/windo
 import type { PublicKnownRuntimeEnvironment } from '../../../shared/runtime-environments'
 import { isWebClientLocation } from './web-client-location'
 
-type WslEnvironmentSource = readonly Pick<PublicKnownRuntimeEnvironment, 'id' | 'orcadDeployment'>[]
+type WslEnvironmentSource = readonly Pick<
+  PublicKnownRuntimeEnvironment,
+  'id' | 'quirkydDeployment'
+>[]
 
 // Why an accessor, not an import of the store: path guards load from inside store slices.
 let readKnownEnvironments: () => WslEnvironmentSource = () => []
@@ -30,7 +33,7 @@ export function getWindowsPathAccess(
     wslDistroForEnvironment: (environmentId) => {
       const deployment = (environments ?? readKnownEnvironments()).find(
         (entry) => entry.id === environmentId
-      )?.orcadDeployment
+      )?.quirkydDeployment
       return deployment?.kind === 'wsl' ? deployment.distro : null
     }
   })

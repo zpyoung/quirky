@@ -6,7 +6,7 @@ import { resolveBrowserTabIdentity } from './browser-tab-identity'
 const CHROME_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
 const NATIVE_UA =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Orca/1.0.0 Chrome/134.0.0.0 Electron/43.0.0 Safari/537.36'
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Quirky/1.0.0 Chrome/134.0.0.0 Electron/43.0.0 Safari/537.36'
 const clean = { mode: 'clean', userAgent: CHROME_UA } as const
 const native = { mode: 'native', userAgent: NATIVE_UA } as const
 const AUTH_URL = 'https://accounts.google.com/v3/signin/identifier'

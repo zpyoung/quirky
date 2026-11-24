@@ -118,7 +118,7 @@ export class AgentSessionJournal {
       serialize: (run) => this.queue.serialize(run),
       database: () => this.database,
       state: () => this.state,
-      // A newer Orca's database: nothing it holds opens, and every write is refused.
+      // A newer Quirky's database: nothing it holds opens, and every write is refused.
       readOnly: () => this.database.readOnly,
       cursor: this.cursor,
       adopt: (loaded) => {

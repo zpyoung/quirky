@@ -1,5 +1,5 @@
 /**
- * The WSL move journal: `orcad-migration-cutovers-wsl/<migrationId>.json` beside the profile.
+ * The WSL move journal: `quirkyd-migration-cutovers-wsl/<migrationId>.json` beside the profile.
  * A separate directory from the SSH journal, so an older build never reads a WSL record as SSH.
  */
 import {
@@ -8,12 +8,12 @@ import {
   parseWslMoveCutover,
   type WslMoveCutover
 } from '../../../shared/wsl-move/wsl-move-cutover'
-import { isRecord } from '../../../shared/orcad-migration/orcad-migration-manifest-fields'
-import { assertOrcadMigrationManifestDigest } from '../../orcad/orcad-migration-manifest-digest'
+import { isRecord } from '../../../shared/quirkyd-migration/quirkyd-migration-manifest-fields'
+import { assertQuirkydMigrationManifestDigest } from '../../quirkyd/quirkyd-migration-manifest-digest'
 import {
   createMigrationJournalDirectory,
   orderMigrationJournalChain
-} from '../migrating-orcad-catalog/migration-journal-directory'
+} from '../migrating-quirkyd-catalog/migration-journal-directory'
 import {
   isWslMoveDesktopRewriteRegistryComplete,
   pendingWslMoveDesktopRewriteStores
@@ -35,7 +35,7 @@ export function onWslMoveJournalChange(listener: (userDataPath: string) => void)
 }
 
 const journals = createMigrationJournalDirectory({
-  directoryName: 'orcad-migration-cutovers-wsl',
+  directoryName: 'quirkyd-migration-cutovers-wsl',
   // A manifest carries catalog rows and dormant session state; blobs travel on their own channel.
   maxFileBytes: 16 * 1024 * 1024,
   parse: parseVerifiedWslMoveCutover,
@@ -65,7 +65,7 @@ export function scanWslMoveCutovers(userDataPath: string): readonly Readonly<Wsl
 function parseVerifiedWslMoveCutover(value: unknown): WslMoveCutover {
   const cutover = parseWslMoveCutover(value)
   // Raw, not parsed: parsing drops fields a newer build signed.
-  assertOrcadMigrationManifestDigest(isRecord(value) ? value.manifest : undefined)
+  assertQuirkydMigrationManifestDigest(isRecord(value) ? value.manifest : undefined)
   return cutover
 }
 

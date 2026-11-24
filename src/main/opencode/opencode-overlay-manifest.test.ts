@@ -8,7 +8,7 @@ import {
 } from './opencode-overlay-manifest'
 
 it('accepts only string manifest entries and tolerates invalid persisted shapes', () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-overlay-manifest-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-overlay-manifest-'))
   try {
     const path = join(root, OPENCODE_OVERLAY_MANIFEST_FILE)
     for (const text of ['null', '1', '{']) {
@@ -32,7 +32,7 @@ it('accepts only string manifest entries and tolerates invalid persisted shapes'
 })
 
 it('keeps source ownership optional for older manifests and rejects non-string metadata', () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-overlay-source-manifest-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-overlay-source-manifest-'))
   try {
     const file = join(root, OPENCODE_OVERLAY_MANIFEST_FILE)
     for (const source of [undefined, null, 42, {}]) {

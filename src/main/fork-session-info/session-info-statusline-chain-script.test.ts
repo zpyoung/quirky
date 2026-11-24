@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { getManagedStatusLineScript } from './session-info-statusline-chaining'
 import { SESSION_INFO_STATUSLINE_CHAIN_ENV } from './session-info-statusline-chain-script'
 
@@ -23,9 +23,9 @@ function baseEnvironment(): NodeJS.ProcessEnv {
     HOME: home,
     TMPDIR: join(directory, 'tmp'),
     PATH: `${bin}:${process.env.PATH ?? ''}`,
-    ORCA_AGENT_HOOK_PORT: '1234',
-    ORCA_AGENT_HOOK_TOKEN: 'token',
-    ORCA_PANE_KEY: 'tab:12345678-1234-1234-1234-123456789abc',
+    QUIRKY_AGENT_HOOK_PORT: '1234',
+    QUIRKY_AGENT_HOOK_TOKEN: 'token',
+    QUIRKY_PANE_KEY: 'tab:12345678-1234-1234-1234-123456789abc',
     POST_MARKER: postMarker
   }
 }
@@ -47,14 +47,14 @@ async function runGeneratedScript(
 
 describe('session info chained statusline script', () => {
   beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), 'orca-session-info-script-'))
+    directory = mkdtempSync(join(tmpdir(), 'quirky-session-info-script-'))
     home = join(directory, 'home')
     bin = join(directory, 'bin')
-    runner = join(home, '.orca', 'agent-hooks', 'claude-statusline-user.sh')
+    runner = join(home, '.quirky', 'agent-hooks', 'claude-statusline-user.sh')
     postMarker = join(directory, 'posted')
     mkdirSync(join(directory, 'tmp'))
     mkdirSync(bin)
-    mkdirSync(join(home, '.orca', 'agent-hooks'), { recursive: true })
+    mkdirSync(join(home, '.quirky', 'agent-hooks'), { recursive: true })
     writeExecutable(join(bin, 'curl'), '#!/bin/sh\ncat >/dev/null\nprintf posted >"$POST_MARKER"\n')
   })
 
@@ -133,31 +133,31 @@ describe('session info chained statusline script', () => {
     const capture = script.indexOf('payload=${payload%?}')
     const chain = script.indexOf(SESSION_INFO_STATUSLINE_CHAIN_ENV)
     const payloadGate = script.indexOf('case "$payload" in')
-    const throttle = script.indexOf('orca_statusline_stamp=')
+    const throttle = script.indexOf('quirky_statusline_stamp=')
 
     expect(capture).toBeLessThan(chain)
     expect(chain).toBeLessThan(payloadGate)
     expect(chain).toBeLessThan(throttle)
     expect(script).toContain('sleep 1')
-    expect(script).toContain('if [ "$orca_statusline_chain_status" -eq 0 ]')
+    expect(script).toContain('if [ "$quirky_statusline_chain_status" -eq 0 ]')
     expect(script).toContain('*\'"context_window"\'*')
   })
 
   it('chains through cmd builtins after capture and before throttle, spawning no interpreter', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const script = getManagedStatusLineScript('local')
-    const capture = script.indexOf('ORCA_STATUSLINE_PAYLOAD_FILE%" 2>nul')
+    const capture = script.indexOf('QUIRKY_STATUSLINE_PAYLOAD_FILE%" 2>nul')
     const chain = script.indexOf(SESSION_INFO_STATUSLINE_CHAIN_ENV)
-    const throttle = script.indexOf('set "ORCA_STATUSLINE_STAMP_FILE=')
+    const throttle = script.indexOf('set "QUIRKY_STATUSLINE_STAMP_FILE=')
 
     expect(capture).toBeLessThan(chain)
     expect(chain).toBeLessThan(throttle)
     expect(script).not.toMatch(/powershell(\.exe)?/i)
     expect(script).toContain('"%ComSpec%" /d /s /c ""%USERPROFILE%')
-    expect(script).toContain('< "%ORCA_STATUSLINE_PAYLOAD_FILE%""')
+    expect(script).toContain('< "%QUIRKY_STATUSLINE_PAYLOAD_FILE%""')
     expect(script).toContain(`  set "${SESSION_INFO_STATUSLINE_CHAIN_ENV}=1"`)
-    expect(script).toContain('if not errorlevel 1 type "%TEMP%\\orca-statusline-chain-')
-    expect(script).toContain('del "%TEMP%\\orca-statusline-chain-')
+    expect(script).toContain('if not errorlevel 1 type "%TEMP%\\quirky-statusline-chain-')
+    expect(script).toContain('del "%TEMP%\\quirky-statusline-chain-')
     expect(script).toContain('context_window')
   })
 })

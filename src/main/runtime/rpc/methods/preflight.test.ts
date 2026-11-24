@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { PREFLIGHT_METHODS } from './preflight'
 import { SSH_HOST_NOT_SERVED_MESSAGE } from '../../../providers/ssh-host-not-served-error'
 
@@ -37,7 +37,7 @@ describe('preflight RPC methods', () => {
       glab: { installed: false, authenticated: false }
     }
     runPreflightCheckMock.mockResolvedValueOnce(status)
-    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
 
     const response = await dispatcher.dispatch(makeRequest('preflight.check', { force: true }))
@@ -60,7 +60,7 @@ describe('preflight RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       resolveAgentDetectionHost
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
 
     const detected = await dispatcher.dispatch(makeRequest('preflight.detectAgents'))
@@ -101,7 +101,7 @@ describe('preflight RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       resolveAgentDetectionHost
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
 
     const wsl = await dispatcher.dispatch(
@@ -119,7 +119,7 @@ describe('preflight RPC methods', () => {
 
   it('refuses agent detection on an SSH target this host does not serve', async () => {
     detectInstalledAgentsWithShellPathHydrationMock.mockClear()
-    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -138,7 +138,7 @@ describe('preflight RPC methods', () => {
       gitBashAvailable: true,
       hostPlatform: 'win32'
     })
-    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
 
     const response = await dispatcher.dispatch(

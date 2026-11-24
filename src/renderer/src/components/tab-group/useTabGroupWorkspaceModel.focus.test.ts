@@ -185,7 +185,7 @@ describe('useTabGroupWorkspaceModel terminal activation focus', () => {
     vi.clearAllMocks()
     mocks.createWebRuntimeSessionTerminal.mockResolvedValue({
       status: 'failed',
-      message: 'The workspace is not connected to a remote Orca host.'
+      message: 'The workspace is not connected to a remote Quirky host.'
     })
     mocks.callRuntimeRpc.mockResolvedValue({ ok: true })
     mocks.runtimeEnvironmentSupportsCapability.mockResolvedValue(true)
@@ -587,7 +587,7 @@ describe('useTabGroupWorkspaceModel terminal activation focus', () => {
             id: 'browser-workspace-1',
             worktreeId: 'wt-1',
             sessionProfileId: 'profile-1',
-            sessionPartition: 'persist:orca-browser-session-profile-1',
+            sessionPartition: 'persist:quirky-browser-session-profile-1',
             activePageId: 'browser-page-1',
             pageIds: ['browser-page-1'],
             url: 'https://example.com',
@@ -610,7 +610,7 @@ describe('useTabGroupWorkspaceModel terminal activation focus', () => {
     expect(mocks.createBrowserTab).toHaveBeenCalledWith('wt-1', 'https://example.com', {
       title: 'Example',
       sessionProfileId: 'profile-1',
-      sessionPartition: 'persist:orca-browser-session-profile-1',
+      sessionPartition: 'persist:quirky-browser-session-profile-1',
       afterTabId: 'browser-unified-1'
     })
   })

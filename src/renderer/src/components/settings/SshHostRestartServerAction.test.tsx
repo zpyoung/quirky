@@ -3,7 +3,7 @@
 import { act, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OrcadManagedRestartResult } from '../../../../shared/orcad-managed-runtime'
+import type { QuirkydManagedRestartResult } from '../../../../shared/quirkyd-managed-runtime'
 import type { SshManagedServerStatus } from '../../../../shared/ssh-types'
 import { canRestartSshHostServer, SshHostRestartServerDialog } from './SshHostRestartServerAction'
 
@@ -23,14 +23,14 @@ const ended: SshManagedServerStatus = {
   launchSessionEnded: true
 }
 
-const restart = vi.fn(async (): Promise<OrcadManagedRestartResult> => ({
+const restart = vi.fn(async (): Promise<QuirkydManagedRestartResult> => ({
   outcome: 'restarted',
   environmentId: 'env-1'
 }))
 const roots: Root[] = []
 beforeEach(() => {
   restart.mockClear()
-  Object.assign(window, { api: { runtimeEnvironments: { managedOrcad: { restart } } } })
+  Object.assign(window, { api: { runtimeEnvironments: { managedQuirkyd: { restart } } } })
 })
 afterEach(() => {
   for (const root of roots.splice(0)) {
@@ -50,7 +50,7 @@ function Harness({
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button onClick={() => setOpen(true)}>Restart Orca’s server…</button>
+      <button onClick={() => setOpen(true)}>Restart Quirky’s server…</button>
       <SshHostRestartServerDialog
         status={status}
         open={open}
@@ -76,7 +76,7 @@ function button(container: HTMLElement, text: string): HTMLButtonElement {
   return [...container.querySelectorAll('button')].find((entry) => entry.textContent === text)!
 }
 
-describe('Restart Orca’s server', () => {
+describe('Restart Quirky’s server', () => {
   it('is offered only when the launching SSH session proved ended', async () => {
     expect(canRestartSshHostServer({ kind: 'managed', environmentId: 'env-1' })).toBe(false)
     expect(canRestartSshHostServer(ended)).toBe(true)
@@ -85,7 +85,7 @@ describe('Restart Orca’s server', () => {
   it('confirms first, then restarts and refreshes', async () => {
     const onChanged = vi.fn()
     const container = await render(ended, onChanged)
-    await act(async () => button(container, 'Restart Orca’s server…').click())
+    await act(async () => button(container, 'Restart Quirky’s server…').click())
     expect(restart).not.toHaveBeenCalled()
     expect(container.textContent).toContain('no terminals are running')
     await act(async () => button(container, 'Restart').click())
@@ -101,7 +101,7 @@ describe('Restart Orca’s server', () => {
     restart.mockResolvedValueOnce(result)
     const onChanged = vi.fn()
     const container = await render(ended, onChanged)
-    await act(async () => button(container, 'Restart Orca’s server…').click())
+    await act(async () => button(container, 'Restart Quirky’s server…').click())
     await act(async () => button(container, 'Restart').click())
     expect(container.textContent).toContain(text)
     expect(onChanged).not.toHaveBeenCalled()

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DurableProfileStateMutation } from '../persistence/loading-store/store-runtime-state'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type {
   RuntimeMobileSessionTabsSnapshot,
@@ -74,7 +74,7 @@ export function registerHeadlessCloseKeepsPublicationEpochTests(): void {
 
   async function closeOneTab(): Promise<RuntimeMobileSessionTabsSnapshot> {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: makeStore covers the reads this suite drives.
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    const runtime = new QuirkyRuntimeService(makeStore() as never)
     const closedTab = terminalTab('tab-a', LEAF_ID)
     const snapshot = storedSnapshot([closedTab, terminalTab('tab-b', LEAF_ID)])
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: closeHeadlessMobileTerminalTab is protected; reaching it is the only way to drive a headless close.

@@ -3,7 +3,7 @@ import {
   armFloatingPanelReclaimIntent,
   consumeFloatingPanelReclaimIntent
 } from '@/lib/floating-workspace-focus-reclaim'
-import { ORCA_EDITOR_REQUEST_FILE_CLOSE_EVENT } from '@/components/editor/editor-autosave'
+import { QUIRKY_EDITOR_REQUEST_FILE_CLOSE_EVENT } from '@/components/editor/editor-autosave'
 import {
   makeFile,
   makeTab,
@@ -23,7 +23,7 @@ function requestedEditorCloseReaction(): () => void {
   const event = vi
     .mocked(window.dispatchEvent)
     .mock.calls.map(([candidate]) => candidate)
-    .find((candidate) => candidate.type === ORCA_EDITOR_REQUEST_FILE_CLOSE_EVENT)
+    .find((candidate) => candidate.type === QUIRKY_EDITOR_REQUEST_FILE_CLOSE_EVENT)
   if (!(event instanceof CustomEvent)) {
     throw new Error('the editor close was not requested')
   }

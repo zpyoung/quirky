@@ -33,7 +33,7 @@ await buildRenderer({
 const { ELECTRON_RUN_AS_NODE: _node, ...env } = process.env
 const app = await electron.launch({
   args: [main],
-  env: { ...env, HOME: home, ZDOTDIR: home, ORCA_BACKGROUND_LAUNCH: '1' }
+  env: { ...env, HOME: home, ZDOTDIR: home, QUIRKY_BACKGROUND_LAUNCH: '1' }
 })
 const report = {
   scope:

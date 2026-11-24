@@ -98,7 +98,7 @@ function resetMocks(): void {
 
 function mockGitHubProvider(): void {
   getProjectSlugMock.mockResolvedValue(null)
-  getRepoSlugMock.mockResolvedValue({ owner: 'acme', repo: 'orca' })
+  getRepoSlugMock.mockResolvedValue({ owner: 'acme', repo: 'quirky' })
   getEnterpriseGitHubRepoSlugMock.mockResolvedValue(null)
 }
 
@@ -110,19 +110,19 @@ function mockGitHubEnterpriseProvider(): void {
   // comes back host-qualified instead of null + separate enterprise fallback.
   getRepoSlugMock.mockResolvedValue({
     owner: 'acme',
-    repo: 'orca',
+    repo: 'quirky',
     host: 'github.acme-corp.com'
   })
   // The auth gate still keys off the enterprise resolver (authed-GHES signal).
   getEnterpriseGitHubRepoSlugMock.mockResolvedValue({
     owner: 'acme',
-    repo: 'orca',
+    repo: 'quirky',
     host: 'github.acme-corp.com'
   })
 }
 
 function mockGitLabProvider(): void {
-  getProjectSlugMock.mockResolvedValue({ host: 'gitlab.com', path: 'acme/orca' })
+  getProjectSlugMock.mockResolvedValue({ host: 'gitlab.com', path: 'acme/quirky' })
   getRepoSlugMock.mockResolvedValue(null)
 }
 

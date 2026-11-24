@@ -12,7 +12,7 @@ export default class TimingSequencer extends RuntimeSequencer {
     try {
       const plan = JSON.parse(
         readFileSync(
-          process.env.ORCA_UNIT_SELECTION_PLAN ?? 'ci-shards/unit-selection.json',
+          process.env.QUIRKY_UNIT_SELECTION_PLAN ?? 'ci-shards/unit-selection.json',
           'utf8'
         )
       )
@@ -20,7 +20,7 @@ export default class TimingSequencer extends RuntimeSequencer {
       if (
         plan.version !== 1 ||
         !plan.sourceSha ||
-        plan.sourceSha !== process.env.ORCA_SHARD_SOURCE_SHA ||
+        plan.sourceSha !== process.env.QUIRKY_SHARD_SOURCE_SHA ||
         JSON.stringify([...plan.files].sort()) !== JSON.stringify(specs.map(key).sort()) ||
         !Array.isArray(plan.executionFiles) ||
         plan.executionFiles.some((file) => !discovered.has(file))
@@ -43,7 +43,7 @@ export default class TimingSequencer extends RuntimeSequencer {
       baseline.timings,
       baseline.overheadMs
     )
-    writeAssignment(process.env.ORCA_SHARD_MANIFEST ?? 'ci-shards/unit-assignment.json', {
+    writeAssignment(process.env.QUIRKY_SHARD_MANIFEST ?? 'ci-shards/unit-assignment.json', {
       ...assignment,
       baselineSha256: baseline.baselineSha256,
       selectedShard: index,

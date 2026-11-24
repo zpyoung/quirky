@@ -31,7 +31,7 @@ export function registerGitWorktreeBinaryCompatibilityCases(
 
     // Why: the `prunable` porcelain annotation landed in Git 2.31 — five
     // releases before `-z` (2.36) — so only Git <2.31 emits neither and needs
-    // Orca's path-existence fallback (issue #8389).
+    // Quirky's path-existence fallback (issue #8389).
     await runGit(['worktree', 'add', '-b', 'compat-stale', 'stale-wt'])
     await rm(join(resolveRepoPath(), 'stale-wt'), { recursive: true, force: true })
     const staleList = await runGit(['worktree', 'list', '--porcelain'])
@@ -134,7 +134,7 @@ export function registerGitWorktreeBinaryCompatibilityCases(
   it('supports prepared worktree creation and finalization', async () => {
     const head = (await runGit(['rev-parse', 'HEAD'])).stdout.trim()
     const lockPath = join(resolveRepoPath(), '.git', 'worktrees', 'compat-prepared', 'locked')
-    const lockReason = 'orca-create-preparation:v1:compat\n'
+    const lockReason = 'quirky-create-preparation:v1:compat\n'
     try {
       await runGit([
         'worktree',

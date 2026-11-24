@@ -13,7 +13,7 @@ import { extractToolFields, isNewTurnEvent } from '../provider-event-routing'
 import { readString } from '../tool-input-preview'
 
 /**
- * DeepSeek Harness reaches Orca through its own `@deepseek-ai/dsh-hooks-claude-code`
+ * DeepSeek Harness reaches Quirky through its own `@deepseek-ai/dsh-hooks-claude-code`
  * bridge, so the payloads are Claude-shaped (`session_id`, `tool_name`, `tool_input`,
  * `tool_use_id`, `prompt`) and the event names are a strict subset of Claude's:
  * SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SubagentStart and

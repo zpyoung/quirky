@@ -27,7 +27,7 @@ afterEach(() => {
 })
 
 function temporaryDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-ledger-import-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-ledger-import-'))
   temporaryDirectories.push(directory)
   return directory
 }

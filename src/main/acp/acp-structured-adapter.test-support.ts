@@ -23,7 +23,11 @@ import { AcpStructuredSessionAdapter } from './acp-structured-session-adapter'
 import type { AcpStructuredSessionAdapterDeps } from './acp-structured-session-adapter-deps'
 
 export const GROK = acpLaunchSpecFor('grok')!
-const RIG_ENV = { PATH: '/usr/bin', ORCA_PANE_KEY: 'tab-1:pane-1', ORCA_AGENT_HOOK_PORT: '1234' }
+const RIG_ENV = {
+  PATH: '/usr/bin',
+  QUIRKY_PANE_KEY: 'tab-1:pane-1',
+  QUIRKY_AGENT_HOOK_PORT: '1234'
+}
 export const PROVIDER_SESSION = 'acp-session-1'
 
 export const GROK_CONFIG_OPTIONS = [
@@ -69,9 +73,9 @@ export type AcpAdapterRig = {
     options?: Readonly<Record<string, string>>
     permissionMode?: AgentChatPermissionMode
   }): ReturnType<AcpStructuredSessionAdapter['acquire']>
-  /** Frames Orca wrote to the agent with this method. */
+  /** Frames Quirky wrote to the agent with this method. */
   sent(method: string): FakeFrame[]
-  /** Waits for the `index`th frame Orca writes with this method. */
+  /** Waits for the `index`th frame Quirky writes with this method. */
   frame(method: string, index?: number): Promise<FakeFrame>
   settle(): Promise<void>
 }
@@ -156,7 +160,7 @@ export async function openAcpAdapterRig(
       return child
     },
     readProcessStartTime: async () => 1_700_000_000_000,
-    dataDirectory: join(tmpdir(), 'orca-acp-adapter-rig'),
+    dataDirectory: join(tmpdir(), 'quirky-acp-adapter-rig'),
     onDispatchSettledLate: (settlement) => settled.push(settlement),
     mintGeneration: () => 'gen-acp',
     now: () => 5_000,

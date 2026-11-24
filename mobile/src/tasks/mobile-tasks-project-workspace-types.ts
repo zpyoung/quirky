@@ -113,7 +113,7 @@ export type WorkspaceCreateArgs = {
   sparseCheckoutOverride?: { directories: string[]; presetId?: string }
 }
 
-export type OrcaYamlTrustPrompt = WorkspaceCreateArgs & {
+export type QuirkyYamlTrustPrompt = WorkspaceCreateArgs & {
   repoId: string
   repoName: string
   scriptContent: string
@@ -141,7 +141,7 @@ export function workspaceAgentIconId(agent: WorkspaceAgentChoice): string {
   return agent === 'blank' ? '__blank__' : agent
 }
 
-export type ProjectRepoNotInOrcaPrompt = {
+export type ProjectRepoNotInQuirkyPrompt = {
   owner: string
   repo: string
   url: string | null

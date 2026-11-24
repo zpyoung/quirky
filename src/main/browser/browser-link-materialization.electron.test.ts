@@ -43,7 +43,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { browserPageInteractionAndSessionsApi } from ${JSON.stringify(join(process.cwd(), 'src/preload/api/browser-bridge-page-interaction-and-sessions.ts'))}
 let heldOpen = null
 contextBridge.exposeInMainWorld('probeApi', {
-  browser: { ...browserPageInteractionAndSessionsApi, onOpenLinkInOrcaTab: (callback) => browserPageInteractionAndSessionsApi.onOpenLinkInOrcaTab((event) => { heldOpen = () => callback(event) }), registerGuest: (args) => ipcRenderer.invoke('link-probe:register', args) },
+  browser: { ...browserPageInteractionAndSessionsApi, onOpenLinkInQuirkyTab: (callback) => browserPageInteractionAndSessionsApi.onOpenLinkInQuirkyTab((event) => { heldOpen = () => callback(event) }), registerGuest: (args) => ipcRenderer.invoke('link-probe:register', args) },
   fixture: {
     open: (event) => ipcRenderer.invoke('link-probe:open', event),
     pending: () => heldOpen !== null,

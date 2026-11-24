@@ -1,15 +1,15 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 
 test.use({
-  orcaAppExtraArgs: process.env.ORCA_CSV_CDP_PORT
-    ? [`--remote-debugging-port=${process.env.ORCA_CSV_CDP_PORT}`]
+  quirkyAppExtraArgs: process.env.QUIRKY_CSV_CDP_PORT
+    ? [`--remote-debugging-port=${process.env.QUIRKY_CSV_CDP_PORT}`]
     : []
 })
 
 test('CSV table edits, inspection, clipboard and widths survive save and view switches', async ({
-  orcaPage,
+  quirkyPage,
   seededRepoPath,
   electronApp
 }, testInfo) => {
@@ -18,7 +18,7 @@ test('CSV table edits, inspection, clipboard and widths survive save and view sw
   const original =
     '\ufeffName,Score,Description\r\nBeta,2,"Original text"\r\nAlpha,10,Second record\r\n'
   writeFileSync(filePath, original)
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     async ({ filePath, name }) => {
       const state = window.__store?.getState()
       if (!state?.activeWorktreeId) {
@@ -38,18 +38,18 @@ test('CSV table edits, inspection, clipboard and widths survive save and view sw
     },
     { filePath, name }
   )
-  const grid = orcaPage.getByTestId('csv-grid')
+  const grid = quirkyPage.getByTestId('csv-grid')
   await expect(grid).toHaveAttribute('role', 'grid')
-  await orcaPage.screenshot({ path: testInfo.outputPath('csv-editable-before-interaction.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('csv-editable-before-interaction.png') })
   const beta = grid.getByRole('gridcell', { name: 'Beta', exact: true })
   await beta.dblclick()
-  const input = orcaPage.getByRole('textbox', { name: /Edit row/ })
+  const input = quirkyPage.getByRole('textbox', { name: /Edit row/ })
   await input.fill('Cancelled')
   await input.press('Escape')
   await expect(beta).toBeVisible()
   await expect
     .poll(() =>
-      orcaPage.evaluate(() =>
+      quirkyPage.evaluate(() =>
         Object.values(window.__store?.getState().editorDrafts ?? {}).some((draft) =>
           draft.includes('Cancelled')
         )
@@ -59,39 +59,39 @@ test('CSV table edits, inspection, clipboard and widths survive save and view sw
   await beta.dblclick()
   await input.fill('Beta updated')
   // Switch directly while the cell owns focus; the pending value must reach Source.
-  await orcaPage.getByRole('radio', { name: 'Source', exact: true }).click()
-  await expect(orcaPage.locator('.monaco-editor')).toBeVisible()
+  await quirkyPage.getByRole('radio', { name: 'Source', exact: true }).click()
+  await expect(quirkyPage.locator('.monaco-editor')).toBeVisible()
   await expect
     .poll(() =>
-      orcaPage.evaluate(() =>
+      quirkyPage.evaluate(() =>
         Object.values(window.__store?.getState().editorDrafts ?? {}).some((draft) =>
           draft.includes('Beta updated')
         )
       )
     )
     .toBe(true)
-  await orcaPage.getByRole('radio', { name: 'Table', exact: true }).click()
+  await quirkyPage.getByRole('radio', { name: 'Table', exact: true }).click()
   await expect(grid.getByRole('gridcell', { name: 'Beta updated', exact: true })).toBeVisible()
-  const separator = orcaPage.getByRole('separator', { name: 'Resize column 3', exact: true })
+  const separator = quirkyPage.getByRole('separator', { name: 'Resize column 3', exact: true })
   const initialWidth = Number(await separator.getAttribute('aria-valuenow'))
   await separator.press('Shift+ArrowRight')
   const resized = String(initialWidth + 40)
   await expect(separator).toHaveAttribute('aria-valuenow', resized)
-  await orcaPage.getByRole('radio', { name: 'Source', exact: true }).click()
-  await orcaPage.getByRole('radio', { name: 'Table', exact: true }).click()
+  await quirkyPage.getByRole('radio', { name: 'Source', exact: true }).click()
+  await quirkyPage.getByRole('radio', { name: 'Table', exact: true }).click()
   await expect(separator).toHaveAttribute('aria-valuenow', resized!)
   await separator.press('Home')
   await grid.getByRole('gridcell', { name: 'Beta updated', exact: true }).click()
-  await orcaPage.getByRole('button', { name: 'Sort', exact: true }).click()
-  await orcaPage
+  await quirkyPage.getByRole('button', { name: 'Sort', exact: true }).click()
+  await quirkyPage
     .getByRole('menuitem', { name: 'Sort selected column ascending', exact: true })
     .click()
   await expect(grid.getByRole('row').nth(1)).toContainText('Alpha')
-  await orcaPage.getByRole('textbox', { name: 'Filter rows', exact: true }).fill('Alpha')
+  await quirkyPage.getByRole('textbox', { name: 'Filter rows', exact: true }).fill('Alpha')
   await grid.getByRole('gridcell', { name: '10', exact: true }).dblclick()
   await input.fill('11')
   await input.press('Enter')
-  await orcaPage.getByRole('textbox', { name: 'Filter rows', exact: true }).fill('')
+  await quirkyPage.getByRole('textbox', { name: 'Filter rows', exact: true }).fill('')
   await grid.getByRole('gridcell', { name: 'Alpha', exact: true }).click()
   await grid.press('Shift+ArrowRight')
   await expect(grid.locator('[aria-selected="true"]')).toHaveCount(2)
@@ -110,14 +110,14 @@ test('CSV table edits, inspection, clipboard and widths survive save and view sw
   })
   expect(clipboard).toBe('Alpha\t11')
   await expect(grid.getByRole('gridcell', { name: '12', exact: true })).toBeVisible()
-  await orcaPage.getByRole('button', { name: 'Save', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Save', exact: true }).click()
   const expected =
     '\ufeffName,Score,Description\r\nBeta updated,2,"Original text"\r\nAlpha renamed,12,Second record\r\n'
   await expect.poll(() => readFileSync(filePath, 'utf8')).toBe(expected)
-  await orcaPage.screenshot({ path: testInfo.outputPath('csv-table-editing-after.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('csv-table-editing-after.png') })
   if (
-    process.env.ORCA_E2E_FORCE_HEADFUL !== '1' &&
-    testInfo.project.metadata.orcaHeadful !== true
+    process.env.QUIRKY_E2E_FORCE_HEADFUL !== '1' &&
+    testInfo.project.metadata.quirkyHeadful !== true
   ) {
     expect(
       await electronApp.evaluate(({ BrowserWindow }) =>
@@ -128,13 +128,13 @@ test('CSV table edits, inspection, clipboard and widths survive save and view sw
 })
 
 test('CSV row and column operations preserve column widths and produce the expected file', async ({
-  orcaPage,
+  quirkyPage,
   seededRepoPath
 }, testInfo) => {
   const name = 'csv-structure.csv'
   const filePath = path.join(seededRepoPath, name)
   writeFileSync(filePath, 'First,Second,Third\nA,1,x\nB,2,y')
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     async ({ filePath, name }) => {
       const state = window.__store?.getState()
       if (!state?.activeWorktreeId) {
@@ -154,47 +154,47 @@ test('CSV row and column operations preserve column widths and produce the expec
     },
     { filePath, name }
   )
-  const grid = orcaPage.getByTestId('csv-grid')
+  const grid = quirkyPage.getByTestId('csv-grid')
   await expect(grid).toHaveAttribute('role', 'grid')
   await grid.getByRole('gridcell', { name: '1', exact: true }).click()
-  const secondWidth = orcaPage.getByRole('separator', { name: 'Resize column 2', exact: true })
+  const secondWidth = quirkyPage.getByRole('separator', { name: 'Resize column 2', exact: true })
   await secondWidth.press('ArrowRight')
   const width = await secondWidth.getAttribute('aria-valuenow')
-  await orcaPage.getByRole('button', { name: 'Columns', exact: true }).click()
-  await orcaPage.getByRole('menuitem', { name: 'Move column left', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Columns', exact: true }).click()
+  await quirkyPage.getByRole('menuitem', { name: 'Move column left', exact: true }).click()
   await expect(grid.getByRole('columnheader').nth(1)).toHaveText('Second')
   await expect(
-    orcaPage.getByRole('separator', { name: 'Resize column 1', exact: true })
+    quirkyPage.getByRole('separator', { name: 'Resize column 1', exact: true })
   ).toHaveAttribute('aria-valuenow', width!)
-  await orcaPage.getByRole('button', { name: 'Columns', exact: true }).click()
-  await orcaPage.getByRole('menuitem', { name: 'Insert column after', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Columns', exact: true }).click()
+  await quirkyPage.getByRole('menuitem', { name: 'Insert column after', exact: true }).click()
   await expect(grid).toHaveAttribute('aria-colcount', '5')
   await grid.getByRole('columnheader', { name: 'Column 4', exact: true }).click()
-  await orcaPage.getByRole('button', { name: 'Columns', exact: true }).click()
-  await orcaPage.getByRole('menuitem', { name: 'Delete selected columns', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Columns', exact: true }).click()
+  await quirkyPage.getByRole('menuitem', { name: 'Delete selected columns', exact: true }).click()
   await expect(grid).toHaveAttribute('aria-colcount', '4')
   await grid.getByRole('gridcell', { name: 'A', exact: true }).click()
-  await orcaPage.getByRole('button', { name: 'Rows', exact: true }).click()
-  await orcaPage.getByRole('menuitem', { name: 'Insert row below', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Rows', exact: true }).click()
+  await quirkyPage.getByRole('menuitem', { name: 'Insert row below', exact: true }).click()
   await expect(grid).toHaveAttribute('aria-rowcount', '4')
   await grid.locator('[data-csv-row="2"][data-csv-column="0"]').click()
-  await orcaPage.getByRole('button', { name: 'Rows', exact: true }).click()
-  await orcaPage.getByRole('menuitem', { name: 'Delete selected rows', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Rows', exact: true }).click()
+  await quirkyPage.getByRole('menuitem', { name: 'Delete selected rows', exact: true }).click()
   await expect(grid).toHaveAttribute('aria-rowcount', '3')
-  await orcaPage.getByRole('button', { name: 'Save', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Save', exact: true }).click()
   await expect.poll(() => readFileSync(filePath, 'utf8')).toBe('Second,First,Third\n1,A,x\n2,B,y')
-  await orcaPage.screenshot({ path: testInfo.outputPath('csv-structure-after.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('csv-structure-after.png') })
 })
 
 test('keyboard selection reaches and edits a cell beyond both virtualized viewports', async ({
-  orcaPage,
+  quirkyPage,
   seededRepoPath
 }, testInfo) => {
   const filePath = path.join(seededRepoPath, 'editable-wide.csv')
   const header = Array.from({ length: 1024 }, (_, column) => `column-${column}`).join(',')
   const row = Array.from({ length: 1024 }, (_, column) => `v${column}`).join(',')
   writeFileSync(filePath, `${header}\n${`${row}\n`.repeat(100)}`)
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     async ({ filePath }) => {
       const state = window.__store?.getState()
       if (!state?.activeWorktreeId) {
@@ -214,7 +214,7 @@ test('keyboard selection reaches and edits a cell beyond both virtualized viewpo
     },
     { filePath }
   )
-  const grid = orcaPage.getByTestId('csv-grid')
+  const grid = quirkyPage.getByTestId('csv-grid')
   await expect(grid).toHaveAttribute('aria-colcount', '1025')
   // Dispatch on the clipped cell without Playwright scrolling it into view first.
   const clipped = await grid.evaluate((element) => {
@@ -234,30 +234,30 @@ test('keyboard selection reaches and edits a cell beyond both virtualized viewpo
     cell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
     return { column, scrollLeft: viewport.scrollLeft }
   })
-  const clippedInput = orcaPage.getByRole('textbox', {
+  const clippedInput = quirkyPage.getByRole('textbox', {
     name: `Edit row 2, column ${clipped.column + 1}`,
     exact: true
   })
   await expect(clippedInput).toBeFocused()
-  expect(await orcaPage.getByTestId('csv-scroll').evaluate((element) => element.scrollLeft)).toBe(
+  expect(await quirkyPage.getByTestId('csv-scroll').evaluate((element) => element.scrollLeft)).toBe(
     clipped.scrollLeft
   )
-  await orcaPage.keyboard.type('z')
+  await quirkyPage.keyboard.type('z')
   await expect(clippedInput).toHaveValue(`zv${clipped.column}`)
   await expect(clippedInput).toBeFocused()
-  await orcaPage.screenshot({ path: testInfo.outputPath('csv-clipped-cell-editor.png') })
-  await orcaPage.getByTestId('csv-scroll').evaluate((element) => {
+  await quirkyPage.screenshot({ path: testInfo.outputPath('csv-clipped-cell-editor.png') })
+  await quirkyPage.getByTestId('csv-scroll').evaluate((element) => {
     element.scrollTop = 2000
   })
   await expect(clippedInput).toHaveCount(0)
   expect(
-    await orcaPage.getByTestId('csv-scroll').evaluate((element) => element.scrollTop)
+    await quirkyPage.getByTestId('csv-scroll').evaluate((element) => element.scrollTop)
   ).toBeGreaterThan(0)
-  await orcaPage.getByTestId('csv-scroll').evaluate((element) => {
+  await quirkyPage.getByTestId('csv-scroll').evaluate((element) => {
     element.scrollTop = 0
   })
   await grid.getByRole('gridcell', { name: 'v0', exact: true }).first().click()
-  const modifier = await orcaPage.evaluate(() =>
+  const modifier = await quirkyPage.evaluate(() =>
     navigator.userAgent.includes('Mac') ? 'Meta' : 'Control'
   )
   await grid.press(`${modifier}+End`)
@@ -265,13 +265,13 @@ test('keyboard selection reaches and edits a cell beyond both virtualized viewpo
   await expect(last).toBeVisible()
   await expect(last).toHaveAttribute('data-active', 'true')
   await grid.press('F2')
-  const input = orcaPage.getByRole('textbox', { name: 'Edit row 101, column 1024', exact: true })
+  const input = quirkyPage.getByRole('textbox', { name: 'Edit row 101, column 1024', exact: true })
   await input.fill('edited-final-cell')
   await input.press('Enter')
   await expect(last).toHaveText('edited-final-cell')
   expect(await grid.getByRole('columnheader').count()).toBeLessThan(40)
   expect(await grid.getByRole('row').count()).toBeLessThan(80)
-  await orcaPage.getByRole('button', { name: 'Save', exact: true }).click()
+  await quirkyPage.getByRole('button', { name: 'Save', exact: true }).click()
   await expect
     .poll(() => readFileSync(filePath, 'utf8').split('\n').at(-2)?.split(',').at(-1))
     .toBe('edited-final-cell')
@@ -281,12 +281,12 @@ test('keyboard selection reaches and edits a cell beyond both virtualized viewpo
 })
 
 test('autosave preserves an active cell while saving the previously committed draft', async ({
-  orcaPage,
+  quirkyPage,
   seededRepoPath
 }, testInfo) => {
   const filePath = path.join(seededRepoPath, 'csv-autosave.csv')
   writeFileSync(filePath, 'Name,Value\nA,1\nB,2')
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     async ({ filePath }) => {
       const state = window.__store?.getState()
       if (!state?.activeWorktreeId) {
@@ -306,9 +306,9 @@ test('autosave preserves an active cell while saving the previously committed dr
     },
     { filePath }
   )
-  const grid = orcaPage.getByTestId('csv-grid')
+  const grid = quirkyPage.getByTestId('csv-grid')
   await grid.getByRole('gridcell', { name: 'A', exact: true }).dblclick()
-  const input = orcaPage.getByRole('textbox', { name: /Edit row/ })
+  const input = quirkyPage.getByRole('textbox', { name: /Edit row/ })
   await input.fill('committed')
   await input.press('Enter')
   await grid.getByRole('gridcell', { name: 'B', exact: true }).dblclick()
@@ -318,10 +318,10 @@ test('autosave preserves an active cell while saving the previously committed dr
   await expect(input).toHaveValue('still typing')
   await expect
     .poll(() =>
-      orcaPage.evaluate(() => window.__store?.getState().openFiles.some((file) => file.isDirty))
+      quirkyPage.evaluate(() => window.__store?.getState().openFiles.some((file) => file.isDirty))
     )
     .toBe(true)
-  await orcaPage.screenshot({ path: testInfo.outputPath('csv-autosave-keeps-input.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('csv-autosave-keeps-input.png') })
   await input.press('Enter')
   await expect
     .poll(() => readFileSync(filePath, 'utf8'))

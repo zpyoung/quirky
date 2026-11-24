@@ -64,7 +64,7 @@ function installChannel(): { deliver: (frame: unknown) => void } {
     postMessage: () => {},
     onmessage: null
   }
-  Object.defineProperty(globalThis, 'orcaBridge', { value: channel, configurable: true })
+  Object.defineProperty(globalThis, 'quirkyBridge', { value: channel, configurable: true })
   return {
     deliver: (frame) => {
       channel.onmessage?.({ data: JSON.stringify(frame) })
@@ -98,7 +98,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
-  Reflect.deleteProperty(globalThis, 'orcaBridge')
+  Reflect.deleteProperty(globalThis, 'quirkyBridge')
 })
 
 describe('the page provider', () => {

@@ -10,7 +10,7 @@ import {
 } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { test as base, expect } from './helpers/orca-app'
+import { test as base, expect } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { waitForActivePaneHookDescriptor, waitForActivePanePtyId } from './helpers/terminal'
 import { RuntimeClient } from '../../src/cli/runtime-client'
@@ -104,7 +104,7 @@ const PROVIDERS: readonly {
   }
 ]
 
-const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-worker-transcript-providers-'))
+const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-worker-transcript-providers-'))
 const preambleLedgerPath = path.join(fakeCliDir, 'preambles.jsonl')
 const fakeGrokHome = path.join(fakeCliDir, 'grok-home')
 const fakeOmpHome = path.join(fakeCliDir, 'omp-home')
@@ -122,19 +122,19 @@ async function sendProviderHook() {
   hookSent = true
   const config = JSON.parse(readFileSync(configPath, 'utf8'))
   const payload = ${providerHookPayload(agent)}
-  await fetch('http://127.0.0.1:' + process.env.ORCA_AGENT_HOOK_PORT + '${hookPath}', {
+  await fetch('http://127.0.0.1:' + process.env.QUIRKY_AGENT_HOOK_PORT + '${hookPath}', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Orca-Agent-Hook-Token': process.env.ORCA_AGENT_HOOK_TOKEN
+      'X-Quirky-Agent-Hook-Token': process.env.QUIRKY_AGENT_HOOK_TOKEN
     },
     body: JSON.stringify({
-      paneKey: process.env.ORCA_PANE_KEY,
-      tabId: process.env.ORCA_TAB_ID,
-      worktreeId: process.env.ORCA_WORKTREE_ID,
-      launchToken: process.env.ORCA_AGENT_LAUNCH_TOKEN,
-      env: process.env.ORCA_AGENT_HOOK_ENV,
-      version: process.env.ORCA_AGENT_HOOK_VERSION,
+      paneKey: process.env.QUIRKY_PANE_KEY,
+      tabId: process.env.QUIRKY_TAB_ID,
+      worktreeId: process.env.QUIRKY_WORKTREE_ID,
+      launchToken: process.env.QUIRKY_AGENT_LAUNCH_TOKEN,
+      env: process.env.QUIRKY_AGENT_HOOK_ENV,
+      version: process.env.QUIRKY_AGENT_HOOK_VERSION,
       payload
     })
   })
@@ -206,13 +206,13 @@ async function listWorker(client: RuntimeClient, handle: string): Promise<Runtim
 }
 
 test('worker-read uses provider transcripts across supported orchestration agents', async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }) => {
   test.setTimeout(240_000)
   rmSync(preambleLedgerPath, { force: true })
-  await waitForSessionReady(orcaPage)
-  await orcaPage.evaluate(
+  await waitForSessionReady(quirkyPage)
+  await quirkyPage.evaluate(
     async ({ commands, terminalWindowsShell }) => {
       await window.__store?.getState().updateSettings({
         agentCmdOverrides: commands,
@@ -223,10 +223,10 @@ test('worker-read uses provider transcripts across supported orchestration agent
     },
     { commands: agentCommands, terminalWindowsShell: FAKE_AGENT_WINDOWS_SHELL }
   )
-  await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActivePanePtyId(orcaPage)
-  const coordinatorPane = await waitForActivePaneHookDescriptor(orcaPage)
+  await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActivePanePtyId(quirkyPage)
+  const coordinatorPane = await waitForActivePaneHookDescriptor(quirkyPage)
   const userDataDir = await electronApp.evaluate(({ app }) => app.getPath('userData'))
   const client = new RuntimeClient(userDataDir, 30_000, null, null)
   const coordinator = await client.call<{ terminal: { handle: string } }>('terminal.resolvePane', {
@@ -266,7 +266,7 @@ test('worker-read uses provider transcripts across supported orchestration agent
       callerTerminalHandle: coordinatorHandle
     })
     const transcriptDir = mkdtempSync(
-      path.join(os.tmpdir(), `orca-e2e-${provider.agent}-transcript-`)
+      path.join(os.tmpdir(), `quirky-e2e-${provider.agent}-transcript-`)
     )
     const sessionId = `e2e-${provider.agent}-session`
     const transcriptPath =

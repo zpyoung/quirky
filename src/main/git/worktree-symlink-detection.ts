@@ -25,7 +25,7 @@ export function getSafeRelativePath(rawPath: string): SafeRelativePathResult {
   // rejected the same way POSIX `../escape` is; the split catches relative
   // backslash traversal that `.split('/')` would otherwise miss.
   // Why the drive check runs on every host, past `.` segments: the same entry — per-user
-  // Shared Paths setting or repo `orca.yaml` — is evaluated on every host Orca runs on, so
+  // Shared Paths setting or repo `quirky.yaml` — is evaluated on every host Quirky runs on, so
   // the verdict must not depend on which one is asking, and `./C:x` is still `C:x`.
   const segments = rel.split(/[\\/]/).filter((segment) => segment !== '' && segment !== '.')
   if (

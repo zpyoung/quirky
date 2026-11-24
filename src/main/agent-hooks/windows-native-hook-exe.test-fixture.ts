@@ -1,4 +1,4 @@
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { join, resolve } from 'node:path'
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../..')
@@ -7,13 +7,13 @@ const BUILD_OUTPUT = join(
   'native',
   'windows-agent-hook',
   '.build',
-  'orca-agent-hook.exe'
+  'quirky-agent-hook.exe'
 )
 
 let built = false
 
 /**
- * The real orca-agent-hook.exe the package ships. CI builds it before the Windows lane, so the build
+ * The real quirky-agent-hook.exe the package ships. CI builds it before the Windows lane, so the build
  * script's fingerprint makes this a read-only check there; a local run builds it on first use.
  * Suites copy it before running it, so no hook ever maps the shared output.
  */
@@ -26,7 +26,7 @@ export function buildWindowsNativeHookExecutable(): string {
       timeoutMs: 300_000
     })
     if (result.code !== 0) {
-      throw new Error(`orca-agent-hook.exe build failed:\n${result.stdout}\n${result.stderr}`)
+      throw new Error(`quirky-agent-hook.exe build failed:\n${result.stdout}\n${result.stderr}`)
     }
     built = true
   }

@@ -268,7 +268,7 @@ export async function waitForBrowserCdpEndpoint(port: number): Promise<void> {
   while (Date.now() < deadline) {
     try {
       const targets = await fetch(`http://127.0.0.1:${port}/json/version`)
-      // The probe only needs the status; an unread body can crash the process (orca#8695).
+      // The probe only needs the status; an unread body can crash the process (quirky#8695).
       await cancelUnreadResponseBody(targets)
       if (targets.ok) {
         return

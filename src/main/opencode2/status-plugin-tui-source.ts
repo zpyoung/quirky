@@ -1,7 +1,7 @@
 import { getTuiStatusDeliverySource } from '../opencode/status-plugin-delivery-source'
 
 /**
- * TUI reporter for the OpenCode 2 status plugin. The module Orca writes as a server plugin is
+ * TUI reporter for the OpenCode 2 status plugin. The module Quirky writes as a server plugin is
  * also installed as a TUI plugin; in a TUI process setup() lands here. The TUI runs in its
  * pane's PTY, so every post names the right pane. It derives the pane's level from the TUI's
  * own session data (which OpenCode keeps current, re-hydrating it on reconnect) instead of
@@ -36,9 +36,9 @@ function paneStatusMemory(ctx) {
 
 async function setupOpenCode2Tui(ctx) {
   const noop = async () => {};
-  // Why: post() needs this pane's key, so a TUI outside an Orca pane has nothing to report.
-  if (!process.env.ORCA_PANE_KEY) return noop;
-  if (process.env.ORCA_OPENCODE_AGENT && process.env.ORCA_OPENCODE_AGENT !== ORCA_STATUS_AGENT) return noop;
+  // Why: post() needs this pane's key, so a TUI outside an Quirky pane has nothing to report.
+  if (!process.env.QUIRKY_PANE_KEY) return noop;
+  if (process.env.QUIRKY_OPENCODE_AGENT && process.env.QUIRKY_OPENCODE_AGENT !== QUIRKY_STATUS_AGENT) return noop;
   // Legacy attach contexts enter only through the checked API adapter.
   if (/^1\./.test(String(ctx.app?.version || "")) && !ctx.legacyOpenCodeTui) return noop;
   const data = ctx.data.session;
@@ -253,7 +253,7 @@ async function setupOpenCode2Tui(ctx) {
         return;
       }
       if (event.type === "session.text.ended" && isOwned && sessionID === root && typeof properties.text === "string" && properties.text) {
-        // Why: Orca reads any MessagePart as Working, which would bury this pane's Needs input.
+        // Why: Quirky reads any MessagePart as Working, which would bury this pane's Needs input.
         if (memory.last.startsWith("waiting:")) return;
         const part = { role: "assistant", text: properties.text, messageID: properties.assistantMessageID, sessionID: root, factoryID };
         // Why queued: the reply must not overtake this turn's SessionStart, prompt or Busy.
@@ -276,7 +276,7 @@ async function setupOpenCode2Tui(ctx) {
     const tick = setInterval(() => {
       try {
         publish();
-        // Why: an Orca restart moves the hook endpoint; the delivery layer re-posts an unchanged
+        // Why: an Quirky restart moves the hook endpoint; the delivery layer re-posts an unchanged
         // level only when asked, which the old event-driven path did on every lifecycle event.
         if (++ticks % TUI_ENDPOINT_CHECK_TICKS === 0 && lastLevel && desiredFactoryID === factoryID && deliveredEndpointKey !== hookEndpointKey()) {
           const level = lastLevel;

@@ -1,20 +1,20 @@
 {
   "tests": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/providers/working-directory-validation-retention.test.ts src/main/providers/working-directory-validation.test.ts src/main/daemon/pty-subprocess-cwd-cancel-identity.test.ts",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/providers/working-directory-validation-retention.test.ts src/main/providers/working-directory-validation.test.ts src/main/daemon/pty-subprocess-cwd-cancel-identity.test.ts",
     "passed": 31,
     "files": 3,
     "exitCode": 0,
     "newRegressionCases": 12
   },
   "baselineOverlay": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/working-directory-wait-retention/before.config.mjs src/main/providers/working-directory-validation-retention.test.ts src/main/providers/working-directory-validation.test.ts src/main/daemon/pty-subprocess-cwd-cancel-identity.test.ts",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/working-directory-wait-retention/before.config.mjs src/main/providers/working-directory-validation-retention.test.ts src/main/providers/working-directory-validation.test.ts src/main/daemon/pty-subprocess-cwd-cancel-identity.test.ts",
     "passed": 30,
     "expectedFailed": 1,
     "failure": "releases the first caller and subsequent canceled callers while their native stat stays owned",
     "exitCode": 1
   },
   "typecheck": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm tc:node",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm tc:node",
     "exitCode": 0
   },
   "lint": {
@@ -31,14 +31,14 @@
     "exitCodes": [0, 0]
   },
   "changedQuality": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 ORCA_CODE_QUALITY_BASE=96970f9b6efe915f9578b765c93f3d06880ccc2d pnpm run check:code-quality:changed",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_CODE_QUALITY_BASE=96970f9b6efe915f9578b765c93f3d06880ccc2d pnpm run check:code-quality:changed",
     "exitCode": 0,
     "changedFiles": 2,
     "newFindings": 0
   },
   "proofs": {
-    "node": "ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/working-directory-wait-retention/reproduce.cjs",
-    "electron": "Installed Electron executable with ELECTRON_RUN_AS_NODE=1 and ORCA_BACKGROUND_LAUNCH=1; same flags and proof path.",
+    "node": "QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/working-directory-wait-retention/reproduce.cjs",
+    "electron": "Installed Electron executable with ELECTRON_RUN_AS_NODE=1 and QUIRKY_BACKGROUND_LAUNCH=1; same flags and proof path.",
     "exitCodes": [0, 0],
     "nativeSettlementOrderingCasesPerRuntime": 48,
     "externalRawObserverCasesPerRuntime": 6,

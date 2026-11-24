@@ -1,8 +1,8 @@
-// Which Orca runtime launched a process. Kept separate from the orchestration compatibility stamp,
+// Which Quirky runtime launched a process. Kept separate from the orchestration compatibility stamp,
 // whose WSL/SSH union carries caller attestation and must stay untouched.
-export const RUNTIME_SOURCE_ID_ENV = 'ORCA_RUNTIME_SOURCE_ID'
-export const RUNTIME_SOURCE_INCARNATION_ENV = 'ORCA_RUNTIME_SOURCE_INCARNATION'
-export const RUNTIME_SOURCE_PROFILE_PATH_ENV = 'ORCA_RUNTIME_SOURCE_PROFILE_PATH'
+export const RUNTIME_SOURCE_ID_ENV = 'QUIRKY_RUNTIME_SOURCE_ID'
+export const RUNTIME_SOURCE_INCARNATION_ENV = 'QUIRKY_RUNTIME_SOURCE_INCARNATION'
+export const RUNTIME_SOURCE_PROFILE_PATH_ENV = 'QUIRKY_RUNTIME_SOURCE_PROFILE_PATH'
 
 export type RuntimeSourceStamp = {
   /** The launching profile's installation id; survives restarts. */
@@ -32,7 +32,7 @@ export function readRuntimeSourceStamp(
   return profilePath ? { sourceId, incarnation, profilePath } : { sourceId, incarnation }
 }
 
-/** Replaces any inherited stamp, so a nested Orca never passes on its parent's source. */
+/** Replaces any inherited stamp, so a nested Quirky never passes on its parent's source. */
 export function stampRuntimeSourceEnv(
   env: Record<string, string | undefined>,
   stamp: RuntimeSourceStamp | null

@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithStateFields } from '../construction/runtime-construction'
+import { QuirkyRuntimeWithStateFields } from '../construction/runtime-construction'
 import {
   persistClientHostedBrowserPages,
   rehydrateClientHostedBrowserPages
@@ -23,7 +23,7 @@ import type { WorktreeTerminalStopOptions } from '../terminal/stop/worktree-term
 import type { PtyLivenessVerdict } from '../../../shared/pty-liveness-verdict'
 import type { Automation } from '../../../shared/automations-types'
 
-export abstract class OrcaRuntimeWithPtyForegroundProcessReads extends OrcaRuntimeWithStateFields {
+export abstract class QuirkyRuntimeWithPtyForegroundProcessReads extends QuirkyRuntimeWithStateFields {
   abstract retireStructuredAgentSessionTabFromSnapshot(sessionId: string): boolean
 
   abstract getPtyLivenessVerdict(ptyId: string): PtyLivenessVerdict | null

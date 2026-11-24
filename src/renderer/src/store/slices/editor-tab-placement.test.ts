@@ -7,7 +7,7 @@ import {
 } from './editor-slice-test-harness'
 import type { AppState } from '../types'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 const { toastErrorMock } = vi.hoisted(() => ({
   toastErrorMock: vi.fn()
@@ -31,7 +31,7 @@ function fileIdOf(store: { getState: () => AppState }, filePath: string): string
 
 /** A floating file's id: its path, or an owned id when main owns the layout. */
 function expectedFileId(filePath: string): unknown {
-  return ORCA_LAYOUT_OWNER_IS_MAIN
+  return QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? ownedEditorFileId(filePath, FLOATING_TERMINAL_WORKTREE_ID, null)
     : filePath
 }
@@ -42,7 +42,7 @@ describe('createEditorSlice floating editor activation', () => {
 
     store.getState().openFile(
       {
-        filePath: '/tmp/orca/notes.md',
+        filePath: '/tmp/quirky/notes.md',
         relativePath: 'notes.md',
         worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
         runtimeEnvironmentId: null,
@@ -52,8 +52,8 @@ describe('createEditorSlice floating editor activation', () => {
       { suppressActiveRuntimeFallback: true }
     )
 
-    const fileId = fileIdOf(store, '/tmp/orca/notes.md')
-    expect(fileId).toEqual(expectedFileId('/tmp/orca/notes.md'))
+    const fileId = fileIdOf(store, '/tmp/quirky/notes.md')
+    expect(fileId).toEqual(expectedFileId('/tmp/quirky/notes.md'))
     const tab = store.getState().unifiedTabsByWorktree[FLOATING_TERMINAL_WORKTREE_ID]?.[0]
     expect(tab).toMatchObject({
       contentType: 'editor',
@@ -78,7 +78,7 @@ describe('createEditorSlice floating editor activation', () => {
     } as Partial<AppState>)
 
     store.getState().openFile({
-      filePath: '/tmp/orca/untitled.md',
+      filePath: '/tmp/quirky/untitled.md',
       relativePath: 'untitled.md',
       worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
       language: 'markdown',
@@ -89,7 +89,7 @@ describe('createEditorSlice floating editor activation', () => {
     expect(store.getState().activeFileId).toBe('/repo/main.md')
     expect(store.getState().activeTabType).toBe('editor')
     expect(store.getState().activeFileIdByWorktree[FLOATING_TERMINAL_WORKTREE_ID]).toEqual(
-      expectedFileId('/tmp/orca/untitled.md')
+      expectedFileId('/tmp/quirky/untitled.md')
     )
     expect(store.getState().activeTabTypeByWorktree[FLOATING_TERMINAL_WORKTREE_ID]).toBe('editor')
   })

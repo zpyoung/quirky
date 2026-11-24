@@ -61,7 +61,7 @@ describe('shouldBypassXtermKeyboardEvent — macOS', () => {
     ).toBe(false)
   })
 
-  it('does NOT bubble other Cmd chords — Orca window handlers intercept them before xterm', () => {
+  it('does NOT bubble other Cmd chords — Quirky window handlers intercept them before xterm', () => {
     // Why: this policy is narrowly scoped to clipboard chords. Cmd+F, Cmd+D,
     // Cmd+K, Cmd+W, Cmd+Arrow, Cmd+Backspace are handled in keyboard-handlers.ts
     // with stopImmediatePropagation before xterm's textarea listener fires.
@@ -202,7 +202,7 @@ describe('isAppOwnedCopyChord', () => {
     expect(isAppOwnedCopyChord(cmdC, kittyApp)).toBe(true)
   })
 
-  it('keeps Orca copy for a selection, a plain shell, other chords, and other platforms', () => {
+  it('keeps Quirky copy for a selection, a plain shell, other chords, and other platforms', () => {
     expect(isAppOwnedCopyChord(cmdC, { ...kittyApp, hasSelection: true })).toBe(false)
     expect(isAppOwnedCopyChord(cmdC, { ...kittyApp, kittyKeyboardFlags: 0 })).toBe(false)
     expect(isAppOwnedCopyChord(cmdC, { ...kittyApp, kittyKeyboardFlags: undefined })).toBe(false)

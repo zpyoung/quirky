@@ -44,7 +44,7 @@ function streamRetry(attempt: number): Record<string, unknown> {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-retry-sweep-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-retry-sweep-'))
   resetHostTestOperationIds()
   sink = null
   clock = NOW

@@ -29,7 +29,7 @@ export async function closeMoveTestStores(): Promise<void> {
 }
 
 export function newDataFile(): string {
-  return join(realpathSync(mkdtempSync(join(tmpdir(), 'orca-leaf-move-'))), 'state.json')
+  return join(realpathSync(mkdtempSync(join(tmpdir(), 'quirky-leaf-move-'))), 'state.json')
 }
 
 export function openStore(dataFile: string): Store {

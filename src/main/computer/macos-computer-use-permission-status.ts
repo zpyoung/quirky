@@ -36,13 +36,13 @@ async function getComputerUsePermissionStatusAsync(): Promise<ComputerUsePermiss
 
   const helperAppPath = resolveMacOSComputerUseAppPath()
   if (!helperAppPath) {
-    return createUnavailablePermissionStatus('Orca Computer Use.app was not found', null)
+    return createUnavailablePermissionStatus('Quirky Computer Use.app was not found', null)
   }
 
   const executablePath = resolveMacOSComputerUseExecutablePath()
   if (!executablePath) {
     return createUnavailablePermissionStatus(
-      `${helperAppPath}/Contents/MacOS/orca-computer-use-macos was not found`,
+      `${helperAppPath}/Contents/MacOS/quirky-computer-use-macos was not found`,
       helperAppPath
     )
   }
@@ -78,7 +78,7 @@ function createUnavailablePermissionStatus(
 async function readPermissionStatusFromHelperApp(
   helperAppPath: string
 ): Promise<Partial<Record<ComputerUsePermissionId, ComputerUsePermissionStatus>>> {
-  const tempDir = await mkdtemp(join(tmpdir(), 'orca-computer-use-permissions-'))
+  const tempDir = await mkdtemp(join(tmpdir(), 'quirky-computer-use-permissions-'))
   const statusPath = join(tempDir, 'status.json')
   try {
     // Why: TCC status must be checked through the helper app identity. Directly

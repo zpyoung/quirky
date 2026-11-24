@@ -20,7 +20,7 @@ const SESSION = 'session-1'
 const THREAD = 'thread-1'
 const PROVIDER_TURN = 'compact-turn'
 const COMMAND_TURN_IDENTITY: AgentJournalItemIdentity = {
-  provider: 'orca',
+  provider: 'quirky',
   clientMessageId: 'command-turn:cmd-1'
 }
 const COMMAND_TURN_KEY = agentJournalItemKey(COMMAND_TURN_IDENTITY)
@@ -28,7 +28,7 @@ const RUNNING = {
   kind: 'turn' as const,
   turnId: 'compact:cmd-1',
   state: 'running' as const,
-  userItemId: 'orca:submission:cmd-1',
+  userItemId: 'quirky:submission:cmd-1',
   requestedAt: 1,
   startedAt: 1
 }
@@ -36,7 +36,7 @@ const COMMAND = {
   clientMessageId: 'cmd-1',
   turnId: RUNNING.turnId,
   identity: COMMAND_TURN_IDENTITY,
-  resultIdentity: { provider: 'orca' as const, clientMessageId: 'command-result:cmd-1' },
+  resultIdentity: { provider: 'quirky' as const, clientMessageId: 'command-result:cmd-1' },
   running: RUNNING
 }
 const ACCEPTED: StructuredAgentSessionSinkAdmission = { accepted: true }

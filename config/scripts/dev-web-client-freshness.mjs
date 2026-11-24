@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const SNAPSHOT_FILENAME = '.orca-dev-web-inputs.json'
+const SNAPSHOT_FILENAME = '.quirky-dev-web-inputs.json'
 const INPUT_PATHS = ['vite.web.config.ts', 'src/renderer', 'src/shared', 'src/preload/api-types.ts']
 
 const TEST_SOURCE_PATTERN = /\.(?:test|spec)\.[cm]?[jt]sx?$/

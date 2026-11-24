@@ -8,7 +8,7 @@ import {
 } from '../../../../shared/remote-rpc-content-budget'
 import { assertGitDiffWithinTransportBudget } from '../../../../shared/git-diff-transport-budget'
 import type { GitDiffResult } from '../../../../shared/git-diff-compare-types'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { RpcRequest, RpcResponse } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { GIT_METHODS } from './git'
@@ -35,28 +35,27 @@ const CASES: readonly {
   method: string
   runtimeMethod: BudgetedRuntimeMethod
   params: Record<string, unknown>
-}[] =
-  [
-    {
-      method: 'git.diff',
-      runtimeMethod: 'getRuntimeGitDiff',
-      params: { worktree: 'id:wt-1', filePath: 'assets/logo.png', staged: false }
-    },
-    {
-      method: 'git.branchDiff',
-      runtimeMethod: 'getRuntimeGitBranchDiff',
-      params: {
-        worktree: 'id:wt-1',
-        compare: { mergeBase: 'a'.repeat(40), headOid: 'b'.repeat(40) },
-        filePath: 'assets/logo.png'
-      }
-    },
-    {
-      method: 'git.commitDiff',
-      runtimeMethod: 'getRuntimeGitCommitDiff',
-      params: { worktree: 'id:wt-1', commitOid: 'c'.repeat(40), filePath: 'assets/logo.png' }
+}[] = [
+  {
+    method: 'git.diff',
+    runtimeMethod: 'getRuntimeGitDiff',
+    params: { worktree: 'id:wt-1', filePath: 'assets/logo.png', staged: false }
+  },
+  {
+    method: 'git.branchDiff',
+    runtimeMethod: 'getRuntimeGitBranchDiff',
+    params: {
+      worktree: 'id:wt-1',
+      compare: { mergeBase: 'a'.repeat(40), headOid: 'b'.repeat(40) },
+      filePath: 'assets/logo.png'
     }
-  ]
+  },
+  {
+    method: 'git.commitDiff',
+    runtimeMethod: 'getRuntimeGitCommitDiff',
+    params: { worktree: 'id:wt-1', commitOid: 'c'.repeat(40), filePath: 'assets/logo.png' }
+  }
+]
 
 function budgetedDiff(): Mock<(...args: unknown[]) => Promise<GitDiffResult>> {
   return vi.fn(async (...args: unknown[]) => {
@@ -68,10 +67,10 @@ function budgetedDiff(): Mock<(...args: unknown[]) => Promise<GitDiffResult>> {
   })
 }
 
-/** Stands in for orca-runtime-git.ts, which enforces the numeric transport budget it is handed. */
-function stubRuntime(): OrcaRuntimeService {
+/** Stands in for quirky-runtime-git.ts, which enforces the numeric transport budget it is handed. */
+function stubRuntime(): QuirkyRuntimeService {
   const runtime: Pick<
-    OrcaRuntimeService,
+    QuirkyRuntimeService,
     'getRuntimeId' | 'getRuntimeGitDiff' | 'getRuntimeGitBranchDiff' | 'getRuntimeGitCommitDiff'
   > = {
     getRuntimeId: () => 'test-runtime',
@@ -80,10 +79,13 @@ function stubRuntime(): OrcaRuntimeService {
     getRuntimeGitCommitDiff: budgetedDiff()
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The dispatcher reads only the Git diff methods and the runtime id installed above.
-  return runtime as OrcaRuntimeService
+  return runtime as QuirkyRuntimeService
 }
 
-function budgetArgument(runtime: OrcaRuntimeService, runtimeMethod: BudgetedRuntimeMethod): unknown {
+function budgetArgument(
+  runtime: QuirkyRuntimeService,
+  runtimeMethod: BudgetedRuntimeMethod
+): unknown {
   const spy = runtime[runtimeMethod]
   if (!vi.isMockFunction(spy)) {
     throw new TypeError(`Expected ${runtimeMethod} to be a mock function`)
@@ -96,7 +98,7 @@ function makeRequest(method: string, params: Record<string, unknown>): RpcReques
 }
 
 async function dispatchRemote(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   method: string,
   params: Record<string, unknown>,
   clientKind: 'mobile' | 'runtime'

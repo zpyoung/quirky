@@ -226,7 +226,7 @@ describe('useStructuredAgentSession rewind RPC', () => {
     // A remote host without the capability throws before anything is sent: the outcome reads unknown.
     mocks.call.mockImplementation((_target, method) =>
       method === 'agentSession.rewind'
-        ? Promise.reject(new Error('Rewinding requires a newer Orca server.'))
+        ? Promise.reject(new Error('Rewinding requires a newer Quirky server.'))
         : Promise.resolve({ ...OPTIONS, rewind: { supported: true } })
     )
     const onMessageReturned = vi.fn()

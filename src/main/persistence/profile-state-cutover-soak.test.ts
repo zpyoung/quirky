@@ -22,7 +22,7 @@ import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identit
 vi.mock('electron', () => ({
   app: {
     getPath: () => tmpdir(),
-    getName: () => 'orca-test',
+    getName: () => 'quirky-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
     on: () => {},
@@ -60,9 +60,9 @@ type MigratedProfile = {
 }
 
 function createProfile(profileId: string, theme: string): MigratedProfile {
-  const directory = mkdtempSync(join(tmpdir(), `orca-profile-state-cutover-${profileId}-`))
+  const directory = mkdtempSync(join(tmpdir(), `quirky-profile-state-cutover-${profileId}-`))
   temporaryDirectories.push(directory)
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const databaseFile = profileStateDatabaseFile(directory)
   const fixture = buildProfileStateCutoverFixture(directory)
   writeFileSync(

@@ -34,7 +34,7 @@ import type { NativeChatStructuredViewProps } from './native-chat-view-types'
 import { NativeChatStructuredSessionStatus } from './NativeChatStructuredSessionStatus'
 import { useNativeChatLaunchDraftSignal } from './use-native-chat-launch-draft-adoption'
 import { useNativeChatInterruptedContinuation } from './NativeChatInterruptedContinue'
-import { NativeChatOrcaStopContext } from './native-chat-orca-stop-context'
+import { NativeChatQuirkyStopContext } from './native-chat-quirky-stop-context'
 import { structuredSessionNotices } from './native-chat-structured-session-notices'
 import { NativeChatPromptSlotNotices } from './NativeChatComposerNotices'
 import { NativeChatInstallSlot, useNativeChatInstallSlot } from './NativeChatInstallSlot'
@@ -151,7 +151,7 @@ export function NativeChatStructuredSession(
     controller.status === 'error' && !(hostOutage && !controller.readRefusal)
       ? structuredAgentSessionReadFailureNotice(controller.readRefusal)
       : null
-  // A read no retry gets past (damage, a newer Orca's chat) takes the whole pane, whatever was
+  // A read no retry gets past (damage, a newer Quirky's chat) takes the whole pane, whatever was
   // already on screen: nothing in it can act, and its words say why once.
   const readFailedFinally = readFailure?.final === true
   const viewState = selectNativeChatViewState(session, { readRetries: !readFailedFinally })
@@ -300,7 +300,7 @@ export function NativeChatStructuredSession(
           <NativeChatEmptyPane slot={install.slot} agent={props.agent} />
         ) : (
           <NativeChatRewindContext.Provider value={controller.rewind.surface}>
-            <NativeChatOrcaStopContext.Provider value={continuation.view}>
+            <NativeChatQuirkyStopContext.Provider value={continuation.view}>
               <NativeChatClaudeSignInContext.Provider value={claudeSignIn}>
                 <NativeChatMessageList
                   // A rewind or a /clear replaces the conversation; nothing the old one held carries over.
@@ -327,7 +327,7 @@ export function NativeChatStructuredSession(
                   deliveryNotices={deliveryNotices}
                 />
               </NativeChatClaudeSignInContext.Provider>
-            </NativeChatOrcaStopContext.Provider>
+            </NativeChatQuirkyStopContext.Provider>
           </NativeChatRewindContext.Provider>
         )}
       </NativeChatContextClearFade>

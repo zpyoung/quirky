@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-openbox --sm-disable > /tmp/orca-e2e-window-manager.log 2>&1 &
+openbox --sm-disable > /tmp/quirky-e2e-window-manager.log 2>&1 &
 wm_pid=$!
 cleanup() {
   kill "$wm_pid" 2>/dev/null || true
@@ -14,7 +14,7 @@ for attempt in {1..100}; do
     break
   fi
   if ! kill -0 "$wm_pid" 2>/dev/null; then
-    cat /tmp/orca-e2e-window-manager.log
+    cat /tmp/quirky-e2e-window-manager.log
     exit 1
   fi
   sleep 0.1

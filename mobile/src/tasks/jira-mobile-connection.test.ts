@@ -26,7 +26,7 @@ describe('extractJiraConnection', () => {
         sites: [],
         selection: null,
         credentialError: null,
-        unavailableReason: 'Update Orca desktop to browse Jira on mobile.'
+        unavailableReason: 'Update Quirky desktop to browse Jira on mobile.'
       })
     }
   })
@@ -143,7 +143,7 @@ describe('Jira connection compatibility', () => {
       })
     ).toMatchObject({
       connected: false,
-      unavailableReason: 'Update Orca desktop to browse Jira on mobile.'
+      unavailableReason: 'Update Quirky desktop to browse Jira on mobile.'
     })
     expect(
       readJiraConnectionProbeReply({ id: 'jira-test', ok: true, result: { connected: false } })

@@ -12,7 +12,7 @@ import type {
   AgentSessionBackgroundTaskRunState
 } from './agent-session-background-task-wire'
 import type { AgentSessionTokenUsage } from './agent-session-context-usage'
-import type { AgentSessionOrcaStop } from './agent-session-orca-stop'
+import type { AgentSessionQuirkyStop } from './agent-session-quirky-stop'
 import type { AgentSessionFailureFact } from './agent-session-failure'
 import type {
   AgentJournalMessageSendMode,
@@ -66,8 +66,8 @@ export type NativeChatTextBlock = {
   }
   /** On a status line that reports a failure: what failed, typed. */
   failure?: AgentSessionFailureFact
-  /** On the line about a reply Orca's own stop cut off: why, and the turn it cut. */
-  orcaStop?: AgentSessionOrcaStop & { turnItemId?: string }
+  /** On the line about a reply Quirky's own stop cut off: why, and the turn it cut. */
+  quirkyStop?: AgentSessionQuirkyStop & { turnItemId?: string }
   /** On a usage-limit line: the turn the limit ended, which its Continue picks up. */
   usageLimitTurnItemId?: string
 }
@@ -266,7 +266,7 @@ export type NativeChatMessage = AgentJournalProducerLinkage & {
   completedAt?: number
   /** On a conversation command the user sent, such as `/compact`: the command it names. */
   command?: { name: string }
-  /** On a user-role message another agent sent through Orca: who, as the journal recorded it. */
+  /** On a user-role message another agent sent through Quirky: who, as the journal recorded it. */
   from?: AgentMessageSource
   /** Accepted but not yet handed to the agent: drawn after everything the agent has done. */
   queued?: true
@@ -331,7 +331,7 @@ export type NativeChatTurnLifecycle = {
 
 /** The model and effort an agent recorded for itself in its own session log.
  *  Provider-authored evidence about a running session, written per turn — so it
- *  outlives the scrollback and reflects a switch made outside Orca. */
+ *  outlives the scrollback and reflects a switch made outside Quirky. */
 export type NativeChatSessionOptionObservation = {
   /** The provider's own model id, verbatim. Mapping to a catalog id needs the
    *  host's discovered model list, which only the renderer holds. */

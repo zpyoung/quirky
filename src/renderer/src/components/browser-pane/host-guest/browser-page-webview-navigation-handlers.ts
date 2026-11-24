@@ -79,7 +79,7 @@ export function createBrowserPageWebviewNavigationHandlers({
     }
     const browserStartedUrl = redactKagiSessionToken(event.url)
     const startedUrl = normalizeBrowserNavigationUrl(browserStartedUrl) ?? browserStartedUrl
-    // Why getURL() and not lastKnownWebviewUrlRef: Orca-driven navigations point that ref at the
+    // Why getURL() and not lastKnownWebviewUrlRef: Quirky-driven navigations point that ref at the
     // destination before assigning src, so it can't identify the document being left.
     let committedUrl: string | null = null
     try {

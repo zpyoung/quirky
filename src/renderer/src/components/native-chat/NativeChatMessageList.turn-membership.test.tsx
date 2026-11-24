@@ -159,7 +159,7 @@ import type { NativeChatMessage } from '../../../../shared/native-chat-types'
     it('gives /compact its own turn and result, and leaves the turn before it untouched', () => {
       const compactEntry = agentJournalSubmissionKey('cmd-1')
       const commandTurn = agentJournalItemKey({
-        provider: 'orca',
+        provider: 'quirky',
         clientMessageId: 'command-turn:cmd-1'
       })
       const items = [
@@ -203,7 +203,7 @@ import type { NativeChatMessage } from '../../../../shared/native-chat-types'
     it('draws a message waiting behind /compact after the compaction, never above it', () => {
       const compactEntry = agentJournalSubmissionKey('cmd-1')
       const commandTurn = agentJournalItemKey({
-        provider: 'orca',
+        provider: 'quirky',
         clientMessageId: 'command-turn:cmd-1'
       })
       const held = agentJournalSubmissionKey('held')
@@ -348,7 +348,7 @@ import type { NativeChatMessage } from '../../../../shared/native-chat-types'
     it('draws a message waiting behind a running /compact after its live activity', () => {
       const compactEntry = agentJournalSubmissionKey('cmd-1')
       const commandTurn = agentJournalItemKey({
-        provider: 'orca',
+        provider: 'quirky',
         clientMessageId: 'command-turn:cmd-1'
       })
       const held = agentJournalSubmissionKey('held')

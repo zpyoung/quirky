@@ -89,7 +89,7 @@ export function localDesktopSession(): WorkspaceSessionState {
         },
         {
           id: 'editor:src/app.ts',
-          entityId: '/Users/dev/orca/src/app.ts',
+          entityId: '/Users/dev/quirky/src/app.ts',
           kind: 'editor',
           entry: { label: 'app.ts' }
         }
@@ -107,7 +107,7 @@ export function localDesktopSession(): WorkspaceSessionState {
         {
           id: 'tab-unbound',
           leaves: [[leaf(4)]],
-          row: { startupCwd: '/Users/dev/orca/src', shellOverride: 'zsh' }
+          row: { startupCwd: '/Users/dev/quirky/src', shellOverride: 'zsh' }
         }
       ]
     }
@@ -115,7 +115,7 @@ export function localDesktopSession(): WorkspaceSessionState {
   session.openFilesByWorktree = {
     [GIT_KEY]: [
       {
-        filePath: '/Users/dev/orca/src/app.ts',
+        filePath: '/Users/dev/quirky/src/app.ts',
         relativePath: 'src/app.ts',
         worktreeId: GIT_KEY,
         language: 'typescript',
@@ -162,7 +162,7 @@ export function localDesktopSession(): WorkspaceSessionState {
     ]
   }
   session.activeBrowserTabIdByWorktree = { [GIT_KEY]: 'browser-1' }
-  session.activeFileIdByWorktree = { [GIT_KEY]: '/Users/dev/orca/src/app.ts' }
+  session.activeFileIdByWorktree = { [GIT_KEY]: '/Users/dev/quirky/src/app.ts' }
   session.activeTabTypeByWorktree = { [GIT_KEY]: 'terminal' }
   addWorkspace(session, FOLDER_KEY, [
     {
@@ -232,7 +232,7 @@ export function relaySshSession(targetId: string): WorkspaceSessionState {
   }
 }
 
-/** A remote Orca server's partition (`runtime:<env>`), mirrored by the desktop. */
+/** A remote Quirky server's partition (`runtime:<env>`), mirrored by the desktop. */
 export function serverRuntimeSession(environmentId: string): WorkspaceSessionState {
   return addWorkspace(
     emptySession(),

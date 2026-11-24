@@ -1,5 +1,5 @@
-// After a Claude start lands, only the child's own exit says Claude stopped; a fault on Orca's
-// side that makes Orca close the child is Orca's.
+// After a Claude start lands, only the child's own exit says Claude stopped; a fault on Quirky's
+// side that makes Quirky close the child is Quirky's.
 
 import { describe, expect, it, vi } from 'vitest'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
@@ -39,7 +39,7 @@ describe('what a started Claude session says ended it', () => {
     })
   })
 
-  it('blames Orca when a journal fault makes Orca close the child', async () => {
+  it('blames Quirky when a journal fault makes Quirky close the child', async () => {
     const { connection, ended } = await startedClaude({
       appendItem: () => {},
       appendTombstone: () => {},

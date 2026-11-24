@@ -11,7 +11,7 @@ describe('startup prompt control with status hooks disabled', () => {
   it.each([false, true])(
     'persists a pending terminal status at shutdown after starting with hooks %s',
     async (statusHooksEnabled) => {
-      const dir = mkdtempSync(join(tmpdir(), 'orca-prompt-terminal-persist-'))
+      const dir = mkdtempSync(join(tmpdir(), 'quirky-prompt-terminal-persist-'))
       const server = new AgentHookServer()
       try {
         await server.start({ userDataPath: dir, statusHooksEnabled })
@@ -42,7 +42,7 @@ describe('startup prompt control with status hooks disabled', () => {
   )
 
   it('enables and disables status without restarting the control listener', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-prompt-toggle-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-prompt-toggle-'))
     class IsolatedHookServer extends AgentHookServer {
       constructor() {
         super()
@@ -65,12 +65,12 @@ describe('startup prompt control with status hooks disabled', () => {
       const post = (path: string) =>
         fetch(`http://127.0.0.1:${coords.port}${path}`, {
           method: 'POST',
-          headers: { 'x-orca-agent-hook-token': coords.token },
+          headers: { 'x-quirky-agent-hook-token': coords.token },
           body: '{}'
         })
       expect((await post('/hook/opencode')).status).toBe(404)
       await server.start({ statusHooksEnabled: true })
-      expect(server.buildPtyEnv()).toHaveProperty('ORCA_AGENT_HOOK_PORT', coords.port)
+      expect(server.buildPtyEnv()).toHaveProperty('QUIRKY_AGENT_HOOK_PORT', coords.port)
       expect((await post('/hook/opencode')).status).toBe(204)
       server.setStatusHooksEnabled(false)
       expect(server.buildPtyEnv()).toEqual({})
@@ -96,7 +96,7 @@ describe('startup prompt control with status hooks disabled', () => {
   })
 
   it('authenticates claims, denies malformed or missing handlers, and refuses status posts', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-prompt-control-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-prompt-control-'))
     const server = new AgentHookServer()
     try {
       await server.start({ userDataPath: dir, statusHooksEnabled: false })
@@ -114,7 +114,7 @@ describe('startup prompt control with status hooks disabled', () => {
       const post = (path: string, body: string, token = coords.token) =>
         fetch(`http://127.0.0.1:${coords.port}${path}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-orca-agent-hook-token': token },
+          headers: { 'content-type': 'application/json', 'x-quirky-agent-hook-token': token },
           body
         })
       expect((await post(OPENCODE_STARTUP_PROMPT_CLAIM_PATH, '{}', 'wrong')).status).toBe(403)

@@ -4,9 +4,9 @@ import { translate } from '@/i18n/i18n'
 /**
  * Tell the user their `zcode` cannot open a session, before they stare at a dead pane.
  *
- * ZCode's desktop bundle answers `--version`, runs `-p`, and passes `zcode doctor`, so Orca
+ * ZCode's desktop bundle answers `--version`, runs `-p`, and passes `zcode doctor`, so Quirky
  * detects it, launches it, and installs hooks against it — all successfully. Only the
- * interactive session fails, leaving a bare Node stack trace that reads as a broken Orca
+ * interactive session fails, leaving a bare Node stack trace that reads as a broken Quirky
  * integration. The capability probe in main answers the question; this reports it.
  */
 export async function warnIfZCodeCannotOpenSession(): Promise<void> {
@@ -25,7 +25,7 @@ export async function warnIfZCodeCannotOpenSession(): Promise<void> {
       id: 'zcode-missing-tui',
       description: translate(
         'auto.components.terminal.pane.zcode.missing.tui.description',
-        "Orca's hooks installed correctly — the zcode on your PATH just cannot open a session. The ZCode desktop app bundles the agent runtime without its terminal UI. Install a zcode that ships the TUI, then run zcode outside Orca to confirm."
+        "Quirky's hooks installed correctly — the zcode on your PATH just cannot open a session. The ZCode desktop app bundles the agent runtime without its terminal UI. Install a zcode that ships the TUI, then run zcode outside Quirky to confirm."
       ),
       duration: 20_000
     }

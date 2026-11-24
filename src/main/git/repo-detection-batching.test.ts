@@ -20,7 +20,7 @@ describe('repository registration probe batching', () => {
   let repo: string
 
   beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), 'orca-repo-probe-count-'))
+    directory = mkdtempSync(join(tmpdir(), 'quirky-repo-probe-count-'))
     repo = join(directory, 'repo')
     mkdirSync(repo)
     git(repo, ['init', '-q'])
@@ -157,7 +157,7 @@ describe.skipIf(process.platform === 'win32')('repository paths with newlines', 
   let directory: string
 
   beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), 'orca-repo-newline-'))
+    directory = mkdtempSync(join(tmpdir(), 'quirky-repo-newline-'))
   })
 
   afterEach(() => {

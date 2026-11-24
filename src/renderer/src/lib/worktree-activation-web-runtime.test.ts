@@ -49,7 +49,7 @@ describe('activateAndRevealWorktree', () => {
             }
           : { ok: false, error: { code: 'test', message: 'stop after recording the request' } }
     )
-    ;(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ = true
+    ;(globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ = true
     stubRuntimeEnvironmentBridge({ call: callRuntimeEnvironment })
     seedEmptyActivatableWorktree(worktree)
     const settings = useAppStore.getState().settings
@@ -80,7 +80,7 @@ describe('activateAndRevealWorktree', () => {
       agent: 'codex',
       startup: {
         command: "codex 'fix the ownership race'",
-        env: { ORCA_AGENT_PROFILE: 'review' },
+        env: { QUIRKY_AGENT_PROFILE: 'review' },
         launchAgent: 'codex',
         launchToken: 'launch-1'
       }
@@ -99,7 +99,7 @@ describe('activateAndRevealWorktree', () => {
       expect.objectContaining({
         params: expect.objectContaining({
           command: "codex 'fix the ownership race'",
-          env: { ORCA_AGENT_PROFILE: 'review' },
+          env: { QUIRKY_AGENT_PROFILE: 'review' },
           launchAgent: 'codex',
           launchToken: 'launch-1'
         })
@@ -118,7 +118,7 @@ describe('activateAndRevealWorktree', () => {
       ok: false,
       error: { code: 'test', message: 'stop after recording the request' }
     })
-    ;(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ = true
+    ;(globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ = true
     stubRuntimeEnvironmentBridge({ call: callRuntimeEnvironment })
     seedEmptyActivatableWorktree(worktree)
     useAppStore.setState((state) => ({
@@ -170,7 +170,7 @@ describe('activateAndRevealFolderWorkspace', () => {
             }
           : { ok: false, error: { code: 'test', message: 'stop after recording the request' } }
     )
-    ;(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ = true
+    ;(globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ = true
     stubRuntimeEnvironmentBridge({ call: callRuntimeEnvironment })
     const settings = useAppStore.getState().settings
     useAppStore.setState({
@@ -232,7 +232,7 @@ describe('activateAndRevealFolderWorkspace', () => {
 
 describe('ensureWorktreeHasInitialTerminal', () => {
   it('does not create a local fallback tab in the paired web runtime client', () => {
-    ;(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ = true
+    ;(globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ = true
     useAppStore.setState((state) => ({
       settings: state.settings
         ? { ...state.settings, activeRuntimeEnvironmentId: 'web-runtime-1' }
@@ -258,7 +258,7 @@ describe('ensureWorktreeHasInitialTerminal', () => {
   })
 
   it('queues returned setup fallback on an existing web runtime tab', () => {
-    ;(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ = true
+    ;(globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ = true
     useAppStore.setState((state) => ({
       settings: state.settings
         ? { ...state.settings, activeRuntimeEnvironmentId: 'web-runtime-1' }
@@ -288,8 +288,8 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       'wt-1',
       { command: 'claude' },
       {
-        runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-        envVars: { ORCA_ROOT_PATH: '/tmp/repo' },
+        runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
+        envVars: { QUIRKY_ROOT_PATH: '/tmp/repo' },
         waitForAgentStartup: true
       }
     )
@@ -302,7 +302,7 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     })
     expect(createdTabStartups(store)['tab-2']).toEqual(
       expect.objectContaining({
-        command: expect.stringContaining('bash /tmp/repo/.git/orca/setup-runner.sh')
+        command: expect.stringContaining('bash /tmp/repo/.git/quirky/setup-runner.sh')
       })
     )
     expect(createdTabStartups(store)['tab-2']).toEqual(
@@ -313,7 +313,7 @@ describe('ensureWorktreeHasInitialTerminal', () => {
   })
 
   it('holds the issue command for the first mirrored web runtime tab when none exists yet', () => {
-    ;(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ = true
+    ;(globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ = true
     useAppStore.setState((state) => ({
       settings: state.settings
         ? { ...state.settings, activeRuntimeEnvironmentId: 'web-runtime-1' }

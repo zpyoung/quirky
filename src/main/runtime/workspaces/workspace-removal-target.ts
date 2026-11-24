@@ -1,6 +1,6 @@
 import { applyClaudeTerminalImageViewerEnv } from '../terminal-image-viewer-env'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
-import { OrcaRuntimeWithRemoveManagedWorktree } from './workspace-removal'
+import { QuirkyRuntimeWithRemoveManagedWorktree } from './workspace-removal'
 import type {
   RemoveManagedWorktreeOptions,
   RuntimeWorktreeRemovalTarget
@@ -46,7 +46,7 @@ import {
 } from '../runtime-agent-terminal-startup'
 import { removeWorktreeMetaRow } from '../../persistence/host-qualified-worktree-meta'
 
-export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWithRemoveManagedWorktree {
+export abstract class QuirkyRuntimeWithResolveWorktreeRemovalTarget extends QuirkyRuntimeWithRemoveManagedWorktree {
   protected abstract resolveExplicitWorktreeIdScoped(
     worktreeId: string,
     requiredHostId?: ExecutionHostId
@@ -278,7 +278,7 @@ export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRu
   async setPaneTitle(handle: string, title: string | null): Promise<RuntimeTerminalSetPaneTitle> {
     const { leaf } = this.getLiveLeafForHandle(handle)
     if (!this.getAvailableAuthoritativeWindow() || !this.notifier?.setPaneTitle) {
-      throw new Error('Pane titles require a running Orca desktop with set-pane-title support')
+      throw new Error('Pane titles require a running Quirky desktop with set-pane-title support')
     }
     const normalizedTitle = title?.trim() || null
     if (!this.notifier.setPaneTitle(leaf.tabId, leaf.leafId, normalizedTitle)) {

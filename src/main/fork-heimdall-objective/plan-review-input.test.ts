@@ -61,7 +61,7 @@ function input(overrides: Partial<PlanReviewInput> = {}): PlanReviewInput {
 const temporaryDirectories: string[] = []
 
 async function localFolderTarget(): Promise<ObjectiveWorkspaceTarget> {
-  return createLocalFolderTarget(temporaryDirectories, 'orca-plan-review-input-')
+  return createLocalFolderTarget(temporaryDirectories, 'quirky-plan-review-input-')
 }
 
 afterEach(async () => {
@@ -187,7 +187,7 @@ describe('writePlanReviewInputFile', () => {
       executionHostId: 'ssh:plan-review-input-test',
       workspacePath: '/srv/objective'
     }
-    const reportPath = '/srv/objective/.orca/heimdall/objective/reports/deadbeef.json'
+    const reportPath = '/srv/objective/.quirky/heimdall/objective/reports/deadbeef.json'
 
     await expect(writePlanReviewInputFile(target, reportPath, input())).rejects.toThrow(
       'Remote objective target is not served by this host'

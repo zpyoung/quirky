@@ -130,7 +130,7 @@ beforeEach(async () => {
   vi.useFakeTimers({
     toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
   })
-  root = await mkdtemp(join(tmpdir(), 'orca-startup-attempt-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-startup-attempt-'))
   resetHostTestOperationIds()
   startupLimits = undefined
   providerStarted.mockReset()

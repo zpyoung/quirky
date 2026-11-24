@@ -638,7 +638,7 @@ describe('launchWorkItemDirect', () => {
     mocks.store.repos = [
       {
         id: 'repo-ssh',
-        path: '/home/orca/repo',
+        path: '/home/quirky/repo',
         displayName: 'Remote Repo',
         badgeColor: '#000',
         addedAt: 0,
@@ -657,7 +657,7 @@ describe('launchWorkItemDirect', () => {
       launchConfig: { agentArgs: '', agentEnv: {} }
     })
     mocks.store.createWorktree.mockResolvedValue({
-      worktree: { id: 'wt-ssh', path: '/home/orca/repo-worktrees/issue-77' }
+      worktree: { id: 'wt-ssh', path: '/home/quirky/repo-worktrees/issue-77' }
     })
 
     await launchWorkItemDirect({
@@ -771,9 +771,9 @@ describe('launchWorkItemDirect', () => {
     expect(mocks.activateAndRevealWorktree).toHaveBeenCalled()
     const activationOptions = mocks.activateAndRevealWorktree.mock.calls.at(-1)?.[1]
     expect(activationOptions.startup.command).toContain(
-      `command test -n "$fish_pid" && set --erase -g ORCA_PI_PREFILL; command test -z "$fish_pid" && unset ORCA_PI_PREFILL; true`
+      `command test -n "$fish_pid" && set --erase -g QUIRKY_PI_PREFILL; command test -z "$fish_pid" && unset QUIRKY_PI_PREFILL; true`
     )
-    expect(activationOptions.startup.command).not.toContain('Remove-Item Env:ORCA_PI_PREFILL')
+    expect(activationOptions.startup.command).not.toContain('Remove-Item Env:QUIRKY_PI_PREFILL')
   })
 
   it('uses the repo SSH connection when the created worktree is not hydrated yet', async () => {
@@ -814,7 +814,7 @@ describe('launchWorkItemDirect', () => {
     expect(mocks.ensureDetectedAgents).not.toHaveBeenCalled()
     const activationOptions = mocks.activateAndRevealWorktree.mock.calls.at(-1)?.[1]
     expect(activationOptions.startup.command).toContain(
-      `command test -n "$fish_pid" && set --erase -g ORCA_PI_PREFILL; command test -z "$fish_pid" && unset ORCA_PI_PREFILL; true`
+      `command test -n "$fish_pid" && set --erase -g QUIRKY_PI_PREFILL; command test -z "$fish_pid" && unset QUIRKY_PI_PREFILL; true`
     )
   })
 })

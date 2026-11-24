@@ -205,7 +205,7 @@ describe('a runtime pane bridged to an older relay’s terminal', () => {
     expect(inner.setOutputPaused).not.toHaveBeenCalled()
   })
 
-  it('reports a terminal the relay no longer runs as an expired session, then spawns on orcad', async () => {
+  it('reports a terminal the relay no longer runs as an expired session, then spawns on quirkyd', async () => {
     bridge.attach.mockResolvedValue({ status: 'exited' })
     const inner = innerTransport()
     const transport = createLegacyRelayBridgeTransport(PTY, inner)

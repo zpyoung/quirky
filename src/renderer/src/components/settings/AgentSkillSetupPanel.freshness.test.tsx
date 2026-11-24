@@ -24,7 +24,7 @@ vi.mock('../onboarding/OnboardingInlineCommandTerminal', () => ({
 function inventory(eligibleUpdateNames: string[]): SkillFreshnessInventory {
   return {
     schemaVersion: 1,
-    // Why: an update is only advertised for a copy the skills.sh lock attributes to Orca.
+    // Why: an update is only advertised for a copy the skills.sh lock attributes to Quirky.
     installations: eligibleUpdateNames.map((name) => ({
       id: name,
       name,
@@ -53,7 +53,7 @@ function panelProps(
   return {
     title: 'Linear skill',
     description: null,
-    command: 'npx skills add orca-linear --global',
+    command: 'npx skills add quirky-linear --global',
     terminalTitle: 'Linear skill setup',
     terminalAriaLabel: 'Linear skill install terminal',
     terminalWorktreeId: 'settings-linear-skill-terminal',
@@ -62,7 +62,7 @@ function panelProps(
     error: null,
     hideHeader: true,
     showRecheckWhenInstalled: true,
-    freshnessSkillName: 'orca-linear',
+    freshnessSkillName: 'quirky-linear',
     onRecheck
   }
 }
@@ -103,7 +103,7 @@ describe('AgentSkillSetupPanel freshness re-check', () => {
     let completeRescan: ((value: SkillFreshnessInventory) => void) | null = null
     const freshnessInventory = vi
       .fn()
-      .mockResolvedValueOnce(inventory(['orca-linear']))
+      .mockResolvedValueOnce(inventory(['quirky-linear']))
       .mockImplementationOnce(
         () =>
           new Promise<SkillFreshnessInventory>((resolve) => {
@@ -154,7 +154,7 @@ describe('AgentSkillSetupPanel freshness re-check', () => {
   it('shows a failed verdict when the post-recheck inventory scan fails', async () => {
     const freshnessInventory = vi
       .fn()
-      .mockResolvedValueOnce(inventory(['orca-linear']))
+      .mockResolvedValueOnce(inventory(['quirky-linear']))
       .mockRejectedValueOnce(new Error('inventory unavailable'))
     window.api = { skills: { freshnessInventory } } as never
 

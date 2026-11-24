@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { denyRpcMethodForCaller } from '../rpc-caller-scope'
 import { eraseRpcMethods } from '../core'
 import { AUTOMATIC_WORK_METHODS } from './automatic-work'
 import type { RpcContext } from '../core'
 import type { RuntimePtyController } from '../../runtime-pty-controller-contract'
 
-function context(runtime: OrcaRuntimeService): RpcContext {
+function context(runtime: QuirkyRuntimeService): RpcContext {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these handlers read only `runtime` from the dispatch context.
   return { runtime } as unknown as RpcContext
 }
@@ -21,8 +21,8 @@ function method(name: string) {
 
 function runtimeWithController(
   controller: Pick<RuntimePtyController, 'getAutomaticWorkStatus' | 'resumeAutomaticWork'>
-): OrcaRuntimeService {
-  const runtime = new OrcaRuntimeService(null)
+): QuirkyRuntimeService {
+  const runtime = new QuirkyRuntimeService(null)
   runtime.setPtyController({
     spawn: vi.fn(),
     write: () => true,

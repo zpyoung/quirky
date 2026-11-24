@@ -32,21 +32,21 @@ function finishedDescription(everyChatResumed: boolean, byUpdate: boolean): stri
     return byUpdate
       ? translate(
           'auto.components.NativeChatResumeRunPanel.finishedUpdate',
-          'These chats were working when Orca installed an update. Orca restored each one where it stopped, with its full context, and asked the agent to check what it was doing before carrying on. Your own prompts weren’t re-sent.'
+          'These chats were working when Quirky installed an update. Quirky restored each one where it stopped, with its full context, and asked the agent to check what it was doing before carrying on. Your own prompts weren’t re-sent.'
         )
       : translate(
           'auto.components.NativeChatResumeRunPanel.finished',
-          'These chats were working when Orca closed. Orca restored each one where it stopped, with its full context, and asked the agent to check what it was doing before carrying on. Your own prompts weren’t re-sent.'
+          'These chats were working when Quirky closed. Quirky restored each one where it stopped, with its full context, and asked the agent to check what it was doing before carrying on. Your own prompts weren’t re-sent.'
         )
   }
   return byUpdate
     ? translate(
         'auto.components.NativeChatResumeRunPanel.finishedPartialUpdate',
-        'These chats were working when Orca installed an update. The ones Orca resumed were restored where they stopped, with their full context, and asked to check what they were doing before carrying on. Your own prompts weren’t re-sent. Check the list for chats that still need attention or can be resumed.'
+        'These chats were working when Quirky installed an update. The ones Quirky resumed were restored where they stopped, with their full context, and asked to check what they were doing before carrying on. Your own prompts weren’t re-sent. Check the list for chats that still need attention or can be resumed.'
       )
     : translate(
         'auto.components.NativeChatResumeRunPanel.finishedPartial',
-        'These chats were working when Orca closed. The ones Orca resumed were restored where they stopped, with their full context, and asked to check what they were doing before carrying on. Your own prompts weren’t re-sent. Check the list for chats that still need attention or can be resumed.'
+        'These chats were working when Quirky closed. The ones Quirky resumed were restored where they stopped, with their full context, and asked to check what they were doing before carrying on. Your own prompts weren’t re-sent. Check the list for chats that still need attention or can be resumed.'
       )
 }
 

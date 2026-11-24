@@ -18,7 +18,7 @@ export const AGENT_JOURNAL_TURN_OUTCOMES = [
 export type AgentJournalTurnOutcome = (typeof AGENT_JOURNAL_TURN_OUTCOMES)[number]
 
 /** The verdict an agent-status row's `mainAgent.outcome` reports: the provider's, a `cancellation`
- *  Orca inferred from the user's own interrupt keystroke, or what the host observed of a turn's end
+ *  Quirky inferred from the user's own interrupt keystroke, or what the host observed of a turn's end
  *  when the provider gave no verdict. `interruption` is a death mid-turn the host proved and nobody
  *  asked for; `unconfirmed` is an end the host cannot prove, and is never success. Both are derived
  *  from the turn's lifecycle state, so the journal never stores them. */

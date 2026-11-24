@@ -39,7 +39,7 @@ export function createZcodePlanCredentialsApi(): PreloadApi['zcodePlanCredential
   const unsupported = () =>
     Promise.reject(
       new Error(
-        'GLM Coding Plan keys can only be changed in the desktop app on the computer running Orca.'
+        'GLM Coding Plan keys can only be changed in the desktop app on the computer running Quirky.'
       )
     )
   return {
@@ -51,7 +51,7 @@ export function createZcodePlanCredentialsApi(): PreloadApi['zcodePlanCredential
 
 export function createCursorAccountsApi(): NonNullable<Partial<PreloadApi>['cursorAccounts']> {
   // Why an explanation and not a bare `signedIn: false`: Cursor's session lives on
-  // the machine running Orca, and this bridge cannot read it. The host may well be
+  // the machine running Quirky, and this bridge cannot read it. The host may well be
   // signed in — its usage meter still arrives over the rate-limit snapshot — so
   // asserting "not signed in" here would contradict the meter beside it.
   return {
@@ -65,7 +65,7 @@ export function createCursorAccountsApi(): NonNullable<Partial<PreloadApi>['curs
         tokenFresh: false,
         error: translate(
           'auto.components.web.preloadApi.cursorAccounts.hostOnly',
-          'Cursor sign-in details are only readable on the computer running Orca.'
+          'Cursor sign-in details are only readable on the computer running Quirky.'
         )
       })
   }
@@ -102,7 +102,7 @@ function rejectHostOnlySignIn(): Promise<never> {
     new Error(
       translate(
         'auto.components.web.preloadApi.accounts.signInHostOnly',
-        'Adding or re-signing an account is only available in the desktop app on the computer running Orca.'
+        'Adding or re-signing an account is only available in the desktop app on the computer running Quirky.'
       )
     )
   )

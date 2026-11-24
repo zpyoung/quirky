@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const PrepareCodexForWslPaneParams = z
   .object({
     codexHome: z.string().max(4_096),
-    orcaCodexHome: z.string().max(4_096),
+    quirkyCodexHome: z.string().max(4_096),
     wslDistro: z
       .string()
       .trim()

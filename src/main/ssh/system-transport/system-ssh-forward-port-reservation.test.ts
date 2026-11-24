@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { stopOrphanMock } = vi.hoisted(() => ({ stopOrphanMock: vi.fn() }))
-vi.mock('./system-ssh-orphaned-forward', () => ({ stopOrphanedOrcaSshForward: stopOrphanMock }))
+vi.mock('./system-ssh-orphaned-forward', () => ({ stopOrphanedQuirkySshForward: stopOrphanMock }))
 
 import { reserveLocalForwardPort } from './system-ssh-forward-port-reservation'
 

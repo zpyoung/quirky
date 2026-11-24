@@ -11,12 +11,12 @@ All UI work — layout, color, typography, spacing, component selection, UX beha
 
 # Electron UI Validation
 
-Always run tests and agent-launched apps in the background with `ORCA_BACKGROUND_LAUNCH=1`.
+Always run tests and agent-launched apps in the background with `QUIRKY_BACKGROUND_LAUNCH=1`.
 Never steal monitor focus or reveal test windows: no `show()`, `showInactive()`, `bringToFront()`,
 `app.focus()`, or OS activation. Use CDP screenshots of hidden renderers. Keep native-focus and visible-window tests paused on the user's desktop; run them on an isolated display or CI.
 Rebuild modified launch-policy code before running an app; stale build wrappers are not safe.
 
-Use the `$electron` skill and Playwright CDP for rendered Orca UI checks. Do not use computer-use for Orca UI validation.
+Use the `$electron` skill and Playwright CDP for rendered Quirky UI checks. Do not use computer-use for Quirky UI validation.
 
 # Code Style
 
@@ -70,7 +70,7 @@ Avoid adding low-value tests. These might be fine for development but offer low 
 Run one test file locally, after `pnpm run build:packages`:
 
 ```sh
-ORCA_ALLOW_LOCAL_TESTS=1 pnpm exec vitest run --config config/vitest.config.ts <file>
+QUIRKY_ALLOW_LOCAL_TESTS=1 pnpm exec vitest run --config config/vitest.config.ts <file>
 ```
 
 Never run the full suite on the Mac. It runs on GitHub Actions: a draft PR runs the tests your change selects, and a PR marked ready runs everything. Read the result with `gh pr checks <number> --watch`. Run `unset GITHUB_TOKEN` before pushing, because the shell's token can't push.
@@ -99,27 +99,27 @@ For a single file, prefer the editor's TypeScript language server over spawning 
 answers from a graph that is already resident. `tsc --noEmit <file>` is not a substitute, because it
 drops the project's `paths` aliases and JSX settings and reports errors that do not exist.
 
-# Typed Observations: the Orca Ledger
+# Typed Observations: the Quirky Ledger
 
 When you notice something you cannot act on in this session, do NOT bury it in prose with phrases
-like "pre-existing", "out of scope", "future work", or "skipped for brevity". File it in the Orca
+like "pre-existing", "out of scope", "future work", or "skipped for brevity". File it in the Quirky
 ledger, which is keyed to the project, so entries survive worktree deletion and stay visible from
 sibling worktrees of this repo.
 
 ```sh
-orca ledger file --type bug      --title <t> --file <path:line> \
+quirky ledger file --type bug      --title <t> --file <path:line> \
                                  --description <d> --severity critical|high|medium|low
-orca ledger file --type deferred --title <t> --why-deferred <w> \
+quirky ledger file --type deferred --title <t> --why-deferred <w> \
                                  --priority high|medium|low
-orca ledger file --type test-gap --title <t> --file-under-test <path:line> \
+quirky ledger file --type test-gap --title <t> --file-under-test <path:line> \
                                  --reason-skipped <r>
-orca ledger file --type proposal --title <t> --context <c> --recommendation <r>
-orca ledger file --type decision --title <t> --context <c> --decision <d> \
+quirky ledger file --type proposal --title <t> --context <c> --recommendation <r>
+quirky ledger file --type decision --title <t> --context <c> --decision <d> \
                                  --consequences <q> --status proposed|accepted|superseded
-orca ledger list   --type bug --state open --json
-orca ledger show   --id bug-12 --json
-orca ledger state  --id bug-12 --state resolved --if-revision <n> --json
-orca ledger review --json
+quirky ledger list   --type bug --state open --json
+quirky ledger show   --id bug-12 --json
+quirky ledger state  --id bug-12 --state resolved --if-revision <n> --json
+quirky ledger review --json
 ```
 
 `--if-revision` takes the revision from `show`; a stale value returns `conflict` with the current

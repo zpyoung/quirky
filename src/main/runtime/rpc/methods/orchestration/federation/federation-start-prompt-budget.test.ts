@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationDb } from '../../../../orchestration/db'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
 
@@ -13,7 +13,7 @@ describe('federation attach-start prompt budget', () => {
 
   it('rejects an 8 MiB Task spec before attachment, worktree, terminal, or prompt effects', async () => {
     db = new OrchestrationDb(':memory:')
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     const createAttachment = vi.spyOn(db, 'createRemoteDispatchAttachment')
     const createWorktree = vi.spyOn(runtime, 'createManagedWorktree')

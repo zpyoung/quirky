@@ -16,7 +16,7 @@ const { homedirMock } = vi.hoisted(() => ({
 
 vi.mock('electron', () => ({
   app: {
-    getPath: () => '/tmp/orca-user-data'
+    getPath: () => '/tmp/quirky-user-data'
   }
 }))
 
@@ -64,7 +64,7 @@ const JSON_INSTALLERS = [
   {
     agent: 'codex',
     timeout: MANAGED_HOOK_TIMEOUT_SECONDS,
-    // Why: Codex clamps Interrupt to 3s, so Orca writes that cap instead of the shared budget.
+    // Why: Codex clamps Interrupt to 3s, so Quirky writes that cap instead of the shared budget.
     eventTimeouts: { Interrupt: 3 },
     configPath: `${REMOTE_HOME}/.codex/hooks.json`,
     install: (sftp: SFTPWrapper) => new CodexHookService().installRemote(sftp, REMOTE_HOME)
@@ -96,13 +96,13 @@ const JSON_INSTALLERS = [
   {
     agent: 'grok',
     timeout: MANAGED_HOOK_TIMEOUT_SECONDS,
-    configPath: `${REMOTE_HOME}/.grok/hooks/orca-status.json`,
+    configPath: `${REMOTE_HOME}/.grok/hooks/quirky-status.json`,
     install: (sftp: SFTPWrapper) => new GrokHookService().installRemote(sftp, REMOTE_HOME)
   },
   {
     agent: 'copilot',
     timeout: 5,
-    configPath: `${REMOTE_HOME}/.copilot/hooks/orca.json`,
+    configPath: `${REMOTE_HOME}/.copilot/hooks/quirky.json`,
     install: (sftp: SFTPWrapper) => new CopilotHookService().installRemote(sftp, REMOTE_HOME)
   },
   {
@@ -113,11 +113,11 @@ const JSON_INSTALLERS = [
   }
 ] as const
 
-const MANAGED_HOOKS_DIR_NEEDLE = '/.orca/agent-hooks/'
+const MANAGED_HOOKS_DIR_NEEDLE = '/.quirky/agent-hooks/'
 // Why: statusLine is not a hook — Claude's schema has no timeout field (type/command/padding/refreshInterval), and a slow statusline can't block agent turns.
 const STATUSLINE_SCRIPT_NEEDLE = '-statusline.'
 
-// Walk the parsed config and assert every Orca-managed command carrier (a node
+// Walk the parsed config and assert every Quirky-managed command carrier (a node
 // with a `command`/`bash`/`powershell` string pointing at the managed script
 // dir) has a positive config-level timeout sibling (`timeout` or the
 // provider-specific `timeoutSec`). Returns the count of managed carriers found
@@ -197,11 +197,11 @@ describe('managed agent hook timeouts', () => {
     // One timeout line per managed [[hooks]] event entry.
     const timeoutLines = config.match(new RegExp(`timeout = ${MANAGED_HOOK_TIMEOUT_SECONDS}`, 'g'))
     expect(timeoutLines?.length ?? 0).toBeGreaterThan(0)
-    expect(config).toContain('/home/dev/.orca/agent-hooks/kimi-hook.sh')
+    expect(config).toContain('/home/dev/.quirky/agent-hooks/kimi-hook.sh')
   })
 
   it('writes a config-level timeout on local-only Droid hooks', () => {
-    const homeDir = mkdtempSync(join(tmpdir(), 'orca-droid-hook-timeout-'))
+    const homeDir = mkdtempSync(join(tmpdir(), 'quirky-droid-hook-timeout-'))
     homedirMock.mockReturnValue(homeDir)
     try {
       const status = new DroidHookService().install()
@@ -238,7 +238,7 @@ describe('managed agent hook timeouts', () => {
     }
     const kimi = createFakeSftp()
     await new KimiHookService().installRemote(kimi.sftp, REMOTE_HOME)
-    const kimiWrapper = kimi.fs.files.get(`${REMOTE_HOME}/.orca/agent-hooks/kimi-hook.sh`)!
+    const kimiWrapper = kimi.fs.files.get(`${REMOTE_HOME}/.quirky/agent-hooks/kimi-hook.sh`)!
     expect(kimiWrapper, 'kimi wrapper missing --connect-timeout').toContain('--connect-timeout')
     expect(kimiWrapper, 'kimi wrapper missing --max-time').toContain('--max-time')
     curlWrappersChecked += 1
@@ -273,12 +273,12 @@ describe('managed agent hook timeouts', () => {
         const child = spawn('sh', [scriptPath], {
           env: {
             ...process.env,
-            ORCA_AGENT_HOOK_ENDPOINT: '',
-            ORCA_AGENT_HOOK_PORT: String(port),
-            ORCA_AGENT_HOOK_TOKEN: 'test-token',
-            ORCA_PANE_KEY: 'pane-1',
-            ORCA_TAB_ID: 'tab-1',
-            ORCA_WORKTREE_ID: 'wt-1'
+            QUIRKY_AGENT_HOOK_ENDPOINT: '',
+            QUIRKY_AGENT_HOOK_PORT: String(port),
+            QUIRKY_AGENT_HOOK_TOKEN: 'test-token',
+            QUIRKY_PANE_KEY: 'pane-1',
+            QUIRKY_TAB_ID: 'tab-1',
+            QUIRKY_WORKTREE_ID: 'wt-1'
           },
           stdio: ['pipe', 'ignore', 'ignore']
         })
@@ -309,9 +309,9 @@ describe('managed agent hook timeouts', () => {
         // Reuse a real generated POSIX wrapper rather than re-deriving the script.
         const { sftp, fs } = createFakeSftp()
         await new CodexHookService().installRemote(sftp, REMOTE_HOME)
-        const wrapperBody = fs.files.get(`${REMOTE_HOME}/.orca/agent-hooks/codex-hook.sh`)!
+        const wrapperBody = fs.files.get(`${REMOTE_HOME}/.quirky/agent-hooks/codex-hook.sh`)!
 
-        tempDir = mkdtempSync(join(tmpdir(), 'orca-hook-timeout-'))
+        tempDir = mkdtempSync(join(tmpdir(), 'quirky-hook-timeout-'))
         const scriptPath = join(tempDir, 'codex-hook.sh')
         writeFileSync(scriptPath, wrapperBody, 'utf8')
         chmodSync(scriptPath, 0o755)

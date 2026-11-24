@@ -7,7 +7,7 @@ import { destroyWorkspaceWebviews } from '../browser-webview-cleanup'
 import { projectHydratedBrowserSession } from './browser-hydration-state'
 import { ensureBrowserClientHostsForRestoredPages } from '@/runtime/restored-client-hosted-browser-host-attach'
 import { findWorkspace } from '../browser-page-records'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { recordLayoutApply } from '@/runtime/layout-apply-send'
 
 export function createBrowserHydrationActions(
@@ -96,7 +96,7 @@ export function createBrowserHydrationActions(
         return s
       })
       // Switch point: main records the tab's new profile.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         const tab = findWorkspace(get().browserTabsByWorktree, workspaceId)
         if (tab) {
           recordLayoutApply(get(), tab.worktreeId, {

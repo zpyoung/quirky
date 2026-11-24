@@ -42,7 +42,7 @@ import { getSystemCodexHomePath } from './codex-home-paths'
 
 /**
  * A managed CODEX_HOME's hooks at launch prep: the user's hooks mirrored from
- * ~/.codex, after Orca's entry in each event Codex listed, approved with
+ * ~/.codex, after Quirky's entry in each event Codex listed, approved with
  * Codex's own hash. The approval is written before the entry and taken back
  * if the entry write fails.
  */
@@ -54,7 +54,7 @@ export async function installCodexHooksExclusively(
   const configPath = getConfigPath(runtimeHomePath)
   const scriptPath = getManagedScriptPath()
   // Why: must run before this install rewrites hooks.json/config.toml —
-  // approvals the user made inside Orca-launched Codex are keyed to the
+  // approvals the user made inside Quirky-launched Codex are keyed to the
   // previous launch's runtime layout, and stale-trust cleanup below would
   // delete them once the system config stops backing them.
   promoteCodexRuntimeHookApprovalsToSystem(runtimeHomePath)
@@ -119,7 +119,7 @@ export async function installCodexHooksExclusively(
     const cleaned = removeManagedCommands(current, isManagedCommand)
     const trustedHash = hashes[CODEX_EVENT_LABEL[eventName]]
     if (trustedHash === undefined) {
-      // Why: an event Codex does not list would never run Orca's entry, or would hold it for review.
+      // Why: an event Codex does not list would never run Quirky's entry, or would hold it for review.
       if (cleaned.length > 0) {
         nextHooks[eventName] = cleaned
       } else {
@@ -145,7 +145,7 @@ export async function installCodexHooksExclusively(
       command,
       timeoutSec: hook.timeout,
       trustedHash,
-      // Why: Orca's setting is the only off switch for its hook (a /hooks toggle-off is overridden).
+      // Why: Quirky's setting is the only off switch for its hook (a /hooks toggle-off is overridden).
       enabled: true
     })
   }
@@ -173,7 +173,7 @@ export async function installCodexHooksExclusively(
   try {
     // Why: system user hook approvals are mirrored into runtime CODEX_HOME. If
     // the user later revokes approval in ~/.codex/config.toml, preserving all
-    // old runtime [hooks.state.*] blocks would keep Orca Codex trusted.
+    // old runtime [hooks.state.*] blocks would keep Quirky Codex trusted.
     upsertHookTrustEntries(tomlPath, mirroredTrustEntries)
     removeStaleRuntimeHookTrustEntries(tomlPath, configPath, trustEntries)
     applyMirroredRuntimeUserHookTrustStates(tomlPath, mirroredUserTrustEntries)

@@ -4,7 +4,7 @@
 // There is no snapshot to anchor to and no superseded-epoch rows to drop — a
 // roll deletes them in the same transaction that publishes the new epoch. A row
 // this build cannot parse, a gap, or a first row that is not the epoch's is
-// damage, and a row a newer Orca wrote is one this build cannot place: the load
+// damage, and a row a newer Quirky wrote is one this build cannot place: the load
 // names either and the open fails on it. Nothing is deleted.
 
 import type Database from '../../sqlite/sync-database'
@@ -32,7 +32,7 @@ export type JournalDamage = {
 
 export type JournalLoad = {
   state: JournalReducerState
-  /** The first row a newer Orca wrote: a future row version, or a row kind this build does not
+  /** The first row a newer Quirky wrote: a future row version, or a row kind this build does not
    *  know. Only an update opens the chat. */
   newer: { sequence: number } | null
   /** Set when the history is damaged; a newer build's row wins over damage beside it. */

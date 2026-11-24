@@ -19,7 +19,7 @@ const roots: string[] = []
 const clients: ProfileStateWriteWorkerClient[] = []
 
 beforeAll(async () => {
-  bundleRoot = mkdtempSync(join(tmpdir(), 'orca-writer-bundle-'))
+  bundleRoot = mkdtempSync(join(tmpdir(), 'quirky-writer-bundle-'))
   workerPath = join(bundleRoot, 'profile-state-writer-worker-entry.js')
   await build({
     entryPoints: [
@@ -42,7 +42,7 @@ afterEach(async () => {
 afterAll(() => rmSync(bundleRoot, { recursive: true, force: true }))
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-writer-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-writer-'))
   roots.push(root)
   const path = join(root, 'profile-state.db')
   const profileId = 'writer-test'
@@ -108,7 +108,7 @@ describe('persistent profile state write worker', () => {
       ui: { note: 'hi \ud800' },
       automationRuns: [{ id: 'run-1', output: 'first' }]
     })
-    const dataFile = join(f.root, 'orca-data.json')
+    const dataFile = join(f.root, 'quirky-data.json')
     expect(await client.writeLatestJsonExport(dataFile)).toBe(3)
     expect(readFileSync(`${dataFile}.sqlite-export.3.json`, 'utf8')).toBe(
       readFileSync(exported, 'utf8')

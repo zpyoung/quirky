@@ -22,12 +22,12 @@ describe('resolveAiVaultServiceEntryPath', () => {
   })
 
   it('uses app.asar.unpacked for packaged Electron', () => {
-    const appPath = join('C:', 'Orca', 'resources', 'app.asar')
+    const appPath = join('C:', 'Quirky', 'resources', 'app.asar')
 
     expect(resolveAiVaultServiceEntryPath(appPath, true)).toBe(
       join(
         'C:',
-        'Orca',
+        'Quirky',
         'resources',
         'app.asar.unpacked',
         'out',
@@ -38,21 +38,21 @@ describe('resolveAiVaultServiceEntryPath', () => {
   })
 
   it('uses the entry beside the bundle on a packaged host without an asar', () => {
-    const orcadRoot = join('/opt', 'orcad', '1.0.0')
-    const adjacent = join(orcadRoot, 'session-scanner-service-entry.js')
+    const quirkydRoot = join('/opt', 'quirkyd', '1.0.0')
+    const adjacent = join(quirkydRoot, 'session-scanner-service-entry.js')
 
-    expect(resolveAiVaultServiceEntryPath(orcadRoot, true, (path) => path === adjacent)).toBe(
+    expect(resolveAiVaultServiceEntryPath(quirkydRoot, true, (path) => path === adjacent)).toBe(
       adjacent
     )
   })
 
   it('never forks an adjacent decoy from inside app.asar', () => {
-    const appPath = join('/opt', 'Orca', 'resources', 'app.asar')
+    const appPath = join('/opt', 'Quirky', 'resources', 'app.asar')
 
     expect(resolveAiVaultServiceEntryPath(appPath, true, () => true)).toBe(
       join(
         '/opt',
-        'Orca',
+        'Quirky',
         'resources',
         'app.asar.unpacked',
         'out',
@@ -63,7 +63,7 @@ describe('resolveAiVaultServiceEntryPath', () => {
   })
 
   it('uses resourcesPath from packaged Electron-as-Node runtimes', () => {
-    const resourcesPath = join('Applications', 'Orca.app', 'Contents', 'Resources')
+    const resourcesPath = join('Applications', 'Quirky.app', 'Contents', 'Resources')
     const entry = join(
       resourcesPath,
       'app.asar.unpacked',

@@ -13,8 +13,8 @@
 
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import { buildOrchestrationTaskDisplayMetadata } from '../../shared/orchestration-task-display'
-import { isOrcaSessionId } from '../../shared/orca-session-address'
-import { canonicalOrcaSessionId } from './orchestration/canonical-orca-session-id'
+import { isQuirkySessionId } from '../../shared/quirky-session-address'
+import { canonicalQuirkySessionId } from './orchestration/canonical-quirky-session-id'
 import type { RunningStructuredSession } from './orchestration/structured-session-lineage'
 import type { OrchestrationDb } from './orchestration/db'
 import type { WorkerDispatchState } from './orchestration/types'
@@ -176,7 +176,9 @@ function ownedWorkerIncarnation(db: OrchestrationDb, record: AgentSessionRecord)
     return null
   }
   const incarnation = structuredWorkerProcessIncarnation(
-    isOrcaSessionId(record.sessionId) ? canonicalOrcaSessionId(record.sessionId) : record.sessionId
+    isQuirkySessionId(record.sessionId)
+      ? canonicalQuirkySessionId(record.sessionId)
+      : record.sessionId
   )
   const owned = db.db
     .prepare(

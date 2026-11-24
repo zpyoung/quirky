@@ -28,7 +28,7 @@ let root: string
 let journal: AgentSessionJournal
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-dead-generation-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-dead-generation-'))
   journal = await openAgentSessionJournal({
     identity: {
       sessionId: SESSION,
@@ -175,7 +175,7 @@ describe('dead structured-session generation settlement', () => {
     const content = 'x'.repeat(MAX_JOURNAL_LIFECYCLE_BATCH_BYTES)
     for (const state of ['running', 'completed'] as const) {
       await journal.appendItem(
-        { provider: 'orca', clientMessageId: `large-${state}` },
+        { provider: 'quirky', clientMessageId: `large-${state}` },
         { kind: 'tool-call', name: 'Write', input: { content }, state },
         { fence: 7, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
       )
@@ -234,7 +234,7 @@ describe('dead structured-session generation settlement', () => {
     expect(statuses[0]?.failure?.detail?.text.length).toBe(MAX_PROVIDER_DIAGNOSTIC_CHARS)
   })
 
-  it("words Orca's own fault as Orca's, never as the provider stopping", async () => {
+  it("words Quirky's own fault as Quirky's, never as the provider stopping", async () => {
     await seedUnfinishedWork()
 
     await settleObservedExitForTest({
@@ -245,7 +245,7 @@ describe('dead structured-session generation settlement', () => {
       pendingSubmissionReason: 'provider_exited_before_acknowledgement',
       verdict: { state: 'interrupted', completedAt: 1_000 },
       showUnexpectedExitOutcome: true,
-      // Orca stopped the provider because its own journal failed.
+      // Quirky stopped the provider because its own journal failed.
       exitFailure: agentSessionFailureFact('hostFault')
     })
 
@@ -255,7 +255,7 @@ describe('dead structured-session generation settlement', () => {
     expect(statuses).toEqual([
       {
         kind: 'status',
-        text: "Orca ran into a problem, so this didn't go through. Try again.",
+        text: "Quirky ran into a problem, so this didn't go through. Try again.",
         failure: { kind: 'hostFault' },
         tone: 'error'
       }
@@ -319,7 +319,7 @@ describe('dead structured-session generation settlement', () => {
       exitedDuringStartup: { generation: 'generation-1' }
     })
 
-    // The sentence is Orca's; the stderr the exit carried rides as a log detail only.
+    // The sentence is Quirky's; the stderr the exit carried rides as a log detail only.
     expect(journal.submissions()).toEqual([
       expect.objectContaining({
         clientMessageId: 'client-held',

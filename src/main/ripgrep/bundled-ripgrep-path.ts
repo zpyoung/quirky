@@ -30,7 +30,7 @@ function candidatePaths(platform: string): string[] {
   }
   // Why nothing else: a packaged app must never run a binary from whatever checkout it was launched in.
   if (isPackagedApp()) {
-    // Why: plain-Node orcad has no resourcesPath; its build copies rg into its own install root.
+    // Why: plain-Node quirkyd has no resourcesPath; its build copies rg into its own install root.
     candidates.push(
       join(getAppEnvironment().getAppPath(), BUNDLED_RIPGREP_RESOURCE_DIR, platform, binaryName)
     )
@@ -66,7 +66,7 @@ function hashBinary(binaryPath: string | null): string | null {
   }
 }
 
-/** Absolute path to Orca's own ripgrep for `platform`, or null when this install lacks it. */
+/** Absolute path to Quirky's own ripgrep for `platform`, or null when this install lacks it. */
 export function resolveBundledRipgrepPath(platform: BundledRipgrepPlatform): string | null {
   if (!resolvedPaths.has(platform)) {
     const found = candidatePaths(platform).find((path) => existsSync(path))
@@ -99,7 +99,7 @@ export function bundledRipgrepCommand(options: { wsl?: boolean } = {}): string {
 
 /**
  * Spawn options for a WSL-routed rg: inside the distro, pick the Linux build matching its own
- * architecture (Windows-on-ARM runs x64 Orca beside arm64 distros) from the Windows install via
+ * architecture (Windows-on-ARM runs x64 Quirky beside arm64 distros) from the Windows install via
  * wslpath (custom automount roots). An inaccessible install fails through the missing-tool path.
  */
 export function bundledRipgrepWslSpawnOptions(command: string): { wslShellCommand?: string } {
@@ -108,7 +108,7 @@ export function bundledRipgrepWslSpawnOptions(command: string): { wslShellComman
     return {}
   }
   return {
-    wslShellCommand: `"$(d=$(wslpath -u ${quotePosixShell(ripgrepRoot)} 2>/dev/null); case "$(uname -m)" in aarch64|arm64) a=linux-arm64;; *) a=linux-x64;; esac; if [ -n "$d" ]; then printf %s "$d/$a/rg"; else printf /dev/null/orca-ripgrep-unavailable; fi)"`
+    wslShellCommand: `"$(d=$(wslpath -u ${quotePosixShell(ripgrepRoot)} 2>/dev/null); case "$(uname -m)" in aarch64|arm64) a=linux-arm64;; *) a=linux-x64;; esac; if [ -n "$d" ]; then printf %s "$d/$a/rg"; else printf /dev/null/quirky-ripgrep-unavailable; fi)"`
   }
 }
 
@@ -132,6 +132,6 @@ export function resetBundledRipgrepPathCacheForTests(): void {
 // means a damaged install or security-software block, which a slower partial listing would hide.
 export function bundledRipgrepUnavailableError(): Error {
   return new Error(
-    "Orca's bundled search tool (ripgrep) could not start. Reinstall Orca, or allow it in your security software."
+    "Quirky's bundled search tool (ripgrep) could not start. Reinstall Quirky, or allow it in your security software."
   )
 }

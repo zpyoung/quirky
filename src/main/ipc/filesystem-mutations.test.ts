@@ -14,7 +14,7 @@ const { handleMock, copyFileMock, lstatMock, mkdirMock, renameMock, writeFileMoc
   }))
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/orca-test-user-data' },
+  app: { getPath: () => '/quirky-test-user-data' },
   ipcMain: { handle: handleMock }
 }))
 

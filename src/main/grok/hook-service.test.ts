@@ -40,7 +40,7 @@ const WINDOWS_POWERSHELL_LAUNCHER =
 
 // Why (#14828): Windows registers the bare script path when it is cmd-safe and only falls back
 // to the encoded launcher for a profile path that is not (#6078). windows-hook-launcher-chain
-// .test.ts pins which branch applies; these cases only care that Orca's hook is present.
+// .test.ts pins which branch applies; these cases only care that Quirky's hook is present.
 function registersManagedGrokScript(command: string): boolean {
   return command.includes(GROK_SCRIPT_FILE_NAME) || WINDOWS_POWERSHELL_LAUNCHER.test(command)
 }
@@ -54,14 +54,14 @@ type WindowsGrokHookRun = {
 
 function createWindowsGrokHookEnvironment(grokHome?: string): NodeJS.ProcessEnv {
   const env = { ...process.env } as NodeJS.ProcessEnv
-  delete env.ORCA_AGENT_HOOK_ENDPOINT
+  delete env.QUIRKY_AGENT_HOOK_ENDPOINT
   if (grokHome === undefined) {
     delete env.GROK_HOME
   } else {
     env.GROK_HOME = grokHome
   }
-  env.ORCA_AGENT_HOOK_TOKEN = 'test-token'
-  env.ORCA_PANE_KEY = 'pane-test'
+  env.QUIRKY_AGENT_HOOK_TOKEN = 'test-token'
+  env.QUIRKY_PANE_KEY = 'pane-test'
   return env
 }
 
@@ -93,7 +93,7 @@ async function runWindowsGrokHook(
   if (!address || typeof address === 'string') {
     throw new Error('Could not resolve Windows Grok hook test listener port')
   }
-  env.ORCA_AGENT_HOOK_PORT = String(address.port)
+  env.QUIRKY_AGENT_HOOK_PORT = String(address.port)
   try {
     const result = await new Promise<Omit<WindowsGrokHookRun, 'request'>>((resolve, reject) => {
       const child = spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/c', scriptPath], {
@@ -122,7 +122,7 @@ describe('GrokHookService', () => {
   let homeDir: string
 
   beforeEach(() => {
-    homeDir = mkdtempSync(join(tmpdir(), 'orca-grok-home-'))
+    homeDir = mkdtempSync(join(tmpdir(), 'quirky-grok-home-'))
     homedirMock.mockReturnValue(homeDir)
   })
 
@@ -132,18 +132,18 @@ describe('GrokHookService', () => {
   })
 
   // Why: #9358 / #9941 — empty GROK_HOME + parse-time %VAR:~n,m% / `"\"` broke
-  // every SessionStart/UserPromptSubmit on Windows outside Orca terminals.
+  // every SessionStart/UserPromptSubmit on Windows outside Quirky terminals.
   it('guards Windows GROK_HOME substring checks when empty (#9358)', () => {
     const script = buildWindowsGrokHookScript()
-    expect(script).toContain('set "ORCA_GROK_HOME="')
-    expect(script).toContain('if not defined GROK_HOME goto :orca_grok_home_ready')
+    expect(script).toContain('set "QUIRKY_GROK_HOME="')
+    expect(script).toContain('if not defined GROK_HOME goto :quirky_grok_home_ready')
     expect(script).toContain('%GROK_HOME:~4096,1%')
-    expect(script).toContain('set "ORCA_GROK_HOME=%GROK_HOME:"=%"')
-    expect(script).toContain('%ORCA_GROK_HOME:~4096,1%')
-    expect(script).toContain(':orca_grok_home_ready')
-    expect(script).toContain('if not defined ORCA_GROK_HOME goto :orca_grok_home_ready')
-    expect(script).toContain('if "%ORCA_GROK_HOME:~-1%"=="\\"')
-    expect(script).toContain('if not "%GROK_HOME:~4096,1%"=="" goto :orca_grok_home_ready')
+    expect(script).toContain('set "QUIRKY_GROK_HOME=%GROK_HOME:"=%"')
+    expect(script).toContain('%QUIRKY_GROK_HOME:~4096,1%')
+    expect(script).toContain(':quirky_grok_home_ready')
+    expect(script).toContain('if not defined QUIRKY_GROK_HOME goto :quirky_grok_home_ready')
+    expect(script).toContain('if "%QUIRKY_GROK_HOME:~-1%"=="\\"')
+    expect(script).toContain('if not "%GROK_HOME:~4096,1%"=="" goto :quirky_grok_home_ready')
     // Why: parenthesized `if defined (...)` still parse-expands the body early.
     expect(script).not.toMatch(/if defined GROK_HOME \(/)
   })
@@ -237,11 +237,11 @@ describe('GrokHookService', () => {
     const status = new GrokHookService().install()
 
     expect(status.state).toBe('installed')
-    expect(status.configPath).toBe(join(homeDir, '.grok', 'hooks', 'orca-status.json'))
+    expect(status.configPath).toBe(join(homeDir, '.grok', 'hooks', 'quirky-status.json'))
     expect(status.managedHooksPresent).toBe(true)
 
     const config = JSON.parse(
-      readFileSync(join(homeDir, '.grok', 'hooks', 'orca-status.json'), 'utf8')
+      readFileSync(join(homeDir, '.grok', 'hooks', 'quirky-status.json'), 'utf8')
     ) as {
       hooks: Record<string, { matcher?: string; hooks: { command: string }[] }[]>
     }
@@ -260,7 +260,7 @@ describe('GrokHookService', () => {
       ].sort()
     )
     // Why: PreToolUse drives in-flight tool state and ask_user_question waits. The pane guard below
-    // keeps it inert outside Orca; PostToolUse cannot replace a state that has already ended.
+    // keeps it inert outside Quirky; PostToolUse cannot replace a state that has already ended.
     expect(config.hooks.PreToolUse[0].matcher).toBe('.*')
     expect(registersManagedGrokScript(config.hooks.PreToolUse[0].hooks[0].command)).toBe(true)
     // Why: Grok matchers are real regexes; bare `*` does not match-all.
@@ -281,14 +281,14 @@ describe('GrokHookService', () => {
     expect(registersManagedGrokScript(config.hooks.PostToolUse[0].hooks[0].command)).toBe(true)
     if (process.platform !== 'win32') {
       const command = config.hooks.PostToolUse[0].hooks[0].command
-      expect(command).toContain(join(homeDir, '.orca'))
-      // Why: with no Orca pane in the environment the guard short-circuits, so a standalone Grok
+      expect(command).toContain(join(homeDir, '.quirky'))
+      // Why: with no Quirky pane in the environment the guard short-circuits, so a standalone Grok
       // session never spawns a shell for the managed script at all.
-      expect(command).toMatch(/^if \[ -n "\$\{ORCA_PANE_KEY-\}" \] && /)
+      expect(command).toMatch(/^if \[ -n "\$\{QUIRKY_PANE_KEY-\}" \] && /)
     }
 
     const script = readFileSync(
-      join(homeDir, '.orca', 'agent-hooks', GROK_SCRIPT_FILE_NAME),
+      join(homeDir, '.quirky', 'agent-hooks', GROK_SCRIPT_FILE_NAME),
       'utf8'
     )
     expect(script).toContain('/hook/grok')
@@ -296,8 +296,8 @@ describe('GrokHookService', () => {
       expect(script).toContain('%SystemRoot%\\System32\\curl.exe')
       // Why: windows-grok-hook-script.test.ts pins the GROK_HOME guard shape itself,
       // and does so on every platform rather than only on Windows runners.
-      expect(script).toContain('set "ORCA_GROK_HOME=%GROK_HOME:"=%"')
-      expect(script).toContain('--data-urlencode "grokHome=%ORCA_GROK_HOME%"')
+      expect(script).toContain('set "QUIRKY_GROK_HOME=%GROK_HOME:"=%"')
+      expect(script).toContain('--data-urlencode "grokHome=%QUIRKY_GROK_HOME%"')
     } else {
       // Why: payload is piped to curl via stdin (`payload@-`) so it never lands
       // on the curl command line (EDR oversized-command-line false positive).
@@ -325,14 +325,14 @@ describe('GrokHookService', () => {
   it.skipIf(process.platform !== 'win32')(
     'wraps the managed hook command to survive spaces in the profile path (#6078)',
     () => {
-      const spaceHome = join(tmpdir(), 'orca grok home with spaces')
+      const spaceHome = join(tmpdir(), 'quirky grok home with spaces')
       mkdirSync(spaceHome, { recursive: true })
       homedirMock.mockReturnValue(spaceHome)
       try {
         expect(new GrokHookService().install().state).toBe('installed')
 
         const config = JSON.parse(
-          readFileSync(join(spaceHome, '.grok', 'hooks', 'orca-status.json'), 'utf8')
+          readFileSync(join(spaceHome, '.grok', 'hooks', 'quirky-status.json'), 'utf8')
         ) as { hooks: Record<string, { hooks: { command: string }[] }[]> }
 
         for (const eventName of ['SessionStart', 'UserPromptSubmit', 'Stop']) {
@@ -346,19 +346,19 @@ describe('GrokHookService', () => {
   )
 
   it('installs hooks under GROK_HOME when set', () => {
-    const grokHome = mkdtempSync(join(tmpdir(), 'orca-grok-home-env-'))
+    const grokHome = mkdtempSync(join(tmpdir(), 'quirky-grok-home-env-'))
     const previous = process.env.GROK_HOME
     process.env.GROK_HOME = grokHome
     try {
       const status = new GrokHookService().install()
       expect(status.state).toBe('installed')
-      expect(status.configPath).toBe(join(grokHome, 'hooks', 'orca-status.json'))
-      expect(readFileSync(join(grokHome, 'hooks', 'orca-status.json'), 'utf8')).toContain(
+      expect(status.configPath).toBe(join(grokHome, 'hooks', 'quirky-status.json'))
+      expect(readFileSync(join(grokHome, 'hooks', 'quirky-status.json'), 'utf8')).toContain(
         'SessionStart'
       )
       // Why: must not also write into the mocked ~/.grok when GROK_HOME wins.
       expect(() =>
-        readFileSync(join(homeDir, '.grok', 'hooks', 'orca-status.json'), 'utf8')
+        readFileSync(join(homeDir, '.grok', 'hooks', 'quirky-status.json'), 'utf8')
       ).toThrow()
     } finally {
       if (previous === undefined) {
@@ -372,7 +372,7 @@ describe('GrokHookService', () => {
 
   it('does not restore a user-cleared global hook config on the next launch', () => {
     const service = new GrokHookService()
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
     const userClearedConfig = '{  "hooks" : {}  }\n'
 
     expect(service.install().state).toBe('installed')
@@ -385,7 +385,7 @@ describe('GrokHookService', () => {
 
   it('preserves a user-cleared config during session cleanup', () => {
     const service = new GrokHookService()
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
     const userClearedConfig = '{  "hooks" : {}  }\n'
 
     expect(service.install().state).toBe('installed')
@@ -397,7 +397,7 @@ describe('GrokHookService', () => {
 
   it('removes the empty managed config when hooks are disabled', () => {
     const service = new GrokHookService()
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
 
     service.install()
     expect(service.remove().state).toBe('not_installed')
@@ -409,7 +409,7 @@ describe('GrokHookService', () => {
   // deliberate opt-out and never reinstalled again.
   it('removes the managed config even when a non-hook key remains', () => {
     const service = new GrokHookService()
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
 
     expect(service.install().state).toBe('installed')
     const withSchema = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>
@@ -422,12 +422,12 @@ describe('GrokHookService', () => {
     expect(service.install().state).toBe('installed')
   })
 
-  // Why: the reported workaround for #15518 was emptying this file by hand, so Orca must not
+  // Why: the reported workaround for #15518 was emptying this file by hand, so Quirky must not
   // rewrite it on startup. But then turning the setting back on has to work, or the toggle
   // silently lies and the only way back is deleting a file in a hidden directory.
   it('leaves a user-cleared config alone on a startup install', () => {
     const service = new GrokHookService()
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
     const userCleared = '{  "hooks" : {}  }\n'
 
     expect(service.install().state).toBe('installed')
@@ -440,7 +440,7 @@ describe('GrokHookService', () => {
 
   it('restores a user-cleared config when the user turns hooks back on', () => {
     const service = new GrokHookService()
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
     const userCleared = '{  "hooks" : {}  }\n'
 
     expect(service.install().state).toBe('installed')
@@ -457,8 +457,8 @@ describe('GrokHookService', () => {
   // version-control. Their file is theirs -- strip our entries and write through it.
   it('writes through a symlinked config instead of destroying the link', async () => {
     const service = new GrokHookService()
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
-    const realConfig = join(homeDir, 'dotfiles', 'orca-status.json')
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
+    const realConfig = join(homeDir, 'dotfiles', 'quirky-status.json')
 
     expect(service.install().state).toBe('installed')
     mkdirSync(dirname(realConfig), { recursive: true })
@@ -474,8 +474,8 @@ describe('GrokHookService', () => {
 
   it('respects an empty user-managed symlink as an opt-out', () => {
     const service = new GrokHookService()
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
-    const realConfig = join(homeDir, 'dotfiles', 'orca-status.json')
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
+    const realConfig = join(homeDir, 'dotfiles', 'quirky-status.json')
     const userCleared = '{"hooks":{}}\n'
     mkdirSync(dirname(configPath), { recursive: true })
     mkdirSync(dirname(realConfig), { recursive: true })
@@ -489,8 +489,8 @@ describe('GrokHookService', () => {
 
   it('writes through a symlinked config on the sync remove path too', () => {
     const service = new GrokHookService()
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
-    const realConfig = join(homeDir, 'dotfiles', 'orca-status.json')
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
+    const realConfig = join(homeDir, 'dotfiles', 'quirky-status.json')
 
     expect(service.install().state).toBe('installed')
     mkdirSync(dirname(realConfig), { recursive: true })
@@ -509,8 +509,8 @@ describe('GrokHookService', () => {
   // heuristic see it meant a symlinked config was silently never reinstalled after the first quit.
   it('reinstalls into a symlinked config on the launch after a quit', async () => {
     const service = new GrokHookService()
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
-    const realConfig = join(homeDir, 'dotfiles', 'orca-status.json')
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
+    const realConfig = join(homeDir, 'dotfiles', 'quirky-status.json')
 
     expect(service.install().state).toBe('installed')
     mkdirSync(dirname(realConfig), { recursive: true })
@@ -526,8 +526,8 @@ describe('GrokHookService', () => {
     expect(service.getStatus().managedHooksPresent).toBe(true)
   })
 
-  it('preserves user-authored hook entries in the Orca Grok config file', () => {
-    const configPath = join(homeDir, '.grok', 'hooks', 'orca-status.json')
+  it('preserves user-authored hook entries in the Quirky Grok config file', () => {
+    const configPath = join(homeDir, '.grok', 'hooks', 'quirky-status.json')
     mkdirSync(dirname(configPath), { recursive: true })
     writeFileSync(
       configPath,

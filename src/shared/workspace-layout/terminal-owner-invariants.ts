@@ -27,7 +27,7 @@ export type TerminalOwnerConflictReason =
   // Kept apart: older relay reattaches left SSH panes in `local`, so this may be one moved surface.
   | 'leaf_in_other_tab_on_other_host'
 
-/** `runtime:` partitions belong to a remote Orca server and are written only by its tab sync. */
+/** `runtime:` partitions belong to a remote Quirky server and are written only by its tab sync. */
 export function isTerminalOwnerPartition(hostId: ExecutionHostId): boolean {
   const kind = parseExecutionHostId(hostId)?.kind
   return kind === 'local' || kind === 'ssh'

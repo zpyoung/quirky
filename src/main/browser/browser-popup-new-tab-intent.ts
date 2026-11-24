@@ -1,5 +1,5 @@
 /**
- * Whether a new-window request from a page should open an Orca tab rather than a popup window.
+ * Whether a new-window request from a page should open an Quirky tab rather than a popup window.
  *
  * Chromium's disposition already carries Chrome's answer: new-tab links, Cmd/Ctrl/middle clicks, and
  * `window.open` without window features (`noopener` and `noreferrer` are not features) arrive as a
@@ -19,7 +19,7 @@ export function isNewBrowserTabPopupIntent(details: {
   )
 }
 
-/** A GET Chrome would open as a tab; Orca can only reopen its URL, which drops any opener. */
+/** A GET Chrome would open as a tab; Quirky can only reopen its URL, which drops any opener. */
 export function isBrowserTabPopupRequest(details: {
   frameName: string
   disposition: string

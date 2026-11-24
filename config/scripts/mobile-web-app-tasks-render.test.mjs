@@ -60,13 +60,13 @@ beforeAll(async () => {
   cspHeader = await readShellCsp()
   bridgeVersion = await readBridgeProtocolVersion()
   faultGrant = await readBridgeFaultGrant()
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-app-tasks-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-app-tasks-'))
   const built = await buildMobileWebAppBundle({ outDir: join(scratch, 'bundle') })
   routeChunks = built.routeChunks
   const served = await createBundleServer({ outDir: built.outDir, cspHeader })
   server = served.server
   origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
 }, 180_000)
 
@@ -135,14 +135,14 @@ async function waitForRoute({ page, errors, uncaught }, route, awaitText) {
       uncaught
     ])
   const cause = await race(
-    page.waitForFunction(() => document.documentElement.dataset.orcaWebEntry === 'mounted', {
+    page.waitForFunction(() => document.documentElement.dataset.quirkyWebEntry === 'mounted', {
       timeout: 30_000,
       polling: 250
     })
   )
   if (cause) {
     const state = await page.evaluate(
-      () => document.documentElement.dataset.orcaWebEntry ?? 'absent'
+      () => document.documentElement.dataset.quirkyWebEntry ?? 'absent'
     )
     throw named(cause, `never mounted (entry ${state})`)
   }
@@ -155,7 +155,7 @@ async function waitForRoute({ page, errors, uncaught }, route, awaitText) {
   if (paintCause) {
     throw named(paintCause, `mounted but never painted ${JSON.stringify(awaitText)}`)
   }
-  for (const fault of await page.evaluate(() => globalThis.__orcaRenderCheckFaults ?? [])) {
+  for (const fault of await page.evaluate(() => globalThis.__quirkyRenderCheckFaults ?? [])) {
     errors.push(`page fault: ${fault}`)
   }
 }

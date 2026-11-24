@@ -1,4 +1,4 @@
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
 import type { Worktree } from '../../shared/worktree/types'
 import { DEFAULT_WORKSPACE_STATUS_ID } from '../../shared/workspace-statuses'
 import type { RuntimeWorktreePsSummary } from '../../shared/runtime-types'
@@ -142,7 +142,7 @@ export function buildRuntimeWorktreePsSummaries(args: {
 function sortStampSummaryFields(
   worktree: Pick<Worktree, 'smartTier' | 'smartAt'>
 ): Pick<RuntimeWorktreePsSummary, 'smartTier' | 'smartAt' | 'sortedByStamps'> {
-  if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+  if (!QUIRKY_SIDEBAR_INPUTS_IS_MAIN) {
     return {}
   }
   return {

@@ -3,7 +3,7 @@
  * ShipIt is cancelled (e.g. "App Still Running", #14732) the request and its staged copy stay,
  * and every later staging stalls behind them until someone deletes them by hand. Before this
  * process stages, it clears them, but only when it alone may: it holds the install lock, no other
- * live Orca has staged anything, and ShipIt is not running.
+ * live Quirky has staged anything, and ShipIt is not running.
  */
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -113,7 +113,7 @@ async function otherLiveOwners(deps: ShipItStagingDeps): Promise<number[]> {
 
 /**
  * Run right before this process asks Squirrel to stage. Always records this process as a staging
- * owner, so no other Orca clears what it is about to stage.
+ * owner, so no other Quirky clears what it is about to stage.
  */
 export async function prepareShipItStaging(deps: ShipItStagingDeps): Promise<ShipItStagingResult> {
   if ((await leftoverNames(deps.cacheDir)).length === 0) {
@@ -142,7 +142,7 @@ async function recoverUnderLock(deps: ShipItStagingDeps): Promise<ShipItStagingR
   if (listing === null) {
     return { kind: 'skipped', reason: 'installer-unknown' }
   }
-  // Why by bundle id: the cache is shared by every copy of Orca, and other apps' ShipIt is irrelevant.
+  // Why by bundle id: the cache is shared by every copy of Quirky, and other apps' ShipIt is irrelevant.
   if (isShipItRunningForBundleId(listing, deps.bundleId)) {
     return { kind: 'skipped', reason: 'installer-running' }
   }

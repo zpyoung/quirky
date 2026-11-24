@@ -93,7 +93,7 @@ async function attach(adapter: StructuredAgentSessionAdapter) {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-attach-reconcile-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-attach-reconcile-'))
 })
 
 afterEach(async () => {

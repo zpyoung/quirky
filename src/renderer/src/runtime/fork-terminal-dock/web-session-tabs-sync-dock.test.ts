@@ -83,7 +83,7 @@ import {
   writeTerminalDockPaneState
 } from '../../components/terminal-pane/fork-terminal-dock/terminal-dock-pane-state'
 
-const TERMINAL_DOCK_STORAGE_KEY = 'orca.terminalDock.paneState.v1'
+const TERMINAL_DOCK_STORAGE_KEY = 'quirky.terminalDock.paneState.v1'
 
 function hasStoredPaneEntry(paneKey: string): boolean {
   const raw = window.localStorage.getItem(TERMINAL_DOCK_STORAGE_KEY)

@@ -45,8 +45,8 @@ function metadataFor(endpoint: string): RuntimeMetadata {
 function nextEndpoint(): string {
   endpointCount += 1
   return process.platform === 'win32'
-    ? `\\\\.\\pipe\\orca-probe-${process.pid}-${endpointCount}`
-    : join(mkdtempSync(join(tmpdir(), 'orca-probe-')), 'runtime.sock')
+    ? `\\\\.\\pipe\\quirky-probe-${process.pid}-${endpointCount}`
+    : join(mkdtempSync(join(tmpdir(), 'quirky-probe-')), 'runtime.sock')
 }
 
 describe('probeRuntimeListener', () => {
@@ -94,7 +94,7 @@ describe('probeRuntimeListener', () => {
       // Why: only ENOENT/ECONNREFUSED disown an endpoint. Anything else — here an
       // unreadable directory — leaves an owner possible, and guessing "free" is
       // what spawns the second main that aborts pre-JS.
-      const dir = join(mkdtempSync(join(tmpdir(), 'orca-probe-')), 'locked')
+      const dir = join(mkdtempSync(join(tmpdir(), 'quirky-probe-')), 'locked')
       mkdirSync(dir)
       chmodSync(dir, 0o000)
       lockedDirs.add(dir)
@@ -127,7 +127,7 @@ describe('probeRuntimeListener', () => {
   ])('frees a profile whose metadata carries %s instead of dialling it', async (_label, value) => {
     // Why: the metadata file is unvalidated JSON. A missing or blank endpoint throws
     // out of createConnection and would fail serve outright, and a number is read as a
-    // TCP port — 127.0.0.1:42 could be answered by something that is not Orca at all.
+    // TCP port — 127.0.0.1:42 could be answered by something that is not Quirky at all.
     const metadata = metadataFor(nextEndpoint())
     const transport = { ...metadata.transports[0]! }
     // The file on disk is untyped JSON, so the probe must survive a non-string endpoint.

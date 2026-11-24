@@ -67,7 +67,7 @@ async function scanAndPersist(previous: ClaudeUsageLoadedSourceCache) {
 }
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-claude-retain-source-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-claude-retain-source-'))
   owner = join(directory, 'owner.jsonl')
   fork = join(directory, 'fork.jsonl')
   sourcePath = join(directory, 'sources.json')

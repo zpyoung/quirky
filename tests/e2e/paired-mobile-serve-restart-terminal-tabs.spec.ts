@@ -1,10 +1,10 @@
 /**
- * A phone paired directly with `orca serve` still lists a `terminal.create` terminal after the
+ * A phone paired directly with `quirky serve` still lists a `terminal.create` terminal after the
  * serve process restarts (an update does this), both in its first tab-stream snapshot and in a
  * tab list. Regression oracle for #26022: the cold-start hydrate used to keep only serve-minted
  * PTYs, so CLI and agent terminals vanished from the phone.
  */
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchPhoneMirrorTopology } from './helpers/phone-mirror-topology'
 import type { PairedMobileClient } from './helpers/paired-mobile-client'
 import type { RuntimeWorktreePsSummary } from '../../src/shared/runtime-worktree-contracts'
@@ -25,7 +25,7 @@ async function listedPtyIds(phone: PairedMobileClient, worktreeId: string): Prom
   return listed.ok ? terminalPtyIds(listed.result) : [`refused:${listed.error.code}`]
 }
 
-test('phone paired with orca serve keeps a terminal.create terminal across a serve restart', async ({
+test('phone paired with quirky serve keeps a terminal.create terminal across a serve restart', async ({
   testRepoPath
 }, testInfo) => {
   test.setTimeout(120_000)

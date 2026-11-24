@@ -1,6 +1,6 @@
 import type { LeaseGuard } from '../../shared/fork-heimdall/kind-contract'
 import type { ObjectiveDispatchRecord } from '../../shared/fork-heimdall-objective/parallel-types'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { ObjectiveSnapshotBinding } from './execution-context'
 import type { ObjectiveStore } from './objective-store'
 
@@ -17,7 +17,7 @@ function isPendingWorkspace(record: ObjectiveDispatchRecord): boolean {
 }
 
 async function removeDispatchWorktree(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   record: ObjectiveDispatchRecord
 ): Promise<void> {
   if (isPendingWorkspace(record)) {
@@ -72,7 +72,7 @@ async function workspaceWorkersReleased(
 
 /** Removes an applied, conflict-free dispatch only after the final node in its lane session. */
 export async function cleanupAppliedObjectiveDispatch(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   objectiveStore: ObjectiveStore
   record: ObjectiveDispatchRecord
   lease: LeaseGuard
@@ -131,7 +131,7 @@ export async function cleanupAppliedObjectiveDispatch(args: {
 
 /** Cleans eligible applied dispatches without depending on a world snapshot. */
 export async function cleanupAppliedObjectiveDispatches(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   objectiveStore: ObjectiveStore
   watcherId: string
   lease: LeaseGuard
@@ -177,7 +177,7 @@ function workspaceMustBeRetained(
 
 /** Watcher deletion is the only path that removes failed or conflict-retained worktrees. */
 export async function purgeObjectiveDispatchWorktrees(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   watcherId: string
   objectiveStore: ObjectiveStore
 }): Promise<void> {
@@ -207,7 +207,7 @@ function markerFingerprint(comment: string, watcherId: string): string | null {
 
 /** Repairs setup/cleanup interrupted by restart while retaining unowned dispatch-like children. */
 export async function reconcileObjectiveDispatchWorktrees(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   binding: ObjectiveSnapshotBinding
   objectiveStore: ObjectiveStore
   lease: LeaseGuard

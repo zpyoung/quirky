@@ -119,7 +119,7 @@ function heldBytes(): number {
 
 it('preserves the successful staged URI, base64 options and bytes without deleting it', () => {
   const uri = device().stageBase64('AQID')
-  expect(uri).toBe('file:///cache/orca-media-1234-0.25.png')
+  expect(uri).toBe('file:///cache/quirky-media-1234-0.25.png')
   expect(storage.events).toEqual([
     { operation: 'create', uri, options: { overwrite: true } },
     { operation: 'write', uri, content: 'AQID', options: { encoding: 'base64' } }
@@ -136,7 +136,7 @@ it.each([0, 4096])('releases an unreturned file after a write fails with %i byte
   expect(storage.files.size).toBe(0)
   expect(storage.events.at(-1)).toEqual({
     operation: 'delete',
-    uri: 'file:///cache/orca-media-1234-0.25.png'
+    uri: 'file:///cache/quirky-media-1234-0.25.png'
   })
 })
 
@@ -165,7 +165,7 @@ it('deletes only the failed file while a prior successful file remains readable'
   storage.partialBytes = 4096
   expect(thrownBy(() => device().stageBase64('BAUG'))).toBe(original)
   expect(storage.events.filter((event) => event.operation === 'delete')).toEqual([
-    { operation: 'delete', uri: 'file:///cache/orca-media-1234-0.2.png' }
+    { operation: 'delete', uri: 'file:///cache/quirky-media-1234-0.2.png' }
   ])
   expect([...storage.files.keys()]).toEqual([successfulUri])
   expect(storage.files.get(successfulUri)).toEqual(Uint8Array.from([1, 2, 3]))
@@ -196,9 +196,9 @@ it('retains the provider-copy cleanup and original read error when deletion fail
   expect(storage.events).toEqual([
     {
       operation: 'create',
-      uri: 'file:///cache/orca-media-1234-0.25.bin',
+      uri: 'file:///cache/quirky-media-1234-0.25.bin',
       options: { overwrite: true }
     },
-    { operation: 'delete', uri: 'file:///cache/orca-media-1234-0.25.bin' }
+    { operation: 'delete', uri: 'file:///cache/quirky-media-1234-0.25.bin' }
   ])
 })

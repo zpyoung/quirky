@@ -18,7 +18,7 @@ import {
   structuredAgentSessionCreateIntentFingerprint
 } from './structured-agent-session-create'
 import { resolveUncommittedStructuredCreate } from './structured-agent-session-precommit-refusal'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
   structuredAgentSessionClosedBeforeCreate,
   structuredAgentSessionClosedBeforeCreateRefusal
@@ -109,7 +109,7 @@ export async function handleStructuredAgentSessionCreate(
   }
   // Nothing is created yet, so a close that came first refuses the create outright.
   if (
-    ORCA_LAYOUT_OWNER_IS_MAIN &&
+    QUIRKY_LAYOUT_OWNER_IS_MAIN &&
     structuredAgentSessionClosedBeforeCreate(params.envelope.sessionId)
   ) {
     return { ok: false, refusal: structuredAgentSessionClosedBeforeCreateRefusal() }

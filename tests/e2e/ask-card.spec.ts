@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { waitForActivePaneHookDescriptor, waitForActiveTerminalManager } from './helpers/terminal'
 import type { AskRegistryEvent } from '../../src/shared/fork-ask-question-tool/ask-question-schema'
@@ -199,40 +199,42 @@ async function replayAskHydration(page: Page): Promise<void> {
 }
 
 test.describe('Ask card', () => {
-  test('takes the right sidebar for a pending ask on the focused pane', async ({ orcaPage }) => {
-    const { paneKey } = await setupAskPane(orcaPage)
+  test('takes the right sidebar for a pending ask on the focused pane', async ({ quirkyPage }) => {
+    const { paneKey } = await setupAskPane(quirkyPage)
     const askId = `e2e-ask-render-${randomUUID()}`
     const question = 'Ready to deploy the release build?'
-    const before = await readSidebarRoute(orcaPage)
+    const before = await readSidebarRoute(quirkyPage)
 
-    await seedPendingAsk(orcaPage, { paneKey, askId, questionId: 'q1', question })
+    await seedPendingAsk(quirkyPage, { paneKey, askId, questionId: 'q1', question })
 
-    await expect(orcaPage.getByText(question)).toBeVisible({ timeout: 10_000 })
-    await expect(orcaPage.getByRole('textbox', { name: question })).toBeVisible()
-    await expect(orcaPage.getByRole('button', { name: /Questions/ })).toBeVisible()
+    await expect(quirkyPage.getByText(question)).toBeVisible({ timeout: 10_000 })
+    await expect(quirkyPage.getByRole('textbox', { name: question })).toBeVisible()
+    await expect(quirkyPage.getByRole('button', { name: /Questions/ })).toBeVisible()
 
     // The override renders the panel without touching the persisted route, so the tab the user
     // chose is still the one on record while the question is up.
-    const during = await readSidebarRoute(orcaPage)
+    const during = await readSidebarRoute(quirkyPage)
     expect(during.open).toBe(true)
     expect(during.stored).toBe(before.stored)
     expect(during.stored).not.toBe('ask')
   })
 
-  test('gives the sidebar back to the previous tab once the ask clears', async ({ orcaPage }) => {
-    const { paneKey } = await setupAskPane(orcaPage)
+  test('gives the sidebar back to the previous tab once the ask clears', async ({ quirkyPage }) => {
+    const { paneKey } = await setupAskPane(quirkyPage)
     const epoch = `e2e-handback-${randomUUID()}`
     const askId = `e2e-ask-handback-${randomUUID()}`
     const question = 'Retire the old stack?'
 
-    await orcaPage.evaluate(() => window.__store?.getState().setRightSidebarTab('source-control'))
+    await quirkyPage.evaluate(() => window.__store?.getState().setRightSidebarTab('source-control'))
     await applyAskEvent(
-      orcaPage,
+      quirkyPage,
       textAsk({ seq: 1, epoch, askId, paneKey, questionId: 'q1', question })
     )
-    await expect(orcaPage.getByRole('textbox', { name: question })).toBeVisible({ timeout: 10_000 })
+    await expect(quirkyPage.getByRole('textbox', { name: question })).toBeVisible({
+      timeout: 10_000
+    })
 
-    await applyAskEvent(orcaPage, {
+    await applyAskEvent(quirkyPage, {
       seq: 2,
       epoch,
       askId,
@@ -243,28 +245,28 @@ test.describe('Ask card', () => {
     })
 
     // The rail item outlives the answer by ASK_DISMISS_DELAY_MS so the summary can be read.
-    await expect(orcaPage.getByRole('button', { name: /Questions/ })).toHaveCount(0, {
+    await expect(quirkyPage.getByRole('button', { name: /Questions/ })).toHaveCount(0, {
       timeout: ASK_DISMISS_DELAY_MS + 10_000
     })
-    expect((await readSidebarRoute(orcaPage)).stored).toBe('source-control')
+    expect((await readSidebarRoute(quirkyPage)).stored).toBe('source-control')
   })
 
-  test('answering resolves the blocked wait and collapses the card', async ({ orcaPage }) => {
-    const { paneKey, worktreeId } = await setupAskPane(orcaPage)
+  test('answering resolves the blocked wait and collapses the card', async ({ quirkyPage }) => {
+    const { paneKey, worktreeId } = await setupAskPane(quirkyPage)
     const questionId = 'q1'
     const question = 'What should the release notes say?'
     const answerText = 'Fixed the release build pipeline.'
 
-    const askId = await registerAsk(orcaPage, { paneKey, worktreeId, questionId, question })
-    const field = orcaPage.getByRole('textbox', { name: question })
+    const askId = await registerAsk(quirkyPage, { paneKey, worktreeId, questionId, question })
+    const field = quirkyPage.getByRole('textbox', { name: question })
     await expect(field).toBeVisible({ timeout: 10_000 })
     await field.fill(answerText)
-    await orcaPage.getByRole('button', { name: 'Submit' }).click()
+    await quirkyPage.getByRole('button', { name: 'Submit' }).click()
 
     // The registry commits the answer and pushes the terminal event back over ask:set, so the
     // card's own result is the proof that Submit reached ask.answer with exactly what was typed.
     await expect
-      .poll(async () => (await readAskCard(orcaPage, { paneKey, askId }))?.result ?? null, {
+      .poll(async () => (await readAskCard(quirkyPage, { paneKey, askId }))?.result ?? null, {
         timeout: 10_000,
         message: 'submit did not resolve the ask through ask.answer'
       })
@@ -273,55 +275,55 @@ test.describe('Ask card', () => {
         skipped: []
       })
 
-    await expect(orcaPage.getByText(question)).toHaveCount(0, { timeout: 10_000 })
+    await expect(quirkyPage.getByText(question)).toHaveCount(0, { timeout: 10_000 })
   })
 
   test('restores a pending ask with its partial draft intact after a renderer remount', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const { paneKey, worktreeId } = await setupAskPane(orcaPage)
+    const { paneKey, worktreeId } = await setupAskPane(quirkyPage)
     const questionId = 'q1'
     const question = 'Which branch should this ship from?'
     const draftText = 'release/1.4 pending one more fix'
 
-    const askId = await registerAsk(orcaPage, { paneKey, worktreeId, questionId, question })
-    const field = orcaPage.getByRole('textbox', { name: question })
+    const askId = await registerAsk(quirkyPage, { paneKey, worktreeId, questionId, question })
+    const field = quirkyPage.getByRole('textbox', { name: question })
     await expect(field).toBeVisible({ timeout: 10_000 })
     await field.fill(draftText)
     // The dock debounces ask.updatePartial; the replay below must run against a draft the
     // registry already holds, or it would only prove the field kept its own state.
     await expect
-      .poll(() => readPersistedDraft(orcaPage, { askId, questionId }), {
+      .poll(() => readPersistedDraft(quirkyPage, { askId, questionId }), {
         timeout: 10_000,
         message: 'the draft never reached ask.updatePartial'
       })
       .toBe(draftText)
 
-    await replayAskHydration(orcaPage)
+    await replayAskHydration(quirkyPage)
 
     // The regression this guards: a card that merely exists post-restart is not enough — the
     // hydrated draft must reach the field, or the user's in-progress answer is silently lost.
     await expect(field).toBeVisible({ timeout: 10_000 })
     await expect(field).toHaveValue(draftText)
 
-    await cancelAsk(orcaPage, askId)
+    await cancelAsk(quirkyPage, askId)
   })
 
   test('clears a resolved card and surfaces the next queued ask on its own', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const { paneKey } = await setupAskPane(orcaPage)
+    const { paneKey } = await setupAskPane(quirkyPage)
     const epoch = `e2e-dismiss-${randomUUID()}`
     const first = 'Should the old stack be retired?'
     const second = 'Which region goes first?'
     const askId = `e2e-ask-first-${randomUUID()}`
 
     await applyAskEvent(
-      orcaPage,
+      quirkyPage,
       textAsk({ seq: 1, epoch, askId, paneKey, questionId: 'q1', question: first })
     )
     await applyAskEvent(
-      orcaPage,
+      quirkyPage,
       textAsk({
         seq: 2,
         epoch,
@@ -332,10 +334,10 @@ test.describe('Ask card', () => {
       })
     )
 
-    await expect(orcaPage.getByRole('textbox', { name: first })).toBeVisible({ timeout: 10_000 })
-    await expect(orcaPage.getByRole('textbox', { name: second })).toHaveCount(0)
+    await expect(quirkyPage.getByRole('textbox', { name: first })).toBeVisible({ timeout: 10_000 })
+    await expect(quirkyPage.getByRole('textbox', { name: second })).toHaveCount(0)
 
-    await applyAskEvent(orcaPage, {
+    await applyAskEvent(quirkyPage, {
       seq: 3,
       epoch,
       askId,
@@ -345,20 +347,20 @@ test.describe('Ask card', () => {
       result: { answers: {}, skipped: ['q1'], summary: 'Declined.' }
     })
 
-    await expect(orcaPage.getByText('Declined.')).toBeVisible({ timeout: 10_000 })
+    await expect(quirkyPage.getByText('Declined.')).toBeVisible({ timeout: 10_000 })
     // The regression this guards: the resolved card used to sit at the head forever, so the
     // already-queued second ask was never shown.
-    await expect(orcaPage.getByRole('textbox', { name: second })).toBeVisible({
+    await expect(quirkyPage.getByRole('textbox', { name: second })).toBeVisible({
       timeout: ASK_DISMISS_DELAY_MS + 10_000
     })
-    await expect(orcaPage.getByText('Declined.')).toHaveCount(0)
+    await expect(quirkyPage.getByText('Declined.')).toHaveCount(0)
   })
 
-  test('scrolls a long card and keeps Submit pinned inside the panel', async ({ orcaPage }) => {
-    const { paneKey } = await setupAskPane(orcaPage)
+  test('scrolls a long card and keeps Submit pinned inside the panel', async ({ quirkyPage }) => {
+    const { paneKey } = await setupAskPane(quirkyPage)
     const askId = `e2e-ask-tall-${randomUUID()}`
 
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       ({ pane, id }) => {
         window.__store?.setState((state) => ({
           pendingAsksByPaneKey: {
@@ -386,12 +388,12 @@ test.describe('Ask card', () => {
       { pane: paneKey, id: askId }
     )
 
-    await expect(orcaPage.getByRole('textbox', { name: 'Tall card question 0?' })).toBeVisible({
+    await expect(quirkyPage.getByRole('textbox', { name: 'Tall card question 0?' })).toBeVisible({
       timeout: 10_000
     })
-    await expect(orcaPage.getByRole('button', { name: 'Submit' })).toBeVisible()
+    await expect(quirkyPage.getByRole('button', { name: 'Submit' })).toBeVisible()
 
-    const metrics = await orcaPage.evaluate(() => {
+    const metrics = await quirkyPage.evaluate(() => {
       const submit = Array.from(document.querySelectorAll('button')).find(
         (button) => button.textContent?.trim() === 'Submit'
       )

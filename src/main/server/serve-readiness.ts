@@ -1,5 +1,5 @@
 import type { PairingOfferUnavailableReason } from '../runtime/runtime-rpc/runtime-rpc-pairing-types'
-import type { OrcadHealth } from '../orcad/orcad-health'
+import type { QuirkydHealth } from '../quirkyd/quirkyd-health'
 import { describePtyProcessCeiling } from '../../shared/pty-process-ceiling-state'
 
 export type ServePairingUnavailableReason = PairingOfferUnavailableReason | 'disabled_by_operator'
@@ -33,7 +33,7 @@ export type ServeReadiness = {
    * treat its absence as "not reported", never as healthy. Additive, so an older client
    * parsing this payload is unaffected.
    */
-  health?: OrcadHealth
+  health?: QuirkydHealth
 }
 
 export type ServeReadinessOutput =
@@ -80,7 +80,7 @@ export function renderServeReadiness(
   }
   if (output.mode === 'json') {
     return JSON.stringify({
-      type: 'orca_server_ready',
+      type: 'quirky_server_ready',
       schemaVersion: 1,
       runtimeId: readiness.runtimeId,
       endpoint: readiness.boundEndpoint,
@@ -96,7 +96,7 @@ export function renderServeReadiness(
 
 function renderHumanReadiness(readiness: ServeReadiness): string {
   const lines = [
-    'Orca server ready',
+    'Quirky server ready',
     `Bound endpoint: ${readiness.boundEndpoint ?? 'websocket unavailable'}`,
     `Advertised endpoint: ${readiness.advertisedEndpoint ?? 'unavailable'}`
   ]
@@ -109,7 +109,7 @@ function renderHumanReadiness(readiness: ServeReadiness): string {
     lines.push(
       `Terminal daemon: ${daemon.state} — PTY self-test ${daemon.selfTest.ok ? 'passed' : 'FAILED'}` +
         ` (${daemon.selfTest.coverage}: ${daemon.selfTest.verdict})` +
-        `; terminals survive an orcad restart: ${daemon.ownsFreshSessions ? 'yes' : 'NO'}`
+        `; terminals survive an quirkyd restart: ${daemon.ownsFreshSessions ? 'yes' : 'NO'}`
     )
     if (daemon.processCeiling !== undefined) {
       lines.push(`Terminal process ceiling: ${describePtyProcessCeiling(daemon.processCeiling)}`)

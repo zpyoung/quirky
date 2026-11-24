@@ -86,7 +86,7 @@ afterEach(() => {
 })
 
 function makeTree(): { root: string; source: string } {
-  const root = mkdtempSync(path.join(tmpdir(), 'orca-share-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'quirky-share-'))
   roots.push(root)
   const source = path.join(root, 'source')
   mkdirSync(path.join(source, 'nested'), { recursive: true })

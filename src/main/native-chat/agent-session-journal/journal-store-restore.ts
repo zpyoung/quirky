@@ -20,11 +20,11 @@ export async function restoreJournalStore(
 ): Promise<void> {
   const database = host.database()
   if (database.readOnly) {
-    // A newer Orca's database: nothing in it is read as this build's, and nothing is written.
+    // A newer Quirky's database: nothing in it is read as this build's, and nothing is written.
     throw journalOpenRefusalError(
       new AgentSessionJournalError(
         'journal_read_only',
-        `agent-session journal for ${host.identity.sessionId} is in a newer Orca's database`
+        `agent-session journal for ${host.identity.sessionId} is in a newer Quirky's database`
       )
     )
   }

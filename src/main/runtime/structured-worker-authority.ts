@@ -14,11 +14,11 @@
  */
 
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
-import { isOrcaSessionId, type OrcaSessionId } from '../../shared/orca-session-address'
+import { isQuirkySessionId, type QuirkySessionId } from '../../shared/quirky-session-address'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as CODES } from '../../shared/orchestration-session-caller-codes'
 import type { RuntimeTerminalState } from '../../shared/runtime-types'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
-import { canonicalOrcaSessionId } from './orchestration/canonical-orca-session-id'
+import { canonicalQuirkySessionId } from './orchestration/canonical-quirky-session-id'
 import type { OrchestrationDb } from './orchestration/db'
 import { OrchestrationError } from './orchestration/orchestration-error'
 import {
@@ -92,10 +92,10 @@ export function resolveStructuredWorkerIdentityForSession(
   db: OrchestrationDb | null | undefined
 ): StructuredWorkerIdentity | null {
   const exact = structuredWorkerIdentities.getBySessionId(sessionId)
-  if (exact || !isOrcaSessionId(sessionId)) {
+  if (exact || !isQuirkySessionId(sessionId)) {
     return exact ?? resolveStructuredWorkerIdentityForRoot(sessionId, db)
   }
-  return resolveStructuredWorkerIdentityForRoot(canonicalOrcaSessionId(sessionId), db)
+  return resolveStructuredWorkerIdentityForRoot(canonicalQuirkySessionId(sessionId), db)
 }
 
 /** The worker minted for a lineage root session, rehydrated from its durable row after a restart. */
@@ -118,14 +118,14 @@ export function resolveStructuredWorkerIdentityForRoot(
  * worker handle, so one whose handle is gone must not act handle-less, as a chat would.
  */
 export function isRecordedStructuredWorkerSession(
-  sessionId: OrcaSessionId,
+  sessionId: QuirkySessionId,
   db: OrchestrationDb
 ): boolean {
   return Boolean(
     db.db
       .prepare(
         `SELECT 1 FROM dispatch_contexts
-         WHERE assignee_orca_session_id = ? AND process_incarnation = ? LIMIT 1`
+         WHERE assignee_quirky_session_id = ? AND process_incarnation = ? LIMIT 1`
       )
       .get(sessionId, structuredWorkerProcessIncarnation(sessionId))
   )

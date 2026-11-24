@@ -19,12 +19,12 @@ on:
       - '.github/actions/restore-pnpm-verification/**'
       - '.github/actions/prepare-headless-compiler/**'
       - '.github/actions/prepare-native-runtime/**'
-      - '.github/actions/prepare-orcad-prebuilds/**'
+      - '.github/actions/prepare-quirkyd-prebuilds/**'
       - '.github/workflows/node-server-tests.yml'
   workflow_dispatch:
     inputs:
       build_template:
-        description: Also merge every lane's slot into the desktop orcad template artifact
+        description: Also merge every lane's slot into the desktop quirkyd template artifact
         type: boolean
         default: false
       fast_runners:
@@ -39,7 +39,7 @@ on:
         type: string
         default: ''
       build_template:
-        description: Upload each lane's release slot and merge them into the orcad-template artifact
+        description: Upload each lane's release slot and merge them into the quirkyd-template artifact
         type: boolean
         default: false
       fast_runners:
@@ -153,7 +153,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
       JOBS: ${{ inputs.fast_runners && 'max' || '' }}
     steps:
       - uses: actions/checkout@v6
@@ -166,49 +166,49 @@ jobs:
           # Template qualification must not wait for large download-cache uploads.
           cache-pnpm-store: ${{ !inputs.build_template }}
           cache-pnpm-store-lookup-only: 'true'
-      # Design D7 upgrade and rollback: the last Bun orcad, built from a main commit that shipped
+      # Design D7 upgrade and rollback: the last Bun quirkyd, built from a main commit that shipped
       # it, using the current Bun pin beside this checkout's Node slot; hand-over skips once PROTOCOL_VERSION
       # moves past the Bun daemon's. Install its pinned dependencies independently of this checkout.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         if: runner.os == 'Linux'
         with:
           bun-version-file: config/.bun-version
-      - name: Build the last Bun orcad for the cross-runtime tests
-        id: bun-orcad
+      - name: Build the last Bun quirkyd for the cross-runtime tests
+        id: bun-quirkyd
         background: true
         shell: bash
         env:
-          BUN_ORCAD_COMMIT: f4092c06d639ee13ad446261dcabc78b27a21fbc
+          BUN_QUIRKYD_COMMIT: f4092c06d639ee13ad446261dcabc78b27a21fbc
         run: |
           if [ "$RUNNER_OS" != Linux ]; then exit 0; fi
-          git fetch --no-tags --depth=1 origin "$BUN_ORCAD_COMMIT"
-          git worktree add --detach "$RUNNER_TEMP/bun-orcad-source" "$BUN_ORCAD_COMMIT"
-          pnpm --dir "$RUNNER_TEMP/bun-orcad-source" install --frozen-lockfile --ignore-scripts
-          node "$RUNNER_TEMP/bun-orcad-source/config/scripts/build-orcad-bun.mjs" --out-dir "$RUNNER_TEMP/bun-orcad"
-          echo "slot=$RUNNER_TEMP/bun-orcad" >> "$GITHUB_OUTPUT"
+          git fetch --no-tags --depth=1 origin "$BUN_QUIRKYD_COMMIT"
+          git worktree add --detach "$RUNNER_TEMP/bun-quirkyd-source" "$BUN_QUIRKYD_COMMIT"
+          pnpm --dir "$RUNNER_TEMP/bun-quirkyd-source" install --frozen-lockfile --ignore-scripts
+          node "$RUNNER_TEMP/bun-quirkyd-source/config/scripts/build-quirkyd-bun.mjs" --out-dir "$RUNNER_TEMP/bun-quirkyd"
+          echo "slot=$RUNNER_TEMP/bun-quirkyd" >> "$GITHUB_OUTPUT"
           echo "executable=$(command -v bun)" >> "$GITHUB_OUTPUT"
       # Linux release slots come from the floor and Alpine lanes; this slot serves local tests.
-      - uses: ./.github/actions/prepare-orcad-prebuilds
+      - uses: ./.github/actions/prepare-quirkyd-prebuilds
       - uses: actions/download-artifact@v8
         if: needs.changes.outputs.qualification != 'false'
         with:
-          name: orcad-mobile-web-bundle
+          name: quirkyd-mobile-web-bundle
           path: out/mobile-web
       # Narrow test-only runs skip the shared producer but still need a page.
       - uses: ./.github/actions/build-mobile-web-bundle
         if: needs.changes.outputs.qualification == 'false'
-      - run: pnpm build:orcad
-      - wait: bun-orcad
+      - run: pnpm build:quirkyd
+      - wait: bun-quirkyd
       - run: pnpm test:node-server --artifact ${{ runner.os == 'Linux' && '--cross-runtime' || '' }}
         env:
-          ORCA_BUN_ORCAD_SLOT: ${{ steps.bun-orcad.outputs.slot }}
-          BUN_EXECUTABLE: ${{ steps.bun-orcad.outputs.executable }}
+          QUIRKY_BUN_QUIRKYD_SLOT: ${{ steps.bun-quirkyd.outputs.slot }}
+          BUN_EXECUTABLE: ${{ steps.bun-quirkyd.outputs.executable }}
       - name: Build the host-target desktop server template
         if: runner.os == 'Linux'
-        run: node config/scripts/build-orcad-template.mjs --targets linux-${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}-glibc
+        run: node config/scripts/build-quirkyd-template.mjs --targets linux-${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}-glibc
       - name: Verify a structured chat from the desktop server template
         if: runner.os == 'Linux'
-        run: pnpm test:node-server --artifact src/main/orcad/orcad-packaged-structured-chat.integration.test.ts --maxWorkers=2
+        run: pnpm test:node-server --artifact src/main/quirkyd/quirkyd-packaged-structured-chat.integration.test.ts --maxWorkers=2
       - uses: actions/setup-node@v6
         if: runner.arch == 'X64'
         with:
@@ -217,16 +217,16 @@ jobs:
         if: runner.arch == 'X64'
         shell: bash
         run: |
-          node out/orcad/orcad.js --orcad-smoke-load-check
-          node out/orcad/orcad.js --orcad-profile-state-preflight 00000000-0000-4000-8000-000000000018 | tee "$RUNNER_TEMP/preflight.json"
+          node out/quirkyd/quirkyd.js --quirkyd-smoke-load-check
+          node out/quirkyd/quirkyd.js --quirkyd-profile-state-preflight 00000000-0000-4000-8000-000000000018 | tee "$RUNNER_TEMP/preflight.json"
           node -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));if(r.runtime!=='node'||!/^24\./.test(r.runtimeVersion))process.exit(1)" "$RUNNER_TEMP/preflight.json"
       # Linux release slots come from the floor and Alpine lanes; these runners own the rest.
       - name: Keep this runner's qualified slot for the desktop template
         if: inputs.build_template && runner.os != 'Linux'
         uses: actions/upload-artifact@v7
         with:
-          name: orcad-prebuild-${{ matrix.os }}
-          path: out/orcad-prebuilds/
+          name: quirkyd-prebuild-${{ matrix.os }}
+          path: out/quirkyd-prebuilds/
           if-no-files-found: error
           retention-days: 7
           # A rerun attempt re-uploads under the same name, which v4 otherwise refuses.
@@ -250,7 +250,7 @@ jobs:
       - uses: ./.github/actions/build-mobile-web-bundle
       - uses: actions/upload-artifact@v7
         with:
-          name: orcad-mobile-web-bundle
+          name: quirkyd-mobile-web-bundle
           path: out/mobile-web/
           if-no-files-found: error
           retention-days: 1
@@ -286,7 +286,7 @@ jobs:
     container: ${{ matrix.image }}
     timeout-minutes: 25
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
       # The image puts /opt/clang first on PATH; the slot is built with its gcc-toolset.
       CC: gcc
       CXX: g++
@@ -313,21 +313,21 @@ jobs:
       - uses: ./.github/actions/install-node-dependencies
       - name: Build and smoke this runner's node-pty prebuild slot under the pinned Node
         run: |
-          pnpm build:orcad-prebuilds
-          pnpm build:orcad-prebuilds --require-slots "$(node config/scripts/build-orcad-prebuilds.mjs --print-slot)"
-          pnpm build:orcad-prebuilds --smoke
+          pnpm build:quirkyd-prebuilds
+          pnpm build:quirkyd-prebuilds --require-slots "$(node config/scripts/build-quirkyd-prebuilds.mjs --print-slot)"
+          pnpm build:quirkyd-prebuilds --smoke
       - uses: actions/download-artifact@v8
         with:
-          name: orcad-mobile-web-bundle
+          name: quirkyd-mobile-web-bundle
           path: out/mobile-web
-      - run: pnpm build:orcad
+      - run: pnpm build:quirkyd
       - run: pnpm test:node-server --artifact
       - name: Keep this runner's glibc 2.28 slot for the desktop template
         if: inputs.build_template
         uses: actions/upload-artifact@v7
         with:
-          name: orcad-prebuild-glibc-${{ matrix.os }}
-          path: out/orcad-prebuilds/
+          name: quirkyd-prebuild-glibc-${{ matrix.os }}
+          path: out/quirkyd-prebuilds/
           if-no-files-found: error
           retention-days: 7
           overwrite: true
@@ -347,7 +347,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -360,13 +360,13 @@ jobs:
       # smokes with that Node. devtoolset-10 supplies C++20; the slot links libstdc++ statically.
       - name: Build and smoke the glibc 2.17 compat slot under the glibc-217 Node
         run: |
-          compat_node="$(node config/scripts/build-orcad-prebuilds.mjs --slot=linux-x64-glibc217 --print-runtime)"
+          compat_node="$(node config/scripts/build-quirkyd-prebuilds.mjs --slot=linux-x64-glibc217 --print-runtime)"
           case "$compat_node" in
             "$GITHUB_WORKSPACE"/*) ;;
             *) echo "glibc-217 Node cached outside the workspace: $compat_node" >&2; exit 1 ;;
           esac
           docker run --rm --init -i \
-            -e ORCA_BACKGROUND_LAUNCH=1 \
+            -e QUIRKY_BACKGROUND_LAUNCH=1 \
             -e COMPAT_NODE="/work/${compat_node#"$GITHUB_WORKSPACE"/}" \
             -e CC=gcc -e CXX=g++ \
             -e PYTHON=/opt/python/cp312-cp312/bin/python3 \
@@ -374,17 +374,17 @@ jobs:
             quay.io/pypa/manylinux2014_x86_64@sha256:6f74cabeac2432570aa4bfdb29f7c1f30313d4d6654d764c44e574b6ffdd4ed5 bash -s <<'GLIBC217_COMPAT_SLOT'
           set -eu
           export PATH="$(dirname "$COMPAT_NODE"):$PATH"
-          node config/scripts/build-orcad-prebuilds.mjs --slot=linux-x64-glibc217
-          node config/scripts/build-orcad-prebuilds.mjs --require-slots linux-x64-glibc217
+          node config/scripts/build-quirkyd-prebuilds.mjs --slot=linux-x64-glibc217
+          node config/scripts/build-quirkyd-prebuilds.mjs --require-slots linux-x64-glibc217
           # The image's devtoolset LD_LIBRARY_PATH must not stand in for a host C++ runtime.
-          env -u LD_LIBRARY_PATH node config/scripts/build-orcad-prebuilds.mjs --slot=linux-x64-glibc217 --smoke
+          env -u LD_LIBRARY_PATH node config/scripts/build-quirkyd-prebuilds.mjs --slot=linux-x64-glibc217 --smoke
           GLIBC217_COMPAT_SLOT
       - name: Keep the glibc 2.17 compat slot for the desktop template
         if: inputs.build_template
         uses: actions/upload-artifact@v7
         with:
-          name: orcad-prebuild-glibc217
-          path: out/orcad-prebuilds/
+          name: quirkyd-prebuild-glibc217
+          path: out/quirkyd-prebuilds/
           if-no-files-found: error
           retention-days: 7
           overwrite: true
@@ -409,7 +409,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -426,41 +426,41 @@ jobs:
           touch "$VERIFICATION_CACHE_PATH"
           mkdir -p out/mobile-web
           # Multi-arch index digest of the tag; re-resolve it whenever NODE_RUNTIME_PIN moves.
-          docker run --rm --init --detach --name orcad-alpine \
-            -e ORCA_BACKGROUND_LAUNCH=1 \
+          docker run --rm --init --detach --name quirkyd-alpine \
+            -e QUIRKY_BACKGROUND_LAUNCH=1 \
             -v "$VERIFICATION_CACHE_PATH:/root/.cache/pnpm/lockfile-verified.jsonl" \
             -v "$GITHUB_WORKSPACE:/work" -w /work \
             node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 sleep infinity
-          docker exec -i orcad-alpine sh -s <<'NODE_SERVER_PREPARATION'
+          docker exec -i quirkyd-alpine sh -s <<'NODE_SERVER_PREPARATION'
           set -eu
           apk add --no-cache bash git libstdc++ python3 make g++
           git config --global --add safe.directory /work
           npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
           pnpm install --frozen-lockfile --ignore-scripts
-          pnpm build:orcad-prebuilds
-          pnpm build:orcad-prebuilds --require-slots "$(node config/scripts/build-orcad-prebuilds.mjs --print-slot)"
-          pnpm build:orcad-prebuilds --smoke
+          pnpm build:quirkyd-prebuilds
+          pnpm build:quirkyd-prebuilds --require-slots "$(node config/scripts/build-quirkyd-prebuilds.mjs --print-slot)"
+          pnpm build:quirkyd-prebuilds --smoke
           NODE_SERVER_PREPARATION
       - uses: actions/download-artifact@v8
         with:
-          name: orcad-mobile-web-bundle
+          name: quirkyd-mobile-web-bundle
           path: out/mobile-web
       - name: Verify native Alpine artifact and persistence
         run: |
-          docker exec -i orcad-alpine sh -s <<'NODE_SERVER_QUALIFICATION'
+          docker exec -i quirkyd-alpine sh -s <<'NODE_SERVER_QUALIFICATION'
           set -eu
-          pnpm build:orcad
+          pnpm build:quirkyd
           pnpm test:node-server --artifact
           NODE_SERVER_QUALIFICATION
       - name: Clean up the Alpine qualification container
         if: always()
-        run: docker rm --force orcad-alpine
+        run: docker rm --force quirkyd-alpine
       - name: Keep this runner's musl slot for the desktop template
         if: inputs.build_template
         uses: actions/upload-artifact@v7
         with:
-          name: orcad-prebuild-musl-${{ matrix.os }}
-          path: out/orcad-prebuilds/
+          name: quirkyd-prebuild-musl-${{ matrix.os }}
+          path: out/quirkyd-prebuilds/
           if-no-files-found: error
           retention-days: 7
           overwrite: true
@@ -484,34 +484,34 @@ jobs:
       - name: Collect every lane's slot
         uses: actions/download-artifact@v8
         with:
-          pattern: orcad-prebuild-*
-          path: ${{ runner.temp }}/orcad-prebuild-lanes
+          pattern: quirkyd-prebuild-*
+          path: ${{ runner.temp }}/quirkyd-prebuild-lanes
       - name: Merge the lanes and gate the full slot matrix
         shell: bash
         run: |
-          node config/scripts/merge-orcad-prebuilds.mjs "$RUNNER_TEMP"/orcad-prebuild-lanes/*
-          pnpm build:orcad-prebuilds --require-slots
-          pnpm build:orcad-prebuilds --require-slots linux-x64-glibc217
+          node config/scripts/merge-quirkyd-prebuilds.mjs "$RUNNER_TEMP"/quirkyd-prebuild-lanes/*
+          pnpm build:quirkyd-prebuilds --require-slots
+          pnpm build:quirkyd-prebuilds --require-slots linux-x64-glibc217
       # The page the qualification lanes tested, not a rebuild.
       - uses: actions/download-artifact@v8
         with:
-          name: orcad-mobile-web-bundle
+          name: quirkyd-mobile-web-bundle
           path: out/mobile-web
-      - run: pnpm build:orcad-template
+      - run: pnpm build:quirkyd-template
       - name: Report the template size
         shell: bash
         run: |
           {
-            echo '### orcad template'
+            echo '### quirkyd template'
             echo '```'
-            du -sh out/orcad-template
-            du -sh out/orcad-template/targets/*
+            du -sh out/quirkyd-template
+            du -sh out/quirkyd-template/targets/*
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
-          name: orcad-template
-          path: out/orcad-template/
+          name: quirkyd-template
+          path: out/quirkyd-template/
           # The per-target .server-target and .runtime-node markers are dotfiles.
           include-hidden-files: true
           if-no-files-found: error

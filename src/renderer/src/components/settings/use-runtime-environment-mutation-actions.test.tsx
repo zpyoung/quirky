@@ -52,7 +52,7 @@ function renderActions(connectEnvironment: () => Promise<boolean>, name = 'Studi
   )
   act(() => {
     view.result.current.setName(name)
-    view.result.current.setPairingCode('orca://pair#code')
+    view.result.current.setPairingCode('quirky://pair#code')
   })
   return view
 }

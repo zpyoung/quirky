@@ -21,7 +21,7 @@ export function runOxlintPluginOnSources({
   sources,
   extension = 'tsx'
 }) {
-  const directory = mkdtempSync(path.join(tmpdir(), `orca-${pluginName}-lint-`))
+  const directory = mkdtempSync(path.join(tmpdir(), `quirky-${pluginName}-lint-`))
   const sourcePaths = sources.map((_, index) =>
     path.join(directory, `sample-${index}.${extension}`)
   )

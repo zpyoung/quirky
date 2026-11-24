@@ -14,19 +14,19 @@ import {
   prepareRuntimeEnvironmentSshAccessLink,
   prepareRuntimeEnvironmentSshAccessUnlink
 } from '../../shared/runtime-environment-ssh-access-store'
-import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
+import { getManagedQuirkydFenceEnvironmentId } from '../../shared/managed-quirkyd-ssh-owner'
 import type { SshTarget } from '../../shared/ssh-types'
 import { runTargetLifecycle } from '../ipc/ssh/ssh-target-lifecycle-queue'
-import { requireManagedOrcadInfrastructure } from '../managed-server/lifecycle/orcad-managed-runtime-context'
+import { requireManagedQuirkydInfrastructure } from '../managed-server/lifecycle/quirkyd-managed-runtime-context'
 import {
-  closeOrcadManagedTunnel,
-  ensureOrcadManagedTunnel,
-  startOrcadManagedTunnel
-} from '../managed-server/lifecycle/orcad-managed-tunnel'
+  closeQuirkydManagedTunnel,
+  ensureQuirkydManagedTunnel,
+  startQuirkydManagedTunnel
+} from '../managed-server/lifecycle/quirkyd-managed-tunnel'
 import { verifyRuntimeEnvironmentSshTunnel } from './runtime-ssh-access-verification'
 import { fingerprintRuntimeSshTarget } from './runtime-ssh-target-fingerprint'
 
-type TargetClaims = ReturnType<typeof requireManagedOrcadInfrastructure>['claims']
+type TargetClaims = ReturnType<typeof requireManagedQuirkydInfrastructure>['claims']
 
 export { fingerprintRuntimeSshTarget }
 
@@ -36,7 +36,7 @@ function requireTarget(claims: TargetClaims, targetId: string): SshTarget & { ge
   if (!target || generation === undefined || !Number.isSafeInteger(generation) || generation <= 0) {
     throw new Error('SSH access requires an existing durable SSH target generation.')
   }
-  if (target.orcadProvisioning) {
+  if (target.quirkydProvisioning) {
     throw new Error('This SSH target has pending server provisioning.')
   }
   return { ...target, generation }
@@ -50,8 +50,8 @@ function requireAccessOnlyTarget(claims: TargetClaims, targetId: string, environ
     .blockers.filter(
       (entry) =>
         !(
-          entry.code === 'orcad_migration_target_owned' &&
-          getManagedOrcadFenceEnvironmentId(target) === environmentId
+          entry.code === 'quirkyd_migration_target_owned' &&
+          getManagedQuirkydFenceEnvironmentId(target) === environmentId
         )
     )
   if (blockers.length) {
@@ -71,12 +71,12 @@ function requireFence(
   allowUnowned = false
 ): SshTarget {
   const target = requireTarget(claims, fence.sshTargetId)
-  const owner = getManagedOrcadFenceEnvironmentId(target)
+  const owner = getManagedQuirkydFenceEnvironmentId(target)
   if (
     target.generation !== fence.sshTargetGeneration ||
     !fence.targetFingerprint ||
     fingerprintRuntimeSshTarget(target) !== fence.targetFingerprint ||
-    (owner !== environmentId && !(allowUnowned && !target.orcadFence))
+    (owner !== environmentId && !(allowUnowned && !target.quirkydFence))
   ) {
     throw new Error('The SSH target registration, connection configuration, or owner changed.')
   }
@@ -95,10 +95,10 @@ export function linkRuntimeSshAccess(
   const environmentId = resolveEnvironment(userDataPath, args.selector).id
   return runTargetLifecycle(`runtime-ssh-access:${userDataPath}:${environmentId}`, () =>
     runTargetLifecycle(args.sshTargetId, async () => {
-      const { claims, connectionManager } = requireManagedOrcadInfrastructure()
+      const { claims, connectionManager } = requireManagedQuirkydInfrastructure()
       const environment = resolveEnvironment(userDataPath, environmentId)
       assertRuntimeEnvironmentNotReconciling(environment)
-      if (environment.orcadDeployment) {
+      if (environment.quirkydDeployment) {
         throw new Error('Managed deployments cannot use independent SSH access.')
       }
       const target = requireAccessOnlyTarget(claims, args.sshTargetId, environmentId)
@@ -118,7 +118,7 @@ export function linkRuntimeSshAccess(
           throw new Error('This server already has a different SSH access request.')
         }
         requireFence(claims, environmentId, access)
-        await ensureOrcadManagedTunnel(userDataPath, environmentId)
+        await ensureQuirkydManagedTunnel(userDataPath, environmentId)
         requireFence(claims, environmentId, access)
         await options.invalidateTransport?.(environmentId)
         return redactRuntimeEnvironment(resolveEnvironment(userDataPath, environmentId))
@@ -150,7 +150,7 @@ export function linkRuntimeSshAccess(
         options.signal?.throwIfAborted()
         requireFence(claims, environmentId, fence)
         tunnelStarted = true
-        const localPort = await startOrcadManagedTunnel(
+        const localPort = await startQuirkydManagedTunnel(
           environmentId,
           claimed,
           connection,
@@ -178,7 +178,7 @@ export function linkRuntimeSshAccess(
         return linked
       } catch (error) {
         if (tunnelStarted && !linkCommitted) {
-          await closeOrcadManagedTunnel(environmentId)
+          await closeQuirkydManagedTunnel(environmentId)
         }
         throw error
       }
@@ -196,7 +196,7 @@ export function unlinkRuntimeSshAccess(
   return runTargetLifecycle(`runtime-ssh-access:${userDataPath}:${environmentId}`, async () => {
     const environment = resolveEnvironment(userDataPath, environmentId)
     assertRuntimeEnvironmentNotReconciling(environment)
-    if (environment.orcadDeployment) {
+    if (environment.quirkydDeployment) {
       throw new Error('Managed deployments cannot unlink independent SSH access.')
     }
     const access = environment.pendingSshAccessOperation ?? environment.sshAccess
@@ -204,7 +204,7 @@ export function unlinkRuntimeSshAccess(
       return redactRuntimeEnvironment(environment)
     }
     return runTargetLifecycle(access.sshTargetId, async () => {
-      const { claims } = requireManagedOrcadInfrastructure()
+      const { claims } = requireManagedQuirkydInfrastructure()
       requireFence(claims, environmentId, access, !!environment.pendingSshAccessOperation)
       const prepared =
         environment.pendingSshAccessOperation?.operation === 'link'
@@ -217,9 +217,9 @@ export function unlinkRuntimeSshAccess(
               requestId: args.requestId
             })
       await options.invalidateTransport(environmentId)
-      await closeOrcadManagedTunnel(environmentId)
+      await closeQuirkydManagedTunnel(environmentId)
       const target = requireFence(claims, environmentId, access, true)
-      if (target.orcadFence && !claims.release(target.id, environmentId)) {
+      if (target.quirkydFence && !claims.release(target.id, environmentId)) {
         throw new Error('The SSH target owner changed before access could be released.')
       }
       await claims.flush()

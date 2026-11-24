@@ -1,4 +1,4 @@
-/** Process-wide stop and spawn gate for `orca serve --supervise`, shared with the update loop. */
+/** Process-wide stop and spawn gate for `quirky serve --supervise`, shared with the update loop. */
 let supervisedStopRequested = false
 let supervisedStop = new AbortController()
 let supervisedSpawnGate: (() => Promise<boolean>) | null = null

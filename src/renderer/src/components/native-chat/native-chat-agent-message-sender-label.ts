@@ -50,7 +50,7 @@ export function useAgentMessageSenderLabel(
   chatWorktreeId: string | null,
   target?: RuntimeClientTarget
 ): string {
-  const { address, orcaSessionId } = sender.party
+  const { address, quirkySessionId } = sender.party
   const local = !address.startsWith('dispatch:')
   const owner = useAppStore((state) =>
     target
@@ -60,7 +60,7 @@ export function useAgentMessageSenderLabel(
         : null
   )
   const chatTab = useAppStore((state) =>
-    local && orcaSessionId ? findChatTab(state, orcaSessionId, owner) : undefined
+    local && quirkySessionId ? findChatTab(state, quirkySessionId, owner) : undefined
   )
   const conversationName = useStructuredChatTabConversationName(chatTab)
   const ownName = chatTab ? chatTab.customLabel?.trim() || conversationName : null

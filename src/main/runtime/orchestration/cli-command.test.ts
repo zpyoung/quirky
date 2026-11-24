@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { resolveTerminalOrchestrationCliCommand } from './cli-command'
 
 describe('resolveTerminalOrchestrationCliCommand', () => {
-  it('uses orca-ide for a pane recorded as WSL', () => {
+  it('uses quirky-ide for a pane recorded as WSL', () => {
     expect(
       resolveTerminalOrchestrationCliCommand({
         connectionId: null,
         isWsl: true,
         worktreeId: 'repo::C:\\repo'
       })
-    ).toBe('orca-ide')
+    ).toBe('quirky-ide')
   })
 
   it('uses project runtime and WSL paths when restored pane metadata is unavailable', () => {
@@ -30,31 +30,31 @@ describe('resolveTerminalOrchestrationCliCommand', () => {
           }
         }
       })
-    ).toBe('orca-ide')
+    ).toBe('quirky-ide')
     expect(
       resolveTerminalOrchestrationCliCommand({
         connectionId: null,
         isWsl: null,
         worktreeId: 'repo::\\\\wsl.localhost\\Ubuntu\\home\\alice\\repo'
       })
-    ).toBe('orca-ide')
+    ).toBe('quirky-ide')
   })
 
-  it('preserves native and SSH bare-orca commands', () => {
+  it('preserves native and SSH bare-quirky commands', () => {
     expect(
       resolveTerminalOrchestrationCliCommand({
         connectionId: null,
         isWsl: false,
         worktreeId: 'repo::/home/alice/repo'
       })
-    ).toBe('orca')
+    ).toBe('quirky')
     expect(
       resolveTerminalOrchestrationCliCommand({
         connectionId: 'ssh-1',
         isWsl: null,
         worktreeId: 'repo::\\\\wsl.localhost\\Ubuntu\\home\\alice\\repo'
       })
-    ).toBe('orca')
+    ).toBe('quirky')
   })
 
   it('uses the runtime-provided command locally but never leaks it to SSH', () => {
@@ -63,16 +63,16 @@ describe('resolveTerminalOrchestrationCliCommand', () => {
         connectionId: null,
         isWsl: true,
         worktreeId: 'repo::C:\\repo',
-        runtimeCliCommand: 'orca-dev'
+        runtimeCliCommand: 'quirky-dev'
       })
-    ).toBe('orca-dev')
+    ).toBe('quirky-dev')
     expect(
       resolveTerminalOrchestrationCliCommand({
         connectionId: 'ssh-1',
         isWsl: true,
         worktreeId: 'repo::C:\\repo',
-        runtimeCliCommand: 'orca-dev'
+        runtimeCliCommand: 'quirky-dev'
       })
-    ).toBe('orca')
+    ).toBe('quirky')
   })
 })

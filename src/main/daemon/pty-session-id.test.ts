@@ -6,7 +6,7 @@ import {
 } from './pty-session-id'
 import { parsePtySessionId } from '../../shared/pty-session-id-format'
 
-const USER_DATA = '/tmp/orca-userdata'
+const USER_DATA = '/tmp/quirky-userdata'
 
 describe('mintPtySessionId', () => {
   it('returns a UUID when no worktreeId is provided', () => {

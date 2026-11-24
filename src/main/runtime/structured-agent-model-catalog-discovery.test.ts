@@ -101,7 +101,7 @@ describe('the model catalog contract on every registration', () => {
   })
 
   it('lists through the command each agent is set to run, never a bare name', async () => {
-    const rig = mkdtempSync(join(tmpdir(), 'orca-catalog-overrides-'))
+    const rig = mkdtempSync(join(tmpdir(), 'quirky-catalog-overrides-'))
     const home = join(rig, 'home')
     const standIn = (agent: string): string => join(rig, `${agent}-standin`)
     for (const agent of ['claude', 'codex', 'grok']) {
@@ -144,7 +144,7 @@ describe('the model catalog contract on every registration', () => {
   it.skipIf(process.platform === 'win32')(
     'rereads the environment once, as a launch does, for a program installed since it was read',
     async () => {
-      const rig = mkdtempSync(join(tmpdir(), 'orca-catalog-installed-'))
+      const rig = mkdtempSync(join(tmpdir(), 'quirky-catalog-installed-'))
       // Names only the reread PATH has, so nothing on the machine running the test answers.
       const installed = (agent: string): string => `${agent}-installed-${process.pid}`
       const agents = {

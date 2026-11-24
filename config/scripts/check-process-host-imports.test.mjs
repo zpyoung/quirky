@@ -28,7 +28,7 @@ function assess(files, baseline = [], packageManifest = manifest) {
 }
 
 function fixture(files) {
-  const root = mkdtempSync(path.join(tmpdir(), 'orca-process-host-imports-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'quirky-process-host-imports-'))
   roots.push(root)
   for (const [file, source] of Object.entries(files)) {
     const target = path.join(root, file)
@@ -46,8 +46,8 @@ describe('process-host import boundary', () => {
         `
           // import { spawn } from 'node:child_process'
           const script = "require('node:child_process')"
-          import type { ProcessSpec } from '@orca/process-host/process-spec'
-          export { forkProcess } from '@orca/process-host/fork-process'
+          import type { ProcessSpec } from '@quirky/process-host/process-spec'
+          export { forkProcess } from '@quirky/process-host/fork-process'
           type Child = import('child_process').ChildProcess
           import legacy = require('legacy-package')
           import('dynamic-package')
@@ -56,8 +56,8 @@ describe('process-host import boundary', () => {
         `
       )
     ).toEqual([
-      '@orca/process-host/process-spec',
-      '@orca/process-host/fork-process',
+      '@quirky/process-host/process-spec',
+      '@quirky/process-host/fork-process',
       'child_process',
       'legacy-package',
       'dynamic-package',
@@ -75,9 +75,9 @@ describe('process-host import boundary', () => {
       assess({
         [`${PACKAGE_SOURCE}run-process.ts`]: "import { spawn } from 'node:child_process'",
         [`${PACKAGE_SOURCE}run-process.test.ts`]: "import { it } from 'vitest'",
-        'src/main/consumer.ts': "import { spawnProcess } from '@orca/process-host'",
+        'src/main/consumer.ts': "import { spawnProcess } from '@quirky/process-host'",
         'config/scripts/consumer.mjs':
-          "import { forkProcess } from '@orca/process-host/fork-process'"
+          "import { forkProcess } from '@quirky/process-host/fork-process'"
       })
     ).toEqual({ direct: [], added: [], stale: [], violations: [] })
   })
@@ -89,8 +89,8 @@ describe('process-host import boundary', () => {
     ['config/scripts/consumer.mjs', '../../src/packages/process-host/src/run-process'],
     ['tests/e2e/consumer.ts', '../../src/packages/process-host/src/run-process'],
     ['mobile/src/consumer.ts', '../../src/packages/process-host/src/run-process'],
-    ['src/main/consumer.ts', '@orca/process-host/src/run-process'],
-    ['src/main/consumer.ts', '@orca/process-host/private-process-state']
+    ['src/main/consumer.ts', '@quirky/process-host/src/run-process'],
+    ['src/main/consumer.ts', '@quirky/process-host/private-process-state']
   ])('rejects private package access in %s', (file, specifier) => {
     expect(assess({ [file]: `import '${specifier}'` }).violations).toHaveLength(1)
   })
@@ -100,8 +100,8 @@ describe('process-host import boundary', () => {
     ['src/main/consumer.ts', '..\\packages\\process-host\\src\\run-process'],
     ['src/main/consumer.ts', '..\\packages\\process-host\\dist\\run-process.js'],
     ['config/scripts/consumer.mjs', '..\\..\\src\\packages\\process-host\\src\\run-process'],
-    ['src/main/consumer.ts', '@orca\\process-host\\src\\run-process'],
-    ['src/main/consumer.ts', '@orca/process-host\\private-process-state']
+    ['src/main/consumer.ts', '@quirky\\process-host\\src\\run-process'],
+    ['src/main/consumer.ts', '@quirky/process-host\\private-process-state']
   ])('rejects Windows private package access in %s through %s', (file, specifier) => {
     expect(assess({ [file]: `require(${JSON.stringify(specifier)})` }).violations).toHaveLength(1)
   })

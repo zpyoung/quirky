@@ -4,12 +4,12 @@ import { sortWorktrees, type Worktree } from './workspace-list-sections'
 import { hostSortsByStamps } from './workspace-list-ordering'
 
 function worktree(overrides: Partial<Worktree> = {}): Worktree {
-  const worktreePath = join('/tmp', 'orca', 'worktrees', 'feature')
+  const worktreePath = join('/tmp', 'quirky', 'worktrees', 'feature')
   return {
     workspaceKind: 'git',
     worktreeId: `repo-1::${worktreePath}`,
     repoId: 'repo-1',
-    repo: 'orca',
+    repo: 'quirky',
     branch: 'feature/mobile-parity',
     displayName: 'feature',
     path: worktreePath,

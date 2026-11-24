@@ -19,7 +19,7 @@ function httpsUrl(raw: string, base?: URL): URL | null {
 }
 
 async function discardBody(response: Response): Promise<void> {
-  // Why: an unread undici body can crash the process (orca#8695).
+  // Why: an unread undici body can crash the process (quirky#8695).
   await response.body?.cancel().catch(() => {})
 }
 

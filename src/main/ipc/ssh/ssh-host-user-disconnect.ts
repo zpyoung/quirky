@@ -1,7 +1,7 @@
 import { getAppEnvironment } from '../../../shared/app-environment'
 import { listEnvironments } from '../../../shared/runtime-environment-store'
 import {
-  getOrcadSshDeployment,
+  getQuirkydSshDeployment,
   getRuntimeSshAccess,
   type KnownRuntimeEnvironment
 } from '../../../shared/runtime-environments'
@@ -81,10 +81,10 @@ export async function disconnectSshHostForUser(
 
 /** The status bar's Disconnect of a managed server is a Disconnect of the machine it runs on. */
 export async function disconnectManagedHostOfEnvironmentForUser(
-  environment: Pick<KnownRuntimeEnvironment, 'orcadDeployment'>,
+  environment: Pick<KnownRuntimeEnvironment, 'quirkydDeployment'>,
   runtimeLayer: RuntimeLayer
 ): Promise<void> {
-  const targetId = getOrcadSshDeployment(environment)?.sshTargetId
+  const targetId = getQuirkydSshDeployment(environment)?.sshTargetId
   if (targetId) {
     await disconnectSshHostForUser(targetId, runtimeLayer)
   }
@@ -92,9 +92,9 @@ export async function disconnectManagedHostOfEnvironmentForUser(
 
 /** The status bar's Connect of a server lifts the Disconnect of the SSH host it is reached through. */
 export async function liftSshUserDisconnectForEnvironment(
-  environment: Pick<KnownRuntimeEnvironment, 'orcadDeployment' | 'sshAccess'>
+  environment: Pick<KnownRuntimeEnvironment, 'quirkydDeployment' | 'sshAccess'>
 ): Promise<void> {
-  const managedHostId = getOrcadSshDeployment(environment)?.sshTargetId
+  const managedHostId = getQuirkydSshDeployment(environment)?.sshTargetId
   if (managedHostId && isSshUserDisconnected(managedHostId)) {
     // Why: the host's own Connect republishes its managed verdict and restores its port forwards,
     // which the status bar's Disconnect tore down with the host.

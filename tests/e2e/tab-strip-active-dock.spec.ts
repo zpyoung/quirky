@@ -8,7 +8,7 @@
  */
 
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady, waitForActiveWorktree, ensureTerminalVisible } from './helpers/store'
 
 const STRIP = '.terminal-tab-strip'
@@ -75,17 +75,17 @@ async function nextFrames(page: Page, count: number): Promise<void> {
 }
 
 test.describe('Tab strip active-tab dock', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
   })
 
   test('docks an offscreen active tab and reveals an arriving tab beside it without flicker', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const worktreeId = await waitForActiveWorktree(orcaPage)
-    const strip = orcaPage.locator(STRIP).first()
+    const worktreeId = await waitForActiveWorktree(quirkyPage)
+    const strip = quirkyPage.locator(STRIP).first()
     await expect(strip).toBeVisible()
 
     for (let i = 0; i < 40; i++) {
@@ -93,27 +93,29 @@ test.describe('Tab strip active-tab dock', () => {
       if (overflowsTwice) {
         break
       }
-      await createBackgroundTerminalTab(orcaPage, worktreeId)
-      await nextFrames(orcaPage, 1)
+      await createBackgroundTerminalTab(quirkyPage, worktreeId)
+      await nextFrames(quirkyPage, 1)
     }
     await expect
       .poll(() => strip.evaluate((el) => el.scrollWidth > el.clientWidth * 2), { timeout: 5_000 })
       .toBe(true)
 
-    const lastTabId = (await readStripSlotIds(orcaPage)).at(-1)!
-    await orcaPage.locator(`${slotSelector(lastTabId)} [data-testid="sortable-tab"]`).click()
-    await expect(orcaPage.locator(`${slotSelector(lastTabId)} [data-active="true"]`)).toHaveCount(1)
+    const lastTabId = (await readStripSlotIds(quirkyPage)).at(-1)!
+    await quirkyPage.locator(`${slotSelector(lastTabId)} [data-testid="sortable-tab"]`).click()
+    await expect(quirkyPage.locator(`${slotSelector(lastTabId)} [data-active="true"]`)).toHaveCount(
+      1
+    )
 
     // Scroll the active last tab's real spot far out of view; sticky layout must hold it at the end.
     await strip.evaluate((el) => {
       el.scrollLeft = 0
     })
     await expect(strip).toHaveAttribute('data-active-tab-docked', 'end')
-    const docked = await readSlotViewportSpan(orcaPage, lastTabId)
+    const docked = await readSlotViewportSpan(quirkyPage, lastTabId)
     expect(Math.abs(docked.right - docked.viewRight)).toBeLessThanOrEqual(1)
 
     // Why sample every frame: a smooth scroll or a double jump shows up only between assertions.
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       ({ strip: stripSelector, slot }) => {
         const stripEl = document.querySelector<HTMLElement>(stripSelector)!
         const samples: DockSample[] = []
@@ -133,22 +135,22 @@ test.describe('Tab strip active-tab dock', () => {
     )
 
     // The pointer still rests on the strip from the click, so the arriving tab waits for it to leave.
-    const arrivingTabId = await createBackgroundTerminalTab(orcaPage, worktreeId)
-    await expect(orcaPage.locator(slotSelector(arrivingTabId))).toHaveCount(1)
-    await nextFrames(orcaPage, 3)
+    const arrivingTabId = await createBackgroundTerminalTab(quirkyPage, worktreeId)
+    await expect(quirkyPage.locator(slotSelector(arrivingTabId))).toHaveCount(1)
+    await nextFrames(quirkyPage, 3)
     expect(await strip.evaluate((el) => el.scrollLeft)).toBe(0)
-    expect(await isSlotInView(orcaPage, arrivingTabId)).toBe(false)
+    expect(await isSlotInView(quirkyPage, arrivingTabId)).toBe(false)
 
     const stripBox = (await strip.boundingBox())!
-    await orcaPage.mouse.move(stripBox.x + stripBox.width / 2, stripBox.y + stripBox.height + 200)
-    await expect.poll(() => isSlotInView(orcaPage, arrivingTabId), { timeout: 3_000 }).toBe(true)
-    expect(await isSlotInView(orcaPage, lastTabId)).toBe(true)
-    await nextFrames(orcaPage, 3)
+    await quirkyPage.mouse.move(stripBox.x + stripBox.width / 2, stripBox.y + stripBox.height + 200)
+    await expect.poll(() => isSlotInView(quirkyPage, arrivingTabId), { timeout: 3_000 }).toBe(true)
+    expect(await isSlotInView(quirkyPage, lastTabId)).toBe(true)
+    await nextFrames(quirkyPage, 3)
 
     const finalScrollLeft = await strip.evaluate((el) => el.scrollLeft)
     expect(finalScrollLeft).toBeGreaterThan(0)
-    const view = await readSlotViewportSpan(orcaPage, lastTabId)
-    const samples = await orcaPage.evaluate(() => window.__tabStripDockSamples ?? [])
+    const view = await readSlotViewportSpan(quirkyPage, lastTabId)
+    const samples = await quirkyPage.evaluate(() => window.__tabStripDockSamples ?? [])
     expect(samples.length).toBeGreaterThan(0)
     for (const sample of samples) {
       // One jump from the docked position to the reveal; any value in between is visible scrolling.

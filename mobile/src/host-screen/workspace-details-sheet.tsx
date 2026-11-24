@@ -105,7 +105,7 @@ export function WorkspaceDetailsSheet(props: { row: Worktree; onOpenLink: (url: 
 
 function originLabel(origin: WorkspaceOrigin): string {
   if (origin.kind === 'cli') {
-    return 'Created from Orca CLI'
+    return 'Created from Quirky CLI'
   }
   return origin.name ? `Created by automation \u201c${origin.name}\u201d` : 'Created by automation'
 }

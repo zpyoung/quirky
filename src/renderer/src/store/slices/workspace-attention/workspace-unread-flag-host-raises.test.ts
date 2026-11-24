@@ -15,7 +15,7 @@ const hostCapabilities = vi.hoisted(() => new Map<string, Promise<readonly strin
 const cachedStatus = vi.hoisted(() => new Map<string, readonly string[]>())
 
 vi.mock('../../../../../shared/sidebar-inputs-switch', () => ({
-  ORCA_SIDEBAR_INPUTS_IS_MAIN: true
+  QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true
 }))
 vi.mock('../worktrees/metadata/worktree-meta-persist', async (importOriginal) => {
   const actual = await importOriginal<typeof WorktreeMetaPersistModule>()

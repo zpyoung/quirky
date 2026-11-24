@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_PROTOCOL_VERSION } from './bridge-envelope'
-import type { OrcaBridgePageChannel } from './orca-bridge-page-channel'
+import type { QuirkyBridgePageChannel } from './quirky-bridge-page-channel'
 import {
   bootstrapShellPage,
   createShellPageClient,
@@ -35,13 +35,13 @@ function createTarget(): PageMountTarget {
 /** The channel the shell's document-start script installs, as a double. */
 function installChannel(): { posted: string[]; deliver: (frame: unknown) => void } {
   const posted: string[] = []
-  const channel: OrcaBridgePageChannel = {
+  const channel: QuirkyBridgePageChannel = {
     postMessage: (json) => {
       posted.push(json)
     },
     onmessage: null
   }
-  Object.defineProperty(globalThis, 'orcaBridge', { value: channel, configurable: true })
+  Object.defineProperty(globalThis, 'quirkyBridge', { value: channel, configurable: true })
   return {
     posted,
     deliver: (frame) => {
@@ -90,7 +90,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
-  Reflect.deleteProperty(globalThis, 'orcaBridge')
+  Reflect.deleteProperty(globalThis, 'quirkyBridge')
 })
 
 describe('the page bootstrap inside the shell', () => {

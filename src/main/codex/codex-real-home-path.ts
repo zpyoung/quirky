@@ -5,16 +5,16 @@ import { readShellStartupEnvVar } from '../pty/shell-startup-env'
 /** True when the user points Codex outside its standard native home. */
 export function hasCustomCodexHomeOverride(env: NodeJS.ProcessEnv = process.env): boolean {
   const codexHome = env.CODEX_HOME?.trim()
-  const orcaCodexHome = env.ORCA_CODEX_HOME?.trim()
+  const quirkyCodexHome = env.QUIRKY_CODEX_HOME?.trim()
   const normalizedCodexHome = codexHome ? normalizePathForComparison(codexHome) : undefined
-  const normalizedOrcaCodexHome = orcaCodexHome
-    ? normalizePathForComparison(orcaCodexHome)
+  const normalizedQuirkyCodexHome = quirkyCodexHome
+    ? normalizePathForComparison(quirkyCodexHome)
     : undefined
   // Why: phase 1 owns only ~/.codex and can clean that path on downgrade. A
-  // custom home needs cross-home ownership tracking before Orca may mutate it.
+  // custom home needs cross-home ownership tracking before Quirky may mutate it.
   return Boolean(
     normalizedCodexHome &&
-    normalizedCodexHome !== normalizedOrcaCodexHome &&
+    normalizedCodexHome !== normalizedQuirkyCodexHome &&
     normalizedCodexHome !== normalizePathForComparison(getSystemCodexHomePath())
   )
 }
@@ -24,7 +24,7 @@ export function hasCustomCodexHomeOverrideForLaunch(launchEnv?: NodeJS.ProcessEn
   if (
     hasCustomCodexHomeOverride({
       CODEX_HOME: getLaunchEnvValue(launchEnv, 'CODEX_HOME'),
-      ORCA_CODEX_HOME: getLaunchEnvValue(launchEnv, 'ORCA_CODEX_HOME')
+      QUIRKY_CODEX_HOME: getLaunchEnvValue(launchEnv, 'QUIRKY_CODEX_HOME')
     })
   ) {
     return true
@@ -48,7 +48,7 @@ export function hasCustomCodexHomeOverrideForLaunch(launchEnv?: NodeJS.ProcessEn
 
 type LaunchEnvKey =
   | 'CODEX_HOME'
-  | 'ORCA_CODEX_HOME'
+  | 'QUIRKY_CODEX_HOME'
   | 'HOME'
   | 'USERPROFILE'
   | 'SHELL'

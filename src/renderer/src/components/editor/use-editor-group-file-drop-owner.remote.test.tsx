@@ -83,10 +83,10 @@ describe('editor group OS file drops on remote workspaces', () => {
       expectedSshConnectionGeneration: 3
     })
     expect(paths).toEqual(['/Users/me/Desktop/shot.png'])
-    expect(dir).toBe(joinPath(SSH_PATH, '.orca/drops'))
+    expect(dir).toBe(joinPath(SSH_PATH, '.quirky/drops'))
     expect(mocks.openFile).toHaveBeenCalledWith(
       expect.objectContaining({
-        filePath: joinPath(SSH_PATH, '.orca/drops/shot.png'),
+        filePath: joinPath(SSH_PATH, '.quirky/drops/shot.png'),
         worktreeId: 'wt-ssh'
       }),
       { suppressActiveRuntimeFallback: true, targetGroupId: 'group-ssh' }
@@ -101,7 +101,7 @@ describe('editor group OS file drops on remote workspaces', () => {
       worktreeId: 'wt-runtime',
       target: { kind: 'environment', environmentId: 'owner-runtime' }
     })
-    expect(mocks.importPaths.mock.calls[0][2]).toBe(joinPath(RUNTIME_PATH, '.orca/drops'))
+    expect(mocks.importPaths.mock.calls[0][2]).toBe(joinPath(RUNTIME_PATH, '.quirky/drops'))
     expect(mocks.openFile).toHaveBeenCalledWith(
       expect.objectContaining({ worktreeId: 'wt-runtime', runtimeEnvironmentId: 'owner-runtime' }),
       { suppressActiveRuntimeFallback: false, targetGroupId: 'group-runtime' }

@@ -107,7 +107,7 @@ describe('workspace package test typecheck', () => {
   })
 
   it("resolves a package project's compiler from that package, not the root", () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-typecheck-compiler-')))
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-typecheck-compiler-')))
     try {
       const writeCompiler = (directory, version) => {
         const compilerDir = join(root, directory, 'node_modules', 'typescript')
@@ -210,7 +210,7 @@ describe('CI compiler selection', () => {
   })
 
   it('rejects a mismatched package compiler before invoking Bun', async () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-bun-compiler-version-')))
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-bun-compiler-version-')))
     try {
       mkdirSync(join(root, 'node_modules', 'typescript'), { recursive: true })
       writeFileSync(
@@ -230,7 +230,7 @@ describe('CI compiler selection', () => {
   })
 
   it('continues to later projects after a compiler exits with an error', async () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-typecheck-failure-')))
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-typecheck-failure-')))
     try {
       const compilerDir = join(root, 'node_modules', 'typescript')
       mkdirSync(compilerDir, { recursive: true })

@@ -35,8 +35,8 @@ describe('reportWindowSaveDrift', () => {
   let logDir: string | null = null
 
   beforeEach(() => {
-    logDir = mkdtempSync(join(tmpdir(), 'orca-divergence-'))
-    vi.stubEnv('ORCA_LAYOUT_SAVE_DIVERGENCE_LOG', join(logDir, 'divergence.jsonl'))
+    logDir = mkdtempSync(join(tmpdir(), 'quirky-divergence-'))
+    vi.stubEnv('QUIRKY_LAYOUT_SAVE_DIVERGENCE_LOG', join(logDir, 'divergence.jsonl'))
   })
 
   afterEach(() => {
@@ -88,8 +88,8 @@ describe('reportWindowSaveDrift', () => {
 
   it('never throws when its log cannot be written', () => {
     vi.stubEnv(
-      'ORCA_LAYOUT_SAVE_DIVERGENCE_LOG',
-      join(tmpdir(), 'orca-missing-dir', 'x', 'log.jsonl')
+      'QUIRKY_LAYOUT_SAVE_DIVERGENCE_LOG',
+      join(tmpdir(), 'quirky-missing-dir', 'x', 'log.jsonl')
     )
     const next = session([{ id: 'tab-c' }])
 
@@ -118,11 +118,11 @@ describe('reportWindowSaveDrift', () => {
   })
 
   it('checks nothing without its log, and never throws when the check fails', () => {
-    vi.stubEnv('ORCA_LAYOUT_SAVE_DIVERGENCE_LOG', '')
+    vi.stubEnv('QUIRKY_LAYOUT_SAVE_DIVERGENCE_LOG', '')
     save(session([{ id: 'tab-a' }]), session([{ id: 'tab-c' }]))
     expect(warn).not.toHaveBeenCalled()
 
-    vi.stubEnv('ORCA_LAYOUT_SAVE_DIVERGENCE_LOG', join(logDir!, 'divergence.jsonl'))
+    vi.stubEnv('QUIRKY_LAYOUT_SAVE_DIVERGENCE_LOG', join(logDir!, 'divergence.jsonl'))
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a malformed stored copy is the case under test.
     expect(() => save(null as never, session([{ id: 'tab-a' }]))).not.toThrow()
     expect(warn).toHaveBeenCalledWith(

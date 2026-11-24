@@ -207,7 +207,7 @@ describe('buildPosixCommandPathLookupScript', () => {
         'set -e',
         buildPosixCommandPathLookupScript({
           kind: 'literal',
-          value: '__orca_missing_command_path_lookup__'
+          value: '__quirky_missing_command_path_lookup__'
         }),
         `printf '%s\\n' survived`
       ].join('\n')
@@ -231,7 +231,7 @@ describe('buildPosixCommandPathLookupScript', () => {
       value: "agent'; echo injected; '"
     })
 
-    expect(script).toContain(`_orca_lookup_command='agent'\\''; echo injected; '\\'''`)
+    expect(script).toContain(`_quirky_lookup_command='agent'\\''; echo injected; '\\'''`)
   })
 
   it.skipIf(!canRunWslSh())(
@@ -287,7 +287,7 @@ function withExecutableFixture(
   name: string,
   run: (directory: string, executable: string, root: string) => void
 ): void {
-  const root = mkdtempSync(join(tmpdir(), 'orca-path-lookup-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-path-lookup-'))
   const directory = join(root, 'bin')
   const executable = join(directory, name)
   try {

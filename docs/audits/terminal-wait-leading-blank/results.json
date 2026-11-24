@@ -11,7 +11,7 @@
   },
   "supportingSourceHashes": {
     "src/main/runtime/terminal-wait-detection.ts": "226d09d2d8f7f1d692fb8ba1ed340818e6bd402b74d7bd98d86b1868a09503f0",
-    "src/main/runtime/orca-runtime-terminal-projection.ts": "70b815cf26864719b30b64845c0035093c16b9d85cb4bb8d25c4ae5fa63c3026",
+    "src/main/runtime/quirky-runtime-terminal-projection.ts": "70b815cf26864719b30b64845c0035093c16b9d85cb4bb8d25c4ae5fa63c3026",
     "src/main/runtime/terminal-tail-read.ts": "3517bb22b9bf4bdf2f3acee8ceac9ca71221964cfa3f16be1f7b2ad22212b476",
     "src/main/runtime/terminal-tail-state.ts": "a6f41a683d5f03023e4f6d20d653ebf069b036f82100c908a775a1890c49b2ef",
     "src/main/runtime/terminal-wait-tail-state.ts": "61acc15fb8b9ce7faa0a2df80a7b6bae09dfed103c15b9c6c35a66d6ad585db1",

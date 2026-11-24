@@ -1,8 +1,8 @@
 import type { Page } from '@stablyai/playwright-test'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { runProcess } from '@orca/process-host'
-import { attachRepoAndOpenTerminal } from './helpers/orca-restart'
+import { runProcess } from '@quirky/process-host'
+import { attachRepoAndOpenTerminal } from './helpers/quirky-restart'
 import { configureRendererScaleFixture } from '../../config/scripts/idle-cpu-renderer-scale-fixture.mjs'
 
 export async function createSpinnerRepository(worktrees: number) {

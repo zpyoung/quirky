@@ -1,5 +1,5 @@
 /**
- * Whether any Orca relay on an SSH host still runs work, asked over the bootstrap connection
+ * Whether any Quirky relay on an SSH host still runs work, asked over the bootstrap connection
  * before a relay session exists. Local leases only cover this desktop's terminals; the host's own
  * relay endpoints also show terminals another desktop opened there.
  *

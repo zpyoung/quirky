@@ -1,4 +1,4 @@
-import type { SetupAgentStartupPolicy } from './orca-yaml-hook-types'
+import type { SetupAgentStartupPolicy } from './quirky-yaml-hook-types'
 
 // Why: existing repos keep launching setup and agents side by side unless the user or
 // committed project config requires setup to finish first.

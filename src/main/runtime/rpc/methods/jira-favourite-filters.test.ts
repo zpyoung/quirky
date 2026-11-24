@@ -1,6 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RpcDispatcher } from '../dispatcher'
 import { JIRA_METHODS } from './jira'
 import { RPC_PARAMS_BY_METHOD } from '../../../../shared/rpc-contract/rpc-params-catalog.generated'
@@ -14,7 +14,7 @@ function fixture() {
   const stub = { getRuntimeId: () => 'jira-runtime', jiraListFavouriteFilters }
   const dispatcher = new RpcDispatcher({
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture dispatches only the implemented Jira favourite filter method.
-    runtime: stub as unknown as OrcaRuntimeService,
+    runtime: stub as unknown as QuirkyRuntimeService,
     methods: JIRA_METHODS
   })
   return { dispatcher, jiraListFavouriteFilters, result }

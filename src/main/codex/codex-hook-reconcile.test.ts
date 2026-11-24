@@ -74,13 +74,13 @@ import { getCodexHookTrustSignature } from './codex-hook-identity'
 import {
   buildCodexManagedHook,
   CODEX_EVENT_LABEL,
-  computeOrcaCodexHookHashes,
+  computeQuirkyCodexHookHashes,
   getCodexManagedHookInstallMaterial
 } from './codex-hook-definition'
 import type { CodexHookHashes } from './codex-hook-trust-derivation'
 import { computeTrustKey, readHookTrustEntries, upsertHookTrustEntries } from './config-toml-trust'
 
-// Why this file: the reconcile is the only writer of Orca's entry in ~/.codex,
+// Why this file: the reconcile is the only writer of Quirky's entry in ~/.codex,
 // and the common call, on every pane spawn and Codex launch, must change nothing.
 
 let root: string
@@ -109,7 +109,7 @@ function writeHooks(hooks: Hooks): void {
 }
 
 function olderBuildStop(): Hooks[string][number] {
-  const script = join(home, '.orca', 'agent-hooks', 'codex-hook.sh')
+  const script = join(home, '.quirky', 'agent-hooks', 'codex-hook.sh')
   return {
     hooks: [
       buildCodexManagedHook(
@@ -182,12 +182,12 @@ async function finishHeldLookupWait(
 
 beforeEach(() => {
   // Why realpath: a symlinked temp dir (macOS /var) would give ~/.codex a second key spelling.
-  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'orca-codex-reconcile-')))
+  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'quirky-codex-reconcile-')))
   home = join(root, 'home')
   userData = join(root, 'user-data')
   mkdirSync(home)
   mkdirSync(userData)
-  vi.stubEnv('ORCA_USER_DATA_PATH', userData)
+  vi.stubEnv('QUIRKY_USER_DATA_PATH', userData)
   vi.stubEnv('CODEX_HOME', '')
   mocks.homedir.mockReturnValue(home)
   mocks.codexPath = join(userData, 'codex')
@@ -404,7 +404,7 @@ describe('reconcileCodexHooks', () => {
     mocks.deriveCodexHookHashes.mockResolvedValue({
       kind: 'refused',
       codexVersion: 'codex-cli 0.120.0',
-      failure: 'Codex 0.120.0 is too old for Orca status; update Codex'
+      failure: 'Codex 0.120.0 is too old for Quirky status; update Codex'
     })
 
     await start()
@@ -420,11 +420,11 @@ describe('reconcileCodexHooks', () => {
 
     expect(existsSync(codexHome())).toBe(false)
     expect(readCurrentCodexHookStatus().detail).toBe(
-      `Orca could not find Codex at ${mocks.codexPath}`
+      `Quirky could not find Codex at ${mocks.codexPath}`
     )
   })
 
-  it("leaves Orca's entry and approvals in ~/.codex as they are while Codex cannot be found", async () => {
+  it("leaves Quirky's entry and approvals in ~/.codex as they are while Codex cannot be found", async () => {
     await start()
     writeHooks({ Stop: [olderBuildStop()] })
     const before = snapshot(codexHome())
@@ -494,7 +494,7 @@ describe('while the lookup is still asking Codex', () => {
       })
     )?.trustedHash
 
-  it("writes the entry with Orca's own hash within a launch's wait, then Codex's once it answers", async () => {
+  it("writes the entry with Quirky's own hash within a launch's wait, then Codex's once it answers", async () => {
     enabled = false
     await start()
     enabled = true
@@ -504,7 +504,7 @@ describe('while the lookup is still asking Codex', () => {
     await finishHeldLookupWait(reconcileCodexHooksForLaunch, true)
 
     expect(Date.now() - startedAt).toBeLessThan(3_000)
-    expect(stopApproval()).toBe(computeOrcaCodexHookHashes().stop)
+    expect(stopApproval()).toBe(computeQuirkyCodexHookHashes().stop)
 
     release()
     await settleSpawn()
@@ -530,7 +530,7 @@ describe('while the lookup is still asking Codex', () => {
   })
 })
 
-describe('a ~/.codex/hooks.json Orca cannot add to', () => {
+describe('a ~/.codex/hooks.json Quirky cannot add to', () => {
   it.each([
     ['an unparseable file', '{ not json'],
     ['unknown top-level fields', JSON.stringify({ hooks: {}, _managed: true })],
@@ -547,7 +547,7 @@ describe('a ~/.codex/hooks.json Orca cannot add to', () => {
       expect(readFileSync(hooksPath(), 'utf-8')).toBe(content)
       expect(existsSync(tomlPath())).toBe(false)
       expect(readRealHomeHooksFileProblem()).toBe(
-        `Orca cannot add its hook to ${hooksPath()}, so Orca shows no status for ~/.codex`
+        `Quirky cannot add its hook to ${hooksPath()}, so Quirky shows no status for ~/.codex`
       )
 
       writeHooks({})
@@ -569,7 +569,7 @@ describe('a ~/.codex/hooks.json Orca cannot add to', () => {
     }
   )
 
-  it('is not the case after a write Orca could not make', async () => {
+  it('is not the case after a write Quirky could not make', async () => {
     writeHooks({})
     writeFileSync(tomlPath(), 'model = "m"\nhooks = { state = {} }\n')
     vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -627,7 +627,7 @@ describe('an app start whose lookup has not answered within its wait', () => {
     expect(snapshot(codexHome())).toEqual(settled)
   })
 
-  it("keeps the approval main's grant recorded for Orca's entry", async () => {
+  it("keeps the approval main's grant recorded for Quirky's entry", async () => {
     const stop = {
       sourcePath: hooksPath(),
       eventLabel: 'stop' as const,

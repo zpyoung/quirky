@@ -15,7 +15,9 @@ describe('getOptionalPositiveSafeIntegerFlag', () => {
   })
 
   it('parses a valid positive integer', () => {
-    expect(getOptionalPositiveSafeIntegerFlag(new Map([['chunk-ms', '5000']]), 'chunk-ms')).toBe(5000)
+    expect(getOptionalPositiveSafeIntegerFlag(new Map([['chunk-ms', '5000']]), 'chunk-ms')).toBe(
+      5000
+    )
   })
 
   it.each([
@@ -96,7 +98,12 @@ describe('formatAskValidationErrors', () => {
 })
 
 describe('resolveAskOriginParams', () => {
-  const envKeys = ['ORCA_PANE_KEY', 'ORCA_TERMINAL_HANDLE', 'ORCA_WORKTREE_ID', 'ORCA_WORKSPACE_ID'] as const
+  const envKeys = [
+    'QUIRKY_PANE_KEY',
+    'QUIRKY_TERMINAL_HANDLE',
+    'QUIRKY_WORKTREE_ID',
+    'QUIRKY_WORKSPACE_ID'
+  ] as const
 
   afterEach(() => {
     for (const key of envKeys) {
@@ -112,10 +119,10 @@ describe('resolveAskOriginParams', () => {
   })
 
   it('forwards every set env var verbatim', () => {
-    process.env.ORCA_PANE_KEY = 'pane_1'
-    process.env.ORCA_TERMINAL_HANDLE = 'term_1'
-    process.env.ORCA_WORKTREE_ID = 'wt_1'
-    process.env.ORCA_WORKSPACE_ID = 'ws_1'
+    process.env.QUIRKY_PANE_KEY = 'pane_1'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_1'
+    process.env.QUIRKY_WORKTREE_ID = 'wt_1'
+    process.env.QUIRKY_WORKSPACE_ID = 'ws_1'
     expect(resolveAskOriginParams('/repo')).toEqual({
       cwd: '/repo',
       paneKey: 'pane_1',

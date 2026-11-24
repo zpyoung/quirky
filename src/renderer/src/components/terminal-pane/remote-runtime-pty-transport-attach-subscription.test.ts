@@ -219,7 +219,7 @@ describe('createRemoteRuntimePtyTransport', () => {
         async (_args: unknown, callbacks: NonNullable<typeof subscriptionCallbacks>) => {
           attempt += 1
           if (attempt === 1) {
-            throw Object.assign(new Error('Could not connect to the remote Orca runtime.'), {
+            throw Object.assign(new Error('Could not connect to the remote Quirky runtime.'), {
               code: 'remote_runtime_unavailable'
             })
           }
@@ -318,7 +318,7 @@ describe('createRemoteRuntimePtyTransport', () => {
         queueMicrotask(() =>
           callbacks.onError?.({
             code: 'unauthorized',
-            message: 'Remote Orca runtime rejected the pairing token.'
+            message: 'Remote Quirky runtime rejected the pairing token.'
           })
         )
         return { unsubscribe, sendBinary: subscriptionSendBinary }

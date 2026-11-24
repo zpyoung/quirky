@@ -133,7 +133,7 @@ const RESUME: CommandItem = {
   name: 'resume',
   token: '/resume',
   skillCollision: false,
-  orcaOwned: true
+  quirkyOwned: true
 }
 
 function renderStructuredChat() {
@@ -230,7 +230,7 @@ describe('/resume in the native chat composer', () => {
 
     expect(mocks.openHistory).not.toHaveBeenCalled()
     expect(transport.dispatchCommand).toHaveBeenCalledWith('/resume make it one page')
-    // Back to the bare token with the menu open: choosing Orca's own row still opens the dialog.
+    // Back to the bare token with the menu open: choosing Quirky's own row still opens the dialog.
     mocks.draft = '/resume'
     rerender()
     act(() => mocks.keyDownArgs?.dispatchPickerCommand(RESUME))

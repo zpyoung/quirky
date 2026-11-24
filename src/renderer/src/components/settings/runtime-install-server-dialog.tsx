@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
+import type { ManagedQuirkydPreloadApi } from '../../../../preload/api/managed-quirkyd-api'
 import type { SshTarget } from '../../../../shared/ssh-types'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { translate } from '@/i18n/i18n'
@@ -22,14 +22,14 @@ import { SshTargetSelect } from './SshTargetSelect'
 
 type RuntimeInstallServerDialogProps = {
   open: boolean
-  api: ManagedOrcadPreloadApi
+  api: ManagedQuirkydPreloadApi
   emptyTargets: SshTarget[]
   loadFailed: boolean
   onOpenChange: (open: boolean) => void
   onDeployed: () => Promise<void> | void
 }
 
-/** Install a managed Orca server on an SSH host that doesn't run one yet. */
+/** Install a managed Quirky server on an SSH host that doesn't run one yet. */
 export function RuntimeInstallServerDialog({
   open,
   api,
@@ -69,7 +69,7 @@ export function RuntimeInstallServerDialog({
         toast.success(
           translate(
             'auto.components.settings.serverList.setUpDone',
-            'Orca is set up on {{name}}.',
+            'Quirky is set up on {{name}}.',
             {
               name: result.environment.name
             }
@@ -100,7 +100,7 @@ export function RuntimeInstallServerDialog({
       toast.message(
         translate(
           'auto.components.settings.serverList.settingUpInBackground',
-          'Setting up Orca on {{name}} in the background. It appears in the list when it’s ready.',
+          'Setting up Quirky on {{name}} in the background. It appears in the list when it’s ready.',
           { name: serverName }
         )
       )
@@ -125,7 +125,7 @@ export function RuntimeInstallServerDialog({
             <DialogTitle>
               {translate(
                 'auto.components.settings.serverList.setUpOnSshHost',
-                'Set up Orca on an SSH host'
+                'Set up Quirky on an SSH host'
               )}
             </DialogTitle>
             <DialogDescription asChild>
@@ -133,14 +133,14 @@ export function RuntimeInstallServerDialog({
                 <p>
                   {translate(
                     'auto.components.settings.managedServers.description',
-                    'Orca installs itself on an empty SSH host and keeps itself up to date.'
+                    'Quirky installs itself on an empty SSH host and keeps itself up to date.'
                   )}
                 </p>
                 {/* Why: this is the moment something moves, so say what does and doesn't. */}
                 <p>
                   {translate(
                     'auto.components.settings.managedServers.reassurance',
-                    'Runs on each host, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to the host.'
+                    'Runs on each host, reached over your own SSH connection. Your code and files stay where they are. Only Quirky’s list of projects, tabs and terminals moves to the host.'
                   )}
                 </p>
               </div>
@@ -157,18 +157,18 @@ export function RuntimeInstallServerDialog({
               onChange={setTargetId}
               placeholder={translate(
                 'auto.components.settings.serverList.installHostPlaceholder',
-                'Choose an SSH host without Orca'
+                'Choose an SSH host without Quirky'
               )}
             />
             <p className="text-xs text-muted-foreground">
               {emptyTargets.length === 0
                 ? translate(
                     'auto.components.settings.serverList.installNoHosts',
-                    'No SSH hosts without an Orca server.'
+                    'No SSH hosts without an Quirky server.'
                   )
                 : translate(
                     'auto.components.settings.serverList.installHostHelp',
-                    'Only hosts without an Orca server.'
+                    'Only hosts without an Quirky server.'
                   )}{' '}
               <button
                 type="button"
@@ -185,7 +185,7 @@ export function RuntimeInstallServerDialog({
               <p className="text-xs text-destructive">
                 {translate(
                   'auto.components.settings.managedServers.loadFailed',
-                  'Orca couldn’t load SSH hosts and unfinished moves. Reopen Settings to try again.'
+                  'Quirky couldn’t load SSH hosts and unfinished moves. Reopen Settings to try again.'
                 )}
               </p>
             ) : null}
@@ -221,7 +221,7 @@ export function RuntimeInstallServerDialog({
               {deploying
                 ? translate(
                     'auto.components.settings.sshHostServer.deploying',
-                    'Setting up Orca on {{host}}…',
+                    'Setting up Quirky on {{host}}…',
                     {
                       host: targetLabel
                     }

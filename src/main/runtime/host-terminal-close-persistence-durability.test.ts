@@ -14,7 +14,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { createStore, testState } from '../persistence-test-harness'
 
 vi.mock('electron', () => ({
-  app: { getPath: () => testStateDirRef.dir, getName: () => 'orca', getVersion: () => '0.0.0' },
+  app: { getPath: () => testStateDirRef.dir, getName: () => 'quirky', getVersion: () => '0.0.0' },
   BrowserWindow: { fromId: () => null, getAllWindows: () => [] },
   webContents: { fromId: () => null },
   ipcMain: { on: () => {}, handle: () => {}, removeListener: () => {} },
@@ -52,7 +52,7 @@ async function makeStore() {
 
 describe('host-created terminal close durability', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-close-durability-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-close-durability-'))
     testStateDirRef.dir = testState.dir
   })
 
@@ -110,7 +110,7 @@ describe('host-created terminal close durability', () => {
  *  fence-advancing path, or arming the fence from the create path, fails here. */
 describe('topology fence census', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-fence-census-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-fence-census-'))
     testStateDirRef.dir = testState.dir
   })
 

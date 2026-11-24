@@ -1,5 +1,5 @@
-import { runProcess } from '@orca/process-host'
-import { windowsPowerShellPath } from '@orca/process-host/windows-system-binary'
+import { runProcess } from '@quirky/process-host'
+import { windowsPowerShellPath } from '@quirky/process-host/windows-system-binary'
 
 let cachedFonts: string[] | null = null
 let fontsPromise: Promise<string[]> | null = null

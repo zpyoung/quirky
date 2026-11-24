@@ -1,12 +1,12 @@
 /**
- * One read-only pass over `~/.orca-remote/` answering what the runtime store GC needs: store
+ * One read-only pass over `~/.quirky-remote/` answering what the runtime store GC needs: store
  * entries, which runtimes are referenced, verified order, and which a running process holds.
  */
 import {
-  ORCAD_NODE_RUNTIME_DIR_PREFIX,
-  ORCAD_NODE_RUNTIME_MARKER_FILENAME,
-  ORCAD_RUNTIMES_DIRNAME
-} from '../../../shared/orcad-artifacts'
+  QUIRKYD_NODE_RUNTIME_DIR_PREFIX,
+  QUIRKYD_NODE_RUNTIME_MARKER_FILENAME,
+  QUIRKYD_RUNTIMES_DIRNAME
+} from '../../../shared/quirkyd-artifacts'
 import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 import { RELAY_REMOTE_DIR } from '../../ssh/remote-exec/remote-frame-protocol'
 import { joinRemotePath, type RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
@@ -14,19 +14,19 @@ import { joinRemotePath, type RemoteHostPlatform } from '../../ssh/ssh-remote-pl
 /** A version dir names a runtime it needs with an empty file of this prefix + sha (design D5). */
 export const RUNTIME_REF_NODE_PREFIX = '.runtime-ref-node-'
 export const RUNTIME_STORE_TOMBSTONE_PREFIX = '.gc-tombstone-'
-export const INVENTORY_OK = '__ORCA_RUNTIME_STORE__OK'
-export const REFS_ERR = '__ORCA_RUNTIME_STORE__REFS_ERR'
+export const INVENTORY_OK = '__QUIRKY_RUNTIME_STORE__OK'
+export const REFS_ERR = '__QUIRKY_RUNTIME_STORE__REFS_ERR'
 export const MAX_DIRS = 512
 const SHA256 = /^[0-9a-f]{64}$/
 export const RUNTIME_STORE_ENTRY_NAME = new RegExp(
-  `^${ORCAD_NODE_RUNTIME_DIR_PREFIX}([0-9a-f]{64})$`
+  `^${QUIRKYD_NODE_RUNTIME_DIR_PREFIX}([0-9a-f]{64})$`
 )
 export const RUNTIME_STORE_TOMBSTONE_NAME = new RegExp(
-  `^${RUNTIME_STORE_TOMBSTONE_PREFIX.replace(/\./g, '\\.')}${ORCAD_NODE_RUNTIME_DIR_PREFIX}([0-9a-f]{64})\\.[0-9]+\\.([0-9]+)$`
+  `^${RUNTIME_STORE_TOMBSTONE_PREFIX.replace(/\./g, '\\.')}${QUIRKYD_NODE_RUNTIME_DIR_PREFIX}([0-9a-f]{64})\\.[0-9]+\\.([0-9]+)$`
 )
 // Why `[/\\]`: Windows process paths use backslashes (see remote-node-runtime-store-windows.ts).
 const HELD_PATH = new RegExp(
-  `[/\\\\]${ORCAD_RUNTIMES_DIRNAME}[/\\\\](?:${RUNTIME_STORE_TOMBSTONE_PREFIX.replace(/\./g, '\\.')})?${ORCAD_NODE_RUNTIME_DIR_PREFIX}([0-9a-f]{64})[./\\\\]`,
+  `[/\\\\]${QUIRKYD_RUNTIMES_DIRNAME}[/\\\\](?:${RUNTIME_STORE_TOMBSTONE_PREFIX.replace(/\./g, '\\.')})?${QUIRKYD_NODE_RUNTIME_DIR_PREFIX}([0-9a-f]{64})[./\\\\]`,
   'i'
 )
 
@@ -39,7 +39,7 @@ export type RuntimeStoreInventory = {
   held: Set<string>
   /** False when neither `ps` nor `/proc` answered; nothing may then be called idle. */
   processCheckRan: boolean
-  /** Other `~/.orca-remote/` directory names, for legacy diagnostics. */
+  /** Other `~/.quirky-remote/` directory names, for legacy diagnostics. */
   dirNames: string[]
 }
 
@@ -49,22 +49,22 @@ export function runtimeStoreInventoryCommand(host: RemoteHostPlatform, remoteHom
   const refPrefix = RUNTIME_REF_NODE_PREFIX
   return [
     `root=${quotePosixShell(root)}`,
-    `rt="$root"/${ORCAD_RUNTIMES_DIRNAME}`,
+    `rt="$root"/${QUIRKYD_RUNTIMES_DIRNAME}`,
     `[ -d "$rt" ] || { printf '%s\\n' ${INVENTORY_OK}; exit 0; }`,
     `[ -r "$root" ] && [ -x "$root" ] || { printf '%s\\n' ${REFS_ERR}; exit 0; }`,
     'n=0',
     // Why every sibling and not a prefix: a directory this client does not recognise may still
-    // be a newer Orca's install that names a runtime.
+    // be a newer Quirky's install that names a runtime.
     'for d in "$root"/* "$root"/.[!.]*; do',
     '  [ -d "$d" ] || continue',
     '  name=${d##*/}',
-    `  [ "$name" = ${ORCAD_RUNTIMES_DIRNAME} ] && continue`,
+    `  [ "$name" = ${QUIRKYD_RUNTIMES_DIRNAME} ] && continue`,
     `  [ -r "$d" ] && [ -x "$d" ] || { printf '%s\\n' ${REFS_ERR}; exit 0; }`,
     '  n=$((n+1))',
     `  [ "$n" -le ${MAX_DIRS} ] || { printf '%s\\n' ${REFS_ERR}; exit 0; }`,
     `  printf 'DIR %s\\n' "$name"`,
-    `  if [ -e "$d"/${ORCAD_NODE_RUNTIME_MARKER_FILENAME} ]; then`,
-    `    sha=$(cat "$d"/${ORCAD_NODE_RUNTIME_MARKER_FILENAME}) || { printf '%s\\n' ${REFS_ERR}; exit 0; }`,
+    `  if [ -e "$d"/${QUIRKYD_NODE_RUNTIME_MARKER_FILENAME} ]; then`,
+    `    sha=$(cat "$d"/${QUIRKYD_NODE_RUNTIME_MARKER_FILENAME}) || { printf '%s\\n' ${REFS_ERR}; exit 0; }`,
     `    printf 'REF %s\\n' "$sha"`,
     '  fi',
     `  for f in "$d"/${refPrefix}*; do`,
@@ -72,10 +72,10 @@ export function runtimeStoreInventoryCommand(host: RemoteHostPlatform, remoteHom
     `    printf 'REF %s\\n' "\${f##*/${refPrefix}}"`,
     '  done',
     'done',
-    `for e in "$rt"/${ORCAD_NODE_RUNTIME_DIR_PREFIX}* "$rt"/${RUNTIME_STORE_TOMBSTONE_PREFIX}${ORCAD_NODE_RUNTIME_DIR_PREFIX}*; do`,
+    `for e in "$rt"/${QUIRKYD_NODE_RUNTIME_DIR_PREFIX}* "$rt"/${RUNTIME_STORE_TOMBSTONE_PREFIX}${QUIRKYD_NODE_RUNTIME_DIR_PREFIX}*; do`,
     `  [ -d "$e" ] && printf 'ENTRY %s\\n' "\${e##*/}"`,
     'done',
-    `set -- "$rt"/${ORCAD_NODE_RUNTIME_DIR_PREFIX}*/.verified`,
+    `set -- "$rt"/${QUIRKYD_NODE_RUNTIME_DIR_PREFIX}*/.verified`,
     'if [ -e "$1" ]; then',
     `  order=$(ls -1t -- "$@") || { printf '%s\\n' ${REFS_ERR}; exit 0; }`,
     `  printf '%s\\n' "$order" | while IFS= read -r v; do v=\${v%/.verified}; printf 'VERIFIED %s\\n' "\${v##*/}"; done`,
@@ -84,13 +84,13 @@ export function runtimeStoreInventoryCommand(host: RemoteHostPlatform, remoteHom
     // /proc exe and argv may name the store through another spelling of a symlinked home.
     'if ps_out=$(ps -e -o args= 2>/dev/null); then',
     "  printf 'PROCESS_CHECK ps\\n'",
-    `  printf '%s\\n' "$ps_out" | grep -F -- /${ORCAD_RUNTIMES_DIRNAME}/ | sed 's/^/HOLD /'`,
+    `  printf '%s\\n' "$ps_out" | grep -F -- /${QUIRKYD_RUNTIMES_DIRNAME}/ | sed 's/^/HOLD /'`,
     'fi',
     'if [ -n "$(readlink /proc/self/exe 2>/dev/null)" ]; then',
     "  printf 'PROCESS_CHECK proc\\n'",
     '  for p in /proc/[0-9]*/exe; do',
     '    t=$(readlink "$p" 2>/dev/null) || continue',
-    `    case "$t" in */${ORCAD_RUNTIMES_DIRNAME}/*) printf 'HOLD %s\\n' "$t";; esac`,
+    `    case "$t" in */${QUIRKYD_RUNTIMES_DIRNAME}/*) printf 'HOLD %s\\n' "$t";; esac`,
     '  done',
     'fi',
     `printf '%s\\n' ${INVENTORY_OK}`

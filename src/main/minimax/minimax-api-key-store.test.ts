@@ -38,9 +38,9 @@ vi.mock('../../shared/secure-file', () => ({
   writeSecureFile: writeSecureFileMock
 }))
 
-const storePath = '/home/test/.orca/minimax-api-key.enc'
+const storePath = '/home/test/.quirky/minimax-api-key.enc'
 const envelope = (kind: 'encrypted' | 'plaintext', value: string): string =>
-  `orca-minimax-api-key:v1:${kind}:${Buffer.from(value, 'utf8').toString('base64')}`
+  `quirky-minimax-api-key:v1:${kind}:${Buffer.from(value, 'utf8').toString('base64')}`
 
 async function loadStore(): Promise<typeof MiniMaxApiKeyStore> {
   return await import('./minimax-api-key-store')
@@ -155,7 +155,7 @@ describe('minimax-api-key-store', () => {
 
     it('reports null for an unreadable envelope rather than guessing', async () => {
       existsSyncMock.mockReturnValue(true)
-      readFileSyncMock.mockReturnValue(Buffer.from('not-an-orca-envelope'))
+      readFileSyncMock.mockReturnValue(Buffer.from('not-an-quirky-envelope'))
       const store = await loadStore()
       expect(store.getMiniMaxApiKeyProtection()).toBeNull()
     })

@@ -28,7 +28,7 @@ afterEach(() => {
 })
 
 function makeRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-grok-session-paths-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-grok-session-paths-'))
   tempDirs.push(dir)
   return dir
 }
@@ -56,7 +56,7 @@ describe('grok-session-paths', () => {
   })
 
   // Why: Grok itself accepts a relative GROK_HOME, but resolves it against *its own* cwd — a
-  // different directory per terminal. Orca's readers (main at `/` when Finder-launched, the
+  // different directory per terminal. Quirky's readers (main at `/` when Finder-launched, the
   // daemon at the user data dir, the scan service inheriting main) would each resolve the same
   // value somewhere else and walk it with no depth, entry or time cap (#13082). `~/…` is in the
   // list because Grok 1.0.30 does not expand a tilde — it creates a literal `~` dir under its cwd.

@@ -7,7 +7,7 @@ import { AtomicSnapshotWriter } from '../persistence/atomic-snapshot-writer'
 
 const MAX_EVENTS = 10_000
 // Why: countedPRs is a deduplication registry that grows with every PR created
-// through Orca. Without a cap, a heavily-used instance accumulates thousands of
+// through Quirky. Without a cap, a heavily-used instance accumulates thousands of
 // URL strings across months. 2000 entries is about 6-12 months of active use
 // for a power user, and at ~50 chars per URL the overhead is ~100KB max.
 const MAX_COUNTED_PRS = 2_000
@@ -16,13 +16,13 @@ const MAX_COUNTED_PRS = 2_000
 const DEBOUNCE_MS = 5_000
 
 // Why: same timing constraint as persistence.ts — the path must be captured
-// after configureDevUserDataPath() but before app.setName('Orca'). See the
+// after configureDevUserDataPath() but before app.setName('Quirky'). See the
 // comment block in persistence.ts:20-28 for the full explanation.
 let _statsFile: string | null = null
 
-/** Why the app environment, not Electron's `app`: orcad (plain Node) records stats too (#31112). */
+/** Why the app environment, not Electron's `app`: quirkyd (plain Node) records stats too (#31112). */
 export function initStatsPath(userDataPath = getAppEnvironment().getPath('userData')): string {
-  _statsFile = join(userDataPath, 'orca-stats.json')
+  _statsFile = join(userDataPath, 'quirky-stats.json')
   return _statsFile
 }
 

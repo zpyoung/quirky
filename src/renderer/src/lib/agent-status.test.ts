@@ -160,7 +160,7 @@ describe('detectAgentStatusFromTitle', () => {
   })
 
   // --- Cursor (cursor-agent) synthesized titles ---
-  // Why: cursor-agent's native title stays "Cursor Agent" all turn, so Orca synthesizes decorated titles for the spinner/unread pipeline.
+  // Why: cursor-agent's native title stays "Cursor Agent" all turn, so Quirky synthesizes decorated titles for the spinner/unread pipeline.
   it('treats the bare "Cursor Agent" native title as a no-op (not idle)', () => {
     // Why: if the native title classified as idle, cursor's per-turn re-emissions would stomp the spinner off mid-turn.
     expect(detectAgentStatusFromTitle('Cursor Agent')).toBeNull()
@@ -421,7 +421,7 @@ describe('getAgentLabel', () => {
 
   it('treats Claude Code prefixed task titles as Claude even when they mention another CLI', () => {
     expect(getAgentLabel('✳ Gemini CLI')).toBe('Claude Code')
-    expect(getAgentLabel('. Compare Opencode Vs Orca')).toBe('Claude Code')
+    expect(getAgentLabel('. Compare Opencode Vs Quirky')).toBe('Claude Code')
     expect(getAgentLabel('* Review Codex behavior')).toBe('Claude Code')
   })
 
@@ -484,7 +484,7 @@ describe('getAgentLabel', () => {
     expect(getAgentLabel('Cursor - action required')).toBe('Cursor')
     expect(getAgentLabel('⠋ preserve cursor visibility across replays')).toBe('Claude Code')
     expect(getAgentLabel('⠋ Codex: fix cursor offsets')).toBe('Codex')
-    expect(getAgentLabel('Terminal Cursor and Orca slows down')).toBeNull()
+    expect(getAgentLabel('Terminal Cursor and Quirky slows down')).toBeNull()
   })
 })
 

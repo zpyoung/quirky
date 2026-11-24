@@ -44,7 +44,7 @@ export class JournalEpochController {
   }
 
   /**
-   * Every reason takes the same writable guard: a newer Orca's database refuses a roll like any
+   * Every reason takes the same writable guard: a newer Quirky's database refuses a roll like any
    * other write, and `schema_unreadable` has no production caller.
    *
    * Serialized like every other write, so the discard cannot land between an

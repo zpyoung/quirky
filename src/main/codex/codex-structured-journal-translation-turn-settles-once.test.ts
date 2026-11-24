@@ -153,7 +153,7 @@ describe('a Codex turn ends once, on its completion', () => {
   })
 
   it('records an exit between the error and the completion as interrupted, with no verdict', () => {
-    // Orca records only an end it observed. The exit is that end; the failure
+    // Quirky records only an end it observed. The exit is that end; the failure
     // Codex would have named arrives only in the completion, which never came.
     const tap = recorder()
     const codex = translator(tap)
@@ -219,7 +219,7 @@ describe('a Codex turn ends once, on its completion', () => {
   })
 
   it('settles once when the sink refuses the completion and its retry lands', () => {
-    // A refused frame is Orca's only redelivery of a completion, and a refused
+    // A refused frame is Quirky's only redelivery of a completion, and a refused
     // end changes nothing, so the retry settles the turn exactly once.
     const tap = recorder()
     const codex = translator(tap)

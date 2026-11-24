@@ -47,7 +47,7 @@ export const MIXED_GROUP = makeGroup({})
 const SSH_GROUP = makeGroup({ id: 'group-ssh', connectionId: 'target-1' })
 
 export const ROUTING_REPOS = [
-  { id: 'repo-1', path: '/Users/dev/orca', projectGroupId: MIXED_GROUP.id, connectionId: null },
+  { id: 'repo-1', path: '/Users/dev/quirky', projectGroupId: MIXED_GROUP.id, connectionId: null },
   {
     id: 'repo-ssh',
     path: '/home/dev/api',

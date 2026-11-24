@@ -85,7 +85,7 @@ describe('sidebar host options', () => {
     expect(hosts.map((host) => host.id)).toEqual(['local', 'runtime:runtime-1'])
     // A first probe still in progress is not evidence of disconnection.
     expect(hosts.find((host) => host.id === 'runtime:runtime-1')).toMatchObject({
-      detail: 'Orca server',
+      detail: 'Quirky server',
       health: 'connecting'
     })
   })
@@ -105,7 +105,7 @@ describe('sidebar host options', () => {
 
     expect(hosts.find((host) => host.id.startsWith('runtime:'))).toMatchObject({
       label: 'dev box',
-      detail: 'Orca server'
+      detail: 'Quirky server'
     })
   })
 
@@ -285,7 +285,7 @@ function mergedHosts(managedServer?: SshConnectionState['managedServer']): Sideb
       {
         id: 'omarchy-server',
         name: 'Omarchy',
-        orcadDeployment: {
+        quirkydDeployment: {
           sshTargetId: 'omarchy-target',
           sshTargetGeneration: 1,
           localPort: 7001,

@@ -1,5 +1,5 @@
 import type { Page, TestInfo } from '@stablyai/playwright-test'
-import { expect } from './orca-app'
+import { expect } from './quirky-app'
 import { focusActiveTerminalInput, getTerminalContent } from './terminal'
 import { quotePosixShell } from '../../../src/shared/shell-argument-quoting'
 

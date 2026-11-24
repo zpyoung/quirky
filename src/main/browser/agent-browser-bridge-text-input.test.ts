@@ -579,7 +579,7 @@ describe('AgentBrowserBridge', () => {
           code: 'browser_target_ambiguous'
         })
         // Must not have dispatched the command to worktree B's session.
-        expect(sessionNamesUsed()).not.toContain('orca-tab-tab-b')
+        expect(sessionNamesUsed()).not.toContain('quirky-tab-tab-b')
       }
     )
 
@@ -593,7 +593,7 @@ describe('AgentBrowserBridge', () => {
 
       await b.keyboardInsertText('x', undefined, undefined)
 
-      expect(sessionNamesUsed()).toContain('orca-tab-tab-a')
+      expect(sessionNamesUsed()).toContain('quirky-tab-tab-a')
     })
 
     it('throws browser_no_tab for inserttext when no live tab exists', async () => {
@@ -612,7 +612,7 @@ describe('AgentBrowserBridge', () => {
 
       await b.snapshot(undefined, undefined)
 
-      expect(sessionNamesUsed()).toContain('orca-tab-tab-b')
+      expect(sessionNamesUsed()).toContain('quirky-tab-tab-b')
     })
   })
 })

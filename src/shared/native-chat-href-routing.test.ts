@@ -98,7 +98,7 @@ describe('routeNativeChatHref', () => {
     'notes%23?#.md',
     'https:notes.md',
     'file:notes.md',
-    '#orca-native-chat-file=notes.md'
+    '#quirky-native-chat-file=notes.md'
   ])('preserves the exact literal path %j without URL or location interpretation', (pathText) => {
     expect(routeNativeChatHref(createNativeChatFileHref(pathText, 'literal'))).toEqual({
       kind: 'file',
@@ -110,7 +110,7 @@ describe('routeNativeChatHref', () => {
 
   it('rejects an empty or malformed literal-path wrapper', () => {
     expect(routeNativeChatHref(createNativeChatFileHref('', 'literal'))).toEqual({ kind: 'none' })
-    expect(routeNativeChatHref('#orca-native-chat-file-path=%ZZ')).toEqual({ kind: 'none' })
+    expect(routeNativeChatHref('#quirky-native-chat-file-path=%ZZ')).toEqual({ kind: 'none' })
   })
 
   it('reads a bare file name with a line suffix as a file, not a scheme', () => {

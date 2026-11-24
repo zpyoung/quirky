@@ -1,6 +1,6 @@
 import type { BrowserPage, BrowserWorkspace } from '../../../../../shared/browser-workspace-types'
 import { createBrowserUuid } from '@/lib/browser-uuid'
-import { ORCA_BROWSER_BLANK_URL } from '../../../../../shared/constants'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../../../../shared/constants'
 import type { WorkspaceSessionState } from '../../../../../shared/workspace-session-state-types'
 import { normalizeBrowserHistoryEntries } from '../../../../../shared/workspace-session-browser-history'
 import { normalizeWorkspaceDocHistoryEntries } from '../../../../../shared/workspace-doc-history'
@@ -73,7 +73,7 @@ export function projectHydratedBrowserSession(
           // Why re-asserted on restore: the same invariant creation enforces. A session written
           // by an older or hand-edited build could carry a grant URL here, and it would name a
           // grant that died with the process that minted it.
-          url: page.docLocation ? ORCA_BROWSER_BLANK_URL : normalizeUrl(page.url),
+          url: page.docLocation ? QUIRKY_BROWSER_BLANK_URL : normalizeUrl(page.url),
           loading: false,
           loadError: page.loadError ?? null
         }

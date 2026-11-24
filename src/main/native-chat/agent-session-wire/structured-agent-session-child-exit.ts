@@ -317,7 +317,7 @@ export async function endExitedStructuredAgentSessionChildUnderSerialize<
       })
     }
     endChild()
-    // A reader re-baselines on a death of the child's own; a close Orca asked for moves no fence a
+    // A reader re-baselines on a death of the child's own; a close Quirky asked for moves no fence a
     // reader holds, as a client resends a message when its fence moves, and discards a reply (the
     // Stop's own) issued at the fence before. Either way every reader learns the generation ended
     // and the queued-card drain runs, whether or not the release or the settlement was written.

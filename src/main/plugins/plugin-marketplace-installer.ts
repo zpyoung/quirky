@@ -57,7 +57,7 @@ export class PluginMarketplaceInstaller {
     pluginKey: string
   ): Promise<PluginMarketplaceInstallPreview> {
     const listing = await this.requireListing(marketplaceSourceId, pluginKey)
-    const stagingDirectory = await mkdtemp(join(tmpdir(), 'orca-plugin-marketplace-preview-'))
+    const stagingDirectory = await mkdtemp(join(tmpdir(), 'quirky-plugin-marketplace-preview-'))
     try {
       const resolvedCommit = await checkoutPluginGitSource({
         url: listing.source.url,

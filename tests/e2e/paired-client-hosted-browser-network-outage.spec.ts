@@ -1,5 +1,5 @@
 import type { Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { cleanupE2EDaemons } from './helpers/electron-process-shutdown'
 import {
@@ -59,7 +59,7 @@ async function remountBrowserTab(
 }
 
 /**
- * Neither Orca process restarts; only the network between them goes away for longer than the lease
+ * Neither Quirky process restarts; only the network between them goes away for longer than the lease
  * grace. When it returns, the same desktop must host its page again on its own, instead of leaving
  * the tab on "Client-hosted browser unavailable … attached to a different desktop" for good.
  */

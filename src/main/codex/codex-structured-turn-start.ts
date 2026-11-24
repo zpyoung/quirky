@@ -170,7 +170,7 @@ export async function startCodexTurn(
     throw error
   }
   let steered = steerable(runningTurnId) ? await steerCodexTurn(host, runningTurnId, input) : null
-  // Refused because a turn Orca heard of meanwhile is running: steer that one, once.
+  // Refused because a turn Quirky heard of meanwhile is running: steer that one, once.
   const runningSince = steered ? undefined : [...(host.activeTurnIds ?? [])].at(-1)
   if (steerable(runningSince) && runningSince !== runningTurnId) {
     steered = await steerCodexTurn(host, runningSince, input)

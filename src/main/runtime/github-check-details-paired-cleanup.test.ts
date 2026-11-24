@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { withPairedCheckDetailsCleanup } from './github-check-details-paired-cleanup.test-fixture'
 
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-paired-check-cleanup-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-paired-check-cleanup-'))
   const attempts: string[] = []
   const actions = {
     closeClient: vi.fn(() => {

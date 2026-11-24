@@ -3,9 +3,9 @@ import { forgetFailedAgentLaunches } from '../agent-launch/agent-launch-pane-att
 import type { Store } from '../persistence/loading-store/store'
 import { makePaneKey, parsePaneKey } from '../../shared/stable-pane-id'
 import type { TerminalLeafMoveRequest } from '../../shared/terminal-leaf-move'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 
-type PaneOwnerRuntime = Pick<OrcaRuntimeService, 'getExistingOrchestrationDb'> | undefined
+type PaneOwnerRuntime = Pick<QuirkyRuntimeService, 'getExistingOrchestrationDb'> | undefined
 type PaneAddress = { tabId: string; leafId: string }
 
 /**

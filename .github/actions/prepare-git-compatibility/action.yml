@@ -9,7 +9,7 @@ runs:
     - name: Cache baseline Git build
       uses: actions/cache@v5
       with:
-        path: ~/.cache/orca-git-compat/git-2.25.5
+        path: ~/.cache/quirky-git-compat/git-2.25.5
         key: git-compat-baseline-${{ runner.os }}-${{ runner.arch }}-2.25.5-submodule
 
     # Finish the CPU-heavy build before any timed compatibility lanes start.
@@ -17,7 +17,7 @@ runs:
       shell: bash
       run: |
         archive="$RUNNER_TEMP/git-2.25.5.tar.gz"
-        source="$HOME/.cache/orca-git-compat/git-2.25.5"
+        source="$HOME/.cache/quirky-git-compat/git-2.25.5"
         if [ -x "$source/git" ] && [ -x "$source/git-submodule" ] \
           && [ -f "$source/git-sh-setup" ] && [ -f "$source/git-sh-i18n" ] \
           && [ -f "$source/git-parse-remote" ] && [ -x "$source/git-sh-i18n--envsubst" ]; then

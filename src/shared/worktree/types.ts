@@ -4,7 +4,7 @@ import type { AutomationExecutionTargetType } from '../automations-types'
 import type { TaskSourceContext } from '../task-source-context'
 import type { TuiAgent } from '../tui-agent'
 import type { DiffComment, MobileDiffReviewState } from '../diff-comment-types'
-import type { EphemeralVmCheckoutMode } from '../orca-yaml-hook-types'
+import type { EphemeralVmCheckoutMode } from '../quirky-yaml-hook-types'
 import type { BuiltInWorktreeVisibilitySourceId } from '../repo-types'
 import type { WorktreeIdentity } from './identity'
 import type { WorktreeScanFailureKind } from '../worktree-scan-failure'
@@ -158,12 +158,12 @@ export type Worktree = {
   /** When a terminal last took input or a phone attached, by any device; the owning host writes
    *  it, throttled, for "last active" readers such as cleanup. Never a sort key. */
   lastTerminalUseAt?: number
-  /** Set once when Orca creates the worktree. Absent for worktrees discovered
+  /** Set once when Quirky creates the worktree. Absent for worktrees discovered
    *  on disk or persisted before this field existed. Used by the sidebar to
    *  grant newly-created worktrees a short grace window at the top of Recent,
    *  immune to ambient PTY-bump reordering in other worktrees. */
   createdAt?: number
-  /** Agent selected when Orca originally created the worktree. Used only to
+  /** Agent selected when Quirky originally created the worktree. Used only to
    *  seed a replacement terminal if the user later reopens the worktree after
    *  closing every visible surface. */
   createdWithAgent?: TuiAgent
@@ -181,7 +181,7 @@ export type Worktree = {
   sparsePresetId?: string
   /** Intended create base for stale-base probes. Persisted metadata, not UI drift state. */
   baseRef?: string
-  /** Remote/branch Orca should publish review commits to when it created this worktree. */
+  /** Remote/branch Quirky should publish review commits to when it created this worktree. */
   pushTarget?: GitPushTarget
   /** Path-derived worktree ids this worktree had before folder renames. */
   priorWorktreeIds?: string[]
@@ -195,13 +195,13 @@ export type Worktree = {
   removing?: true
 } & GitWorktreeInfo
 
-/** Provenance for workspaces created through `orca worktree create`. Absent on
+/** Provenance for workspaces created through `quirky worktree create`. Absent on
  *  workspaces created before this field existed and on every non-CLI create, so
  *  consumers must read "missing" as "not CLI-created". */
 export type CliWorkspaceProvenance = {
   kind: 'created-by-cli'
   createdAt: number
-  /** Orca terminal the CLI ran inside, when the caller had one — distinguishes
+  /** Quirky terminal the CLI ran inside, when the caller had one — distinguishes
    *  an agent-issued create from one hand-typed in an external shell. */
   callerTerminalHandle?: string
   /** Agent requested via `--agent`, when one was passed. */
@@ -237,7 +237,7 @@ export type GitPushTarget = {
   remoteName: string
   branchName: string
   remoteUrl?: string
-  /** True when Orca added this remote while preparing a fork-PR worktree. */
+  /** True when Quirky added this remote while preparing a fork-PR worktree. */
   remoteCreated?: boolean
 }
 
@@ -254,7 +254,7 @@ export type GitHubPrStartPoint = {
   maintainerCanModify?: boolean
 }
 
-export type WorktreeOwnership = 'orca-managed' | 'external' | 'unknown-legacy' | 'agent-scratch'
+export type WorktreeOwnership = 'quirky-managed' | 'external' | 'unknown-legacy' | 'agent-scratch'
 
 export type DetectedWorktreeListSource = 'git' | 'metadata-fallback' | 'session-fallback'
 

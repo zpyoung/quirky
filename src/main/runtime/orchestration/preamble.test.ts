@@ -56,7 +56,7 @@ describe('buildDispatchPreamble', () => {
     const result = buildDispatchPreamble(baseParams())
     const commandLines = result
       .split('\n')
-      .filter((line) => line.trimStart().startsWith('orca orchestration'))
+      .filter((line) => line.trimStart().startsWith('quirky orchestration'))
 
     expect(commandLines).toHaveLength(5)
     expect(result).not.toContain('\\\n')
@@ -133,24 +133,24 @@ describe('buildDispatchPreamble', () => {
     expect(section).not.toMatch(/may exit/)
   })
 
-  it('uses orca-dev CLI when devMode is true', () => {
-    const result = buildDispatchPreamble(baseParams({ devMode: true, cliCommand: 'orca-ide' }))
-    expect(result).toContain('orca-dev orchestration send')
-    expect(result).toContain('orca-dev orchestration check')
-    expect(result).toContain('orca-dev orchestration ask')
-    const fragments = result.split('orca-dev')
+  it('uses quirky-dev CLI when devMode is true', () => {
+    const result = buildDispatchPreamble(baseParams({ devMode: true, cliCommand: 'quirky-ide' }))
+    expect(result).toContain('quirky-dev orchestration send')
+    expect(result).toContain('quirky-dev orchestration check')
+    expect(result).toContain('quirky-dev orchestration ask')
+    const fragments = result.split('quirky-dev')
     for (const fragment of fragments) {
-      expect(fragment).not.toMatch(/orca orchestration/)
+      expect(fragment).not.toMatch(/quirky orchestration/)
     }
   })
 
-  it('uses the exact orca-ide command for packaged WSL workers', () => {
-    const result = buildDispatchPreamble(baseParams({ cliCommand: 'orca-ide' }))
+  it('uses the exact quirky-ide command for packaged WSL workers', () => {
+    const result = buildDispatchPreamble(baseParams({ cliCommand: 'quirky-ide' }))
 
-    expect(result).toContain('orca-ide orchestration send')
-    expect(result).toContain('orca-ide orchestration check')
-    expect(result).toContain('orca-ide orchestration ask')
-    expect(result).not.toMatch(/(^|\s)orca orchestration/m)
+    expect(result).toContain('quirky-ide orchestration send')
+    expect(result).toContain('quirky-ide orchestration check')
+    expect(result).toContain('quirky-ide orchestration ask')
+    expect(result).not.toMatch(/(^|\s)quirky orchestration/m)
   })
 
   it('appends a BASE DRIFT section when baseDrift.behind > 0', () => {
@@ -234,8 +234,8 @@ describe('buildDispatchPreamble', () => {
       taskId: 'task_SNAP',
       dispatchId: 'ctx_SNAP',
       taskSpec: 'TASK_BODY',
-      coordinatorHandle: 'orca_session_id:COORD',
-      workerHandle: 'orca_session_id:WORKER'
+      coordinatorHandle: 'quirky_session_id:COORD',
+      workerHandle: 'quirky_session_id:WORKER'
     })
     expect(result).toMatchSnapshot()
   })
@@ -270,17 +270,17 @@ describe('sub-dispatch section', () => {
 })
 
 describe('how the preamble names the worker and its coordinator, by kind', () => {
-  const SESSION_COORD = 'orca_session_id:4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37'
-  const SESSION_WORKER = 'orca_session_id:7e3b9d15-2c4a-4f86-a0b1-5c9e2d7f3b64'
+  const SESSION_COORD = 'quirky_session_id:4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37'
+  const SESSION_WORKER = 'quirky_session_id:7e3b9d15-2c4a-4f86-a0b1-5c9e2d7f3b64'
   const header = (preamble: string) => preamble.slice(0, preamble.indexOf('\n\n'))
-  const FIRST = 'You are working inside Orca, a multi-agent IDE. You are a dispatched worker.'
+  const FIRST = 'You are working inside Quirky, a multi-agent IDE. You are a dispatched worker.'
 
   it("follows each party's own kind when a session and a terminal meet", () => {
     expect(header(buildDispatchPreamble(baseParams({ workerHandle: SESSION_WORKER })))).toBe(
-      `${FIRST}\nYour coordinator's terminal handle is: term_coord\nYour task ID is: task_abc123\nYour Orca session ID is: ${SESSION_WORKER}`
+      `${FIRST}\nYour coordinator's terminal handle is: term_coord\nYour task ID is: task_abc123\nYour Quirky session ID is: ${SESSION_WORKER}`
     )
     expect(header(buildDispatchPreamble(baseParams({ coordinatorHandle: SESSION_COORD })))).toBe(
-      `${FIRST}\nYour coordinator's Orca session ID is: ${SESSION_COORD}\nYour task ID is: task_abc123`
+      `${FIRST}\nYour coordinator's Quirky session ID is: ${SESSION_COORD}\nYour task ID is: task_abc123`
     )
   })
 

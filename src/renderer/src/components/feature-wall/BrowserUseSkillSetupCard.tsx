@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
 import {
-  ORCA_CLI_SKILL_INSTALL_COMMAND,
-  ORCA_CLI_SKILL_NAME
+  QUIRKY_CLI_SKILL_INSTALL_COMMAND,
+  QUIRKY_CLI_SKILL_NAME
 } from '@/lib/agent-feature-install-commands'
 import { BROWSER_USE_ENABLED_STORAGE_KEY } from '@/lib/browser-use-setup-state'
 import type { InstalledAgentSkillState } from '@/hooks/useInstalledAgentSkills'
@@ -19,8 +19,8 @@ export function BrowserUseSkillSetupCard(props: {
   const { compact, terminalHeightPx, skill } = props
   const activeSkillRuntime = useActiveProjectSkillRuntime()
   const installCommand = !activeSkillRuntime.installDisabledReason
-    ? buildSkillCommandForRuntime(ORCA_CLI_SKILL_INSTALL_COMMAND, activeSkillRuntime.agentRuntime)
-    : ORCA_CLI_SKILL_INSTALL_COMMAND
+    ? buildSkillCommandForRuntime(QUIRKY_CLI_SKILL_INSTALL_COMMAND, activeSkillRuntime.agentRuntime)
+    : QUIRKY_CLI_SKILL_INSTALL_COMMAND
 
   const handleBeforeOpenTerminal = (): void => {
     useAppStore.getState().recordFeatureInteraction('agent-browser-setup')
@@ -36,7 +36,7 @@ export function BrowserUseSkillSetupCard(props: {
       )}
       description={translate(
         'auto.components.feature.wall.BrowserUseSkillSetupCard.cbc45022d4',
-        "Enables agents to navigate and verify pages in Orca's browser."
+        "Enables agents to navigate and verify pages in Quirky's browser."
       )}
       command={installCommand}
       terminalTitle="Browser Use setup"
@@ -53,7 +53,7 @@ export function BrowserUseSkillSetupCard(props: {
       showRecheckWhenInstalled={false}
       onRecheck={skill.refresh}
       freshnessSkillName={
-        activeSkillRuntime.canUseLocalSkillFreshness ? ORCA_CLI_SKILL_NAME : undefined
+        activeSkillRuntime.canUseLocalSkillFreshness ? QUIRKY_CLI_SKILL_NAME : undefined
       }
     />
   )

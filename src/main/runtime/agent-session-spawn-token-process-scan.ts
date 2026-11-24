@@ -1,5 +1,5 @@
 /**
- * Host scan for processes carrying an Orca agent-session spawn token.
+ * Host scan for processes carrying an Quirky agent-session spawn token.
  *
  * The token is the only PID-reuse-safe identity element a child is guaranteed to carry, and it
  * lives in the child's environment — which only Linux lets another process read (`/proc/<pid>/environ`).
@@ -9,7 +9,7 @@
  */
 
 import { readFile, readdir } from 'node:fs/promises'
-import { ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
+import { QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
 import { spawnTokenFromEnvironBlock } from './agent-session-spawn-token-readback'
 
 export type AgentSessionSpawnTokenScan = ReadonlyMap<string, readonly number[]>
@@ -21,7 +21,7 @@ export type AgentSessionSpawnTokenScanEvidence =
 /** Tokens observed on this host, or null when the platform cannot answer at all. */
 export async function scanAgentSessionSpawnTokenProcesses(
   platform: NodeJS.Platform = process.platform,
-  variable: string = ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV
+  variable: string = QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV
 ): Promise<AgentSessionSpawnTokenScan | null> {
   if (platform !== 'linux') {
     return null

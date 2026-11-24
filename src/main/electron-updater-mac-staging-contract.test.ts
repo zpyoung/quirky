@@ -29,7 +29,7 @@ describe('electron-updater MacUpdater staging contract', () => {
 
     await MacUpdater.prototype['updateDownloaded'].call(
       updater,
-      { info: { size: 1 }, url: new URL('https://example.invalid/Orca-arm64-mac.zip') },
+      { info: { size: 1 }, url: new URL('https://example.invalid/Quirky-arm64-mac.zip') },
       { downloadedFile: 'unread-because-size-is-known.zip' }
     )
     expect(updater.dispatchUpdateDownloaded).toHaveBeenCalledOnce()

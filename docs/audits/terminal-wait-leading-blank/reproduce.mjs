@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { build } from 'esbuild'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1.')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1.')
 }
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
@@ -26,7 +26,7 @@ const baseline = current
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const supportingSources = [
   'src/main/runtime/terminal-wait-detection.ts',
-  'src/main/runtime/orca-runtime-terminal-projection.ts',
+  'src/main/runtime/quirky-runtime-terminal-projection.ts',
   'src/main/runtime/terminal-tail-read.ts',
   'src/main/runtime/terminal-tail-state.ts',
   'src/main/runtime/terminal-wait-tail-state.ts',
@@ -38,7 +38,7 @@ const supportingSourceHashes = Object.fromEntries(
     supportingSources.map(async (path) => [path, sha256(await readFile(resolve(root, path)))])
   )
 )
-const scratch = await mkdtemp(join(tmpdir(), 'orca-terminal-wait-blank-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-terminal-wait-blank-'))
 const require = createRequire(import.meta.url)
 let runnerId
 
@@ -58,7 +58,7 @@ try {
     import { startOfLastNonBlankLines } from './src/main/runtime/terminal-wait-tail-window';
     import { detectTerminalWaitBlockedReason, isKnownReadyPromptPreview } from './src/main/runtime/terminal-wait-detection';
     import { HeadlessEmulator } from './src/main/daemon/headless-emulator';
-    import { projectTerminalVisibleLines, projectTerminalTailLines } from './src/main/runtime/orca-runtime-terminal-projection';
+    import { projectTerminalVisibleLines, projectTerminalTailLines } from './src/main/runtime/quirky-runtime-terminal-projection';
     import { buildPreview } from './src/main/runtime/terminal-tail-state';
     import { buildTerminalWaitText } from './src/main/runtime/terminal-wait-tail-state';
     const input = JSON.parse(process.argv[2]);
@@ -162,7 +162,7 @@ try {
       const result = await runProcess({
         program: process.execPath,
         args: ['--max-old-space-size=128', childPath, JSON.stringify(input)],
-        env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+        env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
         timeoutMs: 2_000,
         maxOutputBytes: 8192,
         onChildTerminated: () => {

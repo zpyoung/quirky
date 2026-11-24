@@ -16,7 +16,7 @@ it('restores pointer input when a drag ends after attaching a document preview',
   const attached = attachDocPreviewWebview({
     previewId: 'preview-drag',
     container,
-    url: 'orca-preview://grant/index.html',
+    url: 'quirky-preview://grant/index.html',
     ariaLabel: 'HTML preview',
     onLoadStarted: vi.fn(),
     onLoadStopped: vi.fn(),

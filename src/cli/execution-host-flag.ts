@@ -23,19 +23,19 @@ import type { RuntimeClient } from './runtime-client'
 import { RuntimeClientError } from './runtime/types'
 
 export type HostFlagRoutingSelection = {
-  // Why: SSH targets live in the running Orca host, not on disk, so enumerating them needs a
+  // Why: SSH targets live in the running Quirky host, not on disk, so enumerating them needs a
   // client. Injected as a thunk so the lookup only happens on the error path we are explaining.
   listSshTargets: () => Promise<SshTargetSummary[]>
   // Why: unlike the suggestion listing, this throws when the targets cannot be read. A bare name
   // may only route to a paired server once no SSH target is known to share it.
   verifySshTargets: () => Promise<SshTargetSummary[]>
   pairingCode: string | null
-  // Why: an ambient ORCA_ENVIRONMENT counts as a selection too, so carry the label to
+  // Why: an ambient QUIRKY_ENVIRONMENT counts as a selection too, so carry the label to
   // name the real source in the conflict message.
   environmentSelector: { value: string; label: string } | null
 }
 
-// Why: `orca host list` prints the alias a caller actually knows (`trader-local`), so that is what
+// Why: `quirky host list` prints the alias a caller actually knows (`trader-local`), so that is what
 // they type — but which machine it names needs the host listings, which only the async resolvers
 // below can read. Carry the alias unresolved rather than rejecting the obvious spelling.
 export type HostFlagAlias = { kind: 'alias'; alias: string }
@@ -64,7 +64,7 @@ export function parseHostFlag(flags: Map<string, string | boolean>): HostFlagSel
   if (!alias || alias.startsWith('ssh:') || alias.startsWith('runtime:')) {
     throw new RuntimeClientError(
       'invalid_argument',
-      `Invalid --host value: ${raw}. Expected local, ssh:<target-id>, runtime:<environment-id>, or a host name from \`orca host list\`.`
+      `Invalid --host value: ${raw}. Expected local, ssh:<target-id>, runtime:<environment-id>, or a host name from \`quirky host list\`.`
     )
   }
   return { kind: 'alias', alias }
@@ -115,13 +115,13 @@ export async function resolveHostFlagEnvironmentId(
     const sshTargets = await selection.listSshTargets()
     throw new RuntimeClientError(
       'invalid_argument',
-      `Unknown Orca server in ${flagSpelling}: no paired Orca server is named or has id ${wanted}.`,
+      `Unknown Quirky server in ${flagSpelling}: no paired Quirky server is named or has id ${wanted}.`,
       {
         knownEnvironments: environments,
         knownSshTargets: sshTargets,
         nextSteps: [
           ...crossKindNextSteps(wanted, { environments, sshTargets }, 'environment'),
-          'Run `orca environment list` to see paired Orca servers.',
+          'Run `quirky environment list` to see paired Quirky servers.',
           'Use --host local to target this machine.'
         ]
       }
@@ -131,12 +131,12 @@ export async function resolveHostFlagEnvironmentId(
     if (isLocalHostListName(host.alias)) {
       throw new RuntimeClientError(
         'invalid_argument',
-        `Ambiguous --host ${host.alias}: it names both this machine and a paired Orca server.`,
+        `Ambiguous --host ${host.alias}: it names both this machine and a paired Quirky server.`,
         {
           knownEnvironments: [environment],
           nextSteps: [
             'Use --host local for this machine.',
-            `Use --host runtime:${environment.id} for the paired Orca server named ${environment.name}.`
+            `Use --host runtime:${environment.id} for the paired Quirky server named ${environment.name}.`
           ]
         }
       )
@@ -146,7 +146,7 @@ export async function resolveHostFlagEnvironmentId(
   if (selection.pairingCode) {
     throw new RuntimeClientError(
       'invalid_argument',
-      `${flagSpelling} already selects a paired Orca server; use either --host runtime:<id> or --pairing-code, not both.`
+      `${flagSpelling} already selects a paired Quirky server; use either --host runtime:<id> or --pairing-code, not both.`
     )
   }
   if (selection.environmentSelector) {
@@ -156,7 +156,7 @@ export async function resolveHostFlagEnvironmentId(
     if (selected.id !== environment.id) {
       throw new RuntimeClientError(
         'invalid_argument',
-        `${flagSpelling} and ${selection.environmentSelector.label} ${selection.environmentSelector.value} name different Orca servers.`
+        `${flagSpelling} and ${selection.environmentSelector.label} ${selection.environmentSelector.value} name different Quirky servers.`
       )
     }
   }
@@ -177,11 +177,11 @@ async function assertAliasNamesOneHost(
   } catch {
     throw new RuntimeClientError(
       'invalid_argument',
-      `Cannot verify --host ${alias}: it names a paired Orca server, but this machine's SSH targets could not be read to rule out one with the same name.`,
+      `Cannot verify --host ${alias}: it names a paired Quirky server, but this machine's SSH targets could not be read to rule out one with the same name.`,
       {
         knownEnvironments: [environment],
         nextSteps: [
-          `Use --host runtime:${environment.id} for the paired Orca server named ${environment.name}.`
+          `Use --host runtime:${environment.id} for the paired Quirky server named ${environment.name}.`
         ]
       }
     )
@@ -198,12 +198,12 @@ async function assertAliasNamesOneHost(
     conflicts.length === 1 ? 'an SSH target' : `${conflicts.length} SSH targets sharing that label`
   throw new RuntimeClientError(
     'invalid_argument',
-    `Ambiguous --host ${alias}: it names both a paired Orca server and ${sshCount} on this machine.`,
+    `Ambiguous --host ${alias}: it names both a paired Quirky server and ${sshCount} on this machine.`,
     {
       knownEnvironments: [environment],
       knownSshTargets: conflicts,
       nextSteps: [
-        `Use --host runtime:${environment.id} for the paired Orca server named ${environment.name}.`,
+        `Use --host runtime:${environment.id} for the paired Quirky server named ${environment.name}.`,
         ...conflicts.map(
           (target) => `Use --host ssh:${target.id} for the SSH target labeled ${target.label}.`
         )
@@ -303,7 +303,7 @@ function assertEnvironmentNameUnambiguous(
   }
   throw new RuntimeClientError(
     'invalid_argument',
-    `Ambiguous Orca server in ${flag}: ${ambiguous.length} paired servers are named ${name}. Use the environment id.`,
+    `Ambiguous Quirky server in ${flag}: ${ambiguous.length} paired servers are named ${name}. Use the environment id.`,
     {
       knownEnvironments: ambiguous,
       nextSteps: ambiguous.map(
@@ -338,13 +338,13 @@ export async function resolveEnvironmentSelectorForStore(
   const sshTargets = await listSshTargetsForSuggestion()
   throw new RuntimeClientError(
     'invalid_argument',
-    `Unknown Orca server in --environment ${selector}: no paired Orca server is named or has id ${selector}.`,
+    `Unknown Quirky server in --environment ${selector}: no paired Quirky server is named or has id ${selector}.`,
     {
       knownEnvironments: environments,
       knownSshTargets: sshTargets,
       nextSteps: [
         ...crossKindNextSteps(selector, { environments, sshTargets }, 'environment'),
-        'Run `orca host list` to see every machine you can target and the flag for each.'
+        'Run `quirky host list` to see every machine you can target and the flag for each.'
       ]
     }
   )

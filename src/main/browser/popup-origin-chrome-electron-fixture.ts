@@ -5,7 +5,7 @@ import { openPopupWithOriginBar } from './popup-origin-bar-window'
 import { prepareNativeBrowserPopup } from './browser-popup-native-window'
 import { applyBackgroundActivationPolicy } from '../window/foreground-activation-policy'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
   throw new Error('Popup identity probes require a background launch')
 }
 applyBackgroundActivationPolicy()
@@ -13,7 +13,7 @@ applyBackgroundActivationPolicy()
 app.commandLine.appendSwitch('host-resolver-rules', 'MAP popup-error.invalid 127.0.0.1')
 app.commandLine.appendSwitch('no-proxy-server')
 
-const root = process.env.ORCA_POPUP_IDENTITY_ROOT
+const root = process.env.QUIRKY_POPUP_IDENTITY_ROOT
 if (!root) {
   throw new Error('Missing probe root')
 }
@@ -114,7 +114,7 @@ async function command(input: {
     (view) => view instanceof WebContentsView && view.webContents !== active
   )
   if (input.action === 'capture' && bar instanceof WebContentsView) {
-    const artifacts = process.env.ORCA_POPUP_IDENTITY_ARTIFACT_DIR
+    const artifacts = process.env.QUIRKY_POPUP_IDENTITY_ARTIFACT_DIR
     if (
       artifacts &&
       (input.stage === 'pending' || input.stage === 'committed' || input.stage === 'opaque-error')

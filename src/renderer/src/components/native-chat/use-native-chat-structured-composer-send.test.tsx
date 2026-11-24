@@ -153,7 +153,7 @@ describe('reports the sends that bring the latest into view', () => {
 describe('a send held by its host', () => {
   it('starts no turn, but still lets an option command through', async () => {
     const { send, structuredTransport } = harness('claude')
-    structuredTransport.sendBlockedReason = 'Update Orca on this host to use Ask for approval.'
+    structuredTransport.sendBlockedReason = 'Update Quirky on this host to use Ask for approval.'
     await send('hello', [])
     await send('/compact', [])
     expect(structuredTransport.send).not.toHaveBeenCalled()
@@ -164,7 +164,7 @@ describe('a send held by its host', () => {
   })
 })
 
-describe("says a failed send in Orca's words, with the error it hit apart", () => {
+describe("says a failed send in Quirky's words, with the error it hit apart", () => {
   it('keeps a main-process failure apart from the words saying the message was not sent', async () => {
     const { send, structuredTransport } = harness('claude')
     vi.mocked(structuredTransport.send).mockImplementation(() => {

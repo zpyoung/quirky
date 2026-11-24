@@ -52,9 +52,9 @@ export type ScenarioPort = {
   ) => Promise<RpcReply[]>
   runtimeStub: () => unknown
 }
-export const turnIdentity = { provider: 'orca', clientMessageId: 'turn-stop-test' } as const
+export const turnIdentity = { provider: 'quirky', clientMessageId: 'turn-stop-test' } as const
 export const turnItemId = agentJournalItemKey(turnIdentity)
-export const noteIdentity = { provider: 'orca', clientMessageId: 'stop:turn-stop-test' } as const
+export const noteIdentity = { provider: 'quirky', clientMessageId: 'stop:turn-stop-test' } as const
 export const noteId = agentJournalItemKey(noteIdentity)
 export const scope = { kind: 'turn', turnItemId } as const
 export const ordinary = { kind: 'status', text: 'Cancellation requested.' }
@@ -75,7 +75,7 @@ export function createReleasedStopNoteRig(port: ScenarioPort, ref: string) {
   }, 180_000)
   beforeEach(async () => {
     resetOperationIds()
-    root = await mkdtemp(join(tmpdir(), 'orca-released-stop-note-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-released-stop-note-'))
     const store = await openTestAgentSessionRecordStore(root)
     host = new StructuredAgentSessionHost({
       agents: NO_STRUCTURED_AGENTS,

@@ -28,7 +28,7 @@ export type AgentSessionProcessIdentityField = 'process-start-time' | 'spawn-tok
 export type AgentSessionIdentityMatchField = AgentSessionProcessIdentityField | 'held-child'
 
 export type AgentSessionOwnerProbe =
-  /** Orca watched this exact process exit. */
+  /** Quirky watched this exact process exit. */
   | { outcome: 'exit-observed' }
   /** The recorded pid is not present on the host. */
   | { outcome: 'pid-absent' }
@@ -201,7 +201,7 @@ export function evaluateAgentSessionAcquisition(args: {
   }
   if (lease.ownerProcess !== null) {
     if (!isProvenDeadProbe(probe)) {
-      // Why: a lapsed deadline means Orca stopped hearing from the owner, not that the child
+      // Why: a lapsed deadline means Quirky stopped hearing from the owner, not that the child
       // stopped editing files and spending tokens.
       return isProvenAliveProbe(probe)
         ? { decision: 'refused', code: 'agent_session_conflict', details: { reason: 'ownerAlive' } }

@@ -1,6 +1,6 @@
 import { fileUriToFilesystemPath } from './file-uri-path'
 
-/** File authorities name this machine, never an Orca SSH target. */
+/** File authorities name this machine, never an Quirky SSH target. */
 export function htmlFilePathFromUrl(input: string): string | null {
   if (!/^file:\/\//i.test(input) || /[?#\p{Cc}]|%2f|%5c/iu.test(input)) {
     return null

@@ -165,7 +165,7 @@ function validationErrorCopy(error: ObjectiveEnrollmentError): string {
     case 'gates-unsupported-host':
       return translate(
         'fork.heimdallObjective.validation.gatesUnsupportedHost',
-        "Gates are unavailable on this host's Orca version. Remove all gates to continue."
+        "Gates are unavailable on this host's Quirky version. Remove all gates to continue."
       )
   }
 }

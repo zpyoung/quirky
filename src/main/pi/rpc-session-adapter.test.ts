@@ -157,7 +157,7 @@ describe('Pi RPC session ownership and delivery', () => {
       fence: 7,
       outcome: {
         state: 'accepted',
-        providerIdentity: { provider: 'orca', clientMessageId: 'send-1' }
+        providerIdentity: { provider: 'quirky', clientMessageId: 'send-1' }
       }
     })
     expect(h.connection.sent[0]).toMatchObject({ type: 'prompt', message: 'hello' })
@@ -298,8 +298,8 @@ describe('Pi RPC session ownership and delivery', () => {
     const command = {
       clientMessageId: 'compact-1',
       turnId,
-      identity: { provider: 'orca' as const, clientMessageId: 'compact-1' },
-      resultIdentity: { provider: 'orca' as const, clientMessageId: 'compact-result' },
+      identity: { provider: 'quirky' as const, clientMessageId: 'compact-1' },
+      resultIdentity: { provider: 'quirky' as const, clientMessageId: 'compact-result' },
       running: { kind: 'turn' as const, turnId, state: 'running' as const }
     }
     let release: (() => void) | undefined
@@ -325,8 +325,8 @@ describe('Pi RPC session ownership and delivery', () => {
     const command = {
       clientMessageId: 'compact-1',
       turnId: 'manual-compact',
-      identity: { provider: 'orca' as const, clientMessageId: 'compact-turn' },
-      resultIdentity: { provider: 'orca' as const, clientMessageId: 'compact-result' },
+      identity: { provider: 'quirky' as const, clientMessageId: 'compact-turn' },
+      resultIdentity: { provider: 'quirky' as const, clientMessageId: 'compact-result' },
       running: { kind: 'turn' as const, turnId: 'manual-compact', state: 'running' as const }
     }
     h.rig.journal.appendItem(command.identity, agentJournalTurnBody(command.running), {

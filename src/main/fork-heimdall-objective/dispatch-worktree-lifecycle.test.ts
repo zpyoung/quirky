@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import type { LeaseGuard } from '../../shared/fork-heimdall/kind-contract'
 import type { WatcherEnrollment } from '../../shared/fork-heimdall/watcher-types'
 import type { ObjectiveDispatchRecord } from '../../shared/fork-heimdall-objective/parallel-types'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import {
   cleanupAppliedObjectiveDispatch,
   cleanupAppliedObjectiveDispatches,
@@ -64,10 +64,10 @@ function bindingWithEnrollment(enrollment: Partial<WatcherEnrollment>): Objectiv
 }
 
 function removeWorktreeRuntime(
-  removeManagedWorktree: OrcaRuntimeService['removeManagedWorktree']
-): OrcaRuntimeService {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of OrcaRuntimeService, a class with private fields no object literal can structurally satisfy; only removeManagedWorktree is exercised.
-  return { removeManagedWorktree } as unknown as OrcaRuntimeService
+  removeManagedWorktree: QuirkyRuntimeService['removeManagedWorktree']
+): QuirkyRuntimeService {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of QuirkyRuntimeService, a class with private fields no object literal can structurally satisfy; only removeManagedWorktree is exercised.
+  return { removeManagedWorktree } as unknown as QuirkyRuntimeService
 }
 
 function recordStore(
@@ -177,11 +177,11 @@ it('marks an absent cleanup-pending child cleaned after its worker session exits
   const records = new Map<string, ObjectiveDispatchRecord>([[pending.attemptFingerprint, pending]])
   const objectiveStore = recordStore(records, { setParallelNote: vi.fn() })
   const removeManagedWorktree = vi.fn(async () => ({}))
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of OrcaRuntimeService, a class with private fields no object literal can structurally satisfy; only the methods below are exercised.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of QuirkyRuntimeService, a class with private fields no object literal can structurally satisfy; only the methods below are exercised.
   const runtime = {
     listManagedWorktrees: vi.fn(async () => ({ worktrees: [] })),
     removeManagedWorktree
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 
   const workerSessionExited = vi.fn(async (owner: ObjectiveDispatchRecord) => owner === pending)
 
@@ -299,7 +299,7 @@ it('never treats a same-id child on another execution host as the recorded works
   const records = new Map<string, ObjectiveDispatchRecord>([[record.attemptFingerprint, record]])
   const objectiveStore = recordStore(records, { setParallelNote: vi.fn() })
   const removeManagedWorktree = vi.fn(async () => ({}))
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of OrcaRuntimeService, a class with private fields no object literal can structurally satisfy; only the methods below are exercised.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of QuirkyRuntimeService, a class with private fields no object literal can structurally satisfy; only the methods below are exercised.
   const runtime = {
     listManagedWorktrees: vi.fn(async () => ({
       worktrees: [
@@ -314,7 +314,7 @@ it('never treats a same-id child on another execution host as the recorded works
       ]
     })),
     removeManagedWorktree
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 
   await reconcileObjectiveDispatchWorktrees({
     runtime,

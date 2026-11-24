@@ -68,7 +68,7 @@ export async function downloadMobileFileMedia(
       !statReply.ok &&
       isMobileMethodUnavailableError(statReply.error.code, statReply.error.message)
     ) {
-      throw new Error('Update Orca on your desktop to preview media files on mobile')
+      throw new Error('Update Quirky on your desktop to preview media files on mobile')
     }
     const stat = statRead.interpret(statReply)
     checkDownloadActive(signal)

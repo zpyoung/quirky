@@ -1,5 +1,5 @@
 /**
- * Who a relay-era terminal's `orca` command speaks as, and what it may reach.
+ * Who a relay-era terminal's `quirky` command speaks as, and what it may reach.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  *
  * Everything the host sends is a claim. The caller is accepted only as a pane this desktop leased
@@ -8,7 +8,7 @@
  * mailboxes, its own Dispatch or Run, and the other party of that same orchestration.
  */
 import { parsePaneKey } from '../../../shared/stable-pane-id'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { OrchestrationDb } from '../../runtime/orchestration/db'
 import { isEquivalentPaneKey } from '../../runtime/orchestration/db/pane-key-match'
 import type { DispatchContextRow, RunRow } from '../../runtime/orchestration/types'
@@ -17,8 +17,8 @@ import type { LegacyRelayLivePane } from './legacy-relay-bridge-leases'
 const MAX_IDENTITY_LENGTH = 512
 
 export const LEGACY_RELAY_CLI_UNVERIFIED =
-  "Orca could not confirm this terminal is one of this host's supervised Orca terminals, so its " +
-  'orca command was refused. Run it in a new terminal on this host.'
+  "Quirky could not confirm this terminal is one of this host's supervised Quirky terminals, so its " +
+  'quirky command was refused. Run it in a new terminal on this host.'
 
 export type LegacyRelayCliCaller = {
   handle: string
@@ -45,15 +45,15 @@ function samePane(recorded: string | null | undefined, paneKey: string): boolean
 }
 
 export function resolveLegacyRelayCliCaller(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   env: Readonly<Record<string, string>>,
   livePane: (paneKey: string) => LegacyRelayLivePane | null,
   targetId: string,
   /** A retry of a mutation this caller already completed, which may outlive its Dispatch. */
   replay?: { fingerprint: string; requestId: string }
 ): LegacyRelayCliCaller {
-  const handle = bounded(env.ORCA_TERMINAL_HANDLE)
-  const paneKey = bounded(env.ORCA_PANE_KEY)
+  const handle = bounded(env.QUIRKY_TERMINAL_HANDLE)
+  const paneKey = bounded(env.QUIRKY_PANE_KEY)
   const pane = handle && paneKey && parsePaneKey(paneKey) ? livePane(paneKey) : null
   if (!handle || !paneKey || !pane) {
     throw new Error(LEGACY_RELAY_CLI_UNVERIFIED)
@@ -162,7 +162,7 @@ function principalHostTargetId(hostScope: string): string | undefined {
 
 function outside(subject: string): Error {
   return new Error(
-    `A terminal started by an older version of Orca can reach only its own orchestration, and ${subject} is outside it.`
+    `A terminal started by an older version of Quirky can reach only its own orchestration, and ${subject} is outside it.`
   )
 }
 

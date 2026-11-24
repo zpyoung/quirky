@@ -74,7 +74,7 @@ describe('planDeviceKeyFork', () => {
   })
 
   it('commits nothing when the registry cannot be read', () => {
-    const registry = new DeviceRegistry(mkdtempSync(join(tmpdir(), 'orca-device-key-fork-')))
+    const registry = new DeviceRegistry(mkdtempSync(join(tmpdir(), 'quirky-device-key-fork-')))
     const legacy = registry.addDevice('Laptop', 'runtime')
     registry['registryUnreadable'] = true
     expect(() => registry.forkDeviceKey(legacy.deviceId, KEY_A, 'Mac')).toThrow()
@@ -83,7 +83,7 @@ describe('planDeviceKeyFork', () => {
   })
 
   it('keeps a corrupt registry aside and never calls an unlisted key revoked while it exists', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-device-key-fork-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-device-key-fork-'))
     writeFileSync(join(userDataPath, DEVICE_REGISTRY_FILENAME), '[{"deviceId":"keyed",')
     const afterCrash = new DeviceRegistry(userDataPath)
     expect(afterCrash.lookupDeviceKey('keyed')).toEqual({ kind: 'unavailable' })
@@ -96,7 +96,7 @@ describe('planDeviceKeyFork', () => {
   })
 
   it('stays doubtful when the rewrite after quarantine never landed', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-device-key-fork-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-device-key-fork-'))
     writeFileSync(join(userDataPath, DEVICE_REGISTRY_FILENAME), '{')
     writeFileSync(join(userDataPath, `${DEVICE_REGISTRY_FILENAME}.corrupt-1`), '{')
     rmSync(join(userDataPath, DEVICE_REGISTRY_FILENAME))

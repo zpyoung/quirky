@@ -1,7 +1,7 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { afterEach, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { AI_VAULT_METHODS } from './ai-vault'
 import { agentSessionRecordFixture } from '../../../../shared/agent-session-record.test-fixture'
 import { claudeProviderHandle } from '../../../../shared/agent-session-provider-handle-encoding'
@@ -54,7 +54,7 @@ it('projects the serving record before returning paired-host row identity', asyn
       issues: [],
       scannedAt: row.modifiedAt
     }))
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({ runtime, methods: AI_VAULT_METHODS })
   const request = {
     id: 'request',
@@ -118,7 +118,7 @@ it('owns indexed search hits only for a client that can open the native chat', a
   const runtime = {
     getRuntimeId: () => 'host-runtime',
     ensureStructuredAgentSessionHost: ensureHost
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({ runtime, methods: AI_VAULT_METHODS })
   const request = {
     id: 'request',

@@ -1,5 +1,5 @@
-// What the notice card above a native chat's composer shows: Orca's own words, plus, apart from
-// them, any error text Orca did not write, so it can be read and copied as written.
+// What the notice card above a native chat's composer shows: Quirky's own words, plus, apart from
+// them, any error text Quirky did not write, so it can be read and copied as written.
 
 import { translate } from '@/i18n/i18n'
 import { readIpcErrorDetail } from '@/lib/ipc-error'
@@ -9,7 +9,7 @@ export type NativeChatComposerNoticeContent = {
   text: string
   /** Inline presentation of the sentence when it contains navigation. */
   content?: React.ReactNode
-  /** Text from outside Orca (a host or system error), shown apart and copyable. */
+  /** Text from outside Quirky (a host or system error), shown apart and copyable. */
   errorText?: string
 }
 
@@ -19,19 +19,19 @@ export type NativeChatComposerNotice = NativeChatComposerNoticeContent & {
   onDismiss?: () => void
 } & ({ kind: 'error' | 'attachment' | 'device' } | { kind: 'host'; tone: 'warning' | 'muted' })
 
-/** `headline` in Orca's words, with the error as written beside it. `localErrorIsOrcaWords`: an
- *  error raised in this window (not wrapped by main-process IPC) is already Orca's sentence. */
+/** `headline` in Quirky's words, with the error as written beside it. `localErrorIsQuirkyWords`: an
+ *  error raised in this window (not wrapped by main-process IPC) is already Quirky's sentence. */
 export function nativeChatNoticeFromError(
   error: unknown,
   headline: string,
-  options: { localErrorIsOrcaWords?: boolean } = {}
+  options: { localErrorIsQuirkyWords?: boolean } = {}
 ): NativeChatComposerNoticeContent {
   const detail = error instanceof Error ? readIpcErrorDetail(error) : String(error ?? '').trim()
   if (!detail) {
     return { text: headline }
   }
   const wrapped = error instanceof Error && detail !== error.message.trim()
-  return options.localErrorIsOrcaWords && error instanceof Error && !wrapped
+  return options.localErrorIsQuirkyWords && error instanceof Error && !wrapped
     ? { text: detail }
     : { text: headline, errorText: detail }
 }
@@ -41,7 +41,7 @@ export function setNativeChatNoticeFromError(
   setNotice: (text: string | null, errorText?: string) => void,
   error: unknown,
   headline: string,
-  options: { localErrorIsOrcaWords?: boolean } = {}
+  options: { localErrorIsQuirkyWords?: boolean } = {}
 ): void {
   const notice = nativeChatNoticeFromError(error, headline, options)
   if (notice.errorText) {
@@ -51,8 +51,8 @@ export function setNativeChatNoticeFromError(
   }
 }
 
-/** A failed paste: an error this window raised, or Orca's own size limit coming back from the main
- *  process, is already Orca's sentence; any other is kept apart under `headline`. */
+/** A failed paste: an error this window raised, or Quirky's own size limit coming back from the main
+ *  process, is already Quirky's sentence; any other is kept apart under `headline`. */
 export function setNativeChatPasteFailure(
   setNotice: (text: string | null, errorText?: string) => void,
   error: unknown,
@@ -62,5 +62,5 @@ export function setNativeChatPasteFailure(
     setNotice(readIpcErrorDetail(error) ?? headline)
     return
   }
-  setNativeChatNoticeFromError(setNotice, error, headline, { localErrorIsOrcaWords: true })
+  setNativeChatNoticeFromError(setNotice, error, headline, { localErrorIsQuirkyWords: true })
 }

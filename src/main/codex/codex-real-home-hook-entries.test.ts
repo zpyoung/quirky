@@ -61,7 +61,7 @@ import { reconcileRealHomeCodexHookEntries } from './codex-real-home-hook-instal
 import {
   buildCodexManagedHook,
   CODEX_EVENT_LABEL,
-  computeOrcaCodexHookHashes,
+  computeQuirkyCodexHookHashes,
   getCodexManagedHookInstallMaterial
 } from './codex-hook-definition'
 import { createCodexHookTrustEntry } from './codex-hook-identity'
@@ -74,8 +74,8 @@ import {
   type CodexTrustEntry
 } from './config-toml-trust'
 
-// Why this file: every Orca instance and build on one HOME shares ~/.codex, and
-// the user's own hooks and approvals live beside Orca's entry there.
+// Why this file: every Quirky instance and build on one HOME shares ~/.codex, and
+// the user's own hooks and approvals live beside Quirky's entry there.
 
 type HooksFile = { hooks: Record<string, HookDefinition[]> }
 
@@ -93,12 +93,12 @@ let userData: string
 const hooksPath = (): string => join(home, '.codex', 'hooks.json')
 const configPath = (): string => join(home, '.codex', 'config.toml')
 const frozen = (): string => getCodexManagedHookInstallMaterial().command
-const orcaGroup = (command: string = frozen()): HookDefinition => ({
+const quirkyGroup = (command: string = frozen()): HookDefinition => ({
   hooks: [buildCodexManagedHook(command, 'Stop')]
 })
 
 function olderBuildCommand(): string {
-  const script = join(home, '.orca', 'agent-hooks', 'codex-hook.sh')
+  const script = join(home, '.quirky', 'agent-hooks', 'codex-hook.sh')
   return process.platform === 'win32' ? script : wrapPosixHookCommand(script)
 }
 
@@ -128,7 +128,7 @@ async function reconcile(
 ): Promise<'written' | 'unchanged'> {
   const hashes = options.hashes === undefined ? CODEX_HASHES : options.hashes
   if (options.userDataPath) {
-    vi.stubEnv('ORCA_USER_DATA_PATH', options.userDataPath)
+    vi.stubEnv('QUIRKY_USER_DATA_PATH', options.userDataPath)
   }
   // Why saved: the app's lookup holds the answer an earlier run wrote.
   memoizeCodexHookAnswer(
@@ -169,11 +169,11 @@ function trustAt(entry: CodexTrustEntry): { trustedHash?: string; enabled?: bool
   return readHookTrustEntries(configPath()).get(computeTrustKey(entry))
 }
 
-function expectOrcaApprovedAt(
+function expectQuirkyApprovedAt(
   groupIndex: number,
   hash: string | null | undefined = CODEX_HASHES.stop
 ): void {
-  expect(trustAt(stopEntryAt(groupIndex, orcaGroup()))).toEqual({
+  expect(trustAt(stopEntryAt(groupIndex, quirkyGroup()))).toEqual({
     trustedHash: hash,
     enabled: true
   })
@@ -181,7 +181,7 @@ function expectOrcaApprovedAt(
 
 beforeEach(() => {
   // Why realpath: a symlinked temp dir (macOS /var) would give ~/.codex a second key spelling.
-  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'orca-real-home-entries-')))
+  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'quirky-real-home-entries-')))
   home = join(root, 'home')
   userData = join(root, 'user-data')
   mkdirSync(home)
@@ -190,7 +190,7 @@ beforeEach(() => {
   mocks.beforeHooksJsonGuard = null
   mocks.hooksJsonWrites = 0
   vi.stubEnv('CODEX_HOME', '')
-  vi.stubEnv('ORCA_USER_DATA_PATH', userData)
+  vi.stubEnv('QUIRKY_USER_DATA_PATH', userData)
 })
 
 afterEach(() => {
@@ -201,14 +201,14 @@ afterEach(() => {
 
 describe('reconcileRealHomeCodexHookEntries', () => {
   it("converts an older build's entry once, in its slot, with one pristine backup", async () => {
-    const olderRaw = writeHooks({ hooks: { Stop: [USER_A, orcaGroup(olderBuildCommand())] } })
+    const olderRaw = writeHooks({ hooks: { Stop: [USER_A, quirkyGroup(olderBuildCommand())] } })
 
     expect(await reconcile()).toBe('written')
     const converted = identity(hooksPath())
-    expect(readHooks().hooks.Stop).toEqual([USER_A, orcaGroup()])
-    expectOrcaApprovedAt(1)
+    expect(readHooks().hooks.Stop).toEqual([USER_A, quirkyGroup()])
+    expectQuirkyApprovedAt(1)
     expect(
-      readFileSync(join(userData, 'codex-real-home-hooks', 'hooks.json.pre-orca'), 'utf-8')
+      readFileSync(join(userData, 'codex-real-home-hooks', 'hooks.json.pre-quirky'), 'utf-8')
     ).toBe(olderRaw)
 
     const otherInstance = join(root, 'second-user-data')
@@ -234,29 +234,29 @@ describe('reconcileRealHomeCodexHookEntries', () => {
     expect(existsSync(configPath())).toBe(false)
   })
 
-  it("leaves an older build's event alone on a launch, and adds Orca's entry to the rest", async () => {
-    writeHooks({ hooks: { Stop: [USER_A, orcaGroup(olderBuildCommand())] } })
+  it("leaves an older build's event alone on a launch, and adds Quirky's entry to the rest", async () => {
+    writeHooks({ hooks: { Stop: [USER_A, quirkyGroup(olderBuildCommand())] } })
 
     expect(await reconcile({ convertOlderForms: false })).toBe('written')
 
-    expect(readHooks().hooks.Stop).toEqual([USER_A, orcaGroup(olderBuildCommand())])
+    expect(readHooks().hooks.Stop).toEqual([USER_A, quirkyGroup(olderBuildCommand())])
     expect(readHooks().hooks.SessionStart).toEqual([
       { hooks: [buildCodexManagedHook(frozen(), 'SessionStart')] }
     ])
-    expect(trustAt(stopEntryAt(1, orcaGroup()))).toBeUndefined()
+    expect(trustAt(stopEntryAt(1, quirkyGroup()))).toBeUndefined()
   })
 
   it('never rewrites a newer build form or appends beside it', async () => {
-    const newer = `: orca-agent-hook-form=2; /bin/sh "\${HOME-}/.orca/agent-hooks/codex-hook.sh"`
-    writeHooks({ hooks: { Stop: [orcaGroup(newer)] } })
+    const newer = `: quirky-agent-hook-form=2; /bin/sh "\${HOME-}/.quirky/agent-hooks/codex-hook.sh"`
+    writeHooks({ hooks: { Stop: [quirkyGroup(newer)] } })
 
     await reconcile()
 
-    expect(readHooks().hooks.Stop).toEqual([orcaGroup(newer)])
+    expect(readHooks().hooks.Stop).toEqual([quirkyGroup(newer)])
   })
 
-  it('keeps Orca entries in events this build does not subscribe to', async () => {
-    const otherEvent = [orcaGroup()]
+  it('keeps Quirky entries in events this build does not subscribe to', async () => {
+    const otherEvent = [quirkyGroup()]
     writeHooks({ hooks: { PreCompact: otherEvent } })
 
     expect(await reconcile()).toBe('written')
@@ -264,7 +264,7 @@ describe('reconcileRealHomeCodexHookEntries', () => {
     expect(readHooks().hooks.PreCompact).toEqual(otherEvent)
   })
 
-  it("keeps the approval of Orca's entry in an event this Codex does not list", async () => {
+  it("keeps the approval of Quirky's entry in an event this Codex does not list", async () => {
     const interrupt: HookDefinition = { hooks: [buildCodexManagedHook(frozen(), 'Interrupt')] }
     writeHooks({ hooks: { Interrupt: [interrupt] } })
     // Why another version's hash: a newer Codex sharing ~/.codex approved this entry.
@@ -298,17 +298,19 @@ describe('reconcileRealHomeCodexHookEntries', () => {
   })
 
   it('keeps one copy, alone and last, moving the approvals of user hooks that shift', async () => {
-    writeHooks({ hooks: { Stop: [USER_A, orcaGroup(), USER_B, orcaGroup(), USER_C, orcaGroup()] } })
+    writeHooks({
+      hooks: { Stop: [USER_A, quirkyGroup(), USER_B, quirkyGroup(), USER_C, quirkyGroup()] }
+    })
     upsertHookTrustEntries(configPath(), [
       { ...stopEntryAt(2, USER_B), trustedHash: 'sha256:user-b' },
       { ...stopEntryAt(4, USER_C), trustedHash: 'sha256:user-c' },
-      { ...stopEntryAt(3, orcaGroup()), trustedHash: CODEX_HASHES.stop, enabled: true }
+      { ...stopEntryAt(3, quirkyGroup()), trustedHash: CODEX_HASHES.stop, enabled: true }
     ])
 
     expect(await reconcile()).toBe('written')
 
-    expect(readHooks().hooks.Stop).toEqual([USER_A, orcaGroup(), USER_B, USER_C])
-    expectOrcaApprovedAt(1)
+    expect(readHooks().hooks.Stop).toEqual([USER_A, quirkyGroup(), USER_B, USER_C])
+    expectQuirkyApprovedAt(1)
     expect(trustAt(stopEntryAt(2, USER_B))?.trustedHash).toBe('sha256:user-b')
     expect(trustAt(stopEntryAt(3, USER_C))?.trustedHash).toBe('sha256:user-c')
     expect(trustAt(stopEntryAt(4, USER_C))).toBeUndefined()
@@ -316,20 +318,25 @@ describe('reconcileRealHomeCodexHookEntries', () => {
   })
 
   it('keeps the kept copy in its place when an earlier copy leaves its group empty', async () => {
-    const matched: HookDefinition = { matcher: 'Bash', hooks: orcaGroup().hooks }
+    const matched: HookDefinition = { matcher: 'Bash', hooks: quirkyGroup().hooks }
     writeHooks({
       hooks: {
-        Stop: [matched, USER_A, { hooks: [...orcaGroup().hooks!, ...orcaGroup().hooks!] }, USER_B]
+        Stop: [
+          matched,
+          USER_A,
+          { hooks: [...quirkyGroup().hooks!, ...quirkyGroup().hooks!] },
+          USER_B
+        ]
       }
     })
 
     expect(await reconcile()).toBe('written')
 
-    expect(readHooks().hooks.Stop).toEqual([USER_A, orcaGroup(), USER_B])
-    expectOrcaApprovedAt(1)
+    expect(readHooks().hooks.Stop).toEqual([USER_A, quirkyGroup(), USER_B])
+    expectQuirkyApprovedAt(1)
   })
 
-  it("drops a hook that runs Orca's script through its args, as the opt-out does", async () => {
+  it("drops a hook that runs Quirky's script through its args, as the opt-out does", async () => {
     const viaArgs: HookDefinition = {
       hooks: [
         {
@@ -339,14 +346,14 @@ describe('reconcileRealHomeCodexHookEntries', () => {
         }
       ]
     }
-    writeHooks({ hooks: { Stop: [USER_A, viaArgs, orcaGroup()] } })
+    writeHooks({ hooks: { Stop: [USER_A, viaArgs, quirkyGroup()] } })
 
     expect(await reconcile()).toBe('written')
 
-    expect(readHooks().hooks.Stop).toEqual([USER_A, orcaGroup()])
+    expect(readHooks().hooks.Stop).toEqual([USER_A, quirkyGroup()])
   })
 
-  it("moves Orca's handler out of a user's matcher group, with the shifted user approvals", async () => {
+  it("moves Quirky's handler out of a user's matcher group, with the shifted user approvals", async () => {
     const userGroup: HookDefinition = {
       matcher: 'Bash',
       hooks: [
@@ -371,7 +378,7 @@ describe('reconcileRealHomeCodexHookEntries', () => {
     ])
     expect(trustAt(lintAt(0))?.trustedHash).toBe('sha256:lint')
     expect(trustAt(lintAt(1))).toBeUndefined()
-    const orca = createCodexHookTrustEntry(
+    const quirky = createCodexHookTrustEntry(
       hooksPath(),
       'PreToolUse',
       1,
@@ -379,10 +386,10 @@ describe('reconcileRealHomeCodexHookEntries', () => {
       after[1]!,
       after[1]!.hooks![0]!
     )!
-    expect(trustAt(orca)).toEqual({ trustedHash: CODEX_HASHES.pre_tool_use, enabled: true })
+    expect(trustAt(quirky)).toEqual({ trustedHash: CODEX_HASHES.pre_tool_use, enabled: true })
   })
 
-  it("drops Orca's approval at the slot its copy left in a user's matcher group", async () => {
+  it("drops Quirky's approval at the slot its copy left in a user's matcher group", async () => {
     const lint = { type: 'command' as const, command: 'lint.sh' }
     const userGroup: HookDefinition = {
       matcher: 'Bash',
@@ -425,9 +432,9 @@ describe('reconcileRealHomeCodexHookEntries', () => {
   })
 
   it("keeps the approval of this build's copy in an event left to an older build", async () => {
-    writeHooks({ hooks: { Stop: [orcaGroup(olderBuildCommand()), orcaGroup()] } })
+    writeHooks({ hooks: { Stop: [quirkyGroup(olderBuildCommand()), quirkyGroup()] } })
     const approved = {
-      ...stopEntryAt(1, orcaGroup()),
+      ...stopEntryAt(1, quirkyGroup()),
       trustedHash: CODEX_HASHES.stop,
       enabled: true
     }
@@ -435,7 +442,7 @@ describe('reconcileRealHomeCodexHookEntries', () => {
 
     await reconcile({ convertOlderForms: false })
 
-    expect(readHooks().hooks.Stop).toEqual([orcaGroup(olderBuildCommand()), orcaGroup()])
+    expect(readHooks().hooks.Stop).toEqual([quirkyGroup(olderBuildCommand()), quirkyGroup()])
     expect(trustAt(approved)).toEqual({ trustedHash: CODEX_HASHES.stop, enabled: true })
   })
 
@@ -448,8 +455,8 @@ describe('reconcileRealHomeCodexHookEntries', () => {
 
     expect(await reconcile()).toBe('written')
 
-    expect(readHooks().hooks.Stop).toEqual([orcaGroup(), USER_A])
-    expectOrcaApprovedAt(0)
+    expect(readHooks().hooks.Stop).toEqual([quirkyGroup(), USER_A])
+    expectQuirkyApprovedAt(0)
   })
 
   it("re-approves after a user hook is inserted ahead, keeping the user's approvals", async () => {
@@ -462,9 +469,9 @@ describe('reconcileRealHomeCodexHookEntries', () => {
     expect(await reconcile()).toBe('written')
 
     expect(mocks.hooksJsonWrites).toBe(0)
-    expectOrcaApprovedAt(2)
-    // Why gone: Orca's approval at the slot it left now names a user hook.
-    expect(trustAt(stopEntryAt(1, orcaGroup()))).toBeUndefined()
+    expectQuirkyApprovedAt(2)
+    // Why gone: Quirky's approval at the slot it left now names a user hook.
+    expect(trustAt(stopEntryAt(1, quirkyGroup()))).toBeUndefined()
     expect(trustAt(stopEntryAt(0, USER_B))?.trustedHash).toBe('sha256:b')
     expect(await reconcile()).toBe('unchanged')
   })
@@ -478,7 +485,7 @@ describe('reconcileRealHomeCodexHookEntries', () => {
     expect(await reconcile({ hashes: updated })).toBe('written')
 
     expect(identity(hooksPath())).toEqual(hooksBefore)
-    expectOrcaApprovedAt(1, 'sha256:codex-next-stop')
+    expectQuirkyApprovedAt(1, 'sha256:codex-next-stop')
     expect(await reconcile({ hashes: updated })).toBe('unchanged')
   })
 
@@ -486,16 +493,16 @@ describe('reconcileRealHomeCodexHookEntries', () => {
     writeHooks({ hooks: { Stop: [USER_A] } })
     await reconcile()
     upsertHookTrustEntries(configPath(), [
-      { ...stopEntryAt(1, orcaGroup()), trustedHash: CODEX_HASHES.stop, enabled: false }
+      { ...stopEntryAt(1, quirkyGroup()), trustedHash: CODEX_HASHES.stop, enabled: false }
     ])
 
     expect(await reconcile()).toBe('written')
 
-    expectOrcaApprovedAt(1)
+    expectQuirkyApprovedAt(1)
     expect(await reconcile()).toBe('unchanged')
   })
 
-  it("keeps user hooks' positions and approvals while appending Orca's entry", async () => {
+  it("keeps user hooks' positions and approvals while appending Quirky's entry", async () => {
     writeHooks({ hooks: { Stop: [USER_A, USER_B] } })
     upsertHookTrustEntries(configPath(), [
       { ...stopEntryAt(1, USER_B), trustedHash: 'sha256:user' }
@@ -504,8 +511,8 @@ describe('reconcileRealHomeCodexHookEntries', () => {
 
     await reconcile()
 
-    expect(readHooks().hooks.Stop).toEqual([USER_A, USER_B, orcaGroup()])
-    // Why a prefix: Orca's approval blocks are only appended after the user's bytes.
+    expect(readHooks().hooks.Stop).toEqual([USER_A, USER_B, quirkyGroup()])
+    // Why a prefix: Quirky's approval blocks are only appended after the user's bytes.
     expect(readFileSync(configPath(), 'utf-8').startsWith(userToml)).toBe(true)
     expect(trustAt(stopEntryAt(1, USER_B))?.trustedHash).toBe('sha256:user')
   })
@@ -519,9 +526,9 @@ describe('reconcileRealHomeCodexHookEntries', () => {
 
     expect(await reconcile()).toBe('written')
 
-    expect(readHooks().hooks.Stop).toEqual([USER_A, USER_B, orcaGroup()])
-    expectOrcaApprovedAt(2)
-    expect(trustAt(stopEntryAt(1, orcaGroup()))).toBeUndefined()
+    expect(readHooks().hooks.Stop).toEqual([USER_A, USER_B, quirkyGroup()])
+    expectQuirkyApprovedAt(2)
+    expect(trustAt(stopEntryAt(1, quirkyGroup()))).toBeUndefined()
   })
 
   it.each([
@@ -595,17 +602,17 @@ describe('until Codex answers', () => {
     expect({ hooks: identity(hooksPath()), toml: identity(configPath()) }).toEqual(before)
   })
 
-  it("approves a new entry with Orca's own hash, which Codex's answer then replaces", async () => {
+  it("approves a new entry with Quirky's own hash, which Codex's answer then replaces", async () => {
     writeHooks({ hooks: { Stop: [USER_A] } })
 
     expect(await reconcile({ hashes: null })).toBe('written')
-    expectOrcaApprovedAt(1, computeOrcaCodexHookHashes().stop)
+    expectQuirkyApprovedAt(1, computeQuirkyCodexHookHashes().stop)
 
     expect(await reconcile()).toBe('written')
-    expectOrcaApprovedAt(1)
+    expectQuirkyApprovedAt(1)
   })
 
-  it("approves an entry it rewrites in place with Orca's own hash, not the edited copy's", async () => {
+  it("approves an entry it rewrites in place with Quirky's own hash, not the edited copy's", async () => {
     const edited: HookDefinition = {
       hooks: [{ ...buildCodexManagedHook(frozen(), 'Stop'), timeout: 99 }]
     }
@@ -614,7 +621,7 @@ describe('until Codex answers', () => {
 
     expect(await reconcile({ hashes: null })).toBe('written')
 
-    expectOrcaApprovedAt(0, computeOrcaCodexHookHashes().stop)
+    expectQuirkyApprovedAt(0, computeQuirkyCodexHookHashes().stop)
   })
 
   it('writes the entry with no approval for a Codex that lists it without a hash', async () => {
@@ -622,19 +629,19 @@ describe('until Codex answers', () => {
 
     expect(await reconcile({ hashes: { stop: null } })).toBe('written')
 
-    expect(readHooks().hooks.Stop).toEqual([USER_A, orcaGroup()])
+    expect(readHooks().hooks.Stop).toEqual([USER_A, quirkyGroup()])
     expect(readHookTrustEntries(configPath()).size).toBe(0)
   })
 
-  it("keeps an approval at Orca's entry for a Codex that lists it without a hash", async () => {
-    writeHooks({ hooks: { Stop: [USER_A, orcaGroup()] } })
+  it("keeps an approval at Quirky's entry for a Codex that lists it without a hash", async () => {
+    writeHooks({ hooks: { Stop: [USER_A, quirkyGroup()] } })
     upsertHookTrustEntries(configPath(), [
-      { ...stopEntryAt(1, orcaGroup()), trustedHash: CODEX_HASHES.stop, enabled: true }
+      { ...stopEntryAt(1, quirkyGroup()), trustedHash: CODEX_HASHES.stop, enabled: true }
     ])
 
     await reconcile({ hashes: { ...CODEX_HASHES, stop: null } })
 
-    expect(readHooks().hooks.Stop).toEqual([USER_A, orcaGroup()])
-    expectOrcaApprovedAt(1)
+    expect(readHooks().hooks.Stop).toEqual([USER_A, quirkyGroup()])
+    expectQuirkyApprovedAt(1)
   })
 })

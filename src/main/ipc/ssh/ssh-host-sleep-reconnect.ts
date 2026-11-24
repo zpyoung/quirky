@@ -1,5 +1,5 @@
 import { powerMonitor } from 'electron'
-import { recoverOrcadManagedTunnelsAfterHostResume } from '../../managed-server/lifecycle/orcad-managed-tunnel'
+import { recoverQuirkydManagedTunnelsAfterHostResume } from '../../managed-server/lifecycle/quirkyd-managed-tunnel'
 import { getSshConnectionManager } from '../../ssh/targets/ssh-target-registry'
 import { errorMessage } from '../../../shared/error-message'
 
@@ -24,12 +24,12 @@ export function retrySshConnectionsAfterNetworkReturn(): void {
     return
   }
   // Why: a transport that still looks connected after wake is found dead by this probe, not by keepalive.
-  void recoverOrcadManagedTunnelsAfterHostResume(getUserDataPath(), {
+  void recoverQuirkydManagedTunnelsAfterHostResume(getUserDataPath(), {
     attempts: RESUME_PROBE_ATTEMPTS,
     timeoutMs: RESUME_PROBE_TIMEOUT_MS
   }).catch((err) => {
     console.warn(
-      `[ssh] Failed to recover a managed Orca tunnel after system resume: ${errorMessage(err)}`
+      `[ssh] Failed to recover a managed Quirky tunnel after system resume: ${errorMessage(err)}`
     )
   })
 }

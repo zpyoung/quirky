@@ -13,7 +13,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { materializeServeSimRuntime } from './serve-sim-runtime-materializer'
 
 const DYLIB_CONTENT = Buffer.from('signed-simcam-dylib-mach-o-bytes')
@@ -53,7 +53,7 @@ describe('materializeServeSimRuntime', () => {
   })
 
   async function createRoot(): Promise<string> {
-    const root = await mkdtemp(join(tmpdir(), 'orca-simcam-materializer-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-simcam-materializer-'))
     cleanupPaths.push(root)
     return root
   }
@@ -283,7 +283,7 @@ describe('materializeServeSimRuntime', () => {
     expect(materialized).not.toBeNull()
 
     // Probe from the entry's own directory so ESM resolution walks up exactly as serve-sim.js does.
-    const probePath = join(materialized!, 'dist', 'orca-dependency-probe.mjs')
+    const probePath = join(materialized!, 'dist', 'quirky-dependency-probe.mjs')
     await writeFile(
       probePath,
       `for (const name of ${JSON.stringify(dependencyNames)}) import.meta.resolve(name)\n`

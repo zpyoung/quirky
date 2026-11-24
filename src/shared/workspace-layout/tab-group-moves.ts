@@ -3,7 +3,7 @@ import { buildSplitNode, replaceLeaf } from './tab-group-layout-tree'
 import type { LayoutGroup } from './workspace-layout-model'
 
 /**
- * Headless ("Orca server") tab-GROUP split operations (distinct from terminal
+ * Headless ("Quirky server") tab-GROUP split operations (distinct from terminal
  * PANE splits inside one tab). The headless host historically coalesced every
  * tab into a single group, so a client drag-to-split-group was lost on the next
  * snapshot. These pure helpers let the host model + persist a real multi-group

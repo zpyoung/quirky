@@ -1,4 +1,4 @@
-// Ordinary messages Orca proves the agent never received, owed to it at most once: derived from the
+// Ordinary messages Quirky proves the agent never received, owed to it at most once: derived from the
 // journal on each handover (host only), and carried at the front of the person's next send that
 // opens a turn, for every agent. One is covered by a carrier's `carries` unless that carrier was
 // refused before anything reached the agent. Words only: a stopped message's images are not replayed.
@@ -50,7 +50,7 @@ function isOrdinaryPersonMessage(
   return !(firstText?.type === 'text' && firstText.text.startsWith('/'))
 }
 
-/** A Stop took it back where Orca proves the agent never received it. */
+/** A Stop took it back where Quirky proves the agent never received it. */
 function withdrawnUnwritten(submission: AgentJournalSubmission): boolean {
   return (
     dispatchWasWithdrawn(submission) &&
@@ -59,7 +59,7 @@ function withdrawnUnwritten(submission: AgentJournalSubmission): boolean {
   )
 }
 
-// Raised by Orca before any byte of a words-only send reached the agent; any other kind may follow
+// Raised by Quirky before any byte of a words-only send reached the agent; any other kind may follow
 // a provider write.
 const REFUSED_BEFORE_WRITE: ReadonlySet<SubmissionRejectionKind> = new Set([
   'queueFull',

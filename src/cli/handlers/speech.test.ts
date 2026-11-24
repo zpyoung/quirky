@@ -12,7 +12,7 @@ function piped(...parts: string[]): AsyncIterable<unknown> & { isTTY?: boolean }
   return chunks(...parts)
 }
 
-describe('orca speech openai-key set', () => {
+describe('quirky speech openai-key set', () => {
   it('reads the key from piped stdin and trims the trailing newline', async () => {
     await expect(readOpenAiKeyFromStdin(piped('sk-test-', 'abc\n'))).resolves.toBe('sk-test-abc')
   })
@@ -29,7 +29,7 @@ describe('orca speech openai-key set', () => {
   })
 })
 
-describe('orca speech openai-key against an older server', () => {
+describe('quirky speech openai-key against an older server', () => {
   it('names the update instead of surfacing method_not_found', async () => {
     const client = {
       call: async (): Promise<never> => {
@@ -37,7 +37,7 @@ describe('orca speech openai-key against an older server', () => {
       }
     }
     await expect(callOpenAiKeyMethod(client, 'speech.openAiKey.status')).rejects.toThrow(
-      'Update Orca on the server'
+      'Update Quirky on the server'
     )
   })
 })

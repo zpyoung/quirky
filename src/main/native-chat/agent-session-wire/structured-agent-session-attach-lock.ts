@@ -4,7 +4,7 @@
 
 export type StructuredAgentSessionAttachLock = {
   readonly signal: AbortSignal
-  /** A wait on something outside Orca's state: a probe, a resolver, a provider read. */
+  /** A wait on something outside Quirky's state: a probe, a resolver, a provider read. */
   wait: <T>(work: Promise<T>) => Promise<T>
   /** A write to the session's state, which never waits on a process. */
   commit: <T>(step: () => Promise<T>) => Promise<T>

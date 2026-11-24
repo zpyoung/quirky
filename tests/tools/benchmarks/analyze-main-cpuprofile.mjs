@@ -91,7 +91,7 @@ function originOf(frame) {
  * Why function name and not the resolved source file: the source map's
  * greatest-lower-bound lookup lands on the *preceding* mapped segment often
  * enough that file attribution alone put env builders in the diagnostics probe.
- * With ORCA_UNMINIFIED_MAIN=1 the function name is the real one, so it is the
+ * With QUIRKY_UNMINIFIED_MAIN=1 the function name is the real one, so it is the
  * trustworthy key; the file is kept only as a display hint.
  *
  * `spawn` (no url) is the native process_wrap binding — the synchronous
@@ -132,7 +132,7 @@ const URL_RULES = [
   [/src\/main\/git\/|src\/shared\/git|porcelain/, 'git-parse'],
   [/electron\/js2c|src\/main\/ipc\//, 'ipc'],
   [/node:internal\/fs|node:fs/, 'fs'],
-  [/src\//, 'other-orca'],
+  [/src\//, 'other-quirky'],
   [/node:/, 'other-node']
 ]
 

@@ -1,7 +1,7 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { expect, it, vi } from 'vitest'
 import { WatcherProcessFailure } from '../../../ipc/parcel-watcher-process-failure'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { RpcRequest } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { FILE_METHODS } from './files'
@@ -68,7 +68,7 @@ it.each(['late', 'already-resolved', 'transient'] as const)(
       cleanupSubscription,
       cleanupSubscriptionAndWait,
       retrySubscriptionCleanupAfter
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
     const responses: { result?: { type?: string } }[] = []
 

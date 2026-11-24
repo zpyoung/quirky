@@ -12,8 +12,8 @@ it.each([
   ['sleep 30 && claude', 'claude'],
   [' sleep 30&&codex "do not sleep 30 && claude"', 'codex "do not sleep 30 && claude"'],
   [
-    '/bin/sleep .5 && /usr/bin/sleep 1m && "C:\\Program Files\\Orca\\codex.exe"',
-    '"C:\\Program Files\\Orca\\codex.exe"'
+    '/bin/sleep .5 && /usr/bin/sleep 1m && "C:\\Program Files\\Quirky\\codex.exe"',
+    '"C:\\Program Files\\Quirky\\codex.exe"'
   ]
 ])('extracts only the delayed launch hint from %s', (command, expected) => {
   expect(extractAgentLaunchCommand(command)).toBe(expected)
@@ -48,14 +48,14 @@ it('does not turn a waiting shell process into live agent evidence', () => {
 
 it('extracts executable tokens through the shared launch boundary', () => {
   expect(
-    getAgentLaunchCommandToken('sleep 30 && "C:\\Program Files\\Orca\\codex.exe" --resume')
-  ).toBe('C:\\Program Files\\Orca\\codex.exe')
+    getAgentLaunchCommandToken('sleep 30 && "C:\\Program Files\\Quirky\\codex.exe" --resume')
+  ).toBe('C:\\Program Files\\Quirky\\codex.exe')
   expect(getAgentLaunchCommandToken(undefined)).toBe('')
   expect(getAgentLaunchCommandToken('echo "sleep 30 && claude"')).toBe('echo')
 })
 
 it.each([
-  ['sleep 30 && "C:\\Program Files\\Orca\\Codex.EXE" --resume', 'codex'],
+  ['sleep 30 && "C:\\Program Files\\Quirky\\Codex.EXE" --resume', 'codex'],
   ['/usr/local/bin/mimo.sh', 'mimo'],
   ['sleep 1 && opencode2.cmd', 'opencode2'],
   [undefined, '']

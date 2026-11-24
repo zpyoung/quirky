@@ -6,7 +6,7 @@ vi.mock('../native-chat/agent-session-wire/structured-agent-session-registry', (
   getStructuredAgentSessionHost: () => hostRef.current
 }))
 
-const { OrcaRuntimeWithAdoptTerminalOrphansFromInventory } =
+const { QuirkyRuntimeWithAdoptTerminalOrphansFromInventory } =
   await import('./terminal/adoption/adopt-terminal-orphans-from-inventory')
 const {
   mintStructuredWorkerHandle,
@@ -16,7 +16,7 @@ const {
 } = await import('./structured-worker-identity')
 
 const SESSION_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
-const prototype = OrcaRuntimeWithAdoptTerminalOrphansFromInventory.prototype
+const prototype = QuirkyRuntimeWithAdoptTerminalOrphansFromInventory.prototype
 const getLivePaneKey = prototype.getLiveTerminalPaneKey
 const resolveActiveTerminal = prototype.resolveActiveTerminal
 

@@ -86,7 +86,7 @@ function materializedBuild(): string {
 function recordLaunch(oldBuild: string): { oldBuildPresent?: boolean; forkEntryPath?: string } {
   const seen: { oldBuildPresent?: boolean; forkEntryPath?: string } = {}
   harness.launchDaemonChild.mockImplementation(async (options: { forkEntryPath: string }) => {
-    seen.oldBuildPresent = existsSync(join(oldBuild, 'Orca.exe'))
+    seen.oldBuildPresent = existsSync(join(oldBuild, 'Quirky.exe'))
     seen.forkEntryPath = options.forkEntryPath
     writePidRecord(REPLACEMENT_PID)
     return { child: new EventEmitter(), identity: { pid: REPLACEMENT_PID } }
@@ -118,7 +118,7 @@ beforeEach(() => {
     exit: () => {},
     getAppMetrics: () => []
   })
-  setProcessProp('execPath', join(installDir, 'Orca.exe'))
+  setProcessProp('execPath', join(installDir, 'Quirky.exe'))
   setProcessProp('resourcesPath', join(installDir, 'resources'))
   harness.entryPath = join(
     installDir,
@@ -180,7 +180,7 @@ describe('out-of-process launcher: published daemon-host retention', () => {
     expect(seen.forkEntryPath).toBeDefined()
     expect(seen.forkEntryPath?.startsWith(oldBuild)).toBe(false)
     expect(existsSync(seen.forkEntryPath ?? '')).toBe(true)
-    expect(existsSync(join(oldBuild, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(oldBuild, 'Quirky.exe'))).toBe(true)
   })
 
   it('keeps a published build when another daemon can still be starting before pid publication', async () => {
@@ -191,7 +191,7 @@ describe('out-of-process launcher: published daemon-host retention', () => {
       daemonHostStagingName(STALE_DAEMON_PID, '0123456789ab')
     )
     mkdirSync(abandonedStage, { recursive: true })
-    writeFileSync(join(abandonedStage, 'Orca.exe'), 'abandoned-copy')
+    writeFileSync(join(abandonedStage, 'Quirky.exe'), 'abandoned-copy')
     staleDaemon = 'exited'
     writeFileSync(harness.entryPath, 'entry-rebuilt-same-version')
     harness.prepareDaemonReplacement.mockResolvedValue(null)
@@ -243,7 +243,7 @@ describe('out-of-process launcher: published daemon-host retention', () => {
     // No pid record names 1.0.0, so its mirror is exited and reclaimable at any point.
     const supersededVersion = join(dirname(dirname(oldBuild)), '1.0.0')
     mkdirSync(supersededVersion, { recursive: true })
-    writeFileSync(join(supersededVersion, 'Orca.exe'), 'superseded')
+    writeFileSync(join(supersededVersion, 'Quirky.exe'), 'superseded')
     harness.prepareDaemonReplacement.mockImplementation(async () => {
       staleDaemon = 'exited'
       return null
@@ -252,7 +252,7 @@ describe('out-of-process launcher: published daemon-host retention', () => {
     let supersededPresentAtFork: boolean | undefined
     const fork = harness.launchDaemonChild.getMockImplementation()
     harness.launchDaemonChild.mockImplementation(async (options) => {
-      supersededPresentAtFork = existsSync(join(supersededVersion, 'Orca.exe'))
+      supersededPresentAtFork = existsSync(join(supersededVersion, 'Quirky.exe'))
       return fork?.(options)
     })
 
@@ -260,7 +260,7 @@ describe('out-of-process launcher: published daemon-host retention', () => {
 
     expect(seen.oldBuildPresent).toBe(true)
     expect(supersededPresentAtFork).toBe(true)
-    expect(existsSync(join(supersededVersion, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(supersededVersion, 'Quirky.exe'))).toBe(true)
 
     pruneOldDaemonHosts(collectPinnedDaemonVersions(runtimeDir))
 
@@ -275,6 +275,6 @@ describe('out-of-process launcher: published daemon-host retention', () => {
     await launch()
 
     expect(harness.launchDaemonChild).not.toHaveBeenCalled()
-    expect(existsSync(join(oldBuild, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(oldBuild, 'Quirky.exe'))).toBe(true)
   })
 })

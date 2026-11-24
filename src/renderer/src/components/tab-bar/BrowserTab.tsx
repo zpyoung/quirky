@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { TabHoverCard } from './TabHoverCard'
-import { ORCA_BROWSER_BLANK_URL } from '../../../../shared/constants'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../../../shared/constants'
 import { redactKagiSessionToken } from '../../../../shared/browser-url'
 import type { BrowserTab as BrowserTabState } from '../../../../shared/browser-workspace-types'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
@@ -44,7 +44,7 @@ import { CopyTabIdMenuItem } from './CopyTabIdMenuItem'
 import { CloseSplitPaneMenuItem } from './CloseSplitPaneMenuItem'
 
 export function formatBrowserTabUrlLabel(url: string): string {
-  if (url === ORCA_BROWSER_BLANK_URL || url === 'about:blank') {
+  if (url === QUIRKY_BROWSER_BLANK_URL || url === 'about:blank') {
     return 'New Tab'
   }
   try {
@@ -59,7 +59,7 @@ export function getBrowserTabLabel(tab: BrowserTabState): string {
   if (
     !tab.title ||
     tab.title === tab.url ||
-    tab.title === ORCA_BROWSER_BLANK_URL ||
+    tab.title === QUIRKY_BROWSER_BLANK_URL ||
     tab.title === 'about:blank'
   ) {
     return formatBrowserTabUrlLabel(tab.url)
@@ -68,7 +68,7 @@ export function getBrowserTabLabel(tab: BrowserTabState): string {
 }
 
 function isBlankBrowserTab(tab: BrowserTabState): boolean {
-  return tab.url === ORCA_BROWSER_BLANK_URL || tab.url === 'about:blank'
+  return tab.url === QUIRKY_BROWSER_BLANK_URL || tab.url === 'about:blank'
 }
 
 export default function BrowserTab({

@@ -12,7 +12,7 @@ import {
   type ExecutionHostHealth
 } from '../../../../shared/execution-host-registry'
 import { getExecutionHostHealthLabel } from '../../../../shared/execution-host-health'
-import { pickerExecutionHosts } from '../../../../shared/managed-orcad-execution-host'
+import { pickerExecutionHosts } from '../../../../shared/managed-quirkyd-execution-host'
 import { getCheckedHostRows } from '../../../../shared/workspace-view/workspace-host-visibility'
 import type { RuntimeCompatVerdict } from '../../../../shared/protocol-compat'
 import type { SshConnectionState, SshConnectionStatus } from '../../../../shared/ssh-types'
@@ -47,7 +47,7 @@ export type SidebarHostOption = {
   connectionStatus?: SshConnectionStatus
   aliasHostIds?: readonly ExecutionHostId[]
   mergedIntoHostId?: ExecutionHostId
-  /** Set on a WSL host's row: the distro its Orca server runs in. */
+  /** Set on a WSL host's row: the distro its Quirky server runs in. */
   wslDistro?: string
   /** Why a listed WSL host cannot run: the experiment is off, or this build lacks its server files. */
   wslUnavailable?: 'turned-off' | 'server-files-missing'
@@ -70,7 +70,7 @@ export function buildSidebarHostOptions(args: {
   runtimeStatusByEnvironmentId?: ReadonlyMap<string, RuntimeEnvironmentStatus>
   runtimeEnvironments?: readonly Pick<
     PublicKnownRuntimeEnvironment,
-    'id' | 'name' | 'source' | 'orcadDeployment'
+    'id' | 'name' | 'source' | 'quirkydDeployment'
   >[]
   // Why: per-host display-label overrides rename hosts everywhere the sidebar
   // options feed (host headers, scope picker, focus menu).
@@ -96,7 +96,7 @@ export function buildSidebarHostOptions(args: {
     if (isWslHostRuntimeEnvironment(environment)) {
       wslDistroByHostId.set(toRuntimeExecutionHostId(environment.id), {
         environmentId: environment.id,
-        distro: environment.orcadDeployment.distro
+        distro: environment.quirkydDeployment.distro
       })
     }
   }

@@ -694,7 +694,7 @@ describe('Heimdall kernel service', () => {
     const { service, orchestration, leaseStore } = await harness()
     leaseStore.describeLocation = () => ({
       executionHostId: 'local',
-      leaseDirectory: '/workspace/review-1/.orca/heimdall/lease',
+      leaseDirectory: '/workspace/review-1/.quirky/heimdall/lease',
       pathSeparator: '/'
     })
     service.registerKind(
@@ -731,7 +731,7 @@ describe('Heimdall kernel service', () => {
     expect(pendingReport.pointers).toContainEqual({
       role: 'lease-holder',
       host: 'local',
-      path: '/workspace/review-1/.orca/heimdall/lease/epoch-1/holder.json',
+      path: '/workspace/review-1/.quirky/heimdall/lease/epoch-1/holder.json',
       status: 'resolved'
     })
     releaseBoundary()

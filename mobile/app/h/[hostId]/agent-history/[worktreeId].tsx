@@ -17,7 +17,7 @@ import { firstParam } from '../../../../src/navigation/route-param-reader'
  * would otherwise stop being the single segment `matchesRoutePattern` reads it as.
  *
  * Encoding does not save a `.` or `..` id, and that pathname fails the bridge's own segment rule,
- * which the page would answer with "Update Orca to open this workspace". So the route asks the
+ * which the page would answer with "Update Quirky to open this workspace". So the route asks the
  * schema first (through `shellScreenRoute`) and refuses here when the answer is no.
  */
 export default withWorkspaceRoute(function MobileAgentSessionHistoryScreen() {

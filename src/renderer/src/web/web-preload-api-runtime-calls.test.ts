@@ -52,7 +52,7 @@ describe('web preload runtime calls', () => {
       _meta: { runtimeId: 'runtime-success' }
     })
     expect(
-      JSON.parse(globals.storage.getItem('orca.web.runtimeEnvironment.v1') ?? '{}')
+      JSON.parse(globals.storage.getItem('quirky.web.runtimeEnvironment.v1') ?? '{}')
     ).toMatchObject({ runtimeId: 'runtime-success' })
 
     await expect(globals.window.api.runtime.call({ method: 'runtime.failure' })).resolves.toEqual({
@@ -62,7 +62,7 @@ describe('web preload runtime calls', () => {
       _meta: { runtimeId: 'runtime-failure' }
     })
     expect(
-      JSON.parse(globals.storage.getItem('orca.web.runtimeEnvironment.v1') ?? '{}')
+      JSON.parse(globals.storage.getItem('quirky.web.runtimeEnvironment.v1') ?? '{}')
     ).toMatchObject({ runtimeId: 'runtime-failure' })
   })
 
@@ -105,7 +105,7 @@ describe('web preload runtime calls', () => {
     }
     expect('code' in rejection ? rejection.code : undefined).toBe('repo_unavailable')
     expect(
-      JSON.parse(globals.storage.getItem('orca.web.runtimeEnvironment.v1') ?? '{}')
+      JSON.parse(globals.storage.getItem('quirky.web.runtimeEnvironment.v1') ?? '{}')
     ).toMatchObject({ runtimeId: 'runtime-domain-failure' })
   })
 
@@ -197,7 +197,7 @@ describe('web preload runtime calls', () => {
       method: 'aiVault.prepareSessionResume',
       expectedEnvironmentPairingRevision: revision
     })
-    const refused = expect(queued).rejects.toThrow('paired Orca server changed')
+    const refused = expect(queued).rejects.toThrow('paired Quirky server changed')
     webRuntimeState.activeEnvironment = { ...environment, pairingRevision: revision + 1 }
     release()
     await Promise.all(blockers)
@@ -206,7 +206,7 @@ describe('web preload runtime calls', () => {
     expect(subscribe).not.toHaveBeenCalled()
     webRuntimeState.activeEnvironment = environment
     const staleResponse = expect(prepare(new AbortController().signal)).rejects.toThrow(
-      'paired Orca server changed'
+      'paired Quirky server changed'
     )
     await vi.waitFor(() => expect(subscribe).toHaveBeenCalledTimes(1))
     webRuntimeState.activeEnvironment = { ...environment, pairingRevision: revision + 1 }

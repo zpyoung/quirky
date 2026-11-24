@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { getTarProgram, getZipExtractorCommand } from './zip-extractor-command.mjs'
 
 const directories = []
@@ -15,7 +15,7 @@ afterEach(() => {
 })
 
 function extract(bytes) {
-  const directory = mkdtempSync(join(tmpdir(), "orca archive '$ "))
+  const directory = mkdtempSync(join(tmpdir(), "quirky archive '$ "))
   directories.push(directory)
   const archive = join(directory, "source '$.zip")
   const destination = join(directory, "output '$")
@@ -30,7 +30,7 @@ describe('native archive extraction', () => {
   it('pins Windows tar to the system tool even when Git Bash or an unzip override is present', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     vi.stubEnv('SystemRoot', 'C:\\Windows')
-    vi.stubEnv('ORCA_UNZIP_BIN', 'custom-unzip')
+    vi.stubEnv('QUIRKY_UNZIP_BIN', 'custom-unzip')
     expect(getTarProgram()).toBe(join('C:\\Windows', 'System32', 'tar.exe'))
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
     expect(getTarProgram()).toBe('tar')
@@ -39,13 +39,13 @@ describe('native archive extraction', () => {
   it('uses the system archive reader on Windows unless an override is configured', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     vi.stubEnv('SystemRoot', 'C:\\Windows')
-    vi.stubEnv('ORCA_UNZIP_BIN', '')
+    vi.stubEnv('QUIRKY_UNZIP_BIN', '')
     expect(getZipExtractorCommand('source.zip', 'output')).toEqual({
       file: join('C:\\Windows', 'System32', 'tar.exe'),
       args: ['-xf', 'source.zip', '-C', 'output'],
       label: 'tar'
     })
-    vi.stubEnv('ORCA_UNZIP_BIN', 'C:\\tools\\unzip.exe')
+    vi.stubEnv('QUIRKY_UNZIP_BIN', 'C:\\tools\\unzip.exe')
     expect(getZipExtractorCommand("source '$.zip", "output '$")).toEqual({
       file: 'C:\\tools\\unzip.exe',
       args: ['-q', "source '$.zip", '-d', "output '$"],

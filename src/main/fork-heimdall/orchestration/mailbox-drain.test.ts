@@ -90,7 +90,7 @@ describe('Heimdall orchestration mailbox drain', () => {
         dispatchId: 'dispatch-7',
         outcome: 'succeeded',
         taskId: 'task-7',
-        reportPath: '/repo/.orca/reports/node-7.json',
+        reportPath: '/repo/.quirky/reports/node-7.json',
         filesModified: ['src/node.ts']
       })
     }
@@ -100,7 +100,7 @@ describe('Heimdall orchestration mailbox drain', () => {
         dispatchId: 'dispatch-8',
         outcome: 'failed',
         taskId: 'task-8',
-        reportPath: '/repo/.orca/reports/node-8.json',
+        reportPath: '/repo/.quirky/reports/node-8.json',
         filesModified: ['src/failed.ts']
       })
     }
@@ -144,7 +144,7 @@ describe('Heimdall orchestration mailbox drain', () => {
           acknowledged: params.ack ?? null
         }
       })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of the large OrcaRuntimeService class; drainMailbox only calls runtime.getOrchestrationDb().
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of the large QuirkyRuntimeService class; drainMailbox only calls runtime.getOrchestrationDb().
     const adapter = new RuntimeHeimdallOrchestrationAdapter(runtime as never, {
       persistOrchestrationRunId: async () => undefined
     })
@@ -186,7 +186,7 @@ describe('Heimdall orchestration mailbox drain', () => {
             dispatchId: 'dispatch-7',
             taskId: 'task-7',
             outcome: 'succeeded',
-            reportPath: '/repo/.orca/reports/node-7.json',
+            reportPath: '/repo/.quirky/reports/node-7.json',
             filesModified: ['src/node.ts'],
             result: 'finished once'
           }
@@ -203,7 +203,7 @@ describe('Heimdall orchestration mailbox drain', () => {
             dispatchId: 'dispatch-8',
             taskId: 'task-8',
             outcome: 'failed',
-            reportPath: '/repo/.orca/reports/node-8.json',
+            reportPath: '/repo/.quirky/reports/node-8.json',
             filesModified: ['src/failed.ts'],
             result: 'finished next'
           }
@@ -216,14 +216,14 @@ describe('Heimdall orchestration mailbox drain', () => {
 
   it('normalizes a lifecycle-rejected completion as failed with durable rejection detail', () => {
     const row = {
-      ...message('message-rejected', 9, 'Orca rejected worker report.'),
+      ...message('message-rejected', 9, 'Quirky rejected worker report.'),
       payload: JSON.stringify({
         dispatchId: 'dispatch-9',
         outcome: 'succeeded',
         taskId: 'task-9',
-        reportPath: '/repo/.orca/reports/node-9.json',
+        reportPath: '/repo/.quirky/reports/node-9.json',
         filesModified: ['src/rejected.ts'],
-        _orcaLifecycleRejection: {
+        _quirkyLifecycleRejection: {
           code: 'invalid_report',
           reason: 'terminal diagnostic',
           originalReason: 'missing required evidence',
@@ -245,7 +245,7 @@ describe('Heimdall orchestration mailbox drain', () => {
             dispatchId: 'dispatch-9',
             taskId: 'task-9',
             outcome: 'failed',
-            reportPath: '/repo/.orca/reports/node-9.json',
+            reportPath: '/repo/.quirky/reports/node-9.json',
             filesModified: ['src/rejected.ts'],
             reportRejection: {
               code: 'invalid_report',
@@ -299,7 +299,7 @@ describe('Heimdall orchestration mailbox drain', () => {
       count: 1
     })
     const adapter = new RuntimeHeimdallOrchestrationAdapter(
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of the large OrcaRuntimeService class; drainMailbox only calls runtime.getOrchestrationDb().
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of the large QuirkyRuntimeService class; drainMailbox only calls runtime.getOrchestrationDb().
       { getOrchestrationDb: () => db } as never,
       { persistOrchestrationRunId: async () => undefined }
     )
@@ -337,7 +337,7 @@ describe('Heimdall orchestration mailbox drain', () => {
       count: 1
     })
     const adapter = new RuntimeHeimdallOrchestrationAdapter(
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of the large OrcaRuntimeService class; drainMailbox only calls runtime.getOrchestrationDb().
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of the large QuirkyRuntimeService class; drainMailbox only calls runtime.getOrchestrationDb().
       { getOrchestrationDb: () => db } as never,
       { persistOrchestrationRunId: async () => undefined }
     )
@@ -391,7 +391,7 @@ describe('Heimdall orchestration mailbox drain', () => {
       count: 1
     })
     const adapter = new RuntimeHeimdallOrchestrationAdapter(
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of the large OrcaRuntimeService class; drainMailbox only calls runtime.getOrchestrationDb().
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of the large QuirkyRuntimeService class; drainMailbox only calls runtime.getOrchestrationDb().
       { getOrchestrationDb: () => db } as never,
       { persistOrchestrationRunId: async () => undefined }
     )

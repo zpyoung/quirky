@@ -15,7 +15,7 @@ import type {
   RuntimeMobileSessionTabsRemovedResult,
   RuntimeMobileSessionTabsResult
 } from '../../shared/runtime-types'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => ({ isDestroyed: () => false })) },
@@ -65,7 +65,7 @@ function createHarness() {
     },
     flushOrThrow: () => {}
   })
-  const runtime = new OrcaRuntimeService(store as never)
+  const runtime = new QuirkyRuntimeService(store as never)
   runtime.setNotifier({
     closeTerminal: vi.fn(),
     closeTerminalTab: vi.fn(),
@@ -169,7 +169,7 @@ function createHarness() {
     }
   })
 
-  /** An `orca terminal create` on this host, through the real create path. */
+  /** An `quirky terminal create` on this host, through the real create path. */
   const createCliTerminal = async (worktreeId: string): Promise<string> => {
     await runtime.createTerminal(`id:${worktreeId}`, { focus: false })
     const tabId = spawnedTabIdByWorktree.get(worktreeId)
@@ -182,7 +182,7 @@ function createHarness() {
   }
 
   /** A renderer graph sync that mentions ONLY `worktreeIds` — i.e. the panes the
-   *  renderer currently has mounted. Any orca-cli dispatch triggers one.
+   *  renderer currently has mounted. Any quirky-cli dispatch triggers one.
    *  `version` must climb, or web clients drop the frame as stale. */
   let syncVersion = 0
   const syncRendererGraph = (worktreeIds: readonly string[]): void => {
@@ -252,7 +252,7 @@ describe('graph sync must not prune a tab whose daemon PTY is live', () => {
     await h.createCliTerminal(WT_CLI)
     expect(h.hasSnapshot(WT_CLI)).toBe(true)
 
-    // An orca-cli dispatch in another worktree drives a renderer graph sync that
+    // An quirky-cli dispatch in another worktree drives a renderer graph sync that
     // does not mention WT_CLI at all.
     h.syncRendererGraph([WT_OTHER])
     vi.advanceTimersByTime(300)

@@ -12,7 +12,7 @@ import { tryMakePaneKey } from './agent-status-routing'
 import { wasAgentLaunchPaneClosedByUser } from '@/lib/agent-launch-pane-closes'
 import { revealWorkspaceSurface } from '@/lib/workspace-surface-reveal'
 import { useAppStore } from '../../store'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
   activateExistingLeafInLayout,
   addSplitLeafToLayout,
@@ -99,7 +99,7 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
           // Switch point: main wrote this tab before revealing it, so its frame may have drawn it
           // while stale records left the terminal's owner unclear; that tab is the one to show.
           const frameDrawnTab =
-            ORCA_LAYOUT_OWNER_IS_MAIN && !reusedTab && tabId !== undefined
+            QUIRKY_LAYOUT_OWNER_IS_MAIN && !reusedTab && tabId !== undefined
               ? worktreeTabs.find((candidate) => candidate.id === tabId)
               : undefined
           if (frameDrawnTab) {
@@ -128,7 +128,7 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
                   // Why: CLI-spawned PTYs bake the pane key into env; adopt the same tab id so hook-event attribution keeps working.
                   ...(tabId !== undefined ? { id: tabId } : {}),
                   // Switch point: main's pane too, so this create matches the tab main already wrote.
-                  ...(ORCA_LAYOUT_OWNER_IS_MAIN && leafId ? { initialLeafId: leafId } : {})
+                  ...(QUIRKY_LAYOUT_OWNER_IS_MAIN && leafId ? { initialLeafId: leafId } : {})
                 })
               : store.createTab(
                   worktreeId,
@@ -223,7 +223,7 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
               )
             } else {
               // Switch point: this title is the tab's name; main holds no pane title for it.
-              const paneTitle = ORCA_LAYOUT_OWNER_IS_MAIN ? undefined : title
+              const paneTitle = QUIRKY_LAYOUT_OWNER_IS_MAIN ? undefined : title
               // Why: CLI/runtime PTYs emit hook events before the tab mounts, so the leaf must exist in layout for paneKey validation.
               const existingLayout = reusedTab
                 ? activateExistingLeafInLayout(

@@ -10,7 +10,7 @@ const SCHEMA_ERROR_SIGNATURE = 'Invalid content for node'
 const INLINE_DOT_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAABYAAAAWCAYAAADEtGw7AAAAOklEQVR42mOoMGL4TwvMQHOD//dQB48aTKbB6IBigwmBwWUwsWDUYPINHnqpgqYZZLQQoqrBQ6bOAwDparQl4qEv0wAAAABJRU5ErkJggg=='
 
-export const INLINE_IMAGE_FIXTURE_DIRECTORY = '.orca-e2e-markdown-inline-image'
+export const INLINE_IMAGE_FIXTURE_DIRECTORY = '.quirky-e2e-markdown-inline-image'
 
 export const INLINE_IMAGE_PARAGRAPH_MARKDOWN = [
   '# Inline image crash repro',
@@ -22,7 +22,7 @@ export const INLINE_IMAGE_PARAGRAPH_MARKDOWN = [
 export const INLINE_IMAGE_DETAILS_MARKDOWN = [
   '# Details summary inline image repro',
   '',
-  '<details class="orca-details" open>',
+  '<details class="quirky-details" open>',
   '<summary>Toggle ![alt](inline-dot.png) label</summary>',
   '',
   'Body',

@@ -1,5 +1,5 @@
 import { resolve, relative, isAbsolute, posix, sep, win32 } from 'node:path'
-import type { GlobalSettings, OrcaWorkspaceLayout } from '../../shared/global-settings-types'
+import type { GlobalSettings, QuirkyWorkspaceLayout } from '../../shared/global-settings-types'
 import type { Repo } from '../../shared/repo-types'
 import { isWindowsAbsolutePathLike, resolveRuntimePath } from '../../shared/cross-platform-path'
 import { resolveWslRepoWorktreeBasePath } from '../../shared/wsl-paths'
@@ -80,8 +80,8 @@ export function ensurePathWithinWorkspace(targetPath: string, workspaceDir: stri
  * must also live on the WSL filesystem. Creating them on the Windows side
  * (/mnt/c/...) would be extremely slow due to cross-filesystem I/O and
  * the terminal would open a Windows shell instead of WSL. We mirror the
- * Windows workspace layout inside ~/orca/workspaces on the WSL filesystem
- * (e.g. \\wsl.localhost\Ubuntu\home\user\orca\workspaces\repo\feature).
+ * Windows workspace layout inside ~/quirky/workspaces on the WSL filesystem
+ * (e.g. \\wsl.localhost\Ubuntu\home\user\quirky\workspaces\repo\feature).
  */
 export function computeWorktreePath(
   sanitizedName: string,
@@ -179,7 +179,7 @@ export function getWorktreePathSettings(
 export function getWorktreeCreationLayout(
   repo: WorktreeBasePathRepo,
   settings: WorktreePathSettings
-): OrcaWorkspaceLayout {
+): QuirkyWorkspaceLayout {
   return {
     path: getEffectiveWorktreeBasePath(repo, settings),
     nestWorkspaces: settings.nestWorkspaces

@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import { getDefaultWorkspaceSession } from '../../../../shared/constants'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { notifyLocalPtyProviderRebound } from '../../../ipc/pty/provider/local-provider-rebound'
 
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const FOLDER: FolderWorkspace = {
   id: 'notes-1',
@@ -33,7 +33,7 @@ const LIVE_PTY = (worktreeId: string) => ({
   incarnationId: 'inc-1'
 })
 
-class PlacementRuntime extends OrcaRuntimeService {
+class PlacementRuntime extends QuirkyRuntimeService {
   statusOf(paneKey: string) {
     return this.paneStartStatuses?.peek(paneKey) ?? null
   }

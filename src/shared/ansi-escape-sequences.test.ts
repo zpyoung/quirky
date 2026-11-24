@@ -116,8 +116,8 @@ describe('ordered linear ANSI stripping', () => {
   })
 })
 
-// Manual benchmark: opt in with ORCA_CHECK_LOG_PERF=1.
-describe.runIf(process.env.ORCA_CHECK_LOG_PERF === '1')(
+// Manual benchmark: opt in with QUIRKY_CHECK_LOG_PERF=1.
+describe.runIf(process.env.QUIRKY_CHECK_LOG_PERF === '1')(
   'near-cap unfinished 7-bit stripping completion',
   { concurrent: false },
   () => {

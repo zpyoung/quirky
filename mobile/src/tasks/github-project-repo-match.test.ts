@@ -7,14 +7,14 @@ import {
 } from './github-project-repo-match'
 
 const repos = [
-  { id: 'repo-1', path: '/Users/me/orca', displayName: 'orca' },
+  { id: 'repo-1', path: '/Users/me/quirky', displayName: 'quirky' },
   { id: 'repo-2', path: '/Users/me/other', displayName: 'other' }
 ]
 
 describe('GitHub project repo matching', () => {
   it('normalizes owner/repo slugs case-insensitively', () => {
-    expect(normalizeGitHubRepositorySlug(' StablyAI/Orca ')).toBe('stablyai/orca')
-    expect(normalizeGitHubRepositorySlug('orca')).toBeNull()
+    expect(normalizeGitHubRepositorySlug(' StablyAI/Quirky ')).toBe('stablyai/orca')
+    expect(normalizeGitHubRepositorySlug('quirky')).toBeNull()
     expect(normalizeGitHubRepositorySlug('stablyai/orca/extra')).toBeNull()
   })
 
@@ -22,8 +22,8 @@ describe('GitHub project repo matching', () => {
     expect(
       findRepoForGitHubProjectRepository('stablyai/orca', repos, {
         'repo-1': {
-          path: '/Users/me/orca',
-          repository: { owner: 'stablyai', repo: 'orca' }
+          path: '/Users/me/quirky',
+          repository: { owner: 'stablyai', repo: 'quirky' }
         }
       })
     ).toBe(repos[0])
@@ -33,12 +33,12 @@ describe('GitHub project repo matching', () => {
     expect(
       findRepoForGitHubProjectRepository('stablyai/orca', repos, {
         'repo-1': {
-          path: '/Users/me/orca',
-          repository: { owner: 'stablyai', repo: 'orca' }
+          path: '/Users/me/quirky',
+          repository: { owner: 'stablyai', repo: 'quirky' }
         },
         'repo-2': {
           path: '/Users/me/other',
-          repository: { owner: 'stablyai', repo: 'orca' }
+          repository: { owner: 'stablyai', repo: 'quirky' }
         }
       })
     ).toBeNull()
@@ -47,28 +47,28 @@ describe('GitHub project repo matching', () => {
   it('falls back to exact display/path slug matching when slug resolution is unavailable', () => {
     expect(
       findRepoForGitHubProjectRepository('stablyai/orca', [
-        { id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'orca' }
+        { id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'quirky' }
       ])
-    ).toEqual({ id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'orca' })
+    ).toEqual({ id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'quirky' })
   })
 
   it('normalizes Windows paths before path slug fallback matching', () => {
     expect(
       findRepoForGitHubProjectRepository('stablyai/orca', [
-        { id: 'repo-1', path: 'C:\\Users\\me\\stablyai\\orca', displayName: 'orca' }
+        { id: 'repo-1', path: 'C:\\Users\\me\\stablyai\\quirky', displayName: 'quirky' }
       ])
-    ).toEqual({ id: 'repo-1', path: 'C:\\Users\\me\\stablyai\\orca', displayName: 'orca' })
+    ).toEqual({ id: 'repo-1', path: 'C:\\Users\\me\\stablyai\\quirky', displayName: 'quirky' })
   })
 
   it('does not path-match a repo whose resolved slug points somewhere else', () => {
     expect(
       findRepoForGitHubProjectRepository(
         'stablyai/orca',
-        [{ id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'orca' }],
+        [{ id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'quirky' }],
         {
           'repo-1': {
             path: '/Users/me/stablyai/orca',
-            repository: { owner: 'fork', repo: 'orca' }
+            repository: { owner: 'fork', repo: 'quirky' }
           }
         }
       )
@@ -85,8 +85,8 @@ describe('GitHub project repo matching', () => {
     expect(
       filterGitHubProjectRowsForRepos(rows, repos, {
         'repo-1': {
-          path: '/Users/me/orca',
-          repository: { owner: 'stablyai', repo: 'orca' }
+          path: '/Users/me/quirky',
+          repository: { owner: 'stablyai', repo: 'quirky' }
         }
       }).map((row) => row.id)
     ).toEqual(['row-1'])
@@ -99,14 +99,14 @@ describe('GitHub project repo matching', () => {
         repos,
         {
           'repo-1': {
-            path: '/Users/me/orca',
-            repository: { owner: 'stablyai', repo: 'orca', host: 'github.com' }
+            path: '/Users/me/quirky',
+            repository: { owner: 'stablyai', repo: 'quirky', host: 'github.com' }
           },
           'repo-2': {
             path: '/Users/me/other',
             repository: {
               owner: 'stablyai',
-              repo: 'orca',
+              repo: 'quirky',
               host: 'github.acme-corp.com'
             }
           }
@@ -250,7 +250,7 @@ describe('GitHub project repo matching', () => {
     expect(
       findRepoForGitHubProjectRepository(
         'stablyai/orca',
-        [{ id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'orca' }],
+        [{ id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'quirky' }],
         {},
         'github.acme-corp.com'
       )
@@ -263,10 +263,10 @@ describe('GitHub project repo matching', () => {
     expect(
       findRepoForGitHubProjectRepository(
         'stablyai/orca',
-        [{ id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'orca' }],
+        [{ id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'quirky' }],
         { 'repo-1': { path: '/Users/me/stablyai/orca', repository: null, failed: true } }
       )
-    ).toEqual({ id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'orca' })
+    ).toEqual({ id: 'repo-1', path: '/Users/me/stablyai/orca', displayName: 'quirky' })
   })
 })
 
@@ -274,12 +274,12 @@ describe('dropFailedGitHubRepoSlugEntries', () => {
   it('drops only the entries a retry could still resolve', () => {
     expect(
       dropFailedGitHubRepoSlugEntries({
-        'repo-1': { path: '/a', repository: { owner: 'stablyai', repo: 'orca' } },
+        'repo-1': { path: '/a', repository: { owner: 'stablyai', repo: 'quirky' } },
         'repo-2': { path: '/b', repository: null, failed: true },
         'repo-3': { path: '/c', repository: null }
       })
     ).toEqual({
-      'repo-1': { path: '/a', repository: { owner: 'stablyai', repo: 'orca' } },
+      'repo-1': { path: '/a', repository: { owner: 'stablyai', repo: 'quirky' } },
       'repo-3': { path: '/c', repository: null }
     })
   })

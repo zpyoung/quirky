@@ -12,7 +12,7 @@ import path from 'node:path'
 import { build } from 'esbuild'
 import type { TestInfo } from '@playwright/test'
 
-const TEMP_PREFIX = 'orca-9749-dg-'
+const TEMP_PREFIX = 'quirky-9749-dg-'
 
 type DiagnosticGeneration = {
   label: string
@@ -50,17 +50,17 @@ function isEqualToOrInside(candidate: string, parent: string): boolean {
   )
 }
 
-function knownOrcaUserDataDirs(): string[] {
+function knownQuirkyUserDataDirs(): string[] {
   if (process.platform === 'darwin') {
     const appSupport = path.join(homedir(), 'Library', 'Application Support')
-    return [path.join(appSupport, 'orca'), path.join(appSupport, 'orca-dev')]
+    return [path.join(appSupport, 'quirky'), path.join(appSupport, 'quirky-dev')]
   }
   if (process.platform === 'win32') {
     const roaming = process.env.APPDATA ?? path.join(homedir(), 'AppData', 'Roaming')
-    return [path.join(roaming, 'orca'), path.join(roaming, 'orca-dev')]
+    return [path.join(roaming, 'quirky'), path.join(roaming, 'quirky-dev')]
   }
   const config = process.env.XDG_CONFIG_HOME ?? path.join(homedir(), '.config')
-  return [path.join(config, 'orca'), path.join(config, 'orca-dev')]
+  return [path.join(config, 'quirky'), path.join(config, 'quirky-dev')]
 }
 
 function assertDisposableRoot(rootDir: string): void {
@@ -71,9 +71,9 @@ function assertDisposableRoot(rootDir: string): void {
   if (!isEqualToOrInside(rootDir, tempRoot)) {
     throw new Error('Daemon-generation fixture escaped the OS temporary directory')
   }
-  for (const userDataDir of knownOrcaUserDataDirs()) {
+  for (const userDataDir of knownQuirkyUserDataDirs()) {
     if (isEqualToOrInside(rootDir, userDataDir)) {
-      throw new Error('Refusing daemon-generation fixture inside real Orca user data')
+      throw new Error('Refusing daemon-generation fixture inside real Quirky user data')
     }
   }
 }

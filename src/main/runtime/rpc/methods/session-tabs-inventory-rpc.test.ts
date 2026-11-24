@@ -3,7 +3,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { SESSION_TABS_AUTHORITATIVE_INVENTORY_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { SESSION_TAB_METHODS } from './session-tabs'
@@ -25,7 +25,7 @@ describe('session tabs inventory RPC methods', () => {
             resolveInventory = resolve
           })
       )
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
     const messages: string[] = []
 
@@ -67,7 +67,7 @@ describe('session tabs inventory RPC methods', () => {
         ]
       })),
       listAllMobileSessionTabs: legacyListAll
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
     const messages: string[] = []
 
@@ -95,7 +95,7 @@ describe('session tabs inventory RPC methods', () => {
         throw new Error('client_disconnected')
       }),
       listAllMobileSessionTabs: legacyListAll
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
     const messages: string[] = []
 
@@ -120,7 +120,7 @@ describe('session tabs inventory RPC methods', () => {
         snapshots: [],
         authoritative: true as const
       }))
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
     const messages: string[] = []
 
@@ -155,7 +155,7 @@ describe('session tabs inventory RPC methods', () => {
         ]
       })),
       listAllMobileSessionTabs: legacyListAll
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
     const messages: string[] = []
 
@@ -182,7 +182,7 @@ describe('session tabs inventory RPC methods', () => {
       getRuntimeId: () => 'test-runtime',
       supportsAuthoritativeSessionTabsInventory: vi.fn(() => true),
       listAllMobileSessionTabsInventory: inventory
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const controller = new AbortController()
     controller.abort()
 
@@ -223,7 +223,7 @@ describe('session tabs inventory RPC methods', () => {
       ),
       registerSubscriptionCleanup: vi.fn(),
       cleanupSubscription: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
     const messages: string[] = []
 
@@ -327,7 +327,7 @@ describe('session tabs inventory RPC methods', () => {
       ),
       registerSubscriptionCleanup: vi.fn(),
       cleanupSubscription: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
     const messages: string[] = []
     const snapshot = (snapshotVersion: number): RuntimeMobileSessionTabsResult => ({
@@ -367,7 +367,7 @@ describe('session tabs inventory RPC methods', () => {
       listAllMobileSessionTabsInventory: vi.fn(),
       onMobileSessionTabsChanged: vi.fn(),
       registerSubscriptionCleanup: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
     const controller = new AbortController()
     const messages: string[] = []
@@ -408,7 +408,7 @@ describe('session tabs inventory RPC methods', () => {
         cleanups.delete(id)
         cleanup?.()
       }
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
     const controller = new AbortController()
     const messages: string[] = []
@@ -431,7 +431,7 @@ describe('session tabs inventory RPC methods', () => {
   })
 
   it('aborts and removes a publication waiter when the stream is cleaned up', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.attachWindow(1)
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
     const messages: string[] = []

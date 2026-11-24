@@ -135,7 +135,7 @@ export function useRemoteRepo(
       })
 
       if (alreadyPresent) {
-        useAppStore.getState().clearOrcaHookTrustForRepo(repo.id)
+        useAppStore.getState().clearQuirkyHookTrustForRepo(repo.id)
       }
 
       if (!mountedRef.current || gen !== remoteGenRef.current) {

@@ -1,5 +1,5 @@
-import { ORCA_BROWSER_BLANK_URL } from '../../../../../shared/constants'
-import { ORCA_BROWSER_PAGE_GUEST_WEB_PREFERENCES_ATTRIBUTE } from '../../../../../shared/browser-guest-web-preferences'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../../../../shared/constants'
+import { QUIRKY_BROWSER_PAGE_GUEST_WEB_PREFERENCES_ATTRIBUTE } from '../../../../../shared/browser-guest-web-preferences'
 import {
   destroyPersistentWebview,
   registerPersistentWebview,
@@ -60,8 +60,8 @@ export function ensureBrowserPageWebview({
   webview.setAttribute('allowpopups', '')
   // Why: Electron spreads the webpreferences keys verbatim, so the shared
   // camelCase attribute must stay intact for fullscreen containment to work.
-  // Keep Chromium's normal page canvas opaque while the host underneath follows Orca's theme.
-  webview.setAttribute('webpreferences', ORCA_BROWSER_PAGE_GUEST_WEB_PREFERENCES_ATTRIBUTE)
+  // Keep Chromium's normal page canvas opaque while the host underneath follows Quirky's theme.
+  webview.setAttribute('webpreferences', QUIRKY_BROWSER_PAGE_GUEST_WEB_PREFERENCES_ATTRIBUTE)
   webview.style.display = 'flex'
   webview.style.flex = '1'
   webview.style.width = '100%'
@@ -74,7 +74,7 @@ export function ensureBrowserPageWebview({
   guest.addEventListener('load-commit', (event) => {
     if (event.isMainFrame) {
       guest.style.visibility =
-        event.url === 'about:blank' || event.url === ORCA_BROWSER_BLANK_URL ? 'hidden' : 'visible'
+        event.url === 'about:blank' || event.url === QUIRKY_BROWSER_BLANK_URL ? 'hidden' : 'visible'
     }
   })
   guest.addEventListener('render-process-gone', () => {

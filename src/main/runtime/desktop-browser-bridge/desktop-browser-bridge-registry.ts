@@ -1,5 +1,5 @@
 /**
- * orcad's side of the desktop browser bridge: the desktops attached to it and the forwarded
+ * quirkyd's side of the desktop browser bridge: the desktops attached to it and the forwarded
  * requests waiting on their answers. The newest attachment serves; an older one takes over only
  * when the newer one detaches.
  */
@@ -124,7 +124,7 @@ export class DesktopBrowserBridgeRegistry {
           requestId,
           method: request.method,
           params: request.params,
-          // Why shorter: the desktop must stop starting this before orcad gives up, transit included.
+          // Why shorter: the desktop must stop starting this before quirkyd gives up, transit included.
           timeoutMs: Math.max(
             MIN_DESKTOP_DEADLINE_MS,
             options.timeoutMs - DESKTOP_DEADLINE_MARGIN_MS
@@ -173,7 +173,7 @@ export class DesktopBrowserBridgeRegistry {
         pending.reject(
           new BrowserError(
             DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_CODE,
-            'The Orca desktop stopped sharing its browser before it answered.'
+            'The Quirky desktop stopped sharing its browser before it answered.'
           )
         )
       }
@@ -201,7 +201,7 @@ function unavailableError(): BrowserError {
 const registries = new WeakMap<object, DesktopBrowserBridgeRegistry>()
 let hostEnabled = false
 
-/** Only orcad serves the bridge; a desktop runtime never accepts an attach or forwards a call. */
+/** Only quirkyd serves the bridge; a desktop runtime never accepts an attach or forwards a call. */
 export function setDesktopBrowserBridgeHostEnabled(enabled: boolean): void {
   hostEnabled = enabled
 }

@@ -1,7 +1,7 @@
 import { execFile, type ChildProcess, type ExecFileOptions } from 'node:child_process'
 import { recordSubprocessSpawn } from '../../diagnostics/main-thread-churn-probe'
 import { endSubprocessStdin } from '../../../shared/subprocess-stdin-write'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { resolveSelectedLocalCommand } from '../../ipc/command-path-resolver'
 import { createAbortError } from './abort-error'
 import { killSpawnedCommandTree } from './spawned-command-tree-kill'
@@ -197,7 +197,7 @@ export function execFileCapture(
         args,
         {
           cwd: options.cwd,
-          // Why: git.exe is console-subsystem and Orca's main process owns no
+          // Why: git.exe is console-subsystem and Quirky's main process owns no
           // console, so every spawn without this flashes a conhost that takes
           // foreground. Git runs on nearly every interaction (#14543).
           windowsHide: true,

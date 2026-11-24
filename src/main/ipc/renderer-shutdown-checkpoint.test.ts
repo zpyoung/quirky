@@ -26,7 +26,7 @@ vi.mock('electron', () => ({
 
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import {
   registerRendererShutdownCheckpointHandler,
   SHUTDOWN_CHECKPOINT_FLUSH_DEADLINE_MS
@@ -37,7 +37,7 @@ const AWAIT_CHANNEL = 'app:await-before-unload-checkpoint'
 /** What is staged for a window's save: the save itself, or main's merge of it when main owns the
  *  layout (its content is covered by renderer-shutdown-checkpoint-sleep-records.test.ts). */
 const windowSave = (state: Partial<WorkspaceSessionState>): unknown =>
-  ORCA_LAYOUT_OWNER_IS_MAIN ? expect.any(Object) : state
+  QUIRKY_LAYOUT_OWNER_IS_MAIN ? expect.any(Object) : state
 
 describe('registerRendererShutdownCheckpointHandler', () => {
   beforeEach(() => {
@@ -96,7 +96,7 @@ describe('registerRendererShutdownCheckpointHandler', () => {
     const store = {
       getWorkspaceSession: vi.fn(() => getDefaultWorkspaceSession()),
       stageWorkspaceSessionBeforeUnload: vi.fn(),
-      getSshTarget: vi.fn(() => ({ orcadFence: { environmentId: 'env-1' } })),
+      getSshTarget: vi.fn(() => ({ quirkydFence: { environmentId: 'env-1' } })),
       updateUI: vi.fn(),
       flushPendingOrThrowAsync: vi.fn(() => Promise.resolve())
     }

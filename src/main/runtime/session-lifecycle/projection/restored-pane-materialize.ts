@@ -1,12 +1,12 @@
 // Starting a saved pane that has no live terminal: a client's first view of a pending row, and,
 // in the layout-owner build, every trigger that is not a desktop window's own restore.
 
-import type { OrcaRuntimeWithApplyMobileSessionTabNavigation as MobileSessionNavigation } from './apply-mobile-session-tab-navigation'
+import type { QuirkyRuntimeWithApplyMobileSessionTabNavigation as MobileSessionNavigation } from './apply-mobile-session-tab-navigation'
 import type {
   MobileTerminalCommand,
   MobileTerminalResumeCommand
 } from '../../terminal/launch/mobile-terminal-startup'
-import { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs } from './build-headless-mobile-session-browser-tabs'
+import { QuirkyRuntimeWithBuildHeadlessMobileSessionBrowserTabs } from './build-headless-mobile-session-browser-tabs'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { isWorktreeTerminalsSleepingError } from '../../worktree-terminals-sleeping-error'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
@@ -23,7 +23,7 @@ import { reopenNewerDaemonTerminals } from '../../../daemon/daemon-newer-protoco
 import type { NewerDaemonReopenResult } from '../../../../shared/newer-daemon-hold'
 import type { WorkspaceLayoutStream } from '../../workspace-layout-stream'
 
-export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs {
+export abstract class QuirkyRuntimeWithRestoredPaneStart extends QuirkyRuntimeWithBuildHeadlessMobileSessionBrowserTabs {
   protected abstract resolveAgentLaunchRuntime(
     scope: TerminalWorkspaceLaunchScope,
     agent: TuiAgent | undefined

@@ -1,6 +1,6 @@
 import { tmpdir } from 'node:os'
 import { isAbsolute } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const GETCONF_TIMEOUT_MS = 5_000
 

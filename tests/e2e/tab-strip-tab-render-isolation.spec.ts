@@ -6,7 +6,7 @@
  */
 
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady, waitForActiveWorktree, ensureTerminalVisible } from './helpers/store'
 import { waitForActivePanePtyId } from './helpers/terminal'
 import { runNodeScriptInTerminal } from './helpers/run-node-script-in-terminal'
@@ -29,16 +29,18 @@ async function waitForQuietStrip(page: Page): Promise<void> {
 }
 
 test.describe('Tab strip tab render isolation', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
   })
 
-  test('a title change or a tab switch re-renders only the tabs involved', async ({ orcaPage }) => {
-    const worktreeId = await waitForActiveWorktree(orcaPage)
-    const ptyId = await waitForActivePanePtyId(orcaPage)
-    const tabIds = await orcaPage.evaluate(
+  test('a title change or a tab switch re-renders only the tabs involved', async ({
+    quirkyPage
+  }) => {
+    const worktreeId = await waitForActiveWorktree(quirkyPage)
+    const ptyId = await waitForActivePanePtyId(quirkyPage)
+    const tabIds = await quirkyPage.evaluate(
       ({ wId, count }) => {
         const ids: string[] = []
         for (let i = 0; i < count; i++) {
@@ -51,45 +53,45 @@ test.describe('Tab strip tab render isolation', () => {
       { wId: worktreeId, count: BACKGROUND_TABS }
     )
     const tab = (tabId: string) =>
-      orcaPage.locator(`[data-testid="sortable-tab"][data-tab-id="${tabId}"]`)
+      quirkyPage.locator(`[data-testid="sortable-tab"][data-tab-id="${tabId}"]`)
     await expect(tab(tabIds[BACKGROUND_TABS - 1])).toBeAttached()
-    await startRecordingTabRenders(orcaPage)
+    await startRecordingTabRenders(quirkyPage)
 
-    await waitForQuietStrip(orcaPage)
-    await orcaPage.evaluate(
+    await waitForQuietStrip(quirkyPage)
+    await quirkyPage.evaluate(
       (tabId) => window.__store!.getState().updateTabTitle(tabId, 'retitled in background'),
       tabIds[5]
     )
     await expect(tab(tabIds[5])).toHaveAttribute('data-tab-title', 'retitled in background')
-    const backgroundRetitle = await takeTabRenders(orcaPage)
+    const backgroundRetitle = await takeTabRenders(quirkyPage)
     // Control: the recorder sees the one tab that did change.
     expect(backgroundRetitle.length).toBeGreaterThan(0)
     expect(Math.max(...backgroundRetitle)).toBe(1)
 
-    await waitForQuietStrip(orcaPage)
+    await waitForQuietStrip(quirkyPage)
     // A node script, so the title is emitted the same way under PowerShell, cmd and POSIX shells.
     // It stays alive until the title is read; a shell prompt would retitle the tab straight back.
     const retitle = await runNodeScriptInTerminal(
-      orcaPage,
+      quirkyPage,
       ptyId,
       `process.stdout.write('\\x1b]0;retitled by its terminal\\x07'); setTimeout(() => {}, 3000)`
     )
     try {
       await expect(
-        orcaPage.locator('[data-testid="sortable-tab"][data-active="true"]')
+        quirkyPage.locator('[data-testid="sortable-tab"][data-active="true"]')
       ).toHaveAttribute('data-tab-title', 'retitled by its terminal')
-      const terminalRetitle = await takeTabRenders(orcaPage)
+      const terminalRetitle = await takeTabRenders(quirkyPage)
       expect(terminalRetitle.length).toBeGreaterThan(0)
       expect(Math.max(...terminalRetitle)).toBe(1)
     } finally {
       retitle.cleanup()
     }
 
-    await waitForQuietStrip(orcaPage)
+    await waitForQuietStrip(quirkyPage)
     await tab(tabIds[1]).click()
     await expect(tab(tabIds[1])).toHaveAttribute('data-active', 'true')
-    await orcaPage.waitForTimeout(500)
-    const tabSwitch = await takeTabRenders(orcaPage)
+    await quirkyPage.waitForTimeout(500)
+    const tabSwitch = await takeTabRenders(quirkyPage)
     expect(tabSwitch.length).toBeGreaterThan(0)
     // The tab that lost the active state and the one that gained it.
     expect(Math.max(...tabSwitch)).toBeLessThanOrEqual(2)

@@ -29,7 +29,7 @@ export class CodexJournalCommandTurn {
   private awaiting: StructuredAgentSessionCommandRun | null = null
   private readonly carried = new Map<string, CarriedCommand>()
 
-  /** Before Orca sends the command: the next primary turn to start carries it out. */
+  /** Before Quirky sends the command: the next primary turn to start carries it out. */
   begin(command: StructuredAgentSessionCommandRun): void {
     this.awaiting = command
   }

@@ -1,11 +1,11 @@
 /**
- * An `ssh -N -L` forward a previous Orca left behind — after a crash, a force-quit, or a version
+ * An `ssh -N -L` forward a previous Quirky left behind — after a crash, a force-quit, or a version
  * that did not stop its forwards on quit — keeps holding the fixed local port a managed tunnel
  * binds, so every later start fails with EADDRINUSE. Only a process whose argv is exactly the one
- * Orca would spawn for this same forward and host, and whose parent is gone, qualifies: a user's
- * own ssh and a live Orca's tunnel never match.
+ * Quirky would spawn for this same forward and host, and whose parent is gone, qualifies: a user's
+ * own ssh and a live Quirky's tunnel never match.
  */
-import { parseWindowsCommandLine } from '@orca/process-host/windows-command-line'
+import { parseWindowsCommandLine } from '@quirky/process-host/windows-command-line'
 import { getFreshShellForegroundSnapshot } from '../../../shared/process-table-snapshot-reader'
 import {
   PROCESS_START_TIME_TOLERANCE_MS,
@@ -92,8 +92,8 @@ function sshArgv(command: string, platform: NodeJS.Platform): string[] | null {
   return name === 'ssh' || name === 'ssh.exe' ? rest.split(' ') : null
 }
 
-/** The whole argv after the executable must be Orca's; any extra option is someone else's ssh. */
-function isOrcaForward(
+/** The whole argv after the executable must be Quirky's; any extra option is someone else's ssh. */
+function isQuirkyForward(
   command: string,
   expectedArgs: readonly string[],
   platform: NodeJS.Platform
@@ -128,8 +128,8 @@ function parentIsGone(
   return row.ppid <= 1 || !parent || REAPER_NAMES.has(executableName(parent.command))
 }
 
-/** `expectedArgs` is the argv after the ssh executable that Orca spawns for this forward. */
-export function findOrphanedOrcaSshForward(
+/** `expectedArgs` is the argv after the ssh executable that Quirky spawns for this forward. */
+export function findOrphanedQuirkySshForward(
   rows: readonly SshForwardProcessRow[],
   expectedArgs: readonly string[],
   platform: NodeJS.Platform
@@ -138,7 +138,7 @@ export function findOrphanedOrcaSshForward(
   return (
     rows.find(
       (row) =>
-        isOrcaForward(row.command, expectedArgs, platform) && parentIsGone(row, byPid, platform)
+        isQuirkyForward(row.command, expectedArgs, platform) && parentIsGone(row, byPid, platform)
     ) ?? null
   )
 }
@@ -166,15 +166,15 @@ async function waitUntilGone(
   return isGone(pid, kill)
 }
 
-/** True when an orphaned Orca forward was signalled; false means nothing was touched. */
-export async function stopOrphanedOrcaSshForward(
+/** True when an orphaned Quirky forward was signalled; false means nothing was touched. */
+export async function stopOrphanedQuirkySshForward(
   localPort: number,
   expectedArgs: readonly string[],
   deps: OrphanedForwardDeps = DEFAULT_DEPS
 ): Promise<boolean> {
   const find = async (): Promise<SshForwardProcessRow | null> => {
     try {
-      return findOrphanedOrcaSshForward(await deps.listProcesses(), expectedArgs, deps.platform)
+      return findOrphanedQuirkySshForward(await deps.listProcesses(), expectedArgs, deps.platform)
     } catch {
       return null
     }
@@ -184,7 +184,7 @@ export async function stopOrphanedOrcaSshForward(
     return false
   }
   console.warn(
-    `[ssh] Stopping a forward a previous Orca left on 127.0.0.1:${localPort} (pid ${orphan.pid})`
+    `[ssh] Stopping a forward a previous Quirky left on 127.0.0.1:${localPort} (pid ${orphan.pid})`
   )
   const startedAtMs = await deps.readStartTimeMs(orphan.pid)
   try {

@@ -5,7 +5,7 @@ const { visibleRepos } = vi.hoisted(() => ({
   visibleRepos:
     vi.fn<(store: { getRepos: () => Repo[]; getSshTargets: () => unknown[] }) => Repo[]>()
 }))
-vi.mock('../ssh/orcad-retained-source', () => ({
+vi.mock('../ssh/quirkyd-retained-source', () => ({
   visibleRepos,
   visibleProjectGroups: vi.fn(() => []),
   visibleFolderWorkspaces: vi.fn(() => [])
@@ -38,7 +38,7 @@ describe('runtime visible catalog', () => {
     expect(runtimeHiddenRepos(store).hasRepo(all[0]!)).toBe(false)
   })
 
-  it('treats a store with no SSH targets (headless orcad) as hiding nothing of its own', () => {
+  it('treats a store with no SSH targets (headless quirkyd) as hiding nothing of its own', () => {
     visibleRepos.mockImplementation((store) => {
       expect(store.getSshTargets()).toEqual([])
       return store.getRepos()

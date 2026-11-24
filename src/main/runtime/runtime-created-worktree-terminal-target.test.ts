@@ -5,7 +5,7 @@ import { Store } from '../persistence/loading-store/store'
 import { ProfileStateSqliteAuthority } from '../persistence/profile-state/profile-state-sqlite-authority'
 import { RuntimeRemoteFetchController } from './runtime-remote-fetch-controller'
 import type { RemoteTrackingBase } from './runtime-remote-fetch-controller'
-import type { OrcaRuntimeWithNotifySshStateChanged } from './workspaces/workspace-host-notifications'
+import type { QuirkyRuntimeWithNotifySshStateChanged } from './workspaces/workspace-host-notifications'
 import type { RuntimeManagedWorktreeCreateArgs } from './runtime-managed-worktree-create-types'
 import type { PreparationRearmHolder } from '../worktree-create-preparation'
 import type { RuntimeWorkspaceCreateEvents } from '../workspace-create-session'
@@ -28,9 +28,9 @@ vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp'), isPackaged: false }
 }))
 
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
-class StartupRuntime extends OrcaRuntimeService {
+class StartupRuntime extends QuirkyRuntimeService {
   readonly lookup = vi.fn<(selector: string) => Promise<ResolvedWorktree>>()
   readonly repoLookup = vi.fn<(selector: string) => Promise<Repo>>()
 
@@ -273,11 +273,11 @@ describe('workspace activation and metadata reentry', () => {
     }
   }
 
-  class MetadataRuntime extends OrcaRuntimeService {
+  class MetadataRuntime extends QuirkyRuntimeService {
     protected override readonly remoteFetches = new ControlledRemoteFetches()
     constructor(
       store: Store,
-      readonly selectedWorktree: Awaited<ReturnType<OrcaRuntimeService['showManagedWorktree']>>
+      readonly selectedWorktree: Awaited<ReturnType<QuirkyRuntimeService['showManagedWorktree']>>
     ) {
       super(store)
     }
@@ -291,7 +291,7 @@ describe('workspace activation and metadata reentry', () => {
     }
 
     override notifyWorktreesChanged(
-      ...args: Parameters<OrcaRuntimeWithNotifySshStateChanged['notifyWorktreesChanged']>
+      ...args: Parameters<QuirkyRuntimeWithNotifySshStateChanged['notifyWorktreesChanged']>
     ) {
       super.notifyWorktreesChanged(...args)
     }
@@ -302,7 +302,7 @@ describe('workspace activation and metadata reentry', () => {
   let runtime: MetadataRuntime
 
   beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), 'orca-metadata-reentry-'))
+    directory = mkdtempSync(join(tmpdir(), 'quirky-metadata-reentry-'))
     store = new Store({
       dataFile: join(directory, 'state.json'),
       profileStateAuthority: new ProfileStateSqliteAuthority(
@@ -319,7 +319,7 @@ describe('workspace activation and metadata reentry', () => {
       worktreeBaseRef: 'main'
     })
     const path = join(directory, 'checkout')
-    const worktree: Awaited<ReturnType<OrcaRuntimeService['showManagedWorktree']>> = {
+    const worktree: Awaited<ReturnType<QuirkyRuntimeService['showManagedWorktree']>> = {
       id: `repo::${path}`,
       repoId: 'repo',
       path,

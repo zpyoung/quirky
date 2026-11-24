@@ -207,7 +207,7 @@
       "settledAt": 0,
       "error": {
         "category": "Error",
-        "message": "Remote file changes require a newer Orca server. Update the HUB and try again.",
+        "message": "Remote file changes require a newer Quirky server. Update the HUB and try again.",
         "isRpcDeliveryUnknown": false
       }
     },

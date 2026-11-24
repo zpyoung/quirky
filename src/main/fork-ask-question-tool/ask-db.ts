@@ -109,7 +109,7 @@ function hardenAskDatabaseFiles(dbPath: (string & {}) | ':memory:'): void {
 }
 
 /**
- * Durable store for the `orca ask` question registry, in its own SQLite file — never shared with
+ * Durable store for the `quirky ask` question registry, in its own SQLite file — never shared with
  * or migrated from `OrchestrationDb`. Mirrors its lazy-construction and file-hardening precedent;
  * callers decide the path and when to instantiate.
  */

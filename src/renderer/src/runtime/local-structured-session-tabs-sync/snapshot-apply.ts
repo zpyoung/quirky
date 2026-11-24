@@ -34,7 +34,7 @@ import { suppressCancelledStructuredSessionTabs } from '../structured-agent-sess
 import { LOCAL_STRUCTURED_SESSION_OWNER } from '../local-structured-session-owner'
 import { closeStructuredAgentSession } from '../structured-agent-session-close'
 import { useAppStore } from '../../store'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { recordSyncedAgentSessionTabsInLayoutOwner } from '../agent-session-tab-layout-owner'
 
 /** The host saying it no longer publishes this worktree at all, rather than publishing an empty one. */
@@ -68,7 +68,7 @@ export function applyStructuredSessionTabSnapshots(
   options: StructuredSessionSnapshotApplyOptions = {}
 ): void {
   const acceptedAgentSessions: { worktreeId: string; sessionId: string }[] = []
-  const before = ORCA_LAYOUT_OWNER_IS_MAIN ? useAppStore.getState() : null
+  const before = QUIRKY_LAYOUT_OWNER_IS_MAIN ? useAppStore.getState() : null
   const settleStructuredSessionMirror = applyWebSessionTabsStorePatch(
     (state) =>
       applyLocalStructuredSessionTabSnapshots(state, snapshots, owner, undefined, {
@@ -82,7 +82,7 @@ export function applyStructuredSessionTabSnapshots(
   )
   settleStructuredSessionMirror()
   // Switch point: main records the chat tabs this listing added to or removed from the tab bars.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN && before) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN && before) {
     recordSyncedAgentSessionTabsInLayoutOwner(
       before,
       useAppStore.getState(),

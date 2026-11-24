@@ -10,7 +10,7 @@ import type { Row } from '../../../../../../shared/sidebar-list/row-types'
 const repo: Repo = {
   id: 'repo-1',
   path: '/repo',
-  displayName: 'orca',
+  displayName: 'quirky',
   badgeColor: '#000',
   addedAt: 1
 }

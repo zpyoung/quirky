@@ -27,7 +27,7 @@ describe('JcodeHookService', () => {
   let homeDir: string
 
   beforeEach(() => {
-    homeDir = mkdtempSync(join(tmpdir(), 'orca-jcode-home-'))
+    homeDir = mkdtempSync(join(tmpdir(), 'quirky-jcode-home-'))
     homedirMock.mockReturnValue(homeDir)
     // Why: getJcodeConfigPath prefers JCODE_HOME; an ambient value would write
     // outside the temp home and leak the written config past afterEach.
@@ -115,8 +115,8 @@ describe('JcodeHookService', () => {
   })
 
   it.each([
-    '/Users/previous/.orca/agent-hooks/jcode-hook.sh',
-    'C:\\Users\\previous\\.orca\\agent-hooks\\jcode-hook.cmd'
+    '/Users/previous/.quirky/agent-hooks/jcode-hook.sh',
+    'C:\\Users\\previous\\.quirky\\agent-hooks\\jcode-hook.cmd'
   ])('recognizes a stale managed command %s without a local script', (stalePath) => {
     const service = new JcodeHookService()
     const configPath = getJcodeConfigPath()
@@ -140,7 +140,7 @@ describe('JcodeHookService', () => {
   it('does not report complete stale event coverage as installed when the current script exists', () => {
     const service = new JcodeHookService()
     service.install()
-    const staleCommand = getJcodeManagedCommand('/Users/previous/.orca/agent-hooks/jcode-hook.sh')
+    const staleCommand = getJcodeManagedCommand('/Users/previous/.quirky/agent-hooks/jcode-hook.sh')
     writeFileSync(
       getJcodeConfigPath(),
       `[hooks]\n${JCODE_HOOK_EVENTS.map((event) => `${event} = ${tomlQuoteString(staleCommand)}`).join('\n')}\n`,
@@ -173,7 +173,7 @@ describe('JcodeHookService', () => {
     expect(service.install().state).toBe('installed')
   })
 
-  it('does not mistake a user command mentioning the managed script in a comment for Orca ownership', () => {
+  it('does not mistake a user command mentioning the managed script in a comment for Quirky ownership', () => {
     const configPath = getJcodeConfigPath()
     mkdirSync(dirname(configPath), { recursive: true })
     writeFileSync(

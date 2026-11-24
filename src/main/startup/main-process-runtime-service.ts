@@ -6,14 +6,14 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { sessionSearchScopeCatalogFromStore } from '../ai-vault-search/session-search-store-scope-catalog'
 import { getCanonicalUserDataPath } from '../persistence/loading-store/user-data-path'
 import { app, ipcMain } from 'electron'
-import { OrcaRuntimeService } from '../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { getLocalPtyProvider } from '../ipc/pty/provider/registry'
 import { clearProviderPtyState } from '../ipc/pty/provider/state-cleanup'
 import { agentHookServer } from '../agent-hooks/server'
 import { toAgentStatusIpcPayload } from '../agent-hooks/server/server-status-identity'
 import { browserManager } from '../browser/browser-manager'
 import { loadAgentSessionClaimSigner } from '../runtime/agent-session-claim-identity'
-import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
+import { getProfileUserDataPath } from '../quirky-profiles/profile-storage-paths'
 import { codexAiVaultSessionResumePreparation } from '../codex/codex-ai-vault-session-resume'
 import { prepareCodexPinnedLaunchHome } from './codex-session-resume-launch'
 import { resolveHostCodexSessionSourceHome } from '../codex/codex-session-source-home'
@@ -45,7 +45,7 @@ import {
 } from '../runtime/agent-status-observed-pane-identity'
 import { startAgentStateRulesOverride } from '../runtime/agent-state-rules/agent-state-rules-override'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 
 export function getDesktopWindowStatus(): RuntimeDesktopWindowStatus {
   const activation = state.desktopActivationGate
@@ -56,7 +56,7 @@ export function getDesktopWindowStatus(): RuntimeDesktopWindowStatus {
   return value === 'ready' ? 'openable' : value
 }
 
-export function initializeMainProcessRuntime(): OrcaRuntimeService {
+export function initializeMainProcessRuntime(): QuirkyRuntimeService {
   const store = state.store
   const stats = state.stats
   if (!store || !stats) {
@@ -85,9 +85,9 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
       )
   }
   // Why here and not in the window listener: `subscribeEnrichedStatus` also fires under headless
-  // `orca serve`, which never opens one, and the fleet path runs there too.
+  // `quirky serve`, which never opens one, and the fleet path runs there too.
   const observedPaneIdentities = new AgentStatusObservedPaneIdentities()
-  const runtime = new OrcaRuntimeService(store, stats, {
+  const runtime = new QuirkyRuntimeService(store, stats, {
     ...agentHookRuntimeDeps(agentHookServer, observedPaneIdentities, () =>
       state.store?.getSettings()
     ),
@@ -144,7 +144,7 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
     getScopeCatalog: () => sessionSearchScopeCatalogFromStore(store, LOCAL_EXECUTION_HOST_ID)
   })
   app.once('will-quit', () => sessionSearch?.dispose())
-  // Why here: this runs for the desktop and headless `orca serve`, and each evaluates its own panes.
+  // Why here: this runs for the desktop and headless `quirky serve`, and each evaluates its own panes.
   startAgentStateRulesOverride(store, (rules) =>
     recordDurableCrashBreadcrumb('agent_state_rules_active', rules)
   )
@@ -155,7 +155,7 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
   )
   agentHookServer.setCliWriterExecutionMatcher(observedPaneIdentities, runtime)
   // Switch point: main keeps the resume record of each pane it holds from the status it accepts.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     agentHookServer.subscribeEnrichedStatus((enriched) =>
       runtime.recordHookStatusResume(toAgentStatusIpcPayload(enriched))
     )
@@ -180,7 +180,7 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
   return runtime
 }
 
-export function configureRuntimeServices(runtime: OrcaRuntimeService): void {
+export function configureRuntimeServices(runtime: QuirkyRuntimeService): void {
   const store = state.store
   const claudeAccounts = state.claudeAccounts
   const codexAccounts = state.codexAccounts
@@ -190,7 +190,7 @@ export function configureRuntimeServices(runtime: OrcaRuntimeService): void {
   }
   runtime.setAccountServices({ claudeAccounts, codexAccounts, rateLimits })
   runtime.setCommitMessageAgentEnvironmentResolvers({
-    // Why: Codex hooks/auth live in Orca's managed runtime home even for the default path, so every launch must resolve CODEX_HOME via runtime-home.
+    // Why: Codex hooks/auth live in Quirky's managed runtime home even for the default path, so every launch must resolve CODEX_HOME via runtime-home.
     prepareForCodexLaunch: prepareCodexRuntimeHomeForLaunch,
     prepareForClaudeLaunch: (target) => state.claudeRuntimeAuth!.prepareForClaudeLaunch(target),
     resolveBaseEnvironment: () => resolveHostAgentBaseEnvironment(store.getSettings())

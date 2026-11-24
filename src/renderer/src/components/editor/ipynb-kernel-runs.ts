@@ -29,7 +29,7 @@ export function stopRuns(session: NotebookKernelSession, extraOutputs: NotebookO
   }
 }
 
-/** Orca's own notices (no Python, install failures) are written as markdown outputs of the cell. */
+/** Quirky's own notices (no Python, install failures) are written as markdown outputs of the cell. */
 export function noticeOutput(markdown: string): NotebookOutput {
   return { output_type: 'display_data', data: { 'text/markdown': markdown }, metadata: {} }
 }

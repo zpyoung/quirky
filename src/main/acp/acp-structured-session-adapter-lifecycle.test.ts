@@ -108,7 +108,7 @@ describe('ACP Stop names a turn', () => {
     expect(rig.sent('session/cancel')).toHaveLength(2)
     expect(rig.settled).toEqual(
       expect.arrayContaining([
-        // Held by Orca, never prompted: proof it never reached the agent.
+        // Held by Quirky, never prompted: proof it never reached the agent.
         expect.objectContaining({
           clientMessageId: 'follow-up',
           state: 'rejected',
@@ -204,7 +204,7 @@ describe('ACP connection loss', () => {
     })
   })
 
-  it('keeps a crash a crash when a stop Orca asks for lands before its unproven exit', async () => {
+  it('keeps a crash a crash when a stop Quirky asks for lands before its unproven exit', async () => {
     const rig = await openAcpAdapterRig()
     await rig.acquire()
     const child = rig.child()
@@ -213,7 +213,7 @@ describe('ACP connection loss', () => {
     child.agent.close()
     await rig.settle()
     expect(rig.ended).toEqual([])
-    // Never left Orca, so it is not recorded as unconfirmed.
+    // Never left Quirky, so it is not recorded as unconfirmed.
     expect(
       await rig.adapter.dispatch({
         sessionId: SESSION,
@@ -226,7 +226,7 @@ describe('ACP connection loss', () => {
       reason: 'Grok stopped before this message was sent.',
       rejection: { kind: 'providerExited', neverReachedAgent: true }
     })
-    // The next start's stop of the old child is one Orca asked for; it does not rename the crash.
+    // The next start's stop of the old child is one Quirky asked for; it does not rename the crash.
     await expect(rig.acquire()).rejects.toMatchObject({
       name: 'AgentSessionAcquisitionExitUnprovenError'
     })
@@ -253,7 +253,7 @@ describe('ACP connection loss', () => {
     expect(rig.child().closes).toBe(1)
   })
 
-  it('ends the turn as failed on an answer Orca cannot read, and sends the next message', async () => {
+  it('ends the turn as failed on an answer Quirky cannot read, and sends the next message', async () => {
     const rig = await openAcpAdapterRig()
     await rig.acquire()
     await sendHello(rig, 'garbled')
@@ -465,7 +465,7 @@ describe('ACP startup that never answers', () => {
 })
 
 describe('ACP session release', () => {
-  it('stops nothing for a chat it never started, as one an earlier Orca left', async () => {
+  it('stops nothing for a chat it never started, as one an earlier Quirky left', async () => {
     const rig = await openAcpAdapterRig()
     await expect(rig.adapter.releaseAcquisition({ sessionId: SESSION })).resolves.toBe(true)
     expect(rig.spawned).toEqual([])

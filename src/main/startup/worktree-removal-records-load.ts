@@ -4,7 +4,7 @@ import { loadWorktreeRemovalRecords } from '../worktree-background-removal'
 
 /**
  * Loads this host's removal records at startup. A failed delete is kept only while its repo's LOCAL
- * copy is in Orca: only local listings show the row, and an SSH copy under the same id never would.
+ * copy is in Quirky: only local listings show the row, and an SSH copy under the same id never would.
  */
 export function loadWorktreeRemovalRecordsForStore(store: {
   getProfileStorageDirectory: () => string

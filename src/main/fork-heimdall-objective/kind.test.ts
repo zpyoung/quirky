@@ -18,7 +18,7 @@ import type { LeaseStore } from '../fork-heimdall/lease-store'
 import type { HeimdallOrchestrationAdapter } from '../fork-heimdall/orchestration/orchestration-adapter'
 import type { DispatchWorkerInput } from '../../shared/fork-heimdall/kind-contract'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { RuntimeGitTarget } from '../runtime/runtime-git-command-target'
 import { computeWorkspaceContentIdentity, type ObjectiveWorkspaceTarget } from './content-identity'
 import { createObjectiveKind } from './kind'
@@ -85,7 +85,7 @@ type WorkspaceFixture = {
   repoId: string
   worktreeId: string | null
   target: ObjectiveWorkspaceTarget
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   store: Store
 }
 
@@ -94,7 +94,7 @@ async function runGit(cwd: string, args: string[]): Promise<string> {
 }
 
 async function workspaceFixture(kind: 'folder' | 'git'): Promise<WorkspaceFixture> {
-  const parent = await mkdtemp(join(tmpdir(), `orca-objective-kind-${kind}-`))
+  const parent = await mkdtemp(join(tmpdir(), `quirky-objective-kind-${kind}-`))
   temporaryDirectories.push(parent)
   const profile = join(parent, 'profile')
   const createdRoot = join(parent, 'workspace')
@@ -147,11 +147,11 @@ async function workspaceFixture(kind: 'folder' | 'git'): Promise<WorkspaceFixtur
           gitTarget: runtimeTarget
         }
       : { kind, executionHostId: 'local', workspacePath: root }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of OrcaRuntimeService, a class with private fields no object literal can structurally satisfy; only the methods below are exercised.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of QuirkyRuntimeService, a class with private fields no object literal can structurally satisfy; only the methods below are exercised.
   const runtime = {
     resolveRuntimeFileTarget: vi.fn(async () => runtimeTarget),
     resolveRuntimeGitTarget: vi.fn(async () => runtimeTarget)
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   const repo = {
     id: repoId,
     path: root,
@@ -590,11 +590,11 @@ describe('objective kind through the Heimdall kernel', () => {
       const reportDirectory = dirname(first.orchestration.reportPaths[0]!)
       if (workspaceKind === 'folder') {
         expect(reportDirectory).toBe(
-          join(fixture.root, '.orca', 'heimdall', 'objective', 'reports')
+          join(fixture.root, '.quirky', 'heimdall', 'objective', 'reports')
         )
       } else {
         const gitDirectory = await runGit(fixture.root, ['rev-parse', '--absolute-git-dir'])
-        expect(reportDirectory).toBe(join(gitDirectory, 'orca-heimdall', 'objective', 'reports'))
+        expect(reportDirectory).toBe(join(gitDirectory, 'quirky-heimdall', 'objective', 'reports'))
       }
 
       first.close()

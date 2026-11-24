@@ -44,7 +44,7 @@ describe('terminal history tombstone scan cost', () => {
   let userDataDir: string
 
   beforeEach(() => {
-    userDataDir = mkdtempSync(join(tmpdir(), 'orca-history-scan-cost-'))
+    userDataDir = mkdtempSync(join(tmpdir(), 'quirky-history-scan-cost-'))
     installFakeAppEnvironment({ getPath: () => userDataDir })
     reads.count = 0
     reads.names = 0

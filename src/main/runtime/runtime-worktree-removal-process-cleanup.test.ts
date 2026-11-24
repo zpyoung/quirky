@@ -21,7 +21,7 @@ vi.mock('../workspace-space-analysis-snapshot', () => ({
 }))
 
 import type { Repo } from '../../shared/repo-types'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 const WT = 'repo-1::/tmp/worktree-a'
 
@@ -61,7 +61,7 @@ function createRuntime(repos: Repo[]) {
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial store covering every method this removal path reads.
   const runtimeStore = store as never
-  return { runtime: new OrcaRuntimeService(runtimeStore), store: runtimeStore }
+  return { runtime: new QuirkyRuntimeService(runtimeStore), store: runtimeStore }
 }
 
 beforeEach(() => {

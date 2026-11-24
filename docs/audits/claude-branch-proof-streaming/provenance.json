@@ -183,7 +183,7 @@
       ]
     },
     {
-      "path": "src/main/runtime/orca-runtime-stop-structured-session-process.ts",
+      "path": "src/main/runtime/quirky-runtime-stop-structured-session-process.ts",
       "currentSha256": "11b71f61bdad9cde89ac174a22f91937f2ba138e34bb58a86edeb568252a64b9",
       "reportedTagSha256": "11b71f61bdad9cde89ac174a22f91937f2ba138e34bb58a86edeb568252a64b9",
       "identicalToTag": true,

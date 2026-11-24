@@ -43,7 +43,7 @@ describe('cross-version: session-only browser rows', () => {
   })
 
   it('a released registry keeps the session row and token rows; this host drops it on restart', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-xv-web-session-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-xv-web-session-'))
     const current = new DeviceRegistry(userDataPath)
     const legacy = current.addDevice('Browser', 'runtime')
     current.updateLastSeen(legacy.deviceId)

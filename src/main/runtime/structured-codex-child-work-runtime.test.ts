@@ -61,7 +61,7 @@ describe('structured Codex child work through the production runtime', () => {
   })
 
   it("hands its subagents to the status sink under the session's own address", async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-runtime-codex-child-work-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-runtime-codex-child-work-'))
     const connections: CodexAppServerConnectionHandlers[] = []
     const openConnection: typeof openCodexAppServerConnection = async (_launch, handlers = {}) => {
       connections.push(handlers)

@@ -326,7 +326,7 @@ describe('context usage on journal rows', () => {
     t.handle(resultFrame(3_000, MODEL_USAGE))
     t.handle(userFrame('turn-b', 4_000))
     t.handle(assistantFrame('reply-b', 5_000, 42_000))
-    t.handle({ type: 'ended', sessionId: 'orca-session', reason: 'closed', observedAt: 6_000 })
+    t.handle({ type: 'ended', sessionId: 'quirky-session', reason: 'closed', observedAt: 6_000 })
     expect(t.turnRow('turn-b')?.body).toMatchObject({
       state: 'interrupted',
       contextUsage: { used: { kind: 'estimate', usage: { inputTokens: 42_000 } } }

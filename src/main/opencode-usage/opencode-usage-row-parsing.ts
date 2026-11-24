@@ -80,7 +80,7 @@ export function parseOpenCodeUsageRow(row: OpenCodeUsageRow): OpenCodeUsageParse
   const uncachedInputTokens = ensureNumber(tokens.input)
   const outputTokens = ensureNumber(tokens.output)
   const reasoningOutputTokens = ensureNumber(tokens.reasoning)
-  // OpenCode reports uncached input separately; Orca includes both cache buckets in input.
+  // OpenCode reports uncached input separately; Quirky includes both cache buckets in input.
   const cacheWriteInputTokens = ensureNumber(cache?.write)
   const cachedInputTokens = ensureNumber(cache?.read) + cacheWriteInputTokens
   const inputTokens = uncachedInputTokens + cachedInputTokens

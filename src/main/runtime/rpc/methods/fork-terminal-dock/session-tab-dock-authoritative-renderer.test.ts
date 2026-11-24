@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { getDefaultWorkspaceSession } from '../../../../../shared/constants'
 import type { TerminalTab } from '../../../../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../../../../shared/workspace-session-state-types'
@@ -43,8 +43,8 @@ function makeDockWorktreeSession(
 // Why: seeds the stored snapshot via a real renderer publication (not headless
 // hydrate) — attachWindow alone leaves mobileSessionTabsByWorktree empty once a
 // window is authoritative, since listMobileSessionTabs's full hydrate then skips.
-function makeAuthoritativeRuntime(): OrcaRuntimeService {
-  const runtime = new OrcaRuntimeService({
+function makeAuthoritativeRuntime(): QuirkyRuntimeService {
+  const runtime = new QuirkyRuntimeService({
     getWorkspaceSession: () => makeDockWorktreeSession()
   } as never)
   electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false })
@@ -117,7 +117,7 @@ describe('setMobileSessionTabProps dock patch on an authoritative-renderer host 
   })
 
   it('leaves the headless path (no authoritative renderer) unchanged', async () => {
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       getWorkspaceSession: () => makeDockWorktreeSession()
     } as never)
     await runtime.listMobileSessionTabs(`id:${DOCK_WORKTREE_ID}`)

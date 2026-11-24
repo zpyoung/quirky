@@ -1,6 +1,6 @@
 # OMP Source Control AI settings proof
 
-Run `ORCA_BACKGROUND_LAUNCH=1 node tests/tools/omp-source-control-ui/run.mjs`.
+Run `QUIRKY_BACKGROUND_LAUNCH=1 node tests/tools/omp-source-control-ui/run.mjs`.
 The runner rebuilds the existing background-safe Electron fixture and the production
 `CommitMessageAiPane` with its real styles. It uses disposable HOME/ZDOTDIR/userData,
 never reveals a window, and closes its own app after recording evidence under

@@ -103,7 +103,7 @@ export class RuntimeAccountController {
     }
   }
 
-  /** orcad's store: starts from the last pushed env, so launches before a reconnect keep it. */
+  /** quirkyd's store: starts from the last pushed env, so launches before a reconnect keep it. */
   restoreHostLaunchEnv(
     saved: HostAccountLaunchEnv | null,
     persist: (launchEnv: HostAccountLaunchEnv) => void

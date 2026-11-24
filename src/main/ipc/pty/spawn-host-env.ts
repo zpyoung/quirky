@@ -13,14 +13,14 @@ import type { CodexAccountSelectionTarget } from '../../codex-accounts/runtime-s
 import { isSafePtySessionId } from '../../daemon/pty-session-id'
 import type { IPtyProvider } from '../../providers/pty-provider-contract'
 import { getRuntimeSourceStamp } from '../../runtime/host-descriptor'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { buildPtyHostEnv } from './host-env/assembly'
 import {
   codexHomePathsEqual,
   getCompatibleSelectedCodexHomePath,
   resolveCodexHomeAfterManagedAuthReadiness,
   shouldSkipCodexHomeEnvForWindowsShell,
-  shouldStripInheritedOrcaCodexHome
+  shouldStripInheritedQuirkyCodexHome
 } from './host-env/codex-home'
 import type {
   CodexResumeLaunch,
@@ -53,20 +53,20 @@ export type PtySpawnCodexResumeDeps = {
 export type PtySpawnHostEnv = {
   codexResumeLaunch: CodexResumeLaunch
   launchCommand: string | undefined
-  /** Before Orca's host env; TEMPORARY (row 6 removes it): the window reports this one at commit. */
+  /** Before Quirky's host env; TEMPORARY (row 6 removes it): the window reports this one at commit. */
   baseEnv: Record<string, string> | undefined
   env: Record<string, string> | undefined
   selectedCodexHomePath: string | null
   codexResumeHomeSelected: boolean
   skipCodexHomeEnv: boolean
-  stripInheritedOrcaCodexHome: boolean
+  stripInheritedQuirkyCodexHome: boolean
 }
 
 type PtySpawnHostEnvArgs = {
   launchAgent: TuiAgent | undefined
   command: string | undefined
   resumeProviderSession: AgentProviderSessionMetadata | undefined
-  /** The lane's spawn env before Orca's host env. */
+  /** The lane's spawn env before Quirky's host env. */
   env: Record<string, string> | undefined
   cwd: string | undefined
   shellOverride: string | undefined
@@ -87,7 +87,7 @@ type PtySpawnHostEnvArgs = {
   requestedAgentTeamsPath: string | undefined
   provider: IPtyProvider
   deps: PtySpawnCodexResumeDeps & {
-    runtime?: OrcaRuntimeService
+    runtime?: QuirkyRuntimeService
     getSettings?: () => GlobalSettings | undefined
     getSelectedCodexHomePath?: GetSelectedCodexHomePath
   }
@@ -168,9 +168,9 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       codexResumeHome && codexHomePathsEqual(selectedCodexHomePath, codexResumeHome.codexHomePath)
     ),
     skipCodexHomeEnv,
-    stripInheritedOrcaCodexHome:
+    stripInheritedQuirkyCodexHome:
       args.isDaemonHostSpawn &&
-      shouldStripInheritedOrcaCodexHome({
+      shouldStripInheritedQuirkyCodexHome({
         target,
         selectedCodexHomePath,
         skipCodexHomeEnv,
@@ -208,7 +208,7 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       userDataPath: getAppEnvironment().getPath('userData'),
       selectedCodexHomePath,
       skipCodexHomeEnv,
-      stripInheritedOrcaCodexHome: hostEnv.stripInheritedOrcaCodexHome,
+      stripInheritedQuirkyCodexHome: hostEnv.stripInheritedQuirkyCodexHome,
       launchCommand,
       launchAgent: isTuiAgent(args.launchAgent) ? args.launchAgent : undefined,
       shellPath: args.shellOverride,

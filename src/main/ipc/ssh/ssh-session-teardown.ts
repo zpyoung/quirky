@@ -71,8 +71,8 @@ export async function teardownSshTargetTransport(targetId: string): Promise<void
   const [forwards, managedTunnels, disconnect] = await Promise.allSettled([
     portForwardManager?.removeAllForwards(targetId),
     // Why lazy: the managed tunnel module resolves app paths, which SSH-only callers may lack.
-    import('../../managed-server/lifecycle/orcad-managed-tunnel').then((tunnels) =>
-      tunnels.closeOrcadManagedTunnelsForTarget(targetId)
+    import('../../managed-server/lifecycle/quirkyd-managed-tunnel').then((tunnels) =>
+      tunnels.closeQuirkydManagedTunnelsForTarget(targetId)
     ),
     (async () => connectionManager?.disconnect(targetId))()
   ])

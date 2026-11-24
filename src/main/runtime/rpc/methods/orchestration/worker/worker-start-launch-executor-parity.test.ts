@@ -10,7 +10,7 @@ import {
   type AgentLaunchModeReceipt
 } from '../../../../../agent-launch/agent-launch-mode'
 import { setStructuredAgentSessionHost } from '../../../../../native-chat/agent-session-wire/structured-agent-session-registry'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import { WORKER_START_VOCABULARY } from '../../orchestration-worker-start-mode'
 import { structuredWorkerIdentities } from '../../../../structured-worker-identity'
@@ -79,7 +79,7 @@ function place(
 ) {
   return placeWorkerAgent({
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the placement calls only the methods faked here.
-    runtime: f.runtime as unknown as OrcaRuntimeService,
+    runtime: f.runtime as unknown as QuirkyRuntimeService,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the placement records only worker stages.
     db: f.db as unknown as OrchestrationDb,
     dispatchId: 'ctx_1',

@@ -45,7 +45,7 @@ describe('GitHub source lookup routing', () => {
         repoId: 'repo',
         sourceContext,
         owner: 'acme',
-        repo: 'orca',
+        repo: 'quirky',
         host: 'github.com',
         number: 42,
         type: 'pr'
@@ -55,7 +55,7 @@ describe('GitHub source lookup routing', () => {
         repoId: 'repo',
         sourceContext,
         owner: 'acme',
-        repo: 'orca',
+        repo: 'quirky',
         host: 'github.com',
         number: 42,
         type: 'pr'
@@ -71,7 +71,7 @@ describe('GitHub source lookup routing', () => {
       repoId: 'renderer-repo',
       sourceContext: runtimeSourceContext,
       owner: 'acme',
-      repo: 'orca',
+      repo: 'quirky',
       host: 'github.com',
       number: 42,
       type: 'pr'
@@ -82,7 +82,7 @@ describe('GitHub source lookup routing', () => {
       {
         repo: 'runtime-repo',
         owner: 'acme',
-        ownerRepo: 'orca',
+        ownerRepo: 'quirky',
         host: 'github.com',
         number: 42,
         type: 'pr'

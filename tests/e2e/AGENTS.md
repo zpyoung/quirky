@@ -2,10 +2,10 @@
 
 ## Build and Run
 
-- `ORCA_BACKGROUND_LAUNCH=1 pnpm run test:e2e` builds with `--mode e2e`, which exposes
+- `QUIRKY_BACKGROUND_LAUNCH=1 pnpm run test:e2e` builds with `--mode e2e`, which exposes
   `window.__store`.
 - For iteration, build with `pnpm exec electron-vite build --mode e2e`, then run
-  `ORCA_BACKGROUND_LAUNCH=1 SKIP_BUILD=1 pnpm run test:e2e …` only while that build is current.
+  `QUIRKY_BACKGROUND_LAUNCH=1 SKIP_BUILD=1 pnpm run test:e2e …` only while that build is current.
   A plain build omits `window.__store`; if tests time out waiting for it, rebuild in E2E
   mode before changing the harness.
 
@@ -21,7 +21,7 @@
 ## Layout Regression Gates
 
 - Terminal-topology refactors must preserve behavior or fix a named bug. Run
-  `ORCA_BACKGROUND_LAUNCH=1 pnpm run test:e2e:terminal-layout-parity` to compare the working
+  `QUIRKY_BACKGROUND_LAUNCH=1 pnpm run test:e2e:terminal-layout-parity` to compare the working
   tree with its merge-base on `origin/main`. See the
   [runner](../../config/scripts/run-terminal-layout-parity.mjs) for commit comparisons
   and scenario filters. The head's journeys must work against both builds.
@@ -35,7 +35,7 @@
   [Latency](workspace-layout-oracle-latency.spec.ts) measurements are informational.
 - New [known-on-main](workspace-layout-oracle-known-on-main.ts) entries must cite a reproducing
   run on `main` in the PR; rerun intermittent findings until reproduced. Use
-  `ORCA_LAYOUT_ORACLE_REPEAT=<n>` for repeats and `ORCA_LAYOUT_ORACLE_REPORT_DIR` for JSON
-  reports. `ORCA_LAYOUT_ORACLE_RECORD=1` records without failing; do not use it as a passing gate.
+  `QUIRKY_LAYOUT_ORACLE_REPEAT=<n>` for repeats and `QUIRKY_LAYOUT_ORACLE_REPORT_DIR` for JSON
+  reports. `QUIRKY_LAYOUT_ORACLE_RECORD=1` records without failing; do not use it as a passing gate.
 - Inspect any profile with
   `node config/scripts/check-workspace-layout-rules.mjs <userDataDir>`.

@@ -6,7 +6,7 @@ import { build, emptyModel, testContext, WS } from './workspace-layout-command.t
 const switchState = vi.hoisted(() => ({ layoutOwnerIsMain: true }))
 
 vi.mock('../layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return switchState.layoutOwnerIsMain
   }
 }))

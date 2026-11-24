@@ -9,8 +9,8 @@ import {
   extractRuntimeArchive,
   ReleaseMismatchError
 } from './runtime-archive-download'
-import { findOrcadCachePath } from './orcad-cache-path'
-import { orcadNodeRuntimeExecutable } from '../../shared/orcad-artifacts'
+import { findQuirkydCachePath } from './quirkyd-cache-path'
+import { quirkydNodeRuntimeExecutable } from '../../shared/quirkyd-artifacts'
 import { nodeDistMirrorUrl } from '../../shared/node-dist-mirror'
 import { configuredNodeDistMirror } from './node-dist-mirror-setting'
 import {
@@ -59,7 +59,7 @@ export async function materializeVerifiedRuntimeArchive(
   options.signal?.throwIfAborted()
   await mkdir(cacheDir, { recursive: true })
   const name = archiveName(archive)
-  const cached = await findOrcadCachePath(
+  const cached = await findQuirkydCachePath(
     (attempt) => join(cacheDir, `${attempt ? `repair-${attempt}-` : ''}${name}`),
     async (path) => (await fileSha256(path)) === archive.archiveSha256
   )
@@ -110,7 +110,7 @@ function unreachableArchiveError(
   const cause = error instanceof Error ? error.message : String(error)
   return new DesktopDownloadUnreachableError(
     `This computer couldn't download ${archive.label} from ${archive.url} (${cause}). ` +
-      `Orca uploads ${archive.label} to the host from this computer, so the host doesn't need ` +
+      `Quirky uploads ${archive.label} to the host from this computer, so the host doesn't need ` +
       `internet access, but this computer must reach that address once. Check this computer's ` +
       `network connection or proxy and connect again, set a mirror in Settings > Advanced > ` +
       `Network > Node.js download mirror, or download that file on another machine ` +
@@ -137,7 +137,7 @@ export async function materializeCachedRuntimeExecutable(
   options: PinnedRuntimeMaterializeOptions
 ): Promise<string> {
   options.signal?.throwIfAborted()
-  const cached = await findOrcadCachePath(
+  const cached = await findQuirkydCachePath(
     runtime.cachePath,
     async (path) => (await fileSha256(path)) === runtime.executableSha256
   )
@@ -294,7 +294,7 @@ export function materializeCachedNodeRuntime(
   options: PinnedRuntimeMaterializeOptions
 ): Promise<string> {
   const asset = pinnedNodeRuntimeAsset(target)
-  const executableName = basename(orcadNodeRuntimeExecutable(target))
+  const executableName = basename(quirkydNodeRuntimeExecutable(target))
   return withNodeDistMirror(target, options, (archive, download) =>
     materializeCachedRuntimeExecutable(
       {

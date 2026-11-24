@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   javascriptInventory,
@@ -26,7 +26,7 @@ afterEach(() => {
 })
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-release-javascript-test-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-release-javascript-test-'))
   directories.push(root)
   for (const file of [
     'cli/index.js',
@@ -34,7 +34,7 @@ function fixture() {
     'preload/index.js',
     'renderer/index.html',
     'renderer/.vite/manifest.json',
-    'renderer/.orca-web-client-files.json',
+    'renderer/.quirky-web-client-files.json',
     'web/web-index.html',
     'mobile-web/manifest.json',
     'package.json',
@@ -50,7 +50,7 @@ function fixture() {
 }
 
 function configurationFixture(version = '1.2.3') {
-  const root = mkdtempSync(join(tmpdir(), 'orca-javascript-configuration-test-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-javascript-configuration-test-'))
   directories.push(root)
   const hooks = join(root, 'empty-hooks')
   mkdirSync(hooks)
@@ -79,7 +79,7 @@ function configurationFixture(version = '1.2.3') {
     const result = runProcessSync({ program: 'git', args, cwd: root, timeoutMs: 10_000 })
     expect(result.code, result.stderr).toBe(0)
   }
-  const env = { ORCA_BUILD_IDENTITY: 'stable' }
+  const env = { QUIRKY_BUILD_IDENTITY: 'stable' }
   return { root, env }
 }
 
@@ -89,7 +89,7 @@ describe('release JavaScript configuration', () => {
     ['1.2.3-rc.4.perf', 'rc']
   ])('preserves official build checks for %s', (version, identity) => {
     const { root, env } = configurationFixture(version)
-    const result = releaseJavascriptConfiguration(root, { ...env, ORCA_BUILD_IDENTITY: identity })
+    const result = releaseJavascriptConfiguration(root, { ...env, QUIRKY_BUILD_IDENTITY: identity })
     expect(result.identity).toBe(identity)
     expect(result.sourceSha).toMatch(/^[a-f0-9]{40}$/)
   })
@@ -98,36 +98,39 @@ describe('release JavaScript configuration', () => {
     const { root, env } = configurationFixture('0.0.0-adhoc.test')
     const devEnv = {
       ...env,
-      ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'dev',
-      ORCA_BUILD_IDENTITY: ''
+      QUIRKY_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'dev',
+      QUIRKY_BUILD_IDENTITY: ''
     }
     expect(releaseJavascriptConfiguration(root, devEnv)).toMatchObject({
       identity: 'dev',
       version: '0.0.0-adhoc.test'
     })
     expect(() =>
-      releaseJavascriptConfiguration(root, { ...devEnv, ORCA_BUILD_IDENTITY: 'stable' })
+      releaseJavascriptConfiguration(root, { ...devEnv, QUIRKY_BUILD_IDENTITY: 'stable' })
     ).toThrow('must not set an official build identity')
     expect(() =>
       releaseJavascriptConfiguration(root, {
         ...devEnv,
-        ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: ''
+        QUIRKY_RELEASE_JAVASCRIPT_BUILD_IDENTITY: ''
       })
     ).toThrow('Invalid desktop release tag')
   })
 
   it('does not downgrade an official build when its identity is missing', () => {
     const { root, env } = configurationFixture()
-    expect(() => releaseJavascriptConfiguration(root, { ...env, ORCA_BUILD_IDENTITY: '' })).toThrow(
-      'Release build identity differs from version'
-    )
     expect(() =>
-      releaseJavascriptConfiguration(root, { ...env, ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'rc' })
+      releaseJavascriptConfiguration(root, { ...env, QUIRKY_BUILD_IDENTITY: '' })
+    ).toThrow('Release build identity differs from version')
+    expect(() =>
+      releaseJavascriptConfiguration(root, {
+        ...env,
+        QUIRKY_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'rc'
+      })
     ).toThrow('Invalid JavaScript build identity')
     expect(() =>
       releaseJavascriptConfiguration(root, {
         ...env,
-        ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'typo'
+        QUIRKY_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'typo'
       })
     ).toThrow('Invalid JavaScript build identity')
   })
@@ -136,13 +139,13 @@ describe('release JavaScript configuration', () => {
     const { root, env } = configurationFixture()
     const devEnv = {
       ...env,
-      ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'dev',
-      ORCA_BUILD_IDENTITY: ''
+      QUIRKY_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'dev',
+      QUIRKY_BUILD_IDENTITY: ''
     }
     expect(() =>
       releaseJavascriptConfiguration(root, {
         ...devEnv,
-        ORCA_RELEASE_JAVASCRIPT_SOURCE_SHA: 'b'.repeat(40)
+        QUIRKY_RELEASE_JAVASCRIPT_SOURCE_SHA: 'b'.repeat(40)
       })
     ).toThrow('Release checkout differs from bundle source')
   })

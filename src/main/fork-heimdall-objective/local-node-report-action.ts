@@ -1,5 +1,5 @@
 import type { ActionOutcome } from '../../shared/fork-heimdall/effect-certainty'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { ExecuteContext } from '../../shared/fork-heimdall/kind-contract'
 import { requireObjectiveOriginalDispatchFingerprint } from '../../shared/fork-heimdall-objective/decision-context'
 import type { ObjectiveAction } from '../../shared/fork-heimdall-objective/objective-actions'
@@ -35,7 +35,7 @@ export async function ingestObjectiveNodeReport(args: {
   binding: ObjectiveSnapshotBinding
   context: ExecuteContext<ObjectiveWorld>
   objectiveStore: ObjectiveStore
-  runtime?: OrcaRuntimeService
+  runtime?: QuirkyRuntimeService
 }): Promise<ActionOutcome> {
   const origin = findObjectiveDispatchAttempt(args.context.ledger, args.action.dispatchId)
   if (

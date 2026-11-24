@@ -53,10 +53,10 @@ describe('useCodexSharedSettingsNotice', () => {
     await setNoticeState({ agentStatusByPaneKey: { 'tab-1:leaf': { agentType: 'codex' } } })
 
     expect(toastInfoMock).toHaveBeenCalledTimes(1)
-    expect(toastInfoMock).toHaveBeenCalledWith('Codex in Orca now uses ~/.codex', {
+    expect(toastInfoMock).toHaveBeenCalledWith('Codex in Quirky now uses ~/.codex', {
       id: 'codex-shared-settings-notice',
       description:
-        'Codex may ask again to trust folders or approve commands. Re-add any MCP servers you added only in Orca.',
+        'Codex may ask again to trust folders or approve commands. Re-add any MCP servers you added only in Quirky.',
       duration: Infinity
     })
     expect(isSeen()).toBe(true)
@@ -71,7 +71,7 @@ describe('useCodexSharedSettingsNotice', () => {
   })
 
   it('stays quiet in a paired web client window', async () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     resetStore({ tabsByWorktree: codexTab })
     await mountHook(useCodexSharedSettingsNotice)
     expect(toastInfoMock).not.toHaveBeenCalled()

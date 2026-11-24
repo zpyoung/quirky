@@ -1,5 +1,5 @@
 import type { Page, TestInfo } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { addRepoWithWorkspaces, writeWorkspaceMeta } from './helpers/repo-with-workspaces'
 import { waitForSessionReady } from './helpers/store'
 
@@ -92,13 +92,13 @@ async function sampleMountedPreviewOffsets(
 }
 
 test('dragging a virtualized worktree downward keeps rows stable', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  await orcaPage.setViewportSize({ width: 1_000, height: 620 })
-  const { sourceId, nextId, ids } = await seedVirtualizedManualWorktrees(orcaPage, testInfo)
-  const scroller = orcaPage.locator('[data-worktree-sidebar]')
-  const source = orcaPage.locator(
+  await waitForSessionReady(quirkyPage)
+  await quirkyPage.setViewportSize({ width: 1_000, height: 620 })
+  const { sourceId, nextId, ids } = await seedVirtualizedManualWorktrees(quirkyPage, testInfo)
+  const scroller = quirkyPage.locator('[data-worktree-sidebar]')
+  const source = quirkyPage.locator(
     `[data-worktree-sidebar] [data-worktree-id=${JSON.stringify(sourceId)}]`
   )
   await scroller.evaluate((element) => {
@@ -111,7 +111,7 @@ test('dragging a virtualized worktree downward keeps rows stable', async ({
     const rect = element.getBoundingClientRect()
     return { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
   })
-  const nextSource = orcaPage.locator(
+  const nextSource = quirkyPage.locator(
     `[data-worktree-sidebar] [data-worktree-id=${JSON.stringify(nextId)}]`
   )
   const sourceStride = await nextSource.evaluate(
@@ -125,18 +125,18 @@ test('dragging a virtualized worktree downward keeps rows stable', async ({
     return { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
   })
 
-  await orcaPage.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
-  await orcaPage.mouse.down()
+  await quirkyPage.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+  await quirkyPage.mouse.down()
   try {
     const edgeX = scrollerBox.x + 2
     const edgeY = scrollerBox.y + scrollerBox.height - 8
     // Keep the pointer in the edge zone while the renderer advances autoscroll.
     for (let step = 0; step < 12; step++) {
-      await orcaPage.mouse.move(edgeX, edgeY, { steps: 2 })
+      await quirkyPage.mouse.move(edgeX, edgeY, { steps: 2 })
       if ((await source.count()) === 0) {
         break
       }
-      await orcaPage.waitForTimeout(100)
+      await quirkyPage.waitForTimeout(100)
     }
     if ((await source.count()) > 0) {
       for (let step = 0; step < 8 && (await source.count()) > 0; step++) {
@@ -147,7 +147,7 @@ test('dragging a virtualized worktree downward keeps rows stable', async ({
           )
           element.dispatchEvent(new Event('scroll', { bubbles: true }))
         })
-        await orcaPage.waitForTimeout(100)
+        await quirkyPage.waitForTimeout(100)
       }
     }
     await expect
@@ -157,7 +157,7 @@ test('dragging a virtualized worktree downward keeps rows stable', async ({
       })
       .toBe(0)
 
-    const samples = await sampleMountedPreviewOffsets(orcaPage, sourceId)
+    const samples = await sampleMountedPreviewOffsets(quirkyPage, sourceId)
     expect(samples.length).toBeGreaterThan(0)
     const observationsById = new Map<string, PreviewOffsetSample[]>()
     for (const sample of samples.flat()) {
@@ -193,11 +193,11 @@ test('dragging a virtualized worktree downward keeps rows stable', async ({
       expect(renderedReversal).toBeLessThanOrEqual(sourceStride)
     }
   } finally {
-    await orcaPage.mouse.up()
+    await quirkyPage.mouse.up()
   }
 
-  await expect(orcaPage.locator('[data-worktree-sidebar-drag-preview="true"]')).toHaveCount(0)
-  await expect(orcaPage.locator('html')).not.toHaveAttribute(
+  await expect(quirkyPage.locator('[data-worktree-sidebar-drag-preview="true"]')).toHaveCount(0)
+  await expect(quirkyPage.locator('html')).not.toHaveAttribute(
     'data-worktree-sidebar-pointer-dragging'
   )
   await scroller.evaluate((element) => {

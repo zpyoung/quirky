@@ -1,7 +1,7 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './rpc/dispatcher'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import type { RpcContext } from './rpc/core'
 import { TERMINAL_LIFECYCLE_METHODS } from './rpc/methods/terminal/terminal-lifecycle-methods'
 import { AGENT_SESSION_METHODS } from './rpc/methods/agent-session'
@@ -54,7 +54,7 @@ function fixture() {
     publishAgentLaunchTab: vi.fn()
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: each tested RPC only accesses the mocked methods; any unexpected runtime access fails immediately.
-  const service = runtime as unknown as OrcaRuntimeService
+  const service = runtime as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({
     runtime: service,
     methods: [...TERMINAL_LIFECYCLE_METHODS, ...AGENT_SESSION_METHODS, ...SESSION_TAB_METHODS]

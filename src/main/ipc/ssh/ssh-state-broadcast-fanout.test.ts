@@ -26,7 +26,7 @@ describe('SSH IPC handlers', () => {
 
   beforeEach(harness.reset)
 
-  it('keeps claimed managed-orcad SSH state off clients under the original target id', () => {
+  it('keeps claimed managed-quirkyd SSH state off clients under the original target id', () => {
     const runtime = {
       onPtyData: vi.fn(),
       onPtyExit: vi.fn(),
@@ -36,11 +36,11 @@ describe('SSH IPC handlers', () => {
     registerSshHandlers(mockStore as never, () => mockWindow as never, runtime as never)
     mockSshStore.getTarget.mockReturnValue({
       id: 'ssh-1',
-      label: 'Managed orcad host',
+      label: 'Managed quirkyd host',
       host: 'example.com',
       port: 22,
       username: 'deploy',
-      owner: { type: 'on-demand-runtime', runtimeId: 'managed-orcad:environment-1' }
+      owner: { type: 'on-demand-runtime', runtimeId: 'managed-quirkyd:environment-1' }
     } satisfies SshTarget)
     const callbacks = mockConnectionManager.callbacksRef.current as {
       onStateChange: (targetId: string, state: SshConnectionState) => void

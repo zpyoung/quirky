@@ -6,9 +6,9 @@ import { join } from 'node:path'
 import { buildAgentResumeStartupPlan } from '../../shared/tui-agent-startup'
 import { buildAiVaultResumeShellCommand } from '../../shared/ai-vault-resume-command'
 
-await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
 const {
   store,
   TEST_WORKTREE_PATH,
@@ -16,7 +16,7 @@ const {
   createFolderWorkspaceRuntimeStore,
   makeFolderWorkspace,
   makeFolderProjectGroup
-} = await import('./orca-runtime-test-fixtures.spec')
+} = await import('./quirky-runtime-test-fixtures.spec')
 const { detectAgentCommandsOnHost } = await import('../preflight/agent-detection')
 beforeEach(() =>
   vi
@@ -34,7 +34,7 @@ it.each([
   async (_, found, selected) => {
     vi.mocked(detectAgentCommandsOnHost).mockResolvedValueOnce(new Set(found))
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-independent-start' })
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       ...store,
       getSettings: () => ({ ...store.getSettings(), disabledTuiAgents: [], agentCmdOverrides: {} })
     })
@@ -81,7 +81,7 @@ it('a modern-only repo-less folder start reaches the same production spawn bound
       makeFolderWorkspace({ folderPath }),
       makeFolderProjectGroup({ parentPath: folderPath })
     )
-    const runtime = new OrcaRuntimeService({
+    const runtime = new QuirkyRuntimeService({
       ...folderStore,
       getSettings: () => ({ ...store.getSettings(), disabledTuiAgents: [], agentCmdOverrides: {} })
     })
@@ -120,7 +120,7 @@ it('a modern-only repo-less folder start reaches the same production spawn bound
 it('selects the installed command for a mobile Qoder history resume at creation', async () => {
   vi.mocked(detectAgentCommandsOnHost).mockResolvedValueOnce(new Set(['qoder']))
   const spawn = vi.fn().mockResolvedValue({ id: 'pty-mobile-qoder-resume' })
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new QuirkyRuntimeService(store)
   runtime.setPtyController({
     spawn,
     write: () => true,
@@ -164,7 +164,7 @@ it('host discovery refusal prevents any production spawn', async () => {
     new Error('execution host unavailable')
   )
   const spawn = vi.fn()
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new QuirkyRuntimeService(store)
   runtime.setPtyController({
     spawn,
     write: () => true,
@@ -184,7 +184,7 @@ it('caller-owned explicit executable survives production resume without discover
   const detect = vi.mocked(detectAgentCommandsOnHost)
   detect.mockClear()
   const spawn = vi.fn().mockResolvedValue({ id: 'pty-independent-explicit' })
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new QuirkyRuntimeService(store)
   runtime.setPtyController({
     spawn,
     write: () => true,
@@ -208,7 +208,7 @@ it.each([
   ['resume', 'qodercli --resume original-id']
 ] as const)('does not falsely attribute a %s command as a fresh start', async (_, command) => {
   const spawn = vi.fn().mockResolvedValue({ id: 'pty-independent-unattributed' })
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new QuirkyRuntimeService(store)
   runtime.setPtyController({
     spawn,
     write: () => true,
@@ -229,8 +229,8 @@ it.each([
 it.each(['offline', 'legacy-identity'])(
   'refuses a Qoder command-bearing create with unverifiable inventory: %s',
   async (state) => {
-    const { TEST_WORKTREE_ID } = await import('./orca-runtime-test-fixtures.spec')
-    const runtime = new OrcaRuntimeService(store)
+    const { TEST_WORKTREE_ID } = await import('./quirky-runtime-test-fixtures.spec')
+    const runtime = new QuirkyRuntimeService(store)
     runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
     const spawn = vi.fn()
     const kill = vi.fn()
@@ -269,10 +269,10 @@ it.each(['offline', 'legacy-identity'])(
 )
 
 it('reconciles after the reply-cache expires and isolates deliberate forks and paired callers', async () => {
-  const { TEST_WORKTREE_ID } = await import('./orca-runtime-test-fixtures.spec')
+  const { TEST_WORKTREE_ID } = await import('./quirky-runtime-test-fixtures.spec')
   vi.useFakeTimers()
   try {
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
     const live: {
       id: string

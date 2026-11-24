@@ -39,7 +39,7 @@ vi.mock('electron', () => ({
 
 describe('Store native-chat tab viewMode persistence', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {

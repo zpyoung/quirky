@@ -19,7 +19,7 @@ import {
   type WorktreeAttention
 } from './smart-attention'
 import { smartSortPhase } from './smart-sort-phase'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../sidebar-inputs-switch'
 import { compareSmartStamps, recentStamp } from './stamp-order'
 
 export type SortBy = WorkspaceSortBy
@@ -131,7 +131,7 @@ export function buildWorktreeComparator(
   labels?: WorktreeSortLabels
 ): (a: Worktree, b: Worktree) => number {
   // Switch point: Recent and Smart read the owning host's stamps, with no clock.
-  if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+  if (QUIRKY_SIDEBAR_INPUTS_IS_MAIN) {
     return buildStampComparator(sortBy, repoMap, labels)
   }
   return buildWorkspaceRowComparator<Worktree>(sortBy, {
@@ -233,7 +233,7 @@ export function rankWorktreesForSort<W extends Worktree>(args: {
   // Why precompute: the label tiebreaker runs on every comparison in every mode.
   const labels = buildWorktreeSortLabels(worktrees)
   // Switch point: stamps need no cold phase, latch or attention map.
-  if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+  if (QUIRKY_SIDEBAR_INPUTS_IS_MAIN) {
     worktrees.sort(buildStampComparator(sortBy, args.repoMap, labels))
     return { sorted: worktrees, detectedLiveSmartSignal: false }
   }

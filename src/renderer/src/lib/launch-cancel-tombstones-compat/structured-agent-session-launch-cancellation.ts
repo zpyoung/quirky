@@ -1,7 +1,7 @@
 // The window's cancel tombstones: a chat cancelled before its create landed is hidden and closed when
 // its host later lists it. Kept for paired hosts, which may not refuse a create whose close came
 // first; the remote-server project sets their floor. Local chats need them only in window-owned
-// builds (ORCA_LAYOUT_OWNER), until phase F.
+// builds (QUIRKY_LAYOUT_OWNER), until phase F.
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
   hasStructuredAgentLaunchCancellationTombstonePersisted,

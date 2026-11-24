@@ -48,7 +48,7 @@ afterEach(() => {
 })
 
 function denseFixture(version: 'v1' | 'v2'): string {
-  const root = mkdtempSync(join(tmpdir(), 'orca-opencode-wire-budget-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-opencode-wire-budget-'))
   roots.push(root)
   const path = join(root, 'opencode.db')
   state.path = path
@@ -159,14 +159,14 @@ describe.each(['v1', 'v2'] as const)('%s byte-bounded semantic pages', (version)
       const response = asRecord(JSON.parse(reply))
       const result = asRecord(response?.result)
       const messages = Array.isArray(result?.messages) ? result.messages : []
-      const receipt = process.env.ORCA_NATIVE_CHAT_BUDGET_RECEIPT
+      const receipt = process.env.QUIRKY_NATIVE_CHAT_BUDGET_RECEIPT
       if (receipt && version === 'v2' && clientKind === 'mobile') {
         writeFileSync(`${receipt}.payload.json`, reply)
         writeFileSync(
           receipt,
           `${JSON.stringify(
             {
-              source: process.env.ORCA_NATIVE_CHAT_BUDGET_SOURCE,
+              source: process.env.QUIRKY_NATIVE_CHAT_BUDGET_SOURCE,
               kind: 'Controlled synthetic SQLite stress; actual production parser/RPC serializer/E2EE admission, no genuine CLI claim',
               inputMessages: page.items.length,
               outputMessages: messages.length,

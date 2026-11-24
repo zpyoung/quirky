@@ -1,6 +1,6 @@
 import { agentSessionFailureFact, providerDiagnosticOf } from '../../shared/agent-session-failure'
 import type { CodexAppServerConnection } from './codex-app-server-connection-types'
-import { closeProcessRegistry } from '@orca/process-host/close-process-registry'
+import { closeProcessRegistry } from '@quirky/process-host/close-process-registry'
 import {
   cancelCodexAcquisitionAttempt,
   type CodexAcquisitionRegistry,
@@ -15,8 +15,8 @@ export function handleCodexSessionExit(input: {
   sessionId: string
   connection: CodexAppServerConnection | null
   error: Error
-  /** Set for the end of a close Orca began: by that close, or by the root's own exit report. */
-  closedByOrca?: true
+  /** Set for the end of a close Quirky began: by that close, or by the root's own exit report. */
+  closedByQuirky?: true
   prompts?: CodexSession['prompts']
   onEvent?: (event: CodexStructuredSessionEvent) => void
   logger?: StructuredAgentSessionLogger
@@ -34,12 +34,12 @@ export function handleCodexSessionExit(input: {
     type: 'ended',
     sessionId: input.sessionId,
     // The connection reports the exit inside the close it ends; the close's own reason is the why.
-    reason: ((input.closedByOrca && session.orcaClose?.reason) || input.error).message,
-    // Only the child's own exit blames Codex; a close Orca made, for any reason, is Orca's.
-    failure: input.closedByOrca
+    reason: ((input.closedByQuirky && session.quirkyClose?.reason) || input.error).message,
+    // Only the child's own exit blames Codex; a close Quirky made, for any reason, is Quirky's.
+    failure: input.closedByQuirky
       ? agentSessionFailureFact('hostFault')
       : agentSessionFailureFact('providerExited', { detail: providerDiagnosticOf(input.error) }),
-    cause: session.orcaClose?.requested ? 'requested-close' : 'unexpected-exit',
+    cause: session.quirkyClose?.requested ? 'requested-close' : 'unexpected-exit',
     fence: session.fence,
     acquisitionGeneration: session.acquisitionGeneration,
     observedAt: session.exitObservedAt
@@ -98,7 +98,7 @@ export async function closeCodexPublishedSession(
   }
   // Sink-failure recovery force-closes the child but must preserve the
   // observed-exit cause so host lease settlement runs as an unexpected death.
-  session.orcaClose ??= {
+  session.quirkyClose ??= {
     requested: options?.requestedClose ?? true,
     reason: options?.unexpectedReason ?? new Error('codex session closed')
   }
@@ -113,8 +113,8 @@ export async function closeCodexPublishedSession(
       sessions,
       sessionId,
       connection: session.connection,
-      error: session.orcaClose.reason,
-      closedByOrca: true,
+      error: session.quirkyClose.reason,
+      closedByQuirky: true,
       prompts: session.prompts,
       ...(onEvent ? { onEvent } : {}),
       ...(options?.logger ? { logger: options.logger } : {})

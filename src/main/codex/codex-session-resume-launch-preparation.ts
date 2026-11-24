@@ -14,12 +14,12 @@ import { codexHookService } from './hook-service'
 import { reconcileCodexHooksForLaunch } from './codex-hook-reconcile'
 import { ensureCodexDaemonSocketGuard } from './codex-config-mirror'
 import { isAgentStatusHooksEnabledForAgent } from '../agent-hooks/managed-agent-hook-controls'
-import { getOrcaManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
+import { getQuirkyManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import type { CodexRuntimeHomeService } from '../codex-accounts/runtime-home-service'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 
-/** Automatic Codex resume prep against a host's runtime-home service; the desktop and orcad share it. */
+/** Automatic Codex resume prep against a host's runtime-home service; the desktop and quirkyd share it. */
 export function createCodexSessionResumeLaunchPreparation(deps: {
   getRuntimeHome: () => CodexRuntimeHomeService | null
   getSettings: () => GlobalSettings | undefined
@@ -85,7 +85,7 @@ export function createCodexSessionResumeLaunchPreparation(deps: {
       systemCodexHomePath: systemHomePath,
       // Why: the mirror winning is what triggers the migration into ~/.codex below, so it must
       // outrank the path-sorted account homes or a system-default selection resumes as an account.
-      sharedRuntimeCodexHomePath: getOrcaManagedCodexHomePath(),
+      sharedRuntimeCodexHomePath: getQuirkyManagedCodexHomePath(),
       resolveVerifiedResumeHome: async (sessionSource) => {
         let migrated = { useRealCodexHome: false }
         try {
@@ -132,7 +132,7 @@ export function createCodexSessionResumeLaunchPreparation(deps: {
           ...preparation,
           reconcileSharedRuntimeAuth:
             normalizeRuntimePathForComparison(preparation.codexHomePath) ===
-            normalizeRuntimePathForComparison(getOrcaManagedCodexHomePath())
+            normalizeRuntimePathForComparison(getQuirkyManagedCodexHomePath())
         }
       : preparation
   }

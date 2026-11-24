@@ -11,7 +11,7 @@ const PANE = makePaneKey('tab-1', LEAF)
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-ended-process-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-ended-process-'))
 })
 
 afterEach(() => {

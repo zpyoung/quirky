@@ -41,7 +41,7 @@ vi.mock('lucide-react-native', () => ({
   MessageSquare: 'MessageSquare'
 }))
 
-vi.mock('../components/OrcaLogo', () => ({ OrcaLogo: 'OrcaLogo' }))
+vi.mock('../components/QuirkyLogo', () => ({ QuirkyLogo: 'QuirkyLogo' }))
 
 describe('MobileOnboardingPage', () => {
   let renderer: ReactTestRenderer | null = null

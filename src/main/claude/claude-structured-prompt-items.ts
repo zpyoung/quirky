@@ -39,7 +39,7 @@ export function claudePromptIdentity(input: {
 }): AgentJournalItemIdentity {
   const suffix = input.questionId ? `:${input.questionId}` : ''
   return {
-    provider: 'orca',
+    provider: 'quirky',
     clientMessageId: `claude-prompt:${input.sessionId}:${input.promptKey}${suffix}`
   }
 }

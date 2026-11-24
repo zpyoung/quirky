@@ -13,8 +13,8 @@ import {
 type ExecMock = Mock<GitRemoteExec>
 
 const REPO = '/repo-root'
-const FORK_SSH = 'git@github.com:contributor/orca.git'
-const FORK_HTTPS = 'https://github.com/contributor/orca.git'
+const FORK_SSH = 'git@github.com:contributor/quirky.git'
+const FORK_HTTPS = 'https://github.com/contributor/quirky.git'
 
 /** Real `git remote -v` shape: a fetch row and a push row per remote, tab-separated. */
 export function renderRemoteVerbose(remotes: Record<string, string>): string {
@@ -69,7 +69,7 @@ function callsMatching(exec: ExecMock, head: string[]): string[][] {
 
 function forkTarget(overrides: Partial<GitPushTarget> = {}): GitPushTarget {
   return {
-    remoteName: 'pr-contributor-orca',
+    remoteName: 'pr-contributor-quirky',
     branchName: 'contributor/fix',
     remoteUrl: FORK_SSH,
     ...overrides
@@ -83,17 +83,17 @@ describe('prepareWorktreePushTargetWithExec', () => {
     const result = await prepareWorktreePushTargetWithExec(exec, REPO, forkTarget(), () => false)
 
     expect(callsMatching(exec, ['remote', 'add'])).toEqual([
-      ['remote', 'add', '-t', 'contributor/fix', '--no-tags', 'pr-contributor-orca', FORK_SSH]
+      ['remote', 'add', '-t', 'contributor/fix', '--no-tags', 'pr-contributor-quirky', FORK_SSH]
     ])
     expect(callsMatching(exec, ['fetch'])).toEqual([
       [
         'fetch',
-        'pr-contributor-orca',
-        '+refs/heads/contributor/fix*:refs/remotes/pr-contributor-orca/contributor/fix*'
+        'pr-contributor-quirky',
+        '+refs/heads/contributor/fix*:refs/remotes/pr-contributor-quirky/contributor/fix*'
       ]
     ])
     expect(result).toEqual({
-      remoteName: 'pr-contributor-orca',
+      remoteName: 'pr-contributor-quirky',
       branchName: 'contributor/fix',
       remoteUrl: FORK_SSH,
       remoteCreated: true
@@ -107,26 +107,28 @@ describe('prepareWorktreePushTargetWithExec', () => {
 
     // Why: cleanup's ownership check must survive a store purge (worktree-push-target-cleanup.ts).
     // Narrowing the refspec (#17887) also writes `config` calls, so scope to the marker itself.
-    expect(callsMatching(exec, ['config', 'remote.pr-contributor-orca.orca-created'])).toEqual([
-      ['config', 'remote.pr-contributor-orca.orca-created', 'true']
+    expect(callsMatching(exec, ['config', 'remote.pr-contributor-quirky.quirky-created'])).toEqual([
+      ['config', 'remote.pr-contributor-quirky.quirky-created', 'true']
     ])
   })
 
   it('does not record provenance when reusing an existing remote', async () => {
     const exec = makeRepoExec({
       origin: 'git@github.com:stablyai/orca.git',
-      'pr-contributor-orca': FORK_HTTPS
+      'pr-contributor-quirky': FORK_HTTPS
     })
 
     await prepareWorktreePushTargetWithExec(exec, REPO, forkTarget(), () => false)
 
-    expect(callsMatching(exec, ['config', 'remote.pr-contributor-orca.orca-created'])).toEqual([])
+    expect(callsMatching(exec, ['config', 'remote.pr-contributor-quirky.quirky-created'])).toEqual(
+      []
+    )
   })
 
   it('reuses an existing remote pointing at the same fork (SSH vs HTTPS) without adding', async () => {
     const exec = makeRepoExec({
       origin: 'git@github.com:stablyai/orca.git',
-      'pr-contributor-orca': FORK_HTTPS
+      'pr-contributor-quirky': FORK_HTTPS
     })
 
     const result = await prepareWorktreePushTargetWithExec(exec, REPO, forkTarget(), () => false)
@@ -135,13 +137,13 @@ describe('prepareWorktreePushTargetWithExec', () => {
     expect(callsMatching(exec, ['fetch'])).toEqual([
       [
         'fetch',
-        'pr-contributor-orca',
-        '+refs/heads/contributor/fix*:refs/remotes/pr-contributor-orca/contributor/fix*'
+        'pr-contributor-quirky',
+        '+refs/heads/contributor/fix*:refs/remotes/pr-contributor-quirky/contributor/fix*'
       ]
     ])
     // remoteCreated omitted because the predicate says no known worktree owns it.
     expect(result).toEqual({
-      remoteName: 'pr-contributor-orca',
+      remoteName: 'pr-contributor-quirky',
       branchName: 'contributor/fix',
       remoteUrl: FORK_SSH
     })
@@ -157,14 +159,14 @@ describe('prepareWorktreePushTargetWithExec', () => {
   })
 
   it('disambiguates with a numeric suffix when the preferred remote name is taken by a different URL', async () => {
-    const exec = makeRepoExec({ 'pr-contributor-orca': 'git@github.com:someone-else/orca.git' })
+    const exec = makeRepoExec({ 'pr-contributor-quirky': 'git@github.com:someone-else/quirky.git' })
 
     const result = await prepareWorktreePushTargetWithExec(exec, REPO, forkTarget(), () => false)
 
     expect(callsMatching(exec, ['remote', 'add'])).toEqual([
-      ['remote', 'add', '-t', 'contributor/fix', '--no-tags', 'pr-contributor-orca-2', FORK_SSH]
+      ['remote', 'add', '-t', 'contributor/fix', '--no-tags', 'pr-contributor-quirky-2', FORK_SSH]
     ])
-    expect(result.remoteName).toBe('pr-contributor-orca-2')
+    expect(result.remoteName).toBe('pr-contributor-quirky-2')
     expect(result.remoteCreated).toBe(true)
   })
 
@@ -203,32 +205,32 @@ describe('findRemoteForUrl', () => {
 
 describe('remoteAlreadyMatchesUrl', () => {
   it('matches an exact URL', async () => {
-    const exec = makeRepoExec({ 'pr-contributor-orca': FORK_SSH })
+    const exec = makeRepoExec({ 'pr-contributor-quirky': FORK_SSH })
     await expect(
-      remoteAlreadyMatchesUrl(exec, REPO, 'pr-contributor-orca', FORK_SSH)
+      remoteAlreadyMatchesUrl(exec, REPO, 'pr-contributor-quirky', FORK_SSH)
     ).resolves.toBe(true)
   })
 
   it('matches by GitHub owner/repo across URL protocols', async () => {
-    const exec = makeRepoExec({ 'pr-contributor-orca': FORK_HTTPS })
+    const exec = makeRepoExec({ 'pr-contributor-quirky': FORK_HTTPS })
     await expect(
-      remoteAlreadyMatchesUrl(exec, REPO, 'pr-contributor-orca', FORK_SSH)
+      remoteAlreadyMatchesUrl(exec, REPO, 'pr-contributor-quirky', FORK_SSH)
     ).resolves.toBe(true)
   })
 
   it('returns false when the named remote points elsewhere', async () => {
     const exec = makeRepoExec({
-      'pr-contributor-orca': 'git@github.com:someone-else/orca.git'
+      'pr-contributor-quirky': 'git@github.com:someone-else/quirky.git'
     })
     await expect(
-      remoteAlreadyMatchesUrl(exec, REPO, 'pr-contributor-orca', FORK_SSH)
+      remoteAlreadyMatchesUrl(exec, REPO, 'pr-contributor-quirky', FORK_SSH)
     ).resolves.toBe(false)
   })
 
   it('returns false when the named remote does not exist', async () => {
     const exec = makeRepoExec({ origin: 'git@github.com:stablyai/orca.git' })
     await expect(
-      remoteAlreadyMatchesUrl(exec, REPO, 'pr-contributor-orca', FORK_SSH)
+      remoteAlreadyMatchesUrl(exec, REPO, 'pr-contributor-quirky', FORK_SSH)
     ).resolves.toBe(false)
   })
 })
@@ -258,7 +260,7 @@ describe('configureCreatedWorktreePushTargetWithExec', () => {
     )
 
     expect(exec).toHaveBeenCalledWith(
-      ['branch', '--set-upstream-to', 'pr-contributor-orca/contributor/fix', 'local-branch'],
+      ['branch', '--set-upstream-to', 'pr-contributor-quirky/contributor/fix', 'local-branch'],
       '/wt/path'
     )
     expect(result).toBe(target)
@@ -273,7 +275,7 @@ describe('restoreUpstreamAfterMaterialize', () => {
     const result = await restoreUpstreamAfterMaterialize(exec, '/wt/path', target)
 
     expect(exec).toHaveBeenCalledWith(
-      ['branch', '--set-upstream-to', 'pr-contributor-orca/contributor/fix', 'local-branch'],
+      ['branch', '--set-upstream-to', 'pr-contributor-quirky/contributor/fix', 'local-branch'],
       '/wt/path'
     )
     expect(result).toBe(target)
@@ -319,18 +321,18 @@ describe('prepareWorktreePushTargetWithExec rollback', () => {
       prepareWorktreePushTargetWithExec(
         exec,
         REPO,
-        { remoteName: 'pr-contributor-orca', branchName: 'contributor/fix', remoteUrl: FORK_SSH },
+        { remoteName: 'pr-contributor-quirky', branchName: 'contributor/fix', remoteUrl: FORK_SSH },
         () => false
       )
     ).rejects.toThrow('network unreachable')
 
     expect(callsMatching(exec, ['remote', 'remove'])).toEqual([
-      ['remote', 'remove', 'pr-contributor-orca']
+      ['remote', 'remove', 'pr-contributor-quirky']
     ])
-    expect(remotes).not.toHaveProperty('pr-contributor-orca')
+    expect(remotes).not.toHaveProperty('pr-contributor-quirky')
   })
 
-  it('keeps a reused remote Orca did not add when the fetch fails', async () => {
+  it('keeps a reused remote Quirky did not add when the fetch fails', async () => {
     const remotes: Record<string, string> = {
       origin: 'git@github.com:stablyai/orca.git',
       existing: FORK_SSH
@@ -346,7 +348,7 @@ describe('prepareWorktreePushTargetWithExec rollback', () => {
       prepareWorktreePushTargetWithExec(
         exec,
         REPO,
-        { remoteName: 'pr-contributor-orca', branchName: 'contributor/fix', remoteUrl: FORK_SSH },
+        { remoteName: 'pr-contributor-quirky', branchName: 'contributor/fix', remoteUrl: FORK_SSH },
         () => false
       )
     ).rejects.toThrow('network unreachable')
@@ -360,7 +362,7 @@ describe('prepareWorktreePushTargetWithExec rollback', () => {
   it('keeps a reused remote a sibling worktree owns when the fetch fails', async () => {
     const remotes: Record<string, string> = {
       origin: 'git@github.com:stablyai/orca.git',
-      'pr-contributor-orca': FORK_HTTPS
+      'pr-contributor-quirky': FORK_HTTPS
     }
     const exec = vi.fn<GitRemoteExec>(async (args: string[]) => {
       if (args[0] === 'fetch') {
@@ -374,6 +376,6 @@ describe('prepareWorktreePushTargetWithExec rollback', () => {
     ).rejects.toThrow('network unreachable')
 
     expect(callsMatching(exec, ['remote', 'remove'])).toEqual([])
-    expect(remotes['pr-contributor-orca']).toBe(FORK_HTTPS)
+    expect(remotes['pr-contributor-quirky']).toBe(FORK_HTTPS)
   })
 })

@@ -182,7 +182,7 @@ describe('runner execFile timeout handling', () => {
     mockWedgedCliSpawn(child)
     const processKill = mockProcessGroupSignals()
     try {
-      const promise = glabExecFileAsync(['api', 'projects/stablyai%2Forca/issues'], {
+      const promise = glabExecFileAsync(['api', 'projects/stablyai%2Fquirky/issues'], {
         cwd: '/repo'
       })
       const rejection = expect(promise).rejects.toThrow('glab timed out.')
@@ -283,12 +283,12 @@ describe('runner execFile timeout handling', () => {
 
     await ghExecFileAsync(['api', 'user'], {
       cwd: '/repo',
-      env: { ...process.env, GH_PROMPT_DISABLED: '0', ORCA_TEST_ENV: 'kept' },
+      env: { ...process.env, GH_PROMPT_DISABLED: '0', QUIRKY_TEST_ENV: 'kept' },
       timeout: 1234
     })
 
     expect(capturedEnv?.GH_PROMPT_DISABLED).toBe('0')
-    expect(capturedEnv?.ORCA_TEST_ENV).toBe('kept')
+    expect(capturedEnv?.QUIRKY_TEST_ENV).toBe('kept')
   })
 
   // Issue #5308: git read-path calls must be forced non-interactive so a

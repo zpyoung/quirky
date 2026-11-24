@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { getEventListeners } = require('node:events')
 
-const fixtureKey = '__orcaWorkingDirectoryWaitFixture'
+const fixtureKey = '__quirkyWorkingDirectoryWaitFixture'
 const validDirectory = { isDirectory: () => true }
 async function collect() {
   for (let round = 0; round < 6; round++) {

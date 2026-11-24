@@ -7,9 +7,9 @@ import { TUI_AGENT_CONFIG } from './tui-agent-config'
  * The strongest lane tui-idle-evidence.ts trusts to say an agent's TUI is at rest:
  * - `hook-done`: its hook server row reports the lead turn ended, trusted by its rule file's
  *   `profile.hooks` (DSH, whose title carries no rest status).
- * - `synthetic-title`: its hooks drive an Orca-written `<Agent> ready` title.
+ * - `synthetic-title`: its hooks drive an Quirky-written `<Agent> ready` title.
  * - `title`: its running process names itself in a title the status classifier reads.
- * - `ready-body`: a ready screen Orca recognises (Muse; Qoder, whose idle title can show while
+ * - `ready-body`: a ready screen Quirky recognises (Muse; Qoder, whose idle title can show while
  *   its trust menu still owns input).
  * - `none`: no stronger lane, so a quiet foreground process is its only one. Hooks or a first-party
  *   `done` (amp, kimi, command-code, freebuff) do not count: tui-idle takes their `working` as a

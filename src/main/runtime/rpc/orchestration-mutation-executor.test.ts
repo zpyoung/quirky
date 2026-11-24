@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import { OrchestrationDb } from '../orchestration/db'
 import type { RpcRequest } from './core'
 import { OrchestrationMutationExecutor } from './orchestration-mutation-executor'
@@ -10,7 +10,7 @@ const promptParams = {
   text: 'retry safely',
   enter: true,
   agentPrompt: true,
-  client: { id: 'orca-cli', type: 'desktop' }
+  client: { id: 'quirky-cli', type: 'desktop' }
 } as const
 
 function promptRequest(requestId: string): RpcRequest {
@@ -35,7 +35,7 @@ function workerStartRequest(method: string, requestId: string, params: unknown):
 
 function createHarness() {
   const db = new OrchestrationDb(':memory:')
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   runtime.setOrchestrationDb(db)
   const binding = vi.spyOn(runtime, 'getTerminalPromptRequestBinding').mockReturnValue({
     ptyId: 'pty-prompt',

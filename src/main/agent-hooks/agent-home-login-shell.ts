@@ -1,6 +1,6 @@
 import { basename } from 'node:path'
 import { userInfo } from 'node:os'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const AGENT_HOME_MAX_LENGTH = 4096
 const AGENT_HOME_PROBE_TIMEOUT_MS = 8_000
@@ -84,7 +84,7 @@ export async function resolveLoginShellKiroHome(
 }
 
 /**
- * A process not started from a login shell (orcad over SSH) misses profile-only agent homes, so
+ * A process not started from a login shell (quirkyd over SSH) misses profile-only agent homes, so
  * its installers would write where the agents' login-shell panes never look. Never throws.
  */
 export async function adoptLoginShellAgentHomes(

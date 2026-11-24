@@ -28,7 +28,7 @@ vi.mock('./repo-worktree-admin-fingerprint', () => ({
   readRepoWorktreeAdminFingerprint: vi.fn(async () => null)
 }))
 
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 const TARGET_ID = 'remote-1'
@@ -111,10 +111,10 @@ type RuntimeInternals = {
 }
 
 function makeRuntime(repoOverrides: Record<string, unknown>): {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   list: () => Promise<{ id: string; path: string; hostId?: string }[]>
 } {
-  const runtime = new OrcaRuntimeService(makeStore(repoOverrides) as never)
+  const runtime = new QuirkyRuntimeService(makeStore(repoOverrides) as never)
   return {
     runtime,
     list: () => (runtime as unknown as RuntimeInternals).listResolvedWorktrees()

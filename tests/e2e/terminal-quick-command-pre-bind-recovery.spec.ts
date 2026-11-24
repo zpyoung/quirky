@@ -3,7 +3,7 @@ import { existsSync, readFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { stripAnsiEscapeSequences } from '../../src/shared/ansi-escape-sequences'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   runNodeScriptInTerminal,
   stageNodeScriptForTerminal
@@ -44,34 +44,37 @@ test.describe('Quick Command startup recovery', () => {
   registerTerminalPaneMountReadiness()
 
   test('visible Quick Command survives a forced pre-bind recovery on one fresh PTY', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const siblingBefore = await waitForPaneIdentitySnapshot(orcaPage, 1)
+    const siblingBefore = await waitForPaneIdentitySnapshot(quirkyPage, 1)
     const siblingPtyId = siblingBefore.panes[0]?.ptyId
     if (!siblingPtyId) {
       throw new Error('Sibling terminal has no live PTY')
     }
 
-    const siblingMarker = `ORCA_QUICK_COMMAND_SIBLING_${randomUUID()}`
+    const siblingMarker = `QUIRKY_QUICK_COMMAND_SIBLING_${randomUUID()}`
     const siblingProbe = await runNodeScriptInTerminal(
-      orcaPage,
+      quirkyPage,
       siblingPtyId,
       `process.stdout.write(${JSON.stringify(`${siblingMarker}\n`)})`
     )
-    await waitForTerminalOutput(orcaPage, siblingMarker)
+    await waitForTerminalOutput(quirkyPage, siblingMarker)
     siblingProbe.cleanup()
 
-    const marker = `ORCA_QUICK_COMMAND_RECOVERY_${randomUUID()}`
+    const marker = `QUIRKY_QUICK_COMMAND_RECOVERY_${randomUUID()}`
     const label = `Recovery sentinel ${randomUUID()}`
-    const identityPath = path.join(os.tmpdir(), `orca-quick-command-identity-${randomUUID()}.json`)
+    const identityPath = path.join(
+      os.tmpdir(),
+      `quirky-quick-command-identity-${randomUUID()}.json`
+    )
     const staged = stageNodeScriptForTerminal(
       `
 const { writeFileSync } = require('node:fs')
 const identity = {
   marker: ${JSON.stringify(marker)},
-  paneKey: process.env.ORCA_PANE_KEY || '',
+  paneKey: process.env.QUIRKY_PANE_KEY || '',
   pid: process.pid,
-  tabId: process.env.ORCA_TAB_ID || ''
+  tabId: process.env.QUIRKY_TAB_ID || ''
 }
 writeFileSync(${JSON.stringify(identityPath)}, JSON.stringify(identity), { flag: 'wx' })
 process.stdout.write(${JSON.stringify(`${marker}\n`)})
@@ -79,7 +82,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
     )
 
     try {
-      await orcaPage.evaluate(
+      await quirkyPage.evaluate(
         async ({ command, label }) => {
           const store = window.__store
           if (!store) {
@@ -106,12 +109,12 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
         { command: staged.command, label }
       )
 
-      const quickCommandButton = orcaPage.getByRole('button', {
+      const quickCommandButton = quirkyPage.getByRole('button', {
         name: `Run quick command: ${label}`
       })
       await expect(quickCommandButton).toBeVisible()
       await quickCommandButton.click()
-      await orcaPage.evaluate(async () => {
+      await quirkyPage.evaluate(async () => {
         const spawnBarrier = window.__terminalPtyPreSpawnE2EBarrier
         if (!spawnBarrier) {
           throw new Error('Terminal PTY pre-spawn E2E barrier unavailable')
@@ -119,7 +122,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
         await spawnBarrier.waitUntilBlocked()
       })
 
-      const blocked = await orcaPage.evaluate(() => {
+      const blocked = await quirkyPage.evaluate(() => {
         const store = window.__store
         if (!store) {
           throw new Error('Renderer store unavailable')
@@ -141,7 +144,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
       expect(blocked.pending).toBe(staged.command)
       expect(blocked.status).toBe('blocked')
 
-      await orcaPage.evaluate((tabId) => {
+      await quirkyPage.evaluate((tabId) => {
         const store = window.__store
         if (!store) {
           throw new Error('Renderer store unavailable')
@@ -162,7 +165,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
 
       // No request argument: an external lifecycle remount, which skips the
       // recovery ledger entirely and so reports generation 0.
-      const remountResult = await orcaPage.evaluate((tabId) => {
+      const remountResult = await quirkyPage.evaluate((tabId) => {
         const state = window.__store?.getState()
         if (!state) {
           throw new Error('Renderer store unavailable')
@@ -177,7 +180,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
       await expect
         .poll(
           () =>
-            orcaPage.evaluate(
+            quirkyPage.evaluate(
               ({ expectedGeneration, tabId }) => {
                 const state = window.__store?.getState()
                 const manager = window.__paneManagers?.get(tabId)
@@ -202,7 +205,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
           pending: staged.command,
           expectedGeneration: blocked.generation + 1
         })
-      await orcaPage.evaluate(() => window.__terminalPtyPreSpawnE2EBarrier?.release())
+      await quirkyPage.evaluate(() => window.__terminalPtyPreSpawnE2EBarrier?.release())
 
       let targetPtyId = ''
       let targetLeafId = ''
@@ -213,7 +216,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
         ptyReady: boolean
         expectedGeneration: number
       }> =>
-        orcaPage.evaluate(
+        quirkyPage.evaluate(
           ({ expectedGeneration, tabId }) => {
             const state = window.__store?.getState()
             const manager = window.__paneManagers?.get(tabId)
@@ -245,7 +248,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
             expectedGeneration: blocked.generation + 1
           })
       } catch (error) {
-        const diagnostics = await orcaPage.evaluate(() => ({
+        const diagnostics = await quirkyPage.evaluate(() => ({
           ptyConnect: (window as Window & { __ptyConnectDiag?: string[] }).__ptyConnectDiag ?? [],
           barrier: window.__terminalPtyPreSpawnE2EBarrier?.status() ?? 'missing'
         }))
@@ -254,7 +257,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
         )
       }
 
-      const successor = await orcaPage.evaluate((tabId) => {
+      const successor = await quirkyPage.evaluate((tabId) => {
         const pane = window.__paneManagers?.get(tabId)?.getPanes()[0]
         return {
           leafId: pane?.leafId ?? '',
@@ -267,7 +270,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
       expect(targetLeafId).not.toBe('')
       expect(targetPtyId).not.toBe(siblingPtyId)
 
-      const queueObservations = await orcaPage.evaluate(() => {
+      const queueObservations = await quirkyPage.evaluate(() => {
         const target = window as QueueObservationWindow
         target.__stopQuickCommandQueueObservations?.()
         target.__stopQuickCommandQueueObservations = undefined
@@ -279,14 +282,14 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
       await expect
         .poll(
           () =>
-            orcaPage.evaluate((tabId) => {
+            quirkyPage.evaluate((tabId) => {
               const pane = window.__paneManagers?.get(tabId)?.getPanes()[0]
               return pane?.serializeAddon.serialize() ?? ''
             }, blocked.tabId),
           { message: 'Quick Command marker never reached the visible xterm' }
         )
         .toContain(marker)
-      const targetContent = await orcaPage.evaluate((tabId) => {
+      const targetContent = await quirkyPage.evaluate((tabId) => {
         const pane = window.__paneManagers?.get(tabId)?.getPanes()[0]
         return pane?.serializeAddon.serialize() ?? ''
       }, blocked.tabId)
@@ -301,7 +304,7 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
       })
       expect(identity.pid).toBeGreaterThan(0)
 
-      const ptyIdentity = await orcaPage.evaluate(
+      const ptyIdentity = await quirkyPage.evaluate(
         async ({ siblingPtyId, siblingTabId, tabId, targetPtyId }) => {
           const state = window.__store?.getState()
           const layout = state?.terminalLayoutsByTabId[tabId]
@@ -326,22 +329,24 @@ process.stdout.write(${JSON.stringify(`${marker}\n`)})
       expect(ptyIdentity.siblingLive).toBe(true)
       expect(ptyIdentity.siblingStorePtyIds).toContain(siblingPtyId)
 
-      const siblingAfterMarker = `ORCA_QUICK_COMMAND_SIBLING_AFTER_${randomUUID()}`
-      await orcaPage.evaluate(
+      const siblingAfterMarker = `QUIRKY_QUICK_COMMAND_SIBLING_AFTER_${randomUUID()}`
+      await quirkyPage.evaluate(
         (tabId) => window.__store?.getState().setActiveTab(tabId),
         siblingBefore.tabId
       )
       await expect
-        .poll(() => orcaPage.evaluate(() => window.__store?.getState().activeTabId))
+        .poll(() => quirkyPage.evaluate(() => window.__store?.getState().activeTabId))
         .toBe(siblingBefore.tabId)
-      await focusActiveTerminalInput(orcaPage)
-      await orcaPage.keyboard.type(`echo ${siblingAfterMarker}`)
-      await orcaPage.keyboard.press('Enter')
+      await focusActiveTerminalInput(quirkyPage)
+      await quirkyPage.keyboard.type(`echo ${siblingAfterMarker}`)
+      await quirkyPage.keyboard.press('Enter')
       await expect
-        .poll(async () => (await getTerminalContent(orcaPage)).split(siblingAfterMarker).length - 1)
+        .poll(
+          async () => (await getTerminalContent(quirkyPage)).split(siblingAfterMarker).length - 1
+        )
         .toBeGreaterThanOrEqual(1)
     } finally {
-      await orcaPage
+      await quirkyPage
         .evaluate(() => window.__terminalPtyPreSpawnE2EBarrier?.release())
         .catch(() => {})
       staged.cleanup()

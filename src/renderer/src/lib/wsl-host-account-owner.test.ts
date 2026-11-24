@@ -4,14 +4,14 @@ import { resolveAccountOwner, wslHostDistroForTarget } from './wsl-host-account-
 const ENVIRONMENTS = [
   {
     id: 'wsl:Ubuntu',
-    orcadDeployment: {
+    quirkydDeployment: {
       kind: 'wsl' as const,
       distro: 'Ubuntu',
       localPort: 41000,
       remotePort: 41001
     }
   },
-  { id: 'server-1', orcadDeployment: undefined }
+  { id: 'server-1', quirkydDeployment: undefined }
 ]
 
 describe('resolveAccountOwner', () => {

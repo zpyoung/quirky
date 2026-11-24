@@ -46,7 +46,7 @@ describe('a Claude chat launched with its saved options', () => {
     })
   })
 
-  // A resolved id, a model newer than any listing Orca holds, a retired one: the CLI's own answer
+  // A resolved id, a model newer than any listing Quirky holds, a retired one: the CLI's own answer
   // decides, and a turn's model-not-found error drops it then.
   it.each(['claude-sonnet-5', 'claude-next-9', 'claude-retired-1'])(
     'passes the saved model %s as it was picked',

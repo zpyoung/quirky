@@ -8,7 +8,7 @@ import {
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { Repo } from '../../shared/repo-types'
 import { getFolderWorkspaceHostId } from '../../shared/folder-workspace-execution-host'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { getRepoIdFromWorktreeId, splitWorktreeId } from '../../shared/worktree/id'
 import { workspaceSessionPartitionHostId } from '../../shared/workspace-session-partition-owner'
@@ -50,7 +50,7 @@ export class RuntimeWorkspaceSessionController {
         return null
       }
       // Switch point: a window-owned build keeps today's routing, which throws on a mixed-host folder.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         return layoutOwnerFolderHostId(workspace, store)
       }
       // An explicit host is authoritative for folder workspaces. The connection
@@ -83,7 +83,7 @@ export class RuntimeWorkspaceSessionController {
     worktreeId: string,
     repos?: readonly Repo[]
   ): ExecutionHostId | null {
-    if (!ORCA_LAYOUT_OWNER_IS_MAIN || !splitWorktreeId(worktreeId)) {
+    if (!QUIRKY_LAYOUT_OWNER_IS_MAIN || !splitWorktreeId(worktreeId)) {
       return null
     }
     // Why: routing is hot; only a registered repo can have a twin, and getRepo skips hydrating every row.
@@ -220,7 +220,7 @@ export class RuntimeWorkspaceSessionController {
     )
     const folderHostIdByWorkspaceId = new Map(
       (store?.getFolderWorkspaces?.() ?? []).map((workspace) => {
-        if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
           return [workspace.id, layoutOwnerFolderHostId(workspace, store)] as const
         }
         const explicitHostId =

@@ -5,7 +5,7 @@ import { expect, it } from 'vitest'
 import { buildRecoveryCrashProcess } from './profile-state-recovery-crash-process'
 
 it('bundles one process-host source graph into the isolated recovery fixture', () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-recovery-bundle-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-recovery-bundle-'))
   try {
     const { metafile } = buildRecoveryCrashProcess(root)
     const packageInputs = Object.keys(metafile.inputs).filter((file) =>
@@ -17,7 +17,7 @@ it('bundles one process-host source graph into the isolated recovery fixture', (
     )
     const packageExternals = Object.values(metafile.outputs)
       .flatMap((output) => output.imports)
-      .filter((entry) => entry.external && entry.path.startsWith('@orca/process-host'))
+      .filter((entry) => entry.external && entry.path.startsWith('@quirky/process-host'))
     expect(packageExternals).toEqual([])
   } finally {
     rmSync(root, { recursive: true, force: true })

@@ -20,8 +20,8 @@ function installReviewRead() {
 }
 
 const worktreeId = 'repo1::/path/wt1'
-const url = 'https://github.com/acme/orca/pull/42'
-const link = { url, slug: { owner: 'acme', repo: 'orca' }, number: 42 }
+const url = 'https://github.com/acme/quirky/pull/42'
+const link = { url, slug: { owner: 'acme', repo: 'quirky' }, number: 42 }
 const leaf = '11111111-1111-4111-8111-111111111111'
 const flush = async () => {
   for (let i = 0; i < 20; i++) {
@@ -42,7 +42,7 @@ function setup() {
   })
   store.setState({
     repos: [
-      { id: 'repo1', path: '/repos/orca', displayName: 'orca', badgeColor: '#000', addedAt: 0 }
+      { id: 'repo1', path: '/repos/quirky', displayName: 'quirky', badgeColor: '#000', addedAt: 0 }
     ],
     worktreesByRepo: {
       repo1: [
@@ -97,7 +97,7 @@ describe('terminal reference evidence', () => {
       {
         ...link,
         number: 43,
-        url: 'https://github.com/acme/orca/pull/43'
+        url: 'https://github.com/acme/quirky/pull/43'
       },
       context('tab-2')
     )
@@ -114,7 +114,7 @@ describe('terminal reference evidence', () => {
     first.resolve(review)
     await flush()
     expect(store.getState().worktreesByRepo.repo1[0].linkedPR).toBe(42)
-    second.resolve({ ...review, number: 43, url: 'https://github.com/acme/orca/pull/43' })
+    second.resolve({ ...review, number: 43, url: 'https://github.com/acme/quirky/pull/43' })
     await flush()
     const current = store.getState().worktreesByRepo.repo1[0]
     expect(current.linkedPR).toBe(42)
@@ -135,7 +135,7 @@ describe('terminal reference evidence', () => {
       number: 7,
       title: 'Primary',
       state: 'open',
-      url: 'https://github.com/acme/orca/pull/7',
+      url: 'https://github.com/acme/quirky/pull/7',
       status: 'failure',
       mergeable: 'MERGEABLE',
       updatedAt: '2026-01-01'

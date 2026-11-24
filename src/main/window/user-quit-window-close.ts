@@ -1,7 +1,7 @@
 import type { BrowserWindow } from 'electron'
 
 /**
- * Marks a window close that a user Quit asked for on a host that stays running (`orca serve`).
+ * Marks a window close that a user Quit asked for on a host that stays running (`quirky serve`).
  * Why separate from isQuitting: the process is not quitting, but the close still needs the quit
  * close semantics — the frozen-renderer ack deadline and no minimize-to-tray.
  */

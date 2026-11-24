@@ -13,7 +13,7 @@ describe('resolveKiroHomeDir', () => {
     expect(resolveKiroHomeDir({ KIRO_HOME: ` ${custom} ` })).toBe(custom)
   })
 
-  it('ignores a relative KIRO_HOME, which would resolve against Orca’s cwd', () => {
+  it('ignores a relative KIRO_HOME, which would resolve against Quirky’s cwd', () => {
     expect(resolveKiroHomeDir({ KIRO_HOME: 'relative/kiro' })).toBe(join(homedir(), '.kiro'))
   })
 })

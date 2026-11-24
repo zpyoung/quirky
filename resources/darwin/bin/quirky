@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+function app_realpath() {
+	SOURCE=$1
+	while [ -h "$SOURCE" ]; do
+		DIR=$(dirname "$SOURCE")
+		SOURCE=$(readlink "$SOURCE")
+		[[ $SOURCE != /* ]] && SOURCE=$DIR/$SOURCE
+	done
+	SOURCE_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+	echo "${SOURCE_DIR%%${SOURCE_DIR#*.app}}"
+}
+
+APP_PATH="$(app_realpath "${BASH_SOURCE[0]}")"
+if [ -z "$APP_PATH" ]; then
+	echo "Unable to determine Quirky.app path from symlink: ${BASH_SOURCE[0]}"
+	exit 1
+fi
+
+CONTENTS="$APP_PATH/Contents"
+# Why: this fork renames productName so it installs alongside upstream, so the bundle
+# executable is not always "Quirky" — read the real name instead of hardcoding it.
+EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$CONTENTS/Info.plist" 2>/dev/null || true)"
+ELECTRON="$CONTENTS/MacOS/$EXECUTABLE"
+# Why: PlistBuddy reports a missing plist on stdout and still exits 0, and it is absent
+# entirely off macOS, so fall back to the bundle's sole MacOS entry.
+if [ -z "$EXECUTABLE" ] || [ ! -x "$ELECTRON" ]; then
+	ELECTRON=""
+	for candidate in "$CONTENTS/MacOS"/*; do
+		if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+			ELECTRON="$candidate"
+			break
+		fi
+	done
+fi
+
+if [ -z "$ELECTRON" ]; then
+	echo "Unable to locate the Quirky executable in: $CONTENTS/MacOS"
+	exit 1
+fi
+# Why: Quirky packages the CLI entrypoint outside app.asar so the public shell
+# command can execute it directly with ELECTRON_RUN_AS_NODE, mirroring VS Code's
+# launcher model instead of requiring a separate npm-distributed binary.
+CLI="$CONTENTS/Resources/app.asar.unpacked/out/cli/index.js"
+
+export QUIRKY_NODE_OPTIONS="${NODE_OPTIONS-}"
+export QUIRKY_NODE_REPL_EXTERNAL_MODULE="${NODE_REPL_EXTERNAL_MODULE-}"
+unset NODE_OPTIONS
+unset NODE_REPL_EXTERNAL_MODULE
+
+ELECTRON_RUN_AS_NODE=1 exec "$ELECTRON" "$CLI" "$@"

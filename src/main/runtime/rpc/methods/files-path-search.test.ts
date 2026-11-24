@@ -1,6 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { RpcRequest } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { FILE_METHODS } from './files'
@@ -17,7 +17,7 @@ describe('file path search RPC method', () => {
         totalCount: 1,
         truncated: false
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
     const request: RpcRequest = {
       id: 'req-1',
@@ -47,7 +47,7 @@ describe('file path search RPC method', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       searchQuickOpenFilePaths
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
     const controller = new AbortController()
 
@@ -93,7 +93,7 @@ describe('file path search RPC method', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       searchQuickOpenFilePaths
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
     const id = 'req-bounded-quick-open'
     const replies: string[] = []

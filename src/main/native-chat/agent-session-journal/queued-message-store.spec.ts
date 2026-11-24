@@ -113,7 +113,7 @@ export function registerQueuedMessageStoreTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-queued-message-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-queued-message-'))
     clock = 1_000
   })
 
@@ -145,7 +145,7 @@ export function registerQueuedMessageStoreTests(): void {
     it('opens a database an older build shaped (no drafts table) and creates the table', async () => {
       const first = await open()
       await first.appendItem(
-        { provider: 'orca', clientMessageId: 'seed' },
+        { provider: 'quirky', clientMessageId: 'seed' },
         { kind: 'status', text: 'seed' },
         { fence: 0, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
       )
@@ -187,7 +187,7 @@ export function registerQueuedMessageStoreTests(): void {
             party: {
               address: 'structworker_1',
               terminalHandle: 'structworker_1',
-              orcaSessionId: null
+              quirkySessionId: null
             },
             name: 'Reviewer'
           }

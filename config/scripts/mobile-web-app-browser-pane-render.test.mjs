@@ -149,7 +149,7 @@ beforeAll(async () => {
   const served = await createBundleServer({ outDir, cspHeader })
   server = served.server
   origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({
     headless: true,
     ...(executablePath ? { executablePath } : {})
@@ -199,9 +199,9 @@ async function openPane({ grants }) {
   })
   // The page reports a CSP violation as a document event; the header is the shell's own.
   await page.addInitScript(() => {
-    globalThis.__orcaRenderCheckCsp = []
+    globalThis.__quirkyRenderCheckCsp = []
     document.addEventListener('securitypolicyviolation', (event) => {
-      globalThis.__orcaRenderCheckCsp.push({
+      globalThis.__quirkyRenderCheckCsp.push({
         directive: event.violatedDirective,
         blockedUri: event.blockedURI
       })
@@ -214,7 +214,7 @@ async function openPane({ grants }) {
     context,
     consoleErrors,
     foreignRequests,
-    csp: () => page.evaluate(() => globalThis.__orcaRenderCheckCsp)
+    csp: () => page.evaluate(() => globalThis.__quirkyRenderCheckCsp)
   }
 }
 
@@ -247,11 +247,11 @@ async function encodeNoiseJpeg(page, { width, height, seed }) {
 function emitFrame(page, { b64, frameSeq, width, height, pageScaleFactor = 1 }) {
   return page.evaluate(
     ({ b64, frameSeq, width, height, pageScaleFactor, source }) => {
-      const subscription = globalThis.__orcaRenderCheckSubscribes.at(-1)
+      const subscription = globalThis.__quirkyRenderCheckSubscribes.at(-1)
       if (!subscription) {
         return 'no-subscription'
       }
-      return globalThis.__orcaRenderCheckEmitBinary(subscription.id, {
+      return globalThis.__quirkyRenderCheckEmitBinary(subscription.id, {
         b64,
         format: 'jpeg',
         frameSeq,
@@ -349,7 +349,7 @@ describePane('the browser pane in a page', () => {
   it('files no CSP violation at all, through load and first paint', async () => {
     const view = await openPane({ grants: [faultGrant, BINARY_GRANT] })
     try {
-      await view.page.waitForFunction(() => globalThis.__orcaRenderCheckSubscribes.length > 0)
+      await view.page.waitForFunction(() => globalThis.__quirkyRenderCheckSubscribes.length > 0)
       const b64 = await encodeNoiseJpeg(view.page, { ...FRAME, seed: 33 })
       await emitFrame(view.page, { b64, frameSeq: 1, ...FRAME })
       await waitForPaint(view.page, 1)
@@ -364,8 +364,8 @@ describePane('the browser pane in a page', () => {
   it('subscribes over the binary lane and paints the frame it is handed', async () => {
     const view = await openPane({ grants: [faultGrant, BINARY_GRANT] })
     try {
-      await view.page.waitForFunction(() => globalThis.__orcaRenderCheckSubscribes.length > 0)
-      const subscribes = await view.page.evaluate(() => globalThis.__orcaRenderCheckSubscribes)
+      await view.page.waitForFunction(() => globalThis.__quirkyRenderCheckSubscribes.length > 0)
+      const subscribes = await view.page.evaluate(() => globalThis.__quirkyRenderCheckSubscribes)
       expect(subscribes).toHaveLength(1)
       expect(subscribes[0]).toMatchObject({ method: SCREENCAST, wantsBinary: true })
 
@@ -391,7 +391,7 @@ describePane('the browser pane in a page', () => {
   it('flips the double buffer on the second frame', async () => {
     const view = await openPane({ grants: [faultGrant, BINARY_GRANT] })
     try {
-      await view.page.waitForFunction(() => globalThis.__orcaRenderCheckSubscribes.length > 0)
+      await view.page.waitForFunction(() => globalThis.__quirkyRenderCheckSubscribes.length > 0)
       const first = await encodeNoiseJpeg(view.page, { ...FRAME, seed: 7 })
       await emitFrame(view.page, { b64: first, frameSeq: 1, ...FRAME })
       await waitForPaint(view.page, 1)
@@ -417,7 +417,7 @@ describePane('the browser pane in a page', () => {
   it('drops an over-cap frame, keeps the stream, and paints the next one', async () => {
     const view = await openPane({ grants: [faultGrant, BINARY_GRANT] })
     try {
-      await view.page.waitForFunction(() => globalThis.__orcaRenderCheckSubscribes.length > 0)
+      await view.page.waitForFunction(() => globalThis.__quirkyRenderCheckSubscribes.length > 0)
       const small = await encodeNoiseJpeg(view.page, { ...FRAME, seed: 3 })
       await emitFrame(view.page, { b64: small, frameSeq: 1, ...FRAME })
       await waitForPaint(view.page, 1)
@@ -436,8 +436,12 @@ describePane('the browser pane in a page', () => {
       expect(await emitFrame(view.page, { b64: next, frameSeq: 3, ...FRAME })).toBe('posted')
       await waitForLayerFlip(view.page, staleIndex)
 
-      expect(await view.page.evaluate(() => globalThis.__orcaRenderCheckDroppedFrames)).toEqual([2])
-      expect(await view.page.evaluate(() => globalThis.__orcaRenderCheckSubscribes.length)).toBe(1)
+      expect(await view.page.evaluate(() => globalThis.__quirkyRenderCheckDroppedFrames)).toEqual([
+        2
+      ])
+      expect(await view.page.evaluate(() => globalThis.__quirkyRenderCheckSubscribes.length)).toBe(
+        1
+      )
       expect(await view.csp()).toEqual([])
       expect(view.consoleErrors).toEqual([])
     } finally {
@@ -449,9 +453,9 @@ describePane('the browser pane in a page', () => {
     const view = await openPane({ grants: [faultGrant] })
     try {
       await view.page.waitForFunction(() =>
-        document.body.innerText.includes('Update the Orca app to stream browser tabs here.')
+        document.body.innerText.includes('Update the Quirky app to stream browser tabs here.')
       )
-      expect(await view.page.evaluate(() => globalThis.__orcaRenderCheckSubscribes)).toEqual([])
+      expect(await view.page.evaluate(() => globalThis.__quirkyRenderCheckSubscribes)).toEqual([])
       expect(view.consoleErrors).toEqual([])
       expect(await view.csp()).toEqual([])
       expect(view.foreignRequests).toEqual([])
@@ -467,7 +471,7 @@ describePane('the browser pane in a page', () => {
     // come from the window.
     const view = await openPane({ grants: [faultGrant, BINARY_GRANT] })
     try {
-      await view.page.waitForFunction(() => globalThis.__orcaRenderCheckSubscribes.length > 0)
+      await view.page.waitForFunction(() => globalThis.__quirkyRenderCheckSubscribes.length > 0)
       const b64 = await encodeNoiseJpeg(view.page, { ...FRAME, seed: 55 })
       const cumulative = b64.length * 30
       expect(cumulative).toBeGreaterThan(windowCaps.maxUnackedBytes)
@@ -478,9 +482,11 @@ describePane('the browser pane in a page', () => {
       }
 
       expect(new Set(outcomes)).toEqual(new Set(['posted']))
-      expect(await view.page.evaluate(() => globalThis.__orcaRenderCheckDroppedFrames)).toEqual([])
+      expect(await view.page.evaluate(() => globalThis.__quirkyRenderCheckDroppedFrames)).toEqual(
+        []
+      )
       // And the acks are real rather than the window merely being generous.
-      const acks = await view.page.evaluate(() => globalThis.__orcaRenderCheckAcks)
+      const acks = await view.page.evaluate(() => globalThis.__quirkyRenderCheckAcks)
       expect(acks.length).toBeGreaterThan(0)
       expect(await view.csp()).toEqual([])
       expect(view.consoleErrors).toEqual([])
@@ -496,15 +502,15 @@ describePane('the browser pane in a page', () => {
     // the real `BridgeHostSubscriptions` would have refused.
     const view = await openPane({ grants: [faultGrant, BINARY_GRANT] })
     try {
-      await view.page.waitForFunction(() => globalThis.__orcaRenderCheckSubscribes.length > 0)
+      await view.page.waitForFunction(() => globalThis.__quirkyRenderCheckSubscribes.length > 0)
       const ledger = await view.page.evaluate((protocolVersion) => {
-        const id = globalThis.__orcaRenderCheckSubscribes[0].id
-        globalThis.__orcaRenderCheckEmitEvent(id, { type: 'probe', payload: 'x'.repeat(4096) })
-        const charged = globalThis.__orcaRenderCheckWindow(id)
-        globalThis.orcaBridge.postMessage(
+        const id = globalThis.__quirkyRenderCheckSubscribes[0].id
+        globalThis.__quirkyRenderCheckEmitEvent(id, { type: 'probe', payload: 'x'.repeat(4096) })
+        const charged = globalThis.__quirkyRenderCheckWindow(id)
+        globalThis.quirkyBridge.postMessage(
           JSON.stringify({ v: protocolVersion, type: 'ack', id, seq: charged.frames })
         )
-        return { charged, settled: globalThis.__orcaRenderCheckWindow(id) }
+        return { charged, settled: globalThis.__quirkyRenderCheckWindow(id) }
       }, bridgeVersion)
 
       // Charged on the way out, which is the precondition: a zero here would make the line below
@@ -522,7 +528,7 @@ describePane('the browser pane in a page', () => {
   it('issues one mouseClick with the geometry the native pane would send', async () => {
     const view = await openPane({ grants: [faultGrant, BINARY_GRANT] })
     try {
-      await view.page.waitForFunction(() => globalThis.__orcaRenderCheckSubscribes.length > 0)
+      await view.page.waitForFunction(() => globalThis.__quirkyRenderCheckSubscribes.length > 0)
       const b64 = await encodeNoiseJpeg(view.page, { ...FRAME, seed: 21 })
       await emitFrame(view.page, { b64, frameSeq: 1, ...FRAME })
       await waitForPaint(view.page, 1)
@@ -537,9 +543,9 @@ describePane('the browser pane in a page', () => {
         return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
       })
       await view.page.mouse.click(box.x, box.y)
-      await view.page.waitForFunction(() => globalThis.__orcaRenderCheckRequests.length > 0)
+      await view.page.waitForFunction(() => globalThis.__quirkyRenderCheckRequests.length > 0)
 
-      const requests = await view.page.evaluate(() => globalThis.__orcaRenderCheckRequests)
+      const requests = await view.page.evaluate(() => globalThis.__quirkyRenderCheckRequests)
       // One, not four: the double replies, so the pane never takes its move/down/up fallback. With
       // the refusal the double gives every other method, this is four requests instead.
       expect(requests).toHaveLength(1)
@@ -565,7 +571,7 @@ describePane('the browser pane in a page', () => {
   it('maps a tap through the page scale the frame was painted at', async () => {
     const view = await openPane({ grants: [faultGrant, BINARY_GRANT] })
     try {
-      await view.page.waitForFunction(() => globalThis.__orcaRenderCheckSubscribes.length > 0)
+      await view.page.waitForFunction(() => globalThis.__quirkyRenderCheckSubscribes.length > 0)
       const b64 = await encodeNoiseJpeg(view.page, { ...FRAME, seed: 22 })
       await emitFrame(view.page, {
         b64,
@@ -583,9 +589,9 @@ describePane('the browser pane in a page', () => {
         return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
       })
       await view.page.mouse.click(box.x, box.y)
-      await view.page.waitForFunction(() => globalThis.__orcaRenderCheckRequests.length > 0)
+      await view.page.waitForFunction(() => globalThis.__quirkyRenderCheckRequests.length > 0)
 
-      const requests = await view.page.evaluate(() => globalThis.__orcaRenderCheckRequests)
+      const requests = await view.page.evaluate(() => globalThis.__quirkyRenderCheckRequests)
       expect(requests[0].method).toBe('browser.mouseClick')
       // The centre of the frame is the centre of the layout Chromium scaled into it: 980 CSS px
       // wide, and 712 device px tall over the same scale. The tolerance is three CSS px because

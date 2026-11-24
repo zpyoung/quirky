@@ -114,7 +114,7 @@ describe('minidump fault context', () => {
         { start: rip - 1n, bytes: Buffer.concat([Buffer.from([0x80]), CODE, Buffer.from([0x4c])]) }
       ],
       platformId: VER_PLATFORM_WIN32_NT,
-      modules: [{ base: rip - 0x23d3f88n, size: 0x9000000, name: 'C:\\Orca\\Orca.exe' }]
+      modules: [{ base: rip - 0x23d3f88n, size: 0x9000000, name: 'C:\\Quirky\\Quirky.exe' }]
     })
 
     const signature = await parseMinidumpCrashSignature(dump)
@@ -158,7 +158,7 @@ describe('minidump fault context', () => {
           { start: 0x4ffen, bytes: Buffer.from('9090cc0f0b', 'hex') }
         ],
         platformId: VER_PLATFORM_WIN32_NT,
-        modules: [{ base: 0x4000n, size: 0x2000, name: 'Orca.exe' }]
+        modules: [{ base: 0x4000n, size: 0x2000, name: 'Quirky.exe' }]
       })
     )
     expect(signature?.fault).toEqual({ codeBytes: 'cc0f0b' })
@@ -173,7 +173,7 @@ describe('minidump fault context', () => {
         params: [0n, 0x20n],
         memory: [{ start: 0x9000n, bytes: CODE }],
         platformId: VER_PLATFORM_WIN32_NT,
-        modules: [{ base: 0x4000n, size: 0x2000, name: 'Orca.exe' }]
+        modules: [{ base: 0x4000n, size: 0x2000, name: 'Quirky.exe' }]
       })
     )
     expect(signature?.fault).toEqual({ access: 'read', faultAddress: '0x20' })

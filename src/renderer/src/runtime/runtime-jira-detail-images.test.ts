@@ -9,7 +9,7 @@ import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-t
 type SubscribeArgs = Parameters<typeof window.api.runtimeEnvironments.subscribe>[0]
 type SubscribeCallbacks = Parameters<typeof window.api.runtimeEnvironments.subscribe>[1]
 const target = { kind: 'environment' as const, environmentId: 'issue-owner' }
-const image = '![shot](orca-jira-image://attachment/12345678-1234-1234-1234-123456789012)'
+const image = '![shot](quirky-jira-image://attachment/12345678-1234-1234-1234-123456789012)'
 const localIssue = vi.fn()
 const localComments = vi.fn()
 const runtimeCall = vi.fn()
@@ -129,7 +129,7 @@ describe('captured Jira detail owners', () => {
     const issue = await jiraGetIssueForTarget(target, 'JIR-1', 'site')
     const comments = await jiraIssueCommentsForTarget(target, 'JIR-1', 'site')
     for (const body of [issue?.description, comments[0]?.body]) {
-      const reference = body?.match(/orca-jira-image:\/\/attachment\/([^)]+)/)?.[1]
+      const reference = body?.match(/quirky-jira-image:\/\/attachment\/([^)]+)/)?.[1]
       if (!reference) {
         throw new Error('Expected a migrated image reference')
       }

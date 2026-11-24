@@ -3,7 +3,7 @@
     "components": {
       "automations": {
         "AutomationAgentLaunchFields": {
-          "launchSettingsUnsupported": "この自動化のホストは起動設定をサポートしていません。リモート Orca サーバーを更新してください。",
+          "launchSettingsUnsupported": "この自動化のホストは起動設定をサポートしていません。リモート Quirky サーバーを更新してください。",
           "launchSettingsNotSaved": "起動設定はこのホストに保存できないため、実行には適用されません。"
         },
         "AutomationRunLaunchDisplay": {

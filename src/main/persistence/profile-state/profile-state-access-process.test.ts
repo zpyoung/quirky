@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { buildSync } from 'esbuild'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { stagePackagedProcessHost } from '../../../../config/scripts/packaged-process-host-fixture.mjs'
 import {
   acquireProfileStateMaintenance,
@@ -12,7 +12,7 @@ import {
 } from './profile-state-access'
 import { profileStateAccessPaths } from './profile-state-access-owner'
 
-const fixture = mkdtempSync(join(tmpdir(), 'orca-state-access-process-'))
+const fixture = mkdtempSync(join(tmpdir(), 'quirky-state-access-process-'))
 const bundle = join(fixture, 'access.cjs')
 const children = new Set<ReturnType<typeof spawnProcess>>()
 
@@ -73,7 +73,7 @@ async function startChild(root: string, mode: string): Promise<ReturnType<typeof
   const child = spawnProcess({
     program: process.execPath,
     args: ['-e', CHILD_SOURCE, root, bundle, mode],
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1', NODE_PATH: '', NODE_OPTIONS: '' }
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1', NODE_PATH: '', NODE_OPTIONS: '' }
   })
   children.add(child)
   let stderr = ''

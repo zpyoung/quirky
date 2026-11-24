@@ -4,7 +4,7 @@ import { subscribeAutoAckPresenceSignals } from './agent-auto-ack-presence'
 import { useAppStore } from '@/store'
 import { isWebClientLocation } from '@/lib/web-client-location'
 import { startOnScreenAttentionScan } from './on-screen-attention-scan'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 import {
   createClientWorkspaceViewReporter,
   subscribeViewReportPresenceSignals
@@ -20,7 +20,7 @@ export function useReadOnScreenAttention(): void {
           : async () => window.api?.notifications?.getDesktopAwayState?.(),
         subscribeStructuredViews: subscribeStructuredAttentionViews,
         // Switch point: the owning hosts raise the unread flag, so they learn what is on screen.
-        ...(ORCA_SIDEBAR_INPUTS_IS_MAIN
+        ...(QUIRKY_SIDEBAR_INPUTS_IS_MAIN
           ? {
               subscribePresenceSignals: subscribeViewReportPresenceSignals,
               viewReporter: createClientWorkspaceViewReporter()

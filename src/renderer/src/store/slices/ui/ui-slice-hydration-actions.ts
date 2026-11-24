@@ -50,7 +50,7 @@ import {
   diffPersistedUIWriteFields
 } from '../persisted-ui-write-baseline'
 import {
-  hydrateTrustedOrcaHooks,
+  hydrateTrustedQuirkyHooks,
   normalizeHydratedVisibleWorkspaceHostIds,
   preserveStringArrayIdentity,
   sanitizeHydratedActiveView,
@@ -219,7 +219,7 @@ export function createUiHydrationActions(set: UISliceSet, _get: UISliceGet): Par
             typeof ui.contextualToursAutoEligible === 'boolean'
               ? ui.contextualToursAutoEligible
               : null,
-          trustedOrcaHooks: hydrateTrustedOrcaHooks(ui.trustedOrcaHooks, validRepoIds),
+          trustedQuirkyHooks: hydrateTrustedQuirkyHooks(ui.trustedQuirkyHooks, validRepoIds),
           setupScriptPromptDismissedRepoIds:
             validRepoHostIdentities.size === 0
               ? sanitizeSetupScriptPromptDismissals(ui.setupScriptPromptDismissedRepoIds)

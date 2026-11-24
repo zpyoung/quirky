@@ -1,5 +1,5 @@
 import { parseExecutionHostId } from '../../../../shared/execution-host'
-import { getOrcadSshDeployment } from '../../../../shared/runtime-environments'
+import { getQuirkydSshDeployment } from '../../../../shared/runtime-environments'
 import { workspaceOwnerHostId } from '@/lib/workspace-row-owner-host'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
@@ -20,7 +20,7 @@ export function selectManagedPairingRefusedEnvironmentId(
     return null
   }
   const environment = state.runtimeEnvironments.find((entry) => entry.id === host.environmentId)
-  if (!environment || !getOrcadSshDeployment(environment)) {
+  if (!environment || !getQuirkydSshDeployment(environment)) {
     return null
   }
   const snapshot = state.runtimeStatusByEnvironmentId.get(environment.id)?.snapshot

@@ -63,7 +63,7 @@ function titleRetiresProcessRead(args: { title: string; defaultTitle?: string })
 
 /**
  * Which agent a hook-less pane runs: a live process read (unless the title is a shell's), then the
- * title, then the agent Orca launched while the title shows activity. Sidebar-only; the tab icon
+ * title, then the agent Quirky launched while the title shows activity. Sidebar-only; the tab icon
  * orders its signals differently. Null means the pane shows no agent row.
  *
  * Only the process read may keep a row whose title shows no agent activity (Codex retitles itself

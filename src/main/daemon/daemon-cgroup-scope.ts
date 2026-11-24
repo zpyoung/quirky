@@ -2,7 +2,7 @@
  * Escaping the service cgroup for the detached PTY daemon.
  *
  * `detached: true` buys the daemon its own POSIX process group, not its own cgroup: under a
- * combined unit (`orca-serve.service` / `orca-serve@<slot>`) it and its PTYs stay in the unit's
+ * combined unit (`quirky-serve.service` / `quirky-serve@<slot>`) it and its PTYs stay in the unit's
  * cgroup, and `systemctl stop`/`restart` SIGKILLs whatever is left there — immediately under
  * `KillMode=control-group`, and the instant the main process exits under `KillMode=mixed`
  * (`TimeoutStopSec` only applies while that main process is still alive). Either way every
@@ -19,13 +19,13 @@
  */
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import { runProcessSync } from '@quirky/process-host'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 import { removeChromiumDisabledSessionBus } from '../pty/chromium-session-bus-env'
 import { cgroupPathFromProcLine, userManagerOutlivesCaller } from './daemon-user-manager-lifetime'
 
 const SYSTEMD_RUN_BINARY = 'systemd-run'
-const UNIT_NAME_PREFIX = 'orca-daemon-'
+const UNIT_NAME_PREFIX = 'quirky-daemon-'
 /** The marker that distinguishes "booted under systemd" from a plain container. A test seam so
  *  the capability tests stay hermetic off a systemd host. */
 const SYSTEMD_BOOT_PATH = '/run/systemd/system'
@@ -33,7 +33,7 @@ const SYSTEMD_BOOT_PATH = '/run/systemd/system'
  *  cannot stall the launch lane. */
 const SYSTEMD_RUN_PROBE_TIMEOUT_MS = 2_000
 const SYSTEMD_SCOPE_MIGRATION_TIMEOUT_MS = 5_000
-const LEGACY_SCOPE_PREFIX = 'app-orca-'
+const LEGACY_SCOPE_PREFIX = 'app-quirky-'
 
 /** The conventional per-UID runtime dir every login session (and `loginctl enable-linger`)
  *  provisions, from `getuid()` rather than from the environment. The exported functions'
@@ -62,8 +62,8 @@ function hasReachableBus(runtimeDir: string): boolean {
  * The `XDG_RUNTIME_DIR` that actually hosts this OS user's systemd `--user` bus: the canonical
  * per-UID path first, the process's own env var only as a fallback.
  *
- * Why not that env var first: `RuntimeDirectory=` hardening (`orca-serve@factory.service` on
- * mtl-02) makes systemd export `XDG_RUNTIME_DIR=/run/orca_serve/<slot>`, a private scratch dir
+ * Why not that env var first: `RuntimeDirectory=` hardening (`quirky-serve@factory.service` on
+ * mtl-02) makes systemd export `XDG_RUNTIME_DIR=/run/quirky_serve/<slot>`, a private scratch dir
  * that shares the name but hosts no bus, alongside `DBUS_SESSION_BUS_ADDRESS=disabled:` — while
  * the real bus was live at `/run/user/<uid>` the whole time. Trusting the env var reported
  * "unsupported" on every host hardened that way. It stays as the fallback for hosts that have no
@@ -391,8 +391,8 @@ export function detectOwnCgroupScopeUnit(
     return null
   }
   for (const line of contents.split('\n')) {
-    // cgroup v2 unified hierarchy: "0::/user.slice/.../orca-daemon-<nonce>.scope"
-    // cgroup v1 systemd controller: "1:name=systemd:/user.slice/.../orca-daemon-<nonce>.scope"
+    // cgroup v2 unified hierarchy: "0::/user.slice/.../quirky-daemon-<nonce>.scope"
+    // cgroup v1 systemd controller: "1:name=systemd:/user.slice/.../quirky-daemon-<nonce>.scope"
     const last = line.split('/').at(-1)?.trim()
     if (last && (last.startsWith(UNIT_NAME_PREFIX) || isLegacyDaemonScopeUnit(last))) {
       return last

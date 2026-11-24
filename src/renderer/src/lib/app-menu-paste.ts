@@ -6,7 +6,7 @@ import { TEXT_CONTROL_PASTE_MAX_BYTES, pasteTextIntoTextControl } from './text-c
 import { createTextControlRejectedResult } from './text-control-paste-diagnostics'
 import { findOwnedTextControlPasteTarget } from './text-control-paste-ownership'
 
-export const APP_MENU_PASTE_EVENT = 'orca-app-menu-paste'
+export const APP_MENU_PASTE_EVENT = 'quirky-app-menu-paste'
 
 export type AppMenuPasteRequestResult =
   | { status: 'handled'; target: 'terminal' | 'text-control' }
@@ -99,7 +99,7 @@ export async function handleAppMenuPasteRequest({
       })
     }
     // Why: a native fallback after async failure would paste into whichever
-    // control gained focus, not the text control Orca already resolved.
+    // control gained focus, not the text control Quirky already resolved.
     if (target.ownerDocument.activeElement !== target) {
       const rejectedResult = createTextControlRejectedResult(
         'target-unavailable',
@@ -125,7 +125,7 @@ export async function handleAppMenuPasteRequest({
     return { status: 'handled', target: 'text-control' }
   }
 
-  // Why: for text controls Orca has already resolved ownership. Falling back
+  // Why: for text controls Quirky has already resolved ownership. Falling back
   // to native paste after a stale-target rejection can paste into a new target.
   return createAppMenuTextControlRejectedResult({
     reason: result.reason,

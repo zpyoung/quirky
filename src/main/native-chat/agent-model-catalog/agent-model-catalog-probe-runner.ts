@@ -1,10 +1,10 @@
 import type { ClaudeBackgroundFailedExit } from '../../../shared/claude-background-run-isolation'
-import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
+import type { PipedProcessSpawner } from '@quirky/process-host/process-spec'
 // The one way a catalog probe runs an agent CLI: a disposable child under the provider supervisor,
 // one budget for the whole listing, bounded output, and a teardown awaited on every path. A probe
 // only names what to run and how to read its answer.
 
-import { createOutputSink } from '@orca/process-host/bounded-output-sink'
+import { createOutputSink } from '@quirky/process-host/bounded-output-sink'
 import { spawnManagedProviderProcess } from '../../provider-process/managed-provider-process'
 import type { ProviderProcessClosePolicy } from '../../provider-process/provider-process-close'
 import type { ProviderProcessLaunch } from '../../provider-process/provider-process-launch'

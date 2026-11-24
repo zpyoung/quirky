@@ -23,7 +23,7 @@ import { browserPageDocLocationsEqual } from '../../../shared/browser-page-doc-l
 import type { BrowserPageDocLocation } from '../../../shared/browser-workspace-types'
 import { findPage } from '@/store/slices/browser-page-records'
 import type { BrowserPageConversionLeg } from '@/store/slices/browser-page-conversion'
-import { ORCA_BROWSER_BLANK_URL } from '../../../shared/constants'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../../shared/constants'
 import { chatScratchFileAddress } from '@/runtime/runtime-chat-scratch-file-address'
 
 export type PreviewableLanguage = 'html'
@@ -41,7 +41,7 @@ function pairedOutsideWorktreeMessage(): string {
  *
  * `browser-tab` keeps local workspaces on the pre-existing embedded browser tab.
  * `doc-preview` renders the document locally from the owning workspace's disk
- * over the `orca-preview` scheme, which is the only option for SSH and paired
+ * over the `quirky-preview` scheme, which is the only option for SSH and paired
  * workspaces: client-hosted browser guests refuse `file:` by design, and a
  * `file://` URL would resolve on the wrong machine anyway.
  */
@@ -170,7 +170,7 @@ function openDocPreviewTab(
     }
     return
   }
-  state.createBrowserTab(params.worktreeId, ORCA_BROWSER_BLANK_URL, {
+  state.createBrowserTab(params.worktreeId, QUIRKY_BROWSER_BLANK_URL, {
     docLocation,
     title: basename(params.filePath) || params.filePath,
     ...placement,

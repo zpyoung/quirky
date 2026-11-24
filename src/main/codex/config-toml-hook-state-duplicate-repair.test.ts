@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { syncSystemConfigIntoManagedCodexHome } from './codex-config-mirror'
 import { findDuplicateTomlDeclarations } from './config-toml-duplicate-declarations-test-fixture'
-import { repairOrcaDuplicateTrustTables } from './config-toml-project-duplicate-repair'
+import { repairQuirkyDuplicateTrustTables } from './config-toml-project-duplicate-repair'
 import {
   upsertHookTrustEntriesInContent,
   upsertProjectTrustLevel,
@@ -21,7 +21,7 @@ const hookEntry: CodexTrustEntry = {
   eventLabel: 'stop',
   groupIndex: 0,
   handlerIndex: 0,
-  command: 'orca-hook',
+  command: 'quirky-hook',
   trustedHash: 'sha256:new'
 }
 
@@ -97,7 +97,7 @@ describe('hook trust recognises Codex quoted hooks.state spellings', () => {
   })
 })
 
-describe('repairing Orca hooks.state duplicates', () => {
+describe('repairing Quirky hooks.state duplicates', () => {
   it('fully repairs a file holding both project and hook duplicates', () => {
     const projectPath = '/Users/me/Projects/agentic-WPS'
     const broken = [
@@ -119,7 +119,7 @@ describe('repairing Orca hooks.state duplicates', () => {
       '',
       `[hooks.state."${HOOK_KEY}"]`,
       'enabled = true',
-      'trusted_hash = "sha256:orca"',
+      'trusted_hash = "sha256:quirky"',
       ''
     ].join('\n')
     writeFileSync(configPath, broken)
@@ -147,16 +147,16 @@ describe('repairing Orca hooks.state duplicates', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
-  it('removes the Orca-shaped copy when it comes before the user table', () => {
+  it('removes the Quirky-shaped copy when it comes before the user table', () => {
     const broken = [
-      '[projects."/orca-first"]',
+      '[projects."/quirky-first"]',
       'trust_level = "trusted"',
       '',
       `[hooks.state.'C:\\Users\\me\\.codex\\hooks.json:stop:0:0']`,
       'enabled = true',
-      'trusted_hash = "sha256:orca"',
+      'trusted_hash = "sha256:quirky"',
       '',
-      '["projects"."/orca-first"]',
+      '["projects"."/quirky-first"]',
       'trust_level = "untrusted"',
       '',
       '["hooks"."state"."C:\\\\Users\\\\me\\\\.codex\\\\hooks.json:stop:0:0"]',
@@ -165,9 +165,9 @@ describe('repairing Orca hooks.state duplicates', () => {
       ''
     ].join('\n')
 
-    expect(repairOrcaDuplicateTrustTables(broken)).toBe(
+    expect(repairQuirkyDuplicateTrustTables(broken)).toBe(
       [
-        '["projects"."/orca-first"]',
+        '["projects"."/quirky-first"]',
         'trust_level = "untrusted"',
         '',
         '["hooks"."state"."C:\\\\Users\\\\me\\\\.codex\\\\hooks.json:stop:0:0"]',
@@ -190,8 +190,8 @@ describe('repairing Orca hooks.state duplicates', () => {
       ''
     ].join('\n')
 
-    expect(repairOrcaDuplicateTrustTables(broken)).toBe(broken)
-    expect(repairOrcaDuplicateTrustTables(broken)).toBe(broken)
+    expect(repairQuirkyDuplicateTrustTables(broken)).toBe(broken)
+    expect(repairQuirkyDuplicateTrustTables(broken)).toBe(broken)
     expect(warn).toHaveBeenCalledTimes(1)
   })
 })

@@ -152,7 +152,7 @@ describe('deferred browser lifecycle through the overlay and SSH gate', () => {
     mocks.store = createStore(() => mocks.state!)
     mocks.executionHostId = 'local'
     mocks.destroy.mockReset()
-    mocks.prepare.mockReset().mockResolvedValue({ partition: 'persist:orca-browser-v1-routed' })
+    mocks.prepare.mockReset().mockResolvedValue({ partition: 'persist:quirky-browser-v1-routed' })
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: { browser: { prepareSshWorkspacePartition: mocks.prepare } }

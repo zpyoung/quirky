@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import type { RpcRequest, RpcResponse } from './core'
 import { RpcDispatcher } from './dispatcher'
 import { ALL_RPC_METHODS } from './methods'
@@ -16,7 +16,7 @@ async function dispatchAs(
   scope: RpcCallerScope | undefined,
   method: string,
   params?: unknown,
-  runtime = new OrcaRuntimeService()
+  runtime = new QuirkyRuntimeService()
 ): Promise<RpcResponse> {
   return new RpcDispatcher({ runtime }).dispatch(
     request(method, params),
@@ -98,7 +98,7 @@ describe('the owner', () => {
 describe('a pinned in-process bridge dispatcher', () => {
   it('ignores a wider per-call scope', async () => {
     const dispatcher = new RpcDispatcher({
-      runtime: new OrcaRuntimeService(),
+      runtime: new QuirkyRuntimeService(),
       callerScope: PAIRED
     })
     const response = await dispatcher.dispatch(request('computer.click', { app: 'Finder' }), {

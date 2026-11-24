@@ -26,7 +26,7 @@ import type { JournalOperationReceipt } from '../agent-session-journal/journal-r
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import {
   classifyJournalOpenFailure,
-  isJournalWrittenByNewerOrca,
+  isJournalWrittenByNewerQuirky,
   journalOpenRefusal
 } from '../agent-session-journal/journal-open-failure'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
@@ -155,12 +155,12 @@ export async function performSend(
       return agentSessionAttachmentExpiredRefusal()
     }
     // Damage SQLite proves is the chat's, and no retry writes past it: say so, as an open does. So
-    // does a chat holding a newer Orca's rows, which only an update writes past, and a refusal the
+    // does a chat holding a newer Quirky's rows, which only an update writes past, and a refusal the
     // journal already classified (a failed transaction that will not roll back).
     if (
       isAgentSessionRefusalError(error) ||
       classifyJournalOpenFailure(error) === 'journalCorrupt' ||
-      isJournalWrittenByNewerOrca(error)
+      isJournalWrittenByNewerQuirky(error)
     ) {
       return { ok: false, refusal: journalOpenRefusal(error) }
     }

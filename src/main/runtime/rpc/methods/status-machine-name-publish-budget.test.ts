@@ -1,7 +1,7 @@
 import os from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { normalizeMachineName } from '../../../../shared/machine-name'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { MACHINE_NAME_PUBLISH_WAIT_MS } from '../../runtime-machine-name'
 import type { RuntimeStore } from '../../runtime-store-contract'
 import { STATUS_METHODS } from './status'
@@ -10,7 +10,7 @@ import { STATUS_METHODS } from './status'
 // case needs a process whose first lookup is still running when the publish budget runs out.
 // Why mocked: the friendly-name lookup is the one path that spawns `scutil`; the test decides when it lands.
 const runProcessMock = vi.hoisted(() => vi.fn())
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
@@ -39,7 +39,7 @@ describe('status.get publish budget', () => {
         })
     )
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only `getSettings` off the store during construction and status.
-    const runtime = new OrcaRuntimeService({ getSettings: () => ({}) } as RuntimeStore)
+    const runtime = new QuirkyRuntimeService({ getSettings: () => ({}) } as RuntimeStore)
     expect(finishLookup).toBeTypeOf('function')
     const hostname = normalizeMachineName(os.hostname())
 

@@ -24,7 +24,7 @@ const {
 
 describe('packaged runtime resources', () => {
   it('verifies packaged main runtime deps from Windows-style asar entries', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-runtime-deps-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-runtime-deps-'))
     try {
       await writeFile(join(resourcesDir, 'app.asar'), '', 'utf8')
       await mkdir(join(resourcesDir, 'node_modules', 'yaml'), { recursive: true })
@@ -46,7 +46,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('verifies literal dynamic imports from the packaged main bundle', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-runtime-dynamic-imports-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-runtime-dynamic-imports-'))
     try {
       await writeFile(join(resourcesDir, 'app.asar'), '', 'utf8')
 
@@ -81,7 +81,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('still fails when a required packaged main entry is missing entirely', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-runtime-missing-entry-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-runtime-missing-entry-'))
     try {
       await writeFile(join(resourcesDir, 'app.asar'), '', 'utf8')
 
@@ -99,7 +99,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('verifies bare imports that rolldown hoisted into a shared main chunk', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-runtime-chunk-imports-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-runtime-chunk-imports-'))
     try {
       await writeFile(join(resourcesDir, 'app.asar'), '', 'utf8')
 
@@ -133,7 +133,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('reads a spread require, whose leading dots are not member access', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-runtime-spread-require-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-runtime-spread-require-'))
     try {
       await writeFile(join(resourcesDir, 'app.asar'), '', 'utf8')
 
@@ -152,8 +152,8 @@ describe('packaged runtime resources', () => {
     }
   })
 
-  it('ignores member calls onto Orca methods that are themselves named require', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-runtime-member-require-'))
+  it('ignores member calls onto Quirky methods that are themselves named require', async () => {
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-runtime-member-require-'))
     try {
       await writeFile(join(resourcesDir, 'app.asar'), '', 'utf8')
 
@@ -182,7 +182,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('prunes non-target node-pty architecture outputs from packaged runtime resources', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-node-pty-prune-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-node-pty-prune-'))
     try {
       const nodePtyDir = join(resourcesDir, 'node_modules', 'node-pty')
       const prebuildsDir = join(nodePtyDir, 'prebuilds')
@@ -217,7 +217,7 @@ describe('packaged runtime resources', () => {
       ['x64', 1],
       ['arm64', 3]
     ]) {
-      const resourcesDir = await mkdtemp(join(tmpdir(), `orca-node-pty-conpty-${arch}-`))
+      const resourcesDir = await mkdtemp(join(tmpdir(), `quirky-node-pty-conpty-${arch}-`))
       try {
         const nodePtyDir = join(resourcesDir, 'node_modules', 'node-pty')
         const releaseDir = join(nodePtyDir, 'build', 'Release')
@@ -274,7 +274,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('prunes non-target @parcel/watcher architecture subpackages', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-parcel-watcher-prune-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-parcel-watcher-prune-'))
     try {
       const parcelDir = join(resourcesDir, 'node_modules', '@parcel')
       await mkdir(join(parcelDir, 'watcher'), { recursive: true })
@@ -299,7 +299,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('leaves unrelated @parcel/* runtime deps untouched when pruning the watcher', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-parcel-watcher-prune-unrelated-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-parcel-watcher-prune-unrelated-'))
     try {
       const parcelDir = join(resourcesDir, 'node_modules', '@parcel')
       await mkdir(join(parcelDir, 'watcher'), { recursive: true })
@@ -321,7 +321,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('prunes type declaration artifacts from packaged runtime node_modules', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-runtime-type-prune-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-runtime-type-prune-'))
     try {
       const packageDir = join(resourcesDir, 'node_modules', 'example-package')
       await mkdir(join(packageDir, 'dist'), { recursive: true })
@@ -339,7 +339,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('prunes duplicate darwin sherpa-onnx runtime dylib aliases', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-sherpa-prune-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-sherpa-prune-'))
     try {
       const packageDir = join(resourcesDir, 'node_modules', 'sherpa-onnx-darwin-arm64')
       await mkdir(packageDir, { recursive: true })
@@ -359,7 +359,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('prunes zod TypeScript sources from packaged runtime resources', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-zod-prune-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-zod-prune-'))
     try {
       const packageDir = join(resourcesDir, 'node_modules', 'zod')
       await mkdir(join(packageDir, 'src'), { recursive: true })
@@ -375,7 +375,7 @@ describe('packaged runtime resources', () => {
   })
 
   it('fails when the packaged resources directory is missing', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-electron-builder-config-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-electron-builder-config-'))
     try {
       await expect(
         electronBuilderConfig.afterPack({
@@ -422,7 +422,7 @@ function packagedResourceDestinations(platform) {
 
 describe('lazily required packages reach Resources/node_modules', () => {
   it('excludes runtime builtins while retaining ordinary lazy dependencies', async () => {
-    const sourceDir = await mkdtemp(join(tmpdir(), 'orca-lazy-builtins-'))
+    const sourceDir = await mkdtemp(join(tmpdir(), 'quirky-lazy-builtins-'))
     try {
       await writeFile(
         join(sourceDir, 'runtime.ts'),
@@ -457,7 +457,7 @@ describe('lazily required packages reach Resources/node_modules', () => {
   })
 
   it('resolves the copied emoji dataset the way the packaged main bundle does', async () => {
-    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-lazy-require-'))
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-lazy-require-'))
     try {
       const datasetPath = 'node_modules/emojibase-data/en/shortcodes/emojibase.json'
       const entry = electronBuilderConfig.mac.extraResources.find(

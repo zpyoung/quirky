@@ -8,7 +8,11 @@ import {
   parseTextAnswerValue
 } from './ask-answer-value-parsing'
 import type { AskAnswers } from '../../shared/fork-ask-question-tool/ask-answer-envelope'
-import type { AskNumberQuestion, AskSpec, AskTextQuestion } from '../../shared/fork-ask-question-tool/ask-question-schema'
+import type {
+  AskNumberQuestion,
+  AskSpec,
+  AskTextQuestion
+} from '../../shared/fork-ask-question-tool/ask-question-schema'
 
 describe('nonBlank', () => {
   it.each([
@@ -99,9 +103,23 @@ describe('parseConfirmAnswerValue', () => {
 describe('buildResultSummary', () => {
   const spec: AskSpec = {
     questions: [
-      { id: 'db', type: 'select', question: 'Which database?', header: 'Database', options: [{ value: 'pg', label: 'Postgres' }] },
+      {
+        id: 'db',
+        type: 'select',
+        question: 'Which database?',
+        header: 'Database',
+        options: [{ value: 'pg', label: 'Postgres' }]
+      },
       { id: 'pool', type: 'number', question: 'Pool size?' },
-      { id: 'tags', type: 'multiselect', question: 'Tags?', options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }] },
+      {
+        id: 'tags',
+        type: 'multiselect',
+        question: 'Tags?',
+        options: [
+          { value: 'a', label: 'A' },
+          { value: 'b', label: 'B' }
+        ]
+      },
       { id: 'ready', type: 'confirm', question: 'Ready?' }
     ]
   }
@@ -112,7 +130,9 @@ describe('buildResultSummary', () => {
       pool: { value: 20, source: 'input' },
       ready: { value: true, source: 'input' }
     }
-    expect(buildResultSummary(spec, answers)).toBe('Database: Postgres\nPool size?: 20\nReady?: Yes')
+    expect(buildResultSummary(spec, answers)).toBe(
+      'Database: Postgres\nPool size?: 20\nReady?: Yes'
+    )
   })
 
   it('renders a select "other" answer by its free-text value, and a multiselect with an other remainder', () => {

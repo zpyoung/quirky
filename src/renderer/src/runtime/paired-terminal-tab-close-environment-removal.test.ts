@@ -55,7 +55,7 @@ function managed(id: string, pairingRevision: number, hostKeyFingerprint?: strin
   return environment(id, {
     pairingRevision,
     hostKeyFingerprint,
-    orcadDeployment: {
+    quirkydDeployment: {
       sshTargetId: 'box',
       sshTargetGeneration: 1,
       localPort: 46_768,

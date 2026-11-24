@@ -1,12 +1,12 @@
 /**
  * E2E tests for splitting terminal panes and the stable UUID leaf identity each
- * split pane carries into its PTY binding, ORCA_PANE_KEY, and context menu.
+ * split pane carries into its PTY binding, QUIRKY_PANE_KEY, and context menu.
  *
  * User Prompt:
  * - terminal panes can be split
  */
 
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   UUID_RE,
   discoverActivePtyId,
@@ -30,13 +30,13 @@ test.describe('Terminal Panes', () => {
    * User Prompt:
    * - terminal panes can be split
    */
-  test('can split terminal pane right', async ({ orcaPage }) => {
-    const paneCountBefore = await countVisibleTerminalPanes(orcaPage)
+  test('can split terminal pane right', async ({ quirkyPage }) => {
+    const paneCountBefore = await countVisibleTerminalPanes(quirkyPage)
 
-    await splitActiveTerminalPane(orcaPage, 'vertical')
-    await waitForPaneCount(orcaPage, paneCountBefore + 1)
+    await splitActiveTerminalPane(quirkyPage, 'vertical')
+    await waitForPaneCount(quirkyPage, paneCountBefore + 1)
 
-    const paneCountAfter = await countVisibleTerminalPanes(orcaPage)
+    const paneCountAfter = await countVisibleTerminalPanes(quirkyPage)
     expect(paneCountAfter).toBe(paneCountBefore + 1)
   })
 
@@ -44,23 +44,23 @@ test.describe('Terminal Panes', () => {
    * User Prompt:
    * - terminal panes can be split
    */
-  test('can split terminal pane down', async ({ orcaPage }) => {
-    const paneCountBefore = await countVisibleTerminalPanes(orcaPage)
+  test('can split terminal pane down', async ({ quirkyPage }) => {
+    const paneCountBefore = await countVisibleTerminalPanes(quirkyPage)
 
-    await splitActiveTerminalPane(orcaPage, 'horizontal')
-    await waitForPaneCount(orcaPage, paneCountBefore + 1)
+    await splitActiveTerminalPane(quirkyPage, 'horizontal')
+    await waitForPaneCount(quirkyPage, paneCountBefore + 1)
 
-    const paneCountAfter = await countVisibleTerminalPanes(orcaPage)
+    const paneCountAfter = await countVisibleTerminalPanes(quirkyPage)
     expect(paneCountAfter).toBe(paneCountBefore + 1)
   })
 
-  test('split panes persist PTY bindings by stable UUID leaf id', async ({ orcaPage }) => {
-    const paneCountBefore = await countVisibleTerminalPanes(orcaPage)
+  test('split panes persist PTY bindings by stable UUID leaf id', async ({ quirkyPage }) => {
+    const paneCountBefore = await countVisibleTerminalPanes(quirkyPage)
 
-    await splitActiveTerminalPane(orcaPage, 'vertical')
-    await waitForPaneCount(orcaPage, paneCountBefore + 1)
+    await splitActiveTerminalPane(quirkyPage, 'vertical')
+    await waitForPaneCount(quirkyPage, paneCountBefore + 1)
 
-    const snapshot = await waitForPaneIdentitySnapshot(orcaPage, paneCountBefore + 1)
+    const snapshot = await waitForPaneIdentitySnapshot(quirkyPage, paneCountBefore + 1)
     const leafIds = snapshot.panes.map((pane) => pane.leafId)
     const ptyIds = snapshot.panes.map((pane) => pane.ptyId)
 
@@ -76,40 +76,40 @@ test.describe('Terminal Panes', () => {
     ).toBe(false)
   })
 
-  test('terminal process receives ORCA_PANE_KEY with the active UUID leaf id', async ({
-    orcaPage
+  test('terminal process receives QUIRKY_PANE_KEY with the active UUID leaf id', async ({
+    quirkyPage
   }) => {
-    const snapshot = await waitForPaneIdentitySnapshot(orcaPage, 1)
+    const snapshot = await waitForPaneIdentitySnapshot(quirkyPage, 1)
     const activeLeafId = snapshot.activeLeafId ?? snapshot.panes[0]?.leafId
     if (!activeLeafId) {
       throw new Error('No active pane leaf id found')
     }
 
     const expectedPaneKey = `${snapshot.tabId}:${activeLeafId}`
-    const ptyId = await discoverActivePtyId(orcaPage)
-    const marker = `ORCA_PANE_KEY_E2E_${Date.now()}`
+    const ptyId = await discoverActivePtyId(quirkyPage)
+    const marker = `QUIRKY_PANE_KEY_E2E_${Date.now()}`
 
-    await execInTerminal(orcaPage, ptyId, `printf '${marker}=%s\\n' "$ORCA_PANE_KEY"`)
-    await waitForTerminalOutput(orcaPage, `${marker}=${expectedPaneKey}`)
+    await execInTerminal(quirkyPage, ptyId, `printf '${marker}=%s\\n' "$QUIRKY_PANE_KEY"`)
+    await waitForTerminalOutput(quirkyPage, `${marker}=${expectedPaneKey}`)
 
     expect(activeLeafId).toMatch(UUID_RE)
   })
 
-  test('terminal context menu copies the stable pane ID', async ({ orcaPage }) => {
-    const snapshot = await waitForPaneIdentitySnapshot(orcaPage, 1)
+  test('terminal context menu copies the stable pane ID', async ({ quirkyPage }) => {
+    const snapshot = await waitForPaneIdentitySnapshot(quirkyPage, 1)
     const leafId = snapshot.panes[0]?.leafId
     if (!leafId) {
       throw new Error('No terminal pane leaf id found')
     }
     const expectedPaneKey = `${snapshot.tabId}:${leafId}`
 
-    await openTerminalContextMenu(orcaPage)
-    await orcaPage.getByText('Copy Pane ID', { exact: true }).click()
+    await openTerminalContextMenu(quirkyPage)
+    await quirkyPage.getByText('Copy Pane ID', { exact: true }).click()
 
     await expect
-      .poll(() => orcaPage.evaluate(() => window.api.ui.readClipboardText()), { timeout: 3_000 })
+      .poll(() => quirkyPage.evaluate(() => window.api.ui.readClipboardText()), { timeout: 3_000 })
       .toBe(expectedPaneKey)
-    await expect(orcaPage.getByText('Pane ID copied', { exact: true })).toBeVisible()
+    await expect(quirkyPage.getByText('Pane ID copied', { exact: true })).toBeVisible()
     expect(leafId).toMatch(UUID_RE)
   })
 })

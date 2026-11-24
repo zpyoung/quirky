@@ -2,7 +2,7 @@
  * STA-2854 live validation: a HOST pane that cold-parks while a paired client
  * is actively viewing it must keep serving that client.
  *
- * Topology: headed Orca desktop host (remote server) + a separate paired Orca
+ * Topology: headed Quirky desktop host (remote server) + a separate paired Quirky
  * desktop client. The reported shape is the inverse of every existing paired
  * parking spec: those park on the CLIENT, this parks on the HOST while the
  * client watches. The host user never touches the tab again after parking it.
@@ -39,7 +39,7 @@ import {
   HOST_TERMINAL_SURFACE_SEPARATOR,
   toWebTerminalSurfaceTabId
 } from '../../src/shared/terminal-surface-id'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   createRuntimeDesktopPairingOffer,
   launchPairedElectronClient
@@ -50,7 +50,7 @@ import { quotePosixShell } from '../../src/shared/shell-argument-quoting'
 
 const PARK_DELAY_MS = 30_000
 const PAINT_BUDGET_MS = 20_000
-const scratch = mkdtempSync(path.join(os.tmpdir(), 'orca-host-park-viewer-'))
+const scratch = mkdtempSync(path.join(os.tmpdir(), 'quirky-host-park-viewer-'))
 const fixturePath = path.join(scratch, 'host-park-viewer-terminal.mjs')
 writeFileSync(
   fixturePath,
@@ -80,7 +80,7 @@ test.afterAll(() => {
 })
 
 // Why: the HOST must park quickly too, so its launch env carries the override.
-test.use({ orcaAppExtraEnv: { ORCA_E2E_TERMINAL_PARKING_DELAY_MS: String(PARK_DELAY_MS) } })
+test.use({ quirkyAppExtraEnv: { QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS: String(PARK_DELAY_MS) } })
 
 function fixtureCommand(sinkPath: string): string {
   const command = [process.execPath, fixturePath, sinkPath]
@@ -144,17 +144,17 @@ async function waitForPaneMarker(
 }
 
 test('a cold-parked host pane keeps serving its paired remote viewer', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   test.setTimeout(600_000)
-  const offer = await createRuntimeDesktopPairingOffer(orcaPage)
-  const previousParkDelay = process.env.ORCA_E2E_TERMINAL_PARKING_DELAY_MS
-  process.env.ORCA_E2E_TERMINAL_PARKING_DELAY_MS = String(PARK_DELAY_MS)
+  const offer = await createRuntimeDesktopPairingOffer(quirkyPage)
+  const previousParkDelay = process.env.QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS
+  process.env.QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS = String(PARK_DELAY_MS)
   const client = await launchPairedElectronClient(offer, testInfo, 'host-park-viewer')
   const createdTerminals: string[] = []
   const sinkPath = path.join(scratch, `sink-${randomUUID()}.log`)
   try {
-    const worktreeId = await orcaPage.evaluate(() => {
+    const worktreeId = await quirkyPage.evaluate(() => {
       const id = window.__store?.getState().activeWorktreeId
       if (!id) {
         throw new Error('headed host has no active worktree')
@@ -197,7 +197,7 @@ test('a cold-parked host pane keeps serving its paired remote viewer', async ({
     const webTabId = toWebTerminalSurfaceTabId(hostTabId)
 
     // 1. Host mounts the pane (the ordinary "someone looked at it" state).
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       ({ worktreeId, tabId }) => {
         const state = window.__store?.getState()
         state?.setActiveView('terminal')
@@ -208,7 +208,7 @@ test('a cold-parked host pane keeps serving its paired remote viewer', async ({
       { worktreeId, tabId: hostTabId }
     )
     await expect
-      .poll(() => orcaPage.evaluate((id) => window.__paneManagers?.has(id) ?? false, hostTabId), {
+      .poll(() => quirkyPage.evaluate((id) => window.__paneManagers?.has(id) ?? false, hostTabId), {
         timeout: 60_000,
         message: 'host never mounted its own terminal pane'
       })
@@ -277,7 +277,7 @@ test('a cold-parked host pane keeps serving its paired remote viewer', async ({
         }
       }, webTabId)
     console.log(`[sta2854] before-park client=${JSON.stringify(await readClientState())}`)
-    await parkHiddenTabBehindDecoy(orcaPage, worktreeId, hostTabId, {
+    await parkHiddenTabBehindDecoy(quirkyPage, worktreeId, hostTabId, {
       parkDelayMs: PARK_DELAY_MS
     })
     console.log(`[sta2854] post-park client=${JSON.stringify(await readClientState())}`)
@@ -313,7 +313,7 @@ test('a cold-parked host pane keeps serving its paired remote viewer', async ({
     let inputReached = false
     let clientEchoed = false
     while (Date.now() < timelineDeadline) {
-      const hostMounted = await orcaPage.evaluate(
+      const hostMounted = await quirkyPage.evaluate(
         (id) => window.__paneManagers?.has(id) ?? false,
         hostTabId
       )
@@ -356,9 +356,9 @@ test('a cold-parked host pane keeps serving its paired remote viewer', async ({
     // H+ samples), not a precondition of the invariant.
   } finally {
     if (previousParkDelay === undefined) {
-      delete process.env.ORCA_E2E_TERMINAL_PARKING_DELAY_MS
+      delete process.env.QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS
     } else {
-      process.env.ORCA_E2E_TERMINAL_PARKING_DELAY_MS = previousParkDelay
+      process.env.QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS = previousParkDelay
     }
     for (const terminal of createdTerminals) {
       await callEnvironment(client.page, client.environmentId, 'terminal.closeTab', {

@@ -162,7 +162,7 @@ export function assertLoadableHookTrustConfig(
 ): void {
   if (isLoadableToml(previous) && !isLoadableToml(contents)) {
     throw new CodexConfigTomlRefusedError(
-      `${configPath} defines hook approvals in a form Orca cannot add to without breaking it`
+      `${configPath} defines hook approvals in a form Quirky cannot add to without breaking it`
     )
   }
 }
@@ -284,7 +284,7 @@ export function readHookTrustEntries(configPath: string): Map<string, CodexHookT
 }
 
 /**
- * Whether config.toml holds an approval key under every spelling Orca writes,
+ * Whether config.toml holds an approval key under every spelling Quirky writes,
  * as written: Codex on Windows reads only the backslash one, so a lookup that
  * folds separators would count a forward-slash table alone as approved.
  */

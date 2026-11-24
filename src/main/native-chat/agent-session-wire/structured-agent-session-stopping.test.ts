@@ -564,7 +564,7 @@ describe('a Stop whose provider ends its session', () => {
   })
 
   // The kill timed out, then the agent's process exits on its own: the adapter reports the end of
-  // the close Orca began, and nothing else asks to stop.
+  // the close Quirky began, and nothing else asks to stop.
   it("says the Stop took once the agent's process exits on its own after the kill timed out", async () => {
     await runningTurn({ stopEndsSession: true })
     rig.closeSession.mockRejectedValueOnce(new Error('the kill timed out'))

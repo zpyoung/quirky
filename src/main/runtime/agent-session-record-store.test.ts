@@ -148,7 +148,7 @@ async function markLegacyConflicted(
 }
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-agent-session-store-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-agent-session-store-'))
 })
 
 afterEach(async () => {
@@ -791,14 +791,14 @@ describe('claim keys and unreadable rows', () => {
     )
   })
 
-  it('refuses to write a store a newer Orca wrote, with the refusal clients print as "update"', async () => {
+  it('refuses to write a store a newer Quirky wrote, with the refusal clients print as "update"', async () => {
     await seedTestAgentSessionStoreFromNewerBuild(directory)
     const store = await open()
     expect(store.readOnly).toBe(true)
     await expect(store.reserveOwner(reserveRequest())).rejects.toMatchObject({
       refusal: {
         code: 'agent_session_journal_unreadable',
-        details: { reason: 'journalWrittenByNewerOrca' }
+        details: { reason: 'journalWrittenByNewerQuirky' }
       }
     })
   })

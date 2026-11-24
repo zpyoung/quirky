@@ -3,11 +3,11 @@ import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-typ
 import type { GitAdmissionTier } from '../../git/command-runner/git-exec-options'
 import type { LocalProjectGhExecOptions } from '../../project-runtime-git-options'
 import type { RuntimeTerminalAgentStatus } from '../../../shared/runtime-terminal-contracts'
-import { OrcaRuntimeWithPreservedBranchCleanup } from './runtime-host-services'
-import { RuntimeFileCommands } from '../orca-runtime-files'
+import { QuirkyRuntimeWithPreservedBranchCleanup } from './runtime-host-services'
+import { RuntimeFileCommands } from '../quirky-runtime-files'
 import { nativeChatTranscriptIncludesPath } from '../../native-chat/native-chat-file-provenance'
 import { createRuntimeFileWatcherRemoval } from '../runtime-file-watcher-removal'
-import { RuntimeGitCommands } from '../orca-runtime-git'
+import { RuntimeGitCommands } from '../quirky-runtime-git'
 import { RuntimeHostedReviewCommands } from '../runtime-hosted-review-commands'
 import { RuntimeGitHubRepositoryQueryCommands } from '../runtime-github-repository-query-commands'
 import { RuntimeGitLabQueryCommands } from '../runtime-gitlab-query-commands'
@@ -37,7 +37,7 @@ import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspac
 import type { WindowLayoutCommand } from '../runtime-layout-apply'
 import { createRuntimeEditorFileOpener } from '../files/editor-open-through-layout-owner'
 
-export abstract class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreservedBranchCleanup {
+export abstract class QuirkyRuntimeWithFileCommands extends QuirkyRuntimeWithPreservedBranchCleanup {
   protected abstract hydrateHeadlessMobileSessionTabsFromWorkspaceSession(
     worktreeId?: string,
     options?: { force?: boolean }

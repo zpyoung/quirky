@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { availableParallelism, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { afterEach, expect, it, vi } from 'vitest'
 import { countTestTypeErrors } from './check-e2e-typecheck-ratchet.mjs'
 import { resolvePinnedBunExecutable } from './pinned-bun-executable.mjs'
@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-e2e-check-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-e2e-check-'))
   directories.push(root)
   mkdirSync(join(root, 'config'))
   mkdirSync(join(root, 'tests'))

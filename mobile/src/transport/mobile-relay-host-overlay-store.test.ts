@@ -17,7 +17,7 @@ import {
 } from './mobile-relay-host-overlay-store'
 import type { MobileRelayHostOverlay } from './mobile-relay-host-overlay'
 
-const STORAGE_KEY = 'orca:mobile-relay:host-overlays:v2'
+const STORAGE_KEY = 'quirky:mobile-relay:host-overlays:v2'
 const RELAY = {
   v: 1 as const,
   directorUrl: 'https://relay.onorca.dev',

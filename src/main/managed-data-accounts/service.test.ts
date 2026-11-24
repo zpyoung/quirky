@@ -27,7 +27,7 @@ let source: string
 let service: ManagedDataAccountService
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-data-accounts-test-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-data-accounts-test-'))
   source = join(root, 'source')
   mkdirSync(join(source, 'devin'), { recursive: true })
   writeFileSync(join(source, 'devin', 'credentials.toml'), 'windsurf_api_key = "test-only-key"\n')

@@ -138,7 +138,7 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
           type: 'control_response',
           response: {
             subtype: 'success',
-            request_id: 'orca-model-discovery',
+            request_id: 'quirky-model-discovery',
             response: {
               models: [
                 { value: 'default', displayName: 'Default (recommended)' },
@@ -208,7 +208,7 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
     // Captured from claude 2.1.100: the unsupported subtype still exits 0.
     listeners.get('stdout:data')?.(
       Buffer.from(
-        '{"type":"control_response","response":{"subtype":"error","request_id":"orca-model-discovery","error":"Unsupported control request subtype: list_models"}}\n'
+        '{"type":"control_response","response":{"subtype":"error","request_id":"quirky-model-discovery","error":"Unsupported control request subtype: list_models"}}\n'
       )
     )
     listeners.get('close')?.(0)
@@ -301,7 +301,7 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
         ['-d', 'Ubuntu', '--exec', 'sh', '-lc', expect.any(String)],
         expect.objectContaining({
           // Why a concrete directory (#16463): `undefined` makes CreateProcessW inherit
-          // Orca's own cwd, a deletable WSL UNC path when it was launched from a
+          // Quirky's own cwd, a deletable WSL UNC path when it was launched from a
           // worktree. The Linux directory still rides inside the command (/mnt/c/repo,
           // asserted below), so the Windows-side cwd never decides where discovery runs.
           cwd: expect.any(String),

@@ -5,7 +5,7 @@ import { Platform } from 'react-native'
 // background push can be the first thing that ever targets it. Android drops a
 // notification whose channel does not exist, and the channel used to be created
 // only inside subscribeToDesktopNotifications — i.e. only once a socket connected.
-export const DESKTOP_NOTIFICATION_CHANNEL_ID = 'orca-desktop'
+export const DESKTOP_NOTIFICATION_CHANNEL_ID = 'quirky-desktop'
 
 /** Idempotent on Android (the OS updates the existing channel); a no-op elsewhere. */
 export async function ensureDesktopNotificationChannel(): Promise<void> {
@@ -13,7 +13,7 @@ export async function ensureDesktopNotificationChannel(): Promise<void> {
     return
   }
   await Notifications.setNotificationChannelAsync(`${DESKTOP_NOTIFICATION_CHANNEL_ID}-silent`, {
-    name: 'Orca silent notifications',
+    name: 'Quirky silent notifications',
     importance: Notifications.AndroidImportance.HIGH,
     sound: null,
     enableVibrate: false

@@ -2,7 +2,7 @@ import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './dispatcher'
 import type { RpcRequest } from './core'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { TERMINAL_METHODS } from './methods/terminal'
 
 // Why: the terminal geometry family (resize/setDisplayMode/restoreFit/
@@ -17,7 +17,9 @@ import { TERMINAL_METHODS } from './methods/terminal'
 // silently adopts the replacement PTY ('pty-b'); the guarded resolver throws.
 const NEW_PTY_UNDER_PANE = 'pty-b'
 
-function stubStaleHandleRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeService {
+function stubStaleHandleRuntime(
+  overrides: Partial<QuirkyRuntimeService> = {}
+): QuirkyRuntimeService {
   return {
     getRuntimeId: () => 'test-runtime',
     // Unguarded path: returns the pane's current (replaced) PTY — the misroute.
@@ -27,7 +29,7 @@ function stubStaleHandleRuntime(overrides: Partial<OrcaRuntimeService> = {}): Or
       throw new Error('terminal_handle_stale')
     }),
     ...overrides
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 }
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -39,7 +41,7 @@ async function expectStale(method: string, params: unknown, mutators: string[]):
   for (const name of mutators) {
     spies[name] = vi.fn()
   }
-  const runtime = stubStaleHandleRuntime(spies as Partial<OrcaRuntimeService>)
+  const runtime = stubStaleHandleRuntime(spies as Partial<QuirkyRuntimeService>)
   const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 
   const response = await dispatcher.dispatch(makeRequest(method, params))
@@ -108,7 +110,7 @@ describe('terminal geometry family still mutates the live PTY for a fresh handle
       getRuntimeId: () => 'test-runtime',
       resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-a' }),
       reclaimTerminalForDesktop
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -129,7 +131,7 @@ describe('terminal geometry family still mutates the live PTY for a fresh handle
       getRuntimeId: () => 'test-runtime',
       resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-a' }),
       resizeForClient
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -166,7 +168,7 @@ describe('terminal geometry family still mutates the live PTY for a fresh handle
       updateMobileSubscriberViewport,
       markMobileActor,
       getLayout: vi.fn().mockReturnValue({ seq: 42 })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -199,7 +201,7 @@ describe('terminal geometry family still mutates the live PTY for a fresh handle
       resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-a' }),
       updateMobileViewport,
       getLayout: vi.fn().mockReturnValue({ seq: 7 })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 
     const response = await dispatcher.dispatch(

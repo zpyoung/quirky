@@ -1,10 +1,10 @@
-// Orca appends marker-delimited blocks to user-owned TOML config files. Two
-// independent things can make a byte Orca's: it sits between a matched start and
-// end marker, or the provider positively recognizes it as content Orca emitted.
+// Quirky appends marker-delimited blocks to user-owned TOML config files. Two
+// independent things can make a byte Quirky's: it sits between a matched start and
+// end marker, or the provider positively recognizes it as content Quirky emitted.
 // The end marker is the only proof of a block's extent, so once a hand-edit
 // deletes it the rest of the file is unknown text — #18861: assuming otherwise
 // deleted user tables through EOF. An orphaned block therefore owns nothing but
-// its own stray marker line, and anything Orca actually wrote is reclaimed by
+// its own stray marker line, and anything Quirky actually wrote is reclaimed by
 // recognition instead, wherever in the file it ended up.
 
 export type ManagedTomlMarkers = {
@@ -22,7 +22,7 @@ export type ManagedTomlRegion = {
 export type ManagedTomlBlockRegion = ManagedTomlRegion & {
   /** Offset of the start-marker line itself. */
   markerOffset: number
-  /** End marker found: everything between the markers is Orca's. */
+  /** End marker found: everything between the markers is Quirky's. */
   terminated: boolean
 }
 
@@ -98,7 +98,7 @@ export function findManagedTomlBlocks(
       }
     }
     // Not terminated: `last` stays on the marker line, so the orphan owns only
-    // the stray marker. Its body, if Orca wrote it, is reclaimed by recognition.
+    // the stray marker. Its body, if Quirky wrote it, is reclaimed by recognition.
     regions.push({
       startOffset: startOffsetAbsorbingBlanksAbove(lines, index),
       markerOffset: lines[index].offset,
@@ -112,7 +112,7 @@ export function findManagedTomlBlocks(
 
 /**
  * Every table the provider recognizes as its own, anywhere in the file. Marker
- * position is irrelevant: content Orca emitted is Orca's to remove even when a
+ * position is irrelevant: content Quirky emitted is Quirky's to remove even when a
  * hand-edit stranded it outside the block (#18861).
  */
 export function findRecognizedManagedTables<T>(

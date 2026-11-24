@@ -2,13 +2,13 @@ import './rpc/unused-default-rpc-methods.test-fixture'
 /**
  * A phone subscribing to an idle reattached PTY must get its first snapshot on the phone grid.
  *
- * Harness: real OrcaRuntimeService + real legacy `terminal.subscribe`. After a relaunch the
+ * Harness: real QuirkyRuntimeService + real legacy `terminal.subscribe`. After a relaunch the
  * reattach skips seeding the host model because a pane is mounted; the PTY then emits no byte
  * (an agent waiting for input), and the pane, hidden in another workspace, answers its
  * serializer at desktop size.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { RpcDispatcher } from './rpc/dispatcher'
 import type { RpcRequest } from './rpc/core'
 import { TERMINAL_METHODS } from './rpc/methods/terminal'
@@ -33,7 +33,7 @@ type RuntimeInternals = {
   providerSnapshotPreferredPtys: Set<string>
 }
 
-function internals(runtime: OrcaRuntimeService): RuntimeInternals {
+function internals(runtime: QuirkyRuntimeService): RuntimeInternals {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test reaches protected members the runtime defines.
   return runtime as unknown as RuntimeInternals
 }
@@ -54,7 +54,7 @@ function setup(opts: { paneMounted: boolean; providerSnapshot?: boolean }) {
   const serializeBuffer = vi.fn(async () =>
     opts.paneMounted ? { data: await screenOn(DESKTOP), ...DESKTOP } : null
   )
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   runtime.setPtyController({
     write: () => true,
     kill: () => true,
@@ -82,7 +82,7 @@ function setup(opts: { paneMounted: boolean; providerSnapshot?: boolean }) {
   return { runtime, handle, sizes, serializeBuffer, requestMount }
 }
 
-function subscribePhone(runtime: OrcaRuntimeService, handle: string) {
+function subscribePhone(runtime: QuirkyRuntimeService, handle: string) {
   const frames: Uint8Array<ArrayBufferLike>[] = []
   const controller = new AbortController()
   const request: RpcRequest = {
@@ -142,7 +142,7 @@ async function paintedRows(snapshot: { cols: number; rows: number; data: string 
   }
 }
 
-async function firstSnapshot(runtime: OrcaRuntimeService, handle: string) {
+async function firstSnapshot(runtime: QuirkyRuntimeService, handle: string) {
   const subscription = subscribePhone(runtime, handle)
   await vi.waitFor(() => expect(subscription.snapshot()).not.toBeNull())
   const snapshot = subscription.snapshot()

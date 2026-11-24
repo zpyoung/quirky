@@ -1,10 +1,10 @@
-// The environment every Antigravity ACP server Orca starts runs under: a chat's, and the one
+// The environment every Antigravity ACP server Quirky starts runs under: a chat's, and the one
 // Install starts to check its download.
 
 import { ANTIGRAVITY_BROWSER_COMMAND } from './antigravity-browser-helper'
 
 // Applied after the scrub: the server's sign-in stays in its own folder's file rather than the
-// keychain slot every server on the machine shares, its browser is Orca's helper that prints the
+// keychain slot every server on the machine shares, its browser is Quirky's helper that prints the
 // sign-in link, and its Python output is not held back in a buffer.
 export const ANTIGRAVITY_ACP_ENV = {
   AGY_ACP_FORCE_FILE_STORAGE: '1',

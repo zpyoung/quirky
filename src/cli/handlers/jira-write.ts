@@ -180,7 +180,7 @@ async function create(context: HandlerContext): Promise<void> {
   if (matches.length !== 1) {
     throw new RuntimeClientError(
       'invalid_argument',
-      'Project did not match exactly one project on this Jira site. Use orca jira project list.'
+      'Project did not match exactly one project on this Jira site. Use quirky jira project list.'
     )
   }
   const response = await callJiraWrite<JiraCreateIssueResult>(context, 'jira.createIssue', {

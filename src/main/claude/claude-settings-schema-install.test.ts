@@ -19,13 +19,13 @@ const strictReleases = Object.keys(topLevelSettings).filter(
   (version) => topLevelSettings[version].strict
 )
 
-// Why: checks the whole written file, so any new key Orca writes must pass each strict schema.
+// Why: checks the whole written file, so any new key Quirky writes must pass each strict schema.
 describe('Claude settings written for a strict settings schema', () => {
   let tmpHome: string
   let settingsPath: string
 
   beforeEach(() => {
-    tmpHome = mkdtempSync(join(tmpdir(), 'orca-claude-settings-schema-'))
+    tmpHome = mkdtempSync(join(tmpdir(), 'quirky-claude-settings-schema-'))
     settingsPath = join(tmpHome, '.claude', 'settings.json')
     vi.stubEnv('HOME', tmpHome)
     vi.stubEnv('USERPROFILE', tmpHome)

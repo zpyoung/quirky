@@ -467,7 +467,7 @@ describe('hidden-output restore loss disclosure (STA-4869)', () => {
     })
   })
 
-  // SSH (orcad) and paired `orca serve` panes both reveal through the host's output
+  // SSH (quirkyd) and paired `quirky serve` panes both reveal through the host's output
   // unpause, not the local backlog recovery, so pin that path on its own.
   describe('remote output-pause reveal', () => {
     const REMOTE_MARKER = 'REMOTE-LOST-4d19'

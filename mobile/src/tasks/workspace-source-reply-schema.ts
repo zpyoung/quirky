@@ -6,7 +6,7 @@ import { SSH_CONNECTION_STATUS } from '../transport/ssh-connection-status-arms'
 // src/main/runtime/rpc/methods/ssh.ts:30-46 (getPublicSshState, SshConnectionState in
 // src/shared/ssh-types.ts:187), src/main/runtime/rpc/methods/preflight.ts:22-30 (both agent probes
 // answer a bare `string[]`), and repo.ts:87-103/:184-192 (the sparse preset envelopes, the ref
-// search and the orca.yaml hooks).
+// search and the quirky.yaml hooks).
 
 const sourceText = (name: string) => salvagedOptional(name, z.string())
 
@@ -81,7 +81,7 @@ export const sshConnectionStateSchema = z
 export const detectedAgentIdsSchema = salvagingArray(z.string())
 
 /**
- * The repo's orca.yaml hooks.
+ * The repo's quirky.yaml hooks.
  *
  * Nothing is required. use-mobile-tasks-workspace-ssh-state.tsx:196 spells
  * `result.hooks?.scripts?.setup?.trim()`, :204 defaults `setupRunPolicy`, and

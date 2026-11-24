@@ -1,4 +1,4 @@
-import type { ChildProcessHandle, ProcessSpec } from '@orca/process-host/process-spec'
+import type { ChildProcessHandle, ProcessSpec } from '@quirky/process-host/process-spec'
 import { readFileSync } from 'node:fs'
 import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import {
@@ -69,7 +69,7 @@ async function awaitInstalledHandoff(
   await recordServeUpdateHandoffFailure(
     handoffPath,
     handoff,
-    `Timed out waiting for Orca ${handoff.targetVersion} to be installed.`
+    `Timed out waiting for Quirky ${handoff.targetVersion} to be installed.`
   )
   return null
 }

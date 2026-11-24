@@ -1,8 +1,8 @@
-import { OrcaRuntimeWithMarkPtyLivenessUnverifiable } from './terminal-input-floor'
-import type { ApplyLayoutResult, DriverState } from '../../orca-runtime-core'
+import { QuirkyRuntimeWithMarkPtyLivenessUnverifiable } from './terminal-input-floor'
+import type { ApplyLayoutResult, DriverState } from '../../quirky-runtime-core'
 import { clampTerminalViewport } from '../../../../shared/terminal-viewport'
 
-export abstract class OrcaRuntimeWithMobileTookFloor extends OrcaRuntimeWithMarkPtyLivenessUnverifiable {
+export abstract class QuirkyRuntimeWithMobileTookFloor extends QuirkyRuntimeWithMarkPtyLivenessUnverifiable {
   abstract applyMobileDisplayMode(ptyId: string): Promise<boolean>
 
   // Why: invoked from mobile RPC method handlers (terminal.send / setDisplayMode /

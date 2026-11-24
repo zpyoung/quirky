@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import {
   SkillDiscoveryTargetSchema,
   type SkillDiscoveryResult,
@@ -21,7 +21,7 @@ import {
 } from '../skills/skill-discovery-target'
 import { handleMainWindowSkillIpc } from './skill-ipc-main-window'
 
-export function registerSkillsHandlers(store: Store, runtime?: OrcaRuntimeService): void {
+export function registerSkillsHandlers(store: Store, runtime?: QuirkyRuntimeService): void {
   const discover = async (target?: SkillDiscoveryTarget): Promise<SkillDiscoveryResult> => {
     const parsedTarget = target ? SkillDiscoveryTargetSchema.parse(target) : undefined
     const resolvedTarget = resolveSkillDiscoveryTarget(parsedTarget)
@@ -36,7 +36,7 @@ export function registerSkillsHandlers(store: Store, runtime?: OrcaRuntimeServic
     inventorySkillFreshness({ repos: store.getRepos() })
 
   const runner = new SkillUpdateRunner({
-    sourceCommit: ORCA_BUILD_COMMIT,
+    sourceCommit: QUIRKY_BUILD_COMMIT,
     // Why: per-skill outcomes come from re-hashing what is actually on disk, not
     // from scraping stdout.
     rescanOutdatedNames: async (names) => {

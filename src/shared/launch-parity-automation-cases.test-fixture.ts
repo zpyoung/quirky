@@ -104,10 +104,10 @@ export function automationSpawnRequest(c: AutomationLaunchCase): Record<string, 
     ...(c.request.shellOverride ? { shellOverride: c.request.shellOverride } : {}),
     ...(c.agent === 'codex' ? { startupCommandDelivery: 'shell-ready' } : {}),
     env: {
-      ORCA_PANE_KEY: `${LAUNCH_TAB_ID}:${LAUNCH_LEAF_ID}`,
-      ORCA_TAB_ID: LAUNCH_TAB_ID,
-      ORCA_WORKTREE_ID: worktreeId,
-      ORCA_AGENT_LAUNCH_TOKEN: LAUNCH_TOKEN
+      QUIRKY_PANE_KEY: `${LAUNCH_TAB_ID}:${LAUNCH_LEAF_ID}`,
+      QUIRKY_TAB_ID: LAUNCH_TAB_ID,
+      QUIRKY_WORKTREE_ID: worktreeId,
+      QUIRKY_AGENT_LAUNCH_TOKEN: LAUNCH_TOKEN
     },
     launchConfig: {
       agentCommand: c.request.agentCommand,

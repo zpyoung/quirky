@@ -4,7 +4,7 @@
  */
 
 import type { AgentLaunchIntent, AgentLaunchTarget } from '../../../../shared/agent-launch-intent'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { assertOpenCodeModelLaunchPreferencesAbsent } from '../../../opencode/opencode-model-startup-plan'
 import type { AgentLaunchParams } from '../../../../shared/rpc-contract/agent-launch-params'
 import type { EarlyAgentLaunchTab } from './agent-launch-tab-publication'
@@ -22,7 +22,7 @@ import type { EarlyAgentLaunchTab } from './agent-launch-tab-publication'
  */
 async function agentLaunchTarget(
   params: AgentLaunchParams,
-  runtime: Pick<OrcaRuntimeService, 'showTerminalWorkspaceLaunchScope'>
+  runtime: Pick<QuirkyRuntimeService, 'showTerminalWorkspaceLaunchScope'>
 ): Promise<AgentLaunchTarget> {
   if (params.target.kind !== 'existing') {
     return { kind: params.target.kind, create: { ...params.target.create } }
@@ -38,7 +38,7 @@ async function agentLaunchTarget(
 
 async function agentLaunchIntent(
   params: AgentLaunchParams,
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   /** The pane of a tab already shown for this launch; the spawn must land in it. */
   publishedPaneKey: string | undefined
 ): Promise<AgentLaunchIntent> {
@@ -65,7 +65,7 @@ async function agentLaunchIntent(
 
 async function validateReusedTerminal(
   intent: AgentLaunchIntent,
-  runtime: Pick<OrcaRuntimeService, 'showTerminal' | 'isTerminalRunningAgent'>
+  runtime: Pick<QuirkyRuntimeService, 'showTerminal' | 'isTerminalRunningAgent'>
 ): Promise<void> {
   if (!intent.reuseTerminal) {
     return
@@ -89,7 +89,7 @@ async function validateReusedTerminal(
  */
 export async function resolveUnlaunchedIntent(
   params: AgentLaunchParams,
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   early: EarlyAgentLaunchTab | null
 ): Promise<AgentLaunchIntent> {
   if (params.reuseTerminal || params.target.kind === 'create-worktree') {

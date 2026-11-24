@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createStoreWithState, setupCodexUsageStoreEnv } from './store-test-harness'
 
 const { getPathMock } = vi.hoisted(() => ({
-  getPathMock: vi.fn(() => '/tmp/orca-test-userdata')
+  getPathMock: vi.fn(() => '/tmp/quirky-test-userdata')
 }))
 
 vi.mock('electron', () => ({
@@ -43,7 +43,7 @@ describe('CodexUsageStore', () => {
       ]
     })
 
-    const summary = await store.getSummary('orca', '30d')
+    const summary = await store.getSummary('quirky', '30d')
 
     expect(summary.estimatedCostUsd).toBeCloseTo(0.0014)
     expect(summary.totalTokens).toBe(1250)
@@ -128,8 +128,8 @@ describe('CodexUsageStore', () => {
       ]
     })
 
-    const summary = await store.getSummary('orca', '30d')
-    const breakdown = await store.getBreakdown('orca', '30d', 'model')
+    const summary = await store.getSummary('quirky', '30d')
+    const breakdown = await store.getBreakdown('quirky', '30d', 'model')
 
     expect(summary.estimatedCostUsd).toBeCloseTo(85.1)
     expect(breakdown.find((row) => row.key === 'gpt-5.2-codex')?.estimatedCostUsd).toBeCloseTo(
@@ -164,8 +164,8 @@ describe('CodexUsageStore', () => {
       }))
     })
 
-    const summary = await store.getSummary('orca', '30d')
-    const breakdown = await store.getBreakdown('orca', '30d', 'model')
+    const summary = await store.getSummary('quirky', '30d')
+    const breakdown = await store.getBreakdown('quirky', '30d', 'model')
 
     expect(summary.estimatedCostUsd).toBeCloseTo(40.02)
     expect(breakdown.find((row) => row.key === 'gpt-5.6-sol')?.estimatedCostUsd).toBeCloseTo(24.4)
@@ -195,7 +195,7 @@ describe('CodexUsageStore', () => {
       }))
     })
 
-    const breakdown = await store.getBreakdown('orca', '30d', 'model')
+    const breakdown = await store.getBreakdown('quirky', '30d', 'model')
 
     expect(breakdown.find((row) => row.key === 'gpt-5.6-terra-high')?.estimatedCostUsd).toBeCloseTo(
       0.41
@@ -227,7 +227,7 @@ describe('CodexUsageStore', () => {
       }))
     })
 
-    const breakdown = await store.getBreakdown('orca', '30d', 'model')
+    const breakdown = await store.getBreakdown('quirky', '30d', 'model')
 
     expect(breakdown.find((row) => row.key === 'gpt-5.6')?.estimatedCostUsd).toBeCloseTo(0.72)
     expect(breakdown.find((row) => row.key === 'gpt-5.6-luna')?.estimatedCostUsd).toBeCloseTo(0.041)
@@ -257,7 +257,7 @@ describe('CodexUsageStore', () => {
       ]
     })
 
-    const breakdown = await store.getBreakdown('orca', '30d', 'model')
+    const breakdown = await store.getBreakdown('quirky', '30d', 'model')
 
     expect(breakdown.find((row) => row.key === 'gpt-6-astra')?.estimatedCostUsd).toBeCloseTo(61)
   })
@@ -284,7 +284,7 @@ describe('CodexUsageStore', () => {
       }))
     })
 
-    const breakdown = await store.getBreakdown('orca', '30d', 'model')
+    const breakdown = await store.getBreakdown('quirky', '30d', 'model')
 
     expect(breakdown.find((row) => row.key === 'gpt-6-astra-high')?.estimatedCostUsd).toBeCloseTo(
       1.8
@@ -316,8 +316,8 @@ describe('CodexUsageStore', () => {
       }))
     })
 
-    const summary = await store.getSummary('orca', '30d')
-    const breakdown = await store.getBreakdown('orca', '30d', 'model')
+    const summary = await store.getSummary('quirky', '30d')
+    const breakdown = await store.getBreakdown('quirky', '30d', 'model')
 
     expect(summary.hasUnpricedModels).toBe(false)
     expect(breakdown.find((row) => row.key === 'gpt-6-sol')?.estimatedCostUsd).toBeCloseTo(12.2)
@@ -346,7 +346,7 @@ describe('CodexUsageStore', () => {
       }))
     })
 
-    const breakdown = await store.getBreakdown('orca', '30d', 'model')
+    const breakdown = await store.getBreakdown('quirky', '30d', 'model')
 
     expect(breakdown.find((row) => row.key === 'gpt-6-sol-high')?.estimatedCostUsd).toBeCloseTo(
       0.36
@@ -378,8 +378,8 @@ describe('CodexUsageStore', () => {
       }))
     })
 
-    const summary = await store.getSummary('orca', '30d')
-    const breakdown = await store.getBreakdown('orca', '30d', 'model')
+    const summary = await store.getSummary('quirky', '30d')
+    const breakdown = await store.getBreakdown('quirky', '30d', 'model')
 
     expect(summary.hasUnpricedModels).toBe(false)
     expect(breakdown.find((row) => row.key === 'gpt-5.2-pro')?.estimatedCostUsd).toBeCloseTo(6.3)
@@ -433,7 +433,7 @@ describe('CodexUsageStore', () => {
       ]
     })
 
-    const summary = await store.getSummary('orca', '30d')
+    const summary = await store.getSummary('quirky', '30d')
 
     expect(summary.hasUnpricedModels).toBe(true)
     // The unpriced row's ten million tokens are absent from the total it sits beside.
@@ -482,7 +482,7 @@ describe('CodexUsageStore', () => {
       ]
     })
 
-    const summary = await store.getSummary('orca', '30d')
+    const summary = await store.getSummary('quirky', '30d')
 
     expect(summary.hasUnpricedModels).toBe(false)
   })
@@ -547,7 +547,7 @@ describe('CodexUsageStore', () => {
       ]
     })
 
-    const breakdown = await store.getBreakdown('orca', '30d', 'model')
+    const breakdown = await store.getBreakdown('quirky', '30d', 'model')
 
     expect(breakdown.find((row) => row.key === 'gpt-5.4-mini-high')?.estimatedCostUsd).toBeCloseTo(
       4.9125
@@ -584,7 +584,7 @@ describe('CodexUsageStore', () => {
       ]
     })
 
-    const summary = await store.getSummary('orca', '30d')
+    const summary = await store.getSummary('quirky', '30d')
 
     expect(summary.estimatedCostUsd).toBeCloseTo(446.840002)
   })

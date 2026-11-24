@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native'
-import { OrcaLogo } from '../components/OrcaLogo'
+import { QuirkyLogo } from '../components/QuirkyLogo'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import { useReducedMotionEnabled } from '../platform/use-reduced-motion'
 
@@ -89,11 +89,11 @@ function SampleBanner({ notification }: { notification: (typeof SAMPLE_NOTIFICAT
   return (
     <View style={styles.card}>
       <View style={styles.appIcon}>
-        <OrcaLogo size={14} />
+        <QuirkyLogo size={14} />
       </View>
       <View style={styles.cardCopy}>
         <View style={styles.cardMeta}>
-          <Text style={styles.appName}>Orca</Text>
+          <Text style={styles.appName}>Quirky</Text>
           <Text style={styles.now}>now</Text>
         </View>
         <Text style={styles.cardTitle} numberOfLines={1}>

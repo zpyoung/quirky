@@ -11,11 +11,11 @@ describe('ProjectViewWrapper GitHub source context boundary', () => {
         number: 42,
         title: 'Enterprise pull request',
         body: null,
-        url: 'https://ghe.example.com/acme/orca/pull/42',
+        url: 'https://ghe.example.com/acme/quirky/pull/42',
         state: 'OPEN',
         stateReason: null,
         isDraft: false,
-        repository: 'acme/orca',
+        repository: 'acme/quirky',
         assignees: [],
         labels: [{ name: 'bug', color: 'd73a4a' }],
         parentIssue: null,
@@ -32,7 +32,7 @@ describe('ProjectViewWrapper GitHub source context boundary', () => {
       // Why: the slug-matched row's host, so a twin id never reaches the other host's row.
       repoHostId: 'ssh:builder',
       type: 'pr',
-      prRepo: { owner: 'acme', repo: 'orca', host: 'ghe.example.com' }
+      prRepo: { owner: 'acme', repo: 'quirky', host: 'ghe.example.com' }
     })
     expect(buildProjectWorkItem(row, { id: 'repo-1' })?.prRepo?.host).toBe('github.com')
   })

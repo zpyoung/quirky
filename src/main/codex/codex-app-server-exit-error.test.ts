@@ -4,7 +4,7 @@ import { buildCodexAppServerExitError } from './codex-app-server-exit-error'
 import { PROVIDER_SPAWN_FAILURE_MARKER } from '../provider-process/provider-spawn-failure-report'
 
 describe('buildCodexAppServerExitError', () => {
-  it("keeps the stderr tail apart from Orca's wording, as log text", () => {
+  it("keeps the stderr tail apart from Quirky's wording, as log text", () => {
     const error = buildCodexAppServerExitError('  thread panicked at main.rs:4  ')
     expect(error.message).toBe('codex app-server connection ended: thread panicked at main.rs:4')
     expect(providerDiagnosticOf(error)).toEqual({

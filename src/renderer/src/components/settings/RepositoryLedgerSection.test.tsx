@@ -21,7 +21,7 @@ vi.mock('@/store', () => ({ useAppStore: mocks.useAppStore }))
 vi.mock('../../store', () => ({ useAppStore: mocks.useAppStore }))
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 
-const repo = { id: 'repo-a', displayName: 'orca' } as Repo
+const repo = { id: 'repo-a', displayName: 'quirky' } as Repo
 const summary = { ledgerId: 'ledger-1', revision: 4, staleAfterDays: 90 }
 
 let container: HTMLDivElement

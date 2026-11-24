@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
@@ -25,10 +25,10 @@ function runtimeWithAgentLaunch(
     agentDefaultEnv?: Record<string, Record<string, string>>
   } = {}
 ): {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   spawn: ReturnType<typeof vi.fn>
 } {
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resolver under test is a protected member; the assertion names only the two internals this stub replaces, each of which is assigned before the create reaches it.
   const internal = runtime as unknown as {
     store: { getSettings: () => Record<string, unknown> }

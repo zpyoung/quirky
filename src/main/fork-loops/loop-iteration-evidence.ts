@@ -17,7 +17,7 @@ import { usageDelta } from './loop-usage'
 export const MS_PER_MINUTE = 60_000
 const OUTPUT_TAIL_LINES = 300
 // filtered here rather than via the repo's exclude file, which loop creation can fail to write
-const LOOP_FILES_DIRECTORY = '.orca/loops'
+const LOOP_FILES_DIRECTORY = '.quirky/loops'
 
 const NOT_RUN_CHECK: CheckOutcome = {
   ran: false,

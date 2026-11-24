@@ -25,7 +25,7 @@ const LAYOUT_METHODS = [
 
 const layoutOwner = vi.hoisted(() => ({ isMain: true }))
 vi.mock('../../../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return layoutOwner.isMain
   }
 }))
@@ -34,12 +34,12 @@ vi.mock('../../../../shared/layout-owner-switch', () => ({
 async function switchedBuild(layoutOwnerIsMain: boolean) {
   layoutOwner.isMain = layoutOwnerIsMain
   vi.resetModules()
-  const [{ OrcaRuntimeService }, { RpcDispatcher }, { ALL_RPC_METHODS }] = await Promise.all([
-    import('../../orca-runtime'),
+  const [{ QuirkyRuntimeService }, { RpcDispatcher }, { ALL_RPC_METHODS }] = await Promise.all([
+    import('../../quirky-runtime'),
     import('../dispatcher'),
     import('./index')
   ])
-  return { OrcaRuntimeService, RpcDispatcher, ALL_RPC_METHODS }
+  return { QuirkyRuntimeService, RpcDispatcher, ALL_RPC_METHODS }
 }
 
 const Frame = z.object({ type: z.string(), subscriptionId: z.string().optional() })
@@ -60,14 +60,14 @@ afterEach(() => {
 describe('the layout intents capability', () => {
   it('is advertised only by a layout-owner build', async () => {
     const on = await switchedBuild(true)
-    expect(new on.OrcaRuntimeService().getStatus().capabilities).toEqual(
+    expect(new on.QuirkyRuntimeService().getStatus().capabilities).toEqual(
       expect.arrayContaining([
         LAYOUT_INTENTS_RUNTIME_CAPABILITY,
         LAYOUT_REOPEN_HELD_PANES_CAPABILITY
       ])
     )
     const off = await switchedBuild(false)
-    const offCapabilities = new off.OrcaRuntimeService().getStatus().capabilities
+    const offCapabilities = new off.QuirkyRuntimeService().getStatus().capabilities
     expect(offCapabilities).not.toContain(LAYOUT_INTENTS_RUNTIME_CAPABILITY)
     expect(offCapabilities).not.toContain(LAYOUT_REOPEN_HELD_PANES_CAPABILITY)
     expect(off.ALL_RPC_METHODS.map((method) => method.name)).not.toContain('layout.reopenHeldPanes')
@@ -91,8 +91,8 @@ describe('layout methods on a layout-owner server', () => {
     ['layout.reopenHeldPanes', 'invalid_argument'],
     ['layout.reportView', 'invalid_argument']
   ] as const)('admits a paired desktop and refuses a phone: %s', async (method, nextCheck) => {
-    const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
-    const dispatcher = new RpcDispatcher({ runtime: new OrcaRuntimeService() })
+    const { QuirkyRuntimeService, RpcDispatcher } = await switchedBuild(true)
+    const dispatcher = new RpcDispatcher({ runtime: new QuirkyRuntimeService() })
     const asDesktop = await dispatcher.dispatch(request(method, { bad: 1 }), {
       callerScope: PAIRED_DESKTOP
     })
@@ -102,8 +102,8 @@ describe('layout methods on a layout-owner server', () => {
   })
 
   it('streams a snapshot to a paired desktop', async () => {
-    const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
-    const runtime = new OrcaRuntimeService()
+    const { QuirkyRuntimeService, RpcDispatcher } = await switchedBuild(true)
+    const runtime = new QuirkyRuntimeService()
     const dispatcher = new RpcDispatcher({ runtime })
     const frames: z.infer<typeof Frame>[] = []
     const done = dispatcher.dispatchStreaming(
@@ -131,8 +131,8 @@ describe('layout.reportView', () => {
   }
 
   it("records the desktop's groups under its connection", async () => {
-    const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
-    const runtime = new OrcaRuntimeService()
+    const { QuirkyRuntimeService, RpcDispatcher } = await switchedBuild(true)
+    const runtime = new QuirkyRuntimeService()
     const reported = vi.spyOn(runtime, 'reportClientView')
     const dispatcher = new RpcDispatcher({ runtime })
     const reply = await dispatcher.dispatch(
@@ -144,8 +144,8 @@ describe('layout.reportView', () => {
   })
 
   it('passes a refresh on as one', async () => {
-    const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
-    const runtime = new OrcaRuntimeService()
+    const { QuirkyRuntimeService, RpcDispatcher } = await switchedBuild(true)
+    const runtime = new QuirkyRuntimeService()
     const reported = vi.spyOn(runtime, 'reportClientView')
     const reply = await new RpcDispatcher({ runtime }).dispatch(
       request('layout.reportView', { activeGroupByWorkspace: { 'wt-1': 'g2' }, refresh: true }),
@@ -156,8 +156,8 @@ describe('layout.reportView', () => {
   })
 
   it('refuses a caller with no connection to tie the report to', async () => {
-    const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
-    const runtime = new OrcaRuntimeService()
+    const { QuirkyRuntimeService, RpcDispatcher } = await switchedBuild(true)
+    const runtime = new QuirkyRuntimeService()
     const reported = vi.spyOn(runtime, 'reportClientView')
     const reply = await new RpcDispatcher({ runtime }).dispatch(
       request('layout.reportView', { activeGroupByWorkspace: { 'wt-1': 'g2' } }),
@@ -174,8 +174,8 @@ describe('layout.reportView', () => {
     [{ activeGroupByWorkspace: ['g1'] }],
     [{ activeGroupByWorkspace: {}, refresh: false }]
   ])('refuses params it cannot read: %j', async (params) => {
-    const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
-    const runtime = new OrcaRuntimeService()
+    const { QuirkyRuntimeService, RpcDispatcher } = await switchedBuild(true)
+    const runtime = new QuirkyRuntimeService()
     const reported = vi.spyOn(runtime, 'reportClientView')
     const reply = await new RpcDispatcher({ runtime }).dispatch(
       request('layout.reportView', params),
@@ -231,9 +231,9 @@ describe('an older desktop on a layout-owner server', () => {
 
   /** A windowless (serve) host: no notifier, its tabs already published. */
   async function headlessServer() {
-    const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
+    const { QuirkyRuntimeService, RpcDispatcher } = await switchedBuild(true)
     // Seeding stands in for a prior publication.
-    class HeadlessServer extends OrcaRuntimeService {
+    class HeadlessServer extends QuirkyRuntimeService {
       seed(): void {
         this.storeMobileSessionSnapshot(WT, published())
       }

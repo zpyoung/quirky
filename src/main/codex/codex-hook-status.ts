@@ -18,14 +18,14 @@ import {
   getManagedScriptPath
 } from './codex-hook-definition'
 import {
-  approvalsAtOrcaEntries,
-  findOrcaEntrySlots,
+  approvalsAtQuirkyEntries,
+  findQuirkyEntrySlots,
   getManagedCodexHookHome,
-  isKnownOrcaHash,
-  readKnownOrcaHashes,
+  isKnownQuirkyHash,
+  readKnownQuirkyHashes,
   getRealHomeCodexHookHome,
   type CodexHookHome
-} from './codex-hook-orca-approvals'
+} from './codex-hook-quirky-approvals'
 import type { CodexHookAnswer } from './codex-hook-trust-derivation'
 import { readKnownCodexHookAnswer } from './codex-hook-hash-lookup'
 import { resolveCodexHookStatusHome } from './codex-hook-reconcile'
@@ -89,7 +89,7 @@ function readRealHomeCodexHookStatus(answer: CodexHookAnswer | null): AgentHookI
 }
 
 /**
- * Codex hook status for one home, read from its files: Orca's entry in each
+ * Codex hook status for one home, read from its files: Quirky's entry in each
  * event Codex lists, and that entry's approval holding Codex's own hash under
  * any spelling Codex may key the file by. Without Codex's answer, the reason.
  */
@@ -108,7 +108,7 @@ function readHomeStatus(
   if (!config) {
     return status('error', false, 'Could not parse Codex hooks.json')
   }
-  const slots = findOrcaEntrySlots(config.hooks, command)
+  const slots = findQuirkyEntrySlots(config.hooks, command)
   // Why: an unreadable config.toml is distinct from an absent one (an empty map).
   let trustStates: ReadonlyMap<string, CodexHookTrustState>
   let spelled: (key: string) => boolean = () => false
@@ -122,31 +122,31 @@ function readHomeStatus(
   }
   // Why every spelling: Codex on Windows ignores an approval kept only under the forward-slash key.
   const approvals = new Map(
-    [...approvalsAtOrcaEntries(trustStates, slots, home.keySourcePaths, command)].map(
+    [...approvalsAtQuirkyEntries(trustStates, slots, home.keySourcePaths, command)].map(
       ([eventLabel, held]) => [eventLabel, held.filter((approval) => spelled(approval.key))]
     )
   )
   if (answer?.kind !== 'hashes') {
-    const reason = answer?.failure ?? 'Orca has not asked Codex yet'
+    const reason = answer?.failure ?? 'Quirky has not asked Codex yet'
     if (slots.size === 0) {
       return status('not_installed', false, reason)
     }
     if (answer?.kind === 'refused') {
-      return status('partial', true, `Orca's hook entry is installed, but ${reason}`)
+      return status('partial', true, `Quirky's hook entry is installed, but ${reason}`)
     }
-    // Why not an error: until Codex answers, the approval is the home's earlier one or Orca's own hash.
-    const known = readKnownOrcaHashes(home, command)
+    // Why not an error: until Codex answers, the approval is the home's earlier one or Quirky's own hash.
+    const known = readKnownQuirkyHashes(home, command)
     const approved =
       trustReadError === null &&
       [...approvals].every(([eventLabel, held]) =>
         held.some(
           (approval) =>
-            approval.enabled !== false && isKnownOrcaHash(known, eventLabel, approval.trustedHash)
+            approval.enabled !== false && isKnownQuirkyHash(known, eventLabel, approval.trustedHash)
         )
       )
     return approved
-      ? status('installed', true, `Approved by Orca; not yet confirmed by Codex (${reason})`)
-      : status('partial', true, `Orca's hook entry is not approved yet (${reason})`)
+      ? status('installed', true, `Approved by Quirky; not yet confirmed by Codex (${reason})`)
+      : status('partial', true, `Quirky's hook entry is not approved yet (${reason})`)
   }
   const listedEvents = CODEX_EVENTS.filter(
     (eventName) => answer.hashes[CODEX_EVENT_LABEL[eventName]] !== undefined
@@ -192,8 +192,8 @@ function readHomeStatus(
 }
 
 /**
- * Why Orca's approvals are missing, when it is config.toml's inline approvals:
- * adding Orca's own there would leave a file Codex cannot load. Read now.
+ * Why Quirky's approvals are missing, when it is config.toml's inline approvals:
+ * adding Quirky's own there would leave a file Codex cannot load. Read now.
  */
 function describeInlineApprovals(
   home: CodexHookHome,
@@ -204,7 +204,7 @@ function describeInlineApprovals(
   }
   const command = getManagedCommand(getManagedScriptPath())
   const hooks = readHooksJson(home.hooksJsonPath)?.hooks
-  const slots = findOrcaEntrySlots(hooks, command)
+  const slots = findQuirkyEntrySlots(hooks, command)
   const probes: CodexTrustEntry[] = CODEX_EVENTS.flatMap((eventName) => {
     const label = CODEX_EVENT_LABEL[eventName]
     const hash = answer?.kind === 'hashes' ? answer.hashes[label] : 'probe'
@@ -237,7 +237,7 @@ function describeInlineApprovals(
     return null
   } catch (error) {
     return isCodexConfigTomlRefusedError(error)
-      ? `${home.tomlPath} keeps hook approvals inline, so Orca cannot add its own there; Orca shows no status for ~/.codex until they are tables`
+      ? `${home.tomlPath} keeps hook approvals inline, so Quirky cannot add its own there; Quirky shows no status for ~/.codex until they are tables`
       : null
   }
 }

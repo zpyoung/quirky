@@ -97,7 +97,7 @@ type VerificationDeps = TerminateDeps & {
 }
 
 /**
- * Orca's verdict vocabulary for a snapshotted tree, with no synonyms: `live` is
+ * Quirky's verdict vocabulary for a snapshotted tree, with no synonyms: `live` is
  * an identity-matched descendant still observed at the deadline; `unverifiable`
  * is a table that could not be read, which is never evidence either way.
  */

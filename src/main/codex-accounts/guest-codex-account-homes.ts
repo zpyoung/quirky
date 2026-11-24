@@ -5,14 +5,14 @@ import { getSystemCodexHomePath } from '../codex/codex-home-paths'
 import { resolveHostCodexManagedHomeVerdict } from './host-codex-managed-home-ownership'
 
 // Where the desktop creates a managed Codex account's home inside a guest (a WSL distro):
-// `$HOME/<root>/<accountId>/home`, owned by an `.orca-managed-home` marker holding the id.
-export const GUEST_CODEX_ACCOUNTS_ROOT_SEGMENTS = ['.local', 'share', 'orca', 'codex-accounts']
+// `$HOME/<root>/<accountId>/home`, owned by an `.quirky-managed-home` marker holding the id.
+export const GUEST_CODEX_ACCOUNTS_ROOT_SEGMENTS = ['.local', 'share', 'quirky', 'codex-accounts']
 
 function guestCodexAccountsRoot(home: string): string {
   return join(home, ...GUEST_CODEX_ACCOUNTS_ROOT_SEGMENTS)
 }
 
-/** The canonical home when `candidate` is an Orca-owned account home on this host, else null. */
+/** The canonical home when `candidate` is an Quirky-owned account home on this host, else null. */
 export function resolveGuestCodexAccountHome(
   candidate: string | undefined,
   home: string = homedir()
@@ -36,7 +36,7 @@ export function resolveGuestCodexAccountHome(
   return verdict.kind === 'owned' ? verdict.homePath : null
 }
 
-/** Every Orca-owned account home on this host; none where the desktop never made one. */
+/** Every Quirky-owned account home on this host; none where the desktop never made one. */
 export function listGuestCodexAccountHomes(home: string = homedir()): string[] {
   const root = guestCodexAccountsRoot(home)
   let accountIds: string[]

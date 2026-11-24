@@ -14,7 +14,7 @@ const TAB_ID = 'tab-1'
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const PANE_KEY = makePaneKey(TAB_ID, LEAF_ID)
 const PTY_ID = 'pty-1'
-const TITLE = "That panel is Claude's, not Orca's."
+const TITLE = "That panel is Claude's, not Quirky's."
 const FLOATING_TAB = {
   id: 'unified-floating',
   entityId: TAB_ID,

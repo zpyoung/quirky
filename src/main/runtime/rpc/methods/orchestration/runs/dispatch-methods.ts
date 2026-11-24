@@ -11,7 +11,7 @@ import {
 import { resolveRunScope } from './run-scope'
 import { DispatchParams, DispatchShowParams } from '../schemas'
 import {
-  orcaSessionIdOrHandle,
+  quirkySessionIdOrHandle,
   resolveDispatchAssigneeParty
 } from '../../../../orchestration/orchestration-party'
 import {
@@ -77,8 +77,8 @@ export const ORCHESTRATION_DISPATCH_METHODS = [
           dispatchId: 'ctx_dryrun',
           canDispatchSubWorkers: previewDepth < maxDepth,
           taskSpec: task.spec,
-          coordinatorHandle: orcaSessionIdOrHandle(params.from ?? 'coordinator', db),
-          workerHandle: assignee ? orcaSessionIdOrHandle(assignee, db) : 'worker',
+          coordinatorHandle: quirkySessionIdOrHandle(params.from ?? 'coordinator', db),
+          workerHandle: assignee ? quirkySessionIdOrHandle(assignee, db) : 'worker',
           devMode: params.devMode,
           ...(assignee ? { cliCommand: runtime.getTerminalOrchestrationCliCommand(assignee) } : {})
         })
@@ -117,7 +117,7 @@ export const ORCHESTRATION_DISPATCH_METHODS = [
         // The session wins over `--from`, so a chat calling with none is still refused here.
         refuseChatSelfAssignment({
           sessionId: chatAssignee,
-          coordinatorSessionId: orchestrationCaller?.orcaSessionId,
+          coordinatorSessionId: orchestrationCaller?.quirkySessionId,
           remedy: 'Dispatch to a different agent, or use worker-start to create one.'
         })
       }
@@ -167,8 +167,8 @@ export const ORCHESTRATION_DISPATCH_METHODS = [
         dispatchId: ctx.id,
         canDispatchSubWorkers: ctx.depth < runtime.getNestedWorkerMaxDepth(),
         taskSpec: task.spec,
-        coordinatorHandle: orcaSessionIdOrHandle(params.from ?? 'coordinator', db),
-        workerHandle: orcaSessionIdOrHandle(to, db),
+        coordinatorHandle: quirkySessionIdOrHandle(params.from ?? 'coordinator', db),
+        workerHandle: quirkySessionIdOrHandle(to, db),
         devMode: params.devMode,
         cliCommand: runtime.getTerminalOrchestrationCliCommand(to)
       })
@@ -246,8 +246,8 @@ export const ORCHESTRATION_DISPATCH_METHODS = [
           dispatchId: ctx?.id ?? 'ctx_preview',
           canDispatchSubWorkers: (ctx?.depth ?? 1) < runtime.getNestedWorkerMaxDepth(),
           taskSpec: task.spec,
-          coordinatorHandle: orcaSessionIdOrHandle(params.from ?? 'coordinator', db),
-          workerHandle: orcaSessionIdOrHandle(workerHandle, db),
+          coordinatorHandle: quirkySessionIdOrHandle(params.from ?? 'coordinator', db),
+          workerHandle: quirkySessionIdOrHandle(workerHandle, db),
           devMode: params.devMode,
           ...(ctx ? { cliCommand: runtime.getTerminalOrchestrationCliCommand(workerHandle) } : {})
         })

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as RunProcess from '@orca/process-host'
+import type * as RunProcess from '@quirky/process-host'
 
 const {
   childSpawnMock,
@@ -30,7 +30,7 @@ vi.mock('node:child_process', () => ({
 }))
 
 // The chokepoint is the seam: assertions see what the fetcher asked for, before shim resolution.
-vi.mock('@orca/process-host', async (importOriginal) => ({
+vi.mock('@quirky/process-host', async (importOriginal) => ({
   ...(await importOriginal<typeof RunProcess>()),
   spawnProcess: (spec: { program: string; args?: readonly string[] }) =>
     childSpawnMock(spec.program, spec.args ?? [], spec)
@@ -687,7 +687,8 @@ describe('fetchCodexRateLimits', () => {
 
     try {
       const resultPromise = fetchCodexRateLimits({
-        codexHomePath: '\\\\wsl.localhost\\Ubuntu\\home\\alice\\.local\\share\\orca\\account\\home'
+        codexHomePath:
+          '\\\\wsl.localhost\\Ubuntu\\home\\alice\\.local\\share\\quirky\\account\\home'
       })
       await vi.advanceTimersByTimeAsync(0)
       rpcChild.emit('close')

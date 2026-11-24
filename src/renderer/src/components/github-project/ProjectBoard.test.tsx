@@ -96,7 +96,7 @@ const status = (optionId: string, name: string): GitHubProjectFieldValue => ({
 })
 
 function dragData(rowId: string): { dataTransfer: Partial<DataTransfer> } {
-  const store: Record<string, string> = { 'application/x-orca-project-row': rowId }
+  const store: Record<string, string> = { 'application/x-quirky-project-row': rowId }
   return {
     dataTransfer: {
       types: Object.keys(store),

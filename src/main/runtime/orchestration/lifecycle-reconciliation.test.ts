@@ -269,13 +269,13 @@ describe('lifecycle reconciliation', () => {
       type: 'worker_done',
       priority: 'high',
       subject: 'Rejected worker_done: Done',
-      body: expect.stringContaining('Orca rejected this worker_done')
+      body: expect.stringContaining('Quirky rejected this worker_done')
     })
     const persisted = db.getMessageById(message.id)
     expect(JSON.parse(persisted?.payload ?? '{}')).toMatchObject({
       taskId: task.id,
       dispatchId: dispatch.id,
-      _orcaLifecycleRejection: { code: 'sender_not_assignee' }
+      _quirkyLifecycleRejection: { code: 'sender_not_assignee' }
     })
     const rereadLogs: string[] = []
     expect(
@@ -303,7 +303,7 @@ describe('lifecycle reconciliation', () => {
         taskId: task.id,
         dispatchId: dispatch.id,
         outcome: 'succeeded',
-        _orcaLifecycleRejection: {
+        _quirkyLifecycleRejection: {
           code: 'sender_not_assignee',
           reason: 'caller supplied'
         }

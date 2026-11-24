@@ -1,10 +1,10 @@
-// Whether Orca's own send echo opens a turn.
+// Whether Quirky's own send echo opens a turn.
 //
 // The provider's own output opens one too — see `ensureTurnOpen` in the
-// translator, which the content sites call as they journal. Orca's turn used to
+// translator, which the content sites call as they journal. Quirky's turn used to
 // open only here, while any `result` frame closed it, and that asymmetry is what
 // leaves a working session reading idle: the provider resumes on its own when a
-// background task reports in and wakes the agent, and nothing Orca sent ever
+// background task reports in and wakes the agent, and nothing Quirky sent ever
 // arrives to reopen a turn.
 
 import {
@@ -25,7 +25,7 @@ export type ClaudeSendEchoTurnInput = {
   /** The raw frame: an absent `parent_tool_use_id` is not the same claim as an
    *  explicit `null`, and only a root frame carries a root turn. */
   frame: Record<string, unknown>
-  /** Orca dispatched this send and the provider is replaying it back. */
+  /** Quirky dispatched this send and the provider is replaying it back. */
   startsTurn: boolean
   observedAt: number
   /** Host clock on the submission row that produced this send, when known. */

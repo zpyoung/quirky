@@ -1,4 +1,4 @@
-// A runtime Orca installs for an agent only when the person asks, as its host reports it.
+// A runtime Quirky installs for an agent only when the person asks, as its host reports it.
 
 // The host answers managedRuntime.subscribe, managedRuntime.install and managedRuntime.cancel.
 export const MANAGED_RUNTIME_INSTALL_RUNTIME_CAPABILITY = 'managed-runtime.install.v1' as const
@@ -36,9 +36,9 @@ export type ManagedRuntimeInstallState = {
   installedCurrent: boolean
   /** The pinned release's folder is there but not whole; Install repairs it. */
   damaged?: boolean
-  /** Orca's copy is there to remove, whole or damaged; absent from a host without Remove. */
+  /** Quirky's copy is there to remove, whole or damaged; absent from a host without Remove. */
   canRemove?: boolean
-  /** What a chat start runs now: Orca's release, a copy found outside it, or nothing. */
+  /** What a chat start runs now: Quirky's release, a copy found outside it, or nothing. */
   source: 'managed' | 'external' | null
   /** The latest operation; an ended one stays readable until the next starts. */
   operation: ManagedRuntimeOperation | null

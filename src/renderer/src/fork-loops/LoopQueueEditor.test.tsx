@@ -145,9 +145,7 @@ describe('LoopQueueEditor', () => {
     installQueueApi()
     render(<LoopQueueEditor loop={makeLoop()} />)
 
-    expect(
-      within(itemRow('Add the tests')).getByRole('button', { name: 'Move up' })
-    ).toBeDisabled()
+    expect(within(itemRow('Add the tests')).getByRole('button', { name: 'Move up' })).toBeDisabled()
     expect(
       within(itemRow('Update the docs')).getByRole('button', { name: 'Move down' })
     ).toBeDisabled()
@@ -171,9 +169,7 @@ describe('LoopQueueEditor', () => {
     expect(within(done).getByRole('button', { name: 'Move up' })).toBeDisabled()
     expect(within(done).getByRole('button', { name: 'Move down' })).toBeDisabled()
     expect(within(itemRow('Write the parser')).queryAllByRole('button')).toHaveLength(0)
-    expect(
-      within(itemRow('Add the tests')).getByRole('button', { name: 'Move up' })
-    ).toBeDisabled()
+    expect(within(itemRow('Add the tests')).getByRole('button', { name: 'Move up' })).toBeDisabled()
 
     await act(async () => {
       fireEvent.click(within(itemRow('Add the tests')).getByRole('button', { name: 'Move down' }))

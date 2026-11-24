@@ -31,10 +31,10 @@ export type TerminalWebDocument = {
   dispose: () => void
 }
 
-const STYLE_ELEMENT_ID = 'orca-terminal-document-style'
+const STYLE_ELEMENT_ID = 'quirky-terminal-document-style'
 
 /** The class the host carries, and the prefix every injected rule is held under. */
-const HOST_CLASS = 'orca-terminal-document-host'
+const HOST_CLASS = 'quirky-terminal-document-host'
 
 /**
  * The stylesheet, planted in the head once per page and reaching only inside the host.

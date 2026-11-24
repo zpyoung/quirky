@@ -60,7 +60,7 @@ const CORPUS_REPLIES = {
   // Two scenarios merged, because two readers read this one method and neither reply carries what
   // the other needs. `transport-host-status-gates-ready` is what `HostProtocolGate` above every
   // host route reads: with only the capability list it decides this desktop is too old and paints
-  // "Update Orca on your computer" over the route, which is what the screen showed first. The
+  // "Update Quirky on your computer" over the route, which is what the screen showed first. The
   // capability is `aivault-history-screen-listed`'s, and it is what opens the panel's own gate.
   'status.get': {
     protocolVersion: 5,
@@ -121,13 +121,13 @@ beforeAll(async () => {
   bridgeVersion = await readBridgeProtocolVersion()
   faultGrant = await readBridgeFaultGrant()
   paintName = await readBridgePagePainted()
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-app-agent-history-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-app-agent-history-'))
   const built = await buildMobileWebAppBundle({ outDir: join(scratch, 'bundle') })
   routeChunks = built.routeChunks
   const served = await createBundleServer({ outDir: built.outDir, cspHeader })
   server = served.server
   origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
 }, 180_000)
 
@@ -197,14 +197,14 @@ async function waitForRoute({ page, errors, uncaught }, route, awaitText) {
       uncaught
     ])
   const cause = await race(
-    page.waitForFunction(() => document.documentElement.dataset.orcaWebEntry === 'mounted', {
+    page.waitForFunction(() => document.documentElement.dataset.quirkyWebEntry === 'mounted', {
       timeout: 30_000,
       polling: 250
     })
   )
   if (cause) {
     const state = await page.evaluate(
-      () => document.documentElement.dataset.orcaWebEntry ?? 'absent'
+      () => document.documentElement.dataset.quirkyWebEntry ?? 'absent'
     )
     throw named(cause, `never mounted (entry ${state})`)
   }
@@ -217,7 +217,7 @@ async function waitForRoute({ page, errors, uncaught }, route, awaitText) {
   if (paintCause) {
     throw named(paintCause, `mounted but never painted ${JSON.stringify(awaitText)}`)
   }
-  for (const fault of await page.evaluate(() => globalThis.__orcaRenderCheckFaults ?? [])) {
+  for (const fault of await page.evaluate(() => globalThis.__quirkyRenderCheckFaults ?? [])) {
     errors.push(`page fault: ${fault}`)
   }
 }
@@ -233,7 +233,7 @@ async function openRoute(route, awaitText, options = {}) {
 /** Every grant-gated notify the page posted, whole and in order, as the shell received them. The
  *  paint report is not one: every page posts it once its route screen has a frame. */
 async function readNotifies(page) {
-  const notifies = await page.evaluate(() => globalThis.__orcaRenderCheckNotifies ?? [])
+  const notifies = await page.evaluate(() => globalThis.__quirkyRenderCheckNotifies ?? [])
   return notifies.filter((frame) => frame.name !== paintName)
 }
 
@@ -257,7 +257,7 @@ describeRender('the agent-history route in a real browser', () => {
     const text = await opened.page.evaluate(() => document.body.innerText)
     const url = await opened.page.evaluate(() => location.pathname + location.search)
     const session = await opened.page.evaluate(
-      () => document.documentElement.dataset.orcaWebSessionId ?? null
+      () => document.documentElement.dataset.quirkyWebSessionId ?? null
     )
     expect(opened.errors.filter((entry) => entry.includes('Content Security Policy'))).toEqual([])
     expect(opened.errors).toEqual([])

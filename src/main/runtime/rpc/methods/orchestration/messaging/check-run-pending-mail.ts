@@ -1,5 +1,5 @@
 import type { MessageType, OrchestrationDb, RunRow } from '../../../../orchestration/db'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { interruptedAcknowledgedCheck } from '../routing'
 import { checkWorkerMailbox } from './check-worker'
 import { currentDispatchAssigneeRun } from './recipient-routing'
@@ -11,7 +11,7 @@ import type { z } from 'zod'
 
 export async function checkRunPendingMail(args: {
   params: z.infer<typeof CheckParams>
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   db: OrchestrationDb
   run: RunRow
   handle: string
@@ -71,8 +71,8 @@ export async function checkRunPendingMail(args: {
   if (
     residual &&
     residual.run_id !== run.id &&
-    (residual.assignee_orca_session_id === null ||
-      residual.assignee_orca_session_id === caller.orcaSessionId) &&
+    (residual.assignee_quirky_session_id === null ||
+      residual.assignee_quirky_session_id === caller.quirkySessionId) &&
     callerHoldsDispatchPane(residual, paneKey) &&
     currentDispatchAssigneeRun(runtime, db, residual)?.id === run.id &&
     (residualAck || !db.hasOutstandingMailboxDelivery(address))

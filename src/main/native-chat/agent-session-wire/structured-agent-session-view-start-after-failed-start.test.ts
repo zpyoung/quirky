@@ -48,7 +48,7 @@ let lifecycle: Promise<void>[]
 let initGate: Promise<void>
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-view-start-after-failed-start-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-view-start-after-failed-start-'))
   resetHostTestOperationIds()
   lifecycle = []
   initGate = Promise.resolve()

@@ -38,16 +38,16 @@ function createFiles(root: string, directoryName: string, count: number, extensi
 export type PairedQuickOpenLargeTreeFixture = {
   dispose: () => void
   gitIgnoredTargetPath: string
-  orcaIgnoredTargetPath: string
+  quirkyIgnoredTargetPath: string
   root: string
 }
 
 export function createPairedQuickOpenLargeTreeFixture(): PairedQuickOpenLargeTreeFixture {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'orca-paired-quick-open-large-tree-'))
+  const root = mkdtempSync(path.join(os.tmpdir(), 'quirky-paired-quick-open-large-tree-'))
   try {
     execFileSync('git', ['init'], { cwd: root, stdio: 'pipe' })
     writeFileSync(path.join(root, '.gitignore'), 'data/\n')
-    writeFileSync(path.join(root, '.orcaignore'), 'orca-ignored/\n')
+    writeFileSync(path.join(root, '.quirkyignore'), 'quirky-ignored/\n')
 
     const visibleFileCount = LARGE_TREE_FILE_COUNT - LARGE_TREE_IGNORED_FILE_COUNT - 3
     createFiles(root, 'src', visibleFileCount, 'ts')
@@ -66,22 +66,22 @@ export function createPairedQuickOpenLargeTreeFixture(): PairedQuickOpenLargeTre
       ),
       path.join(root, ...gitIgnoredTargetPath.split('/'))
     )
-    const orcaIgnoredTargetPath = 'orca-ignored/sta-4354-orcaignore-target.ts'
-    mkdirSync(path.join(root, 'orca-ignored'))
-    closeSync(openSync(path.join(root, ...orcaIgnoredTargetPath.split('/')), 'w'))
+    const quirkyIgnoredTargetPath = 'quirky-ignored/sta-4354-quirkyignore-target.ts'
+    mkdirSync(path.join(root, 'quirky-ignored'))
+    closeSync(openSync(path.join(root, ...quirkyIgnoredTargetPath.split('/')), 'w'))
     truncateSync(
       path.join(root, 'data', 'chunk-000000', `${LONG_STEM}000000.bin`),
       LARGE_TREE_NOMINAL_IGNORED_BYTES
     )
 
-    execFileSync('git', ['add', '.gitignore', '.orcaignore'], { cwd: root, stdio: 'pipe' })
+    execFileSync('git', ['add', '.gitignore', '.quirkyignore'], { cwd: root, stdio: 'pipe' })
     execFileSync(
       'git',
       [
         '-c',
-        'user.name=Orca E2E',
+        'user.name=Quirky E2E',
         '-c',
-        'user.email=orca-e2e@example.invalid',
+        'user.email=quirky-e2e@example.invalid',
         'commit',
         '-m',
         'seed large-tree fixture'
@@ -91,7 +91,7 @@ export function createPairedQuickOpenLargeTreeFixture(): PairedQuickOpenLargeTre
     return {
       root,
       gitIgnoredTargetPath,
-      orcaIgnoredTargetPath,
+      quirkyIgnoredTargetPath,
       dispose: () => rmSync(root, { recursive: true, force: true })
     }
   } catch (error) {

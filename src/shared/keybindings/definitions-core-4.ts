@@ -94,7 +94,7 @@ export const KEYBINDING_DEFINITION_CORE_4: readonly KeybindingDefinition[] = [
       linux: [],
       win32: []
     },
-    // Why: macOS uses Shift+Space as an input-source shortcut; Orca otherwise rejects Shift-only bindings to avoid stealing typed text.
+    // Why: macOS uses Shift+Space as an input-source shortcut; Quirky otherwise rejects Shift-only bindings to avoid stealing typed text.
     allowShiftOnlyKeybindings: true
   },
   {

@@ -23,7 +23,7 @@ import {
   abandonInstall
 } from './remote-versioned-install'
 import { gcOldRemoteInstallVersions } from './remote-install-gc'
-import { ORCAD_INSTALL_MODEL } from './remote-install-model'
+import { QUIRKYD_INSTALL_MODEL } from './remote-install-model'
 import {
   isUnconfirmedSshCommandTermination,
   execCommand
@@ -79,17 +79,17 @@ describe('isRemoteInstallComplete', () => {
 
   it('returns true only when the OK probe succeeds', async () => {
     mockExec.mockResolvedValueOnce('OK')
-    expect(await isRemoteInstallComplete(conn, ORCAD_INSTALL_MODEL, '/r')).toBe(true)
+    expect(await isRemoteInstallComplete(conn, QUIRKYD_INSTALL_MODEL, '/r')).toBe(true)
   })
 
   it('returns false when the probe reports MISSING', async () => {
     mockExec.mockResolvedValueOnce('MISSING')
-    expect(await isRemoteInstallComplete(conn, ORCAD_INSTALL_MODEL, '/r')).toBe(false)
+    expect(await isRemoteInstallComplete(conn, QUIRKYD_INSTALL_MODEL, '/r')).toBe(false)
   })
 
   it('returns false on exec error', async () => {
     mockExec.mockRejectedValueOnce(new Error('boom'))
-    expect(await isRemoteInstallComplete(conn, ORCAD_INSTALL_MODEL, '/r')).toBe(false)
+    expect(await isRemoteInstallComplete(conn, QUIRKYD_INSTALL_MODEL, '/r')).toBe(false)
   })
 
   it('does not convert an aborted install probe into a missing install', async () => {
@@ -100,7 +100,7 @@ describe('isRemoteInstallComplete', () => {
     })
 
     await expect(
-      isRemoteInstallComplete(conn, ORCAD_INSTALL_MODEL, '/r', undefined, {
+      isRemoteInstallComplete(conn, QUIRKYD_INSTALL_MODEL, '/r', undefined, {
         signal: controller.signal
       })
     ).rejects.toMatchObject({ name: 'AbortError' })
@@ -112,7 +112,7 @@ describe('isRemoteInstallComplete', () => {
     })
     mockExec.mockRejectedValueOnce(sessionLimitError)
 
-    await expect(isRemoteInstallComplete(conn, ORCAD_INSTALL_MODEL, '/r')).resolves.toBe(false)
+    await expect(isRemoteInstallComplete(conn, QUIRKYD_INSTALL_MODEL, '/r')).resolves.toBe(false)
   })
 
   it('rethrows SSH session-limit errors in strict mode', async () => {
@@ -122,7 +122,7 @@ describe('isRemoteInstallComplete', () => {
     mockExec.mockRejectedValueOnce(sessionLimitError)
 
     await expect(
-      isRemoteInstallComplete(conn, ORCAD_INSTALL_MODEL, '/r', undefined, {
+      isRemoteInstallComplete(conn, QUIRKYD_INSTALL_MODEL, '/r', undefined, {
         rethrowSessionLimitErrors: true
       })
     ).rejects.toBe(sessionLimitError)
@@ -131,14 +131,14 @@ describe('isRemoteInstallComplete', () => {
   it('remote completeness requires every model artifact and the install sentinel', async () => {
     mockExec.mockResolvedValueOnce('OK')
     const host = getRemoteHostPlatform('linux-x64')
-    await isRemoteInstallComplete(conn, ORCAD_INSTALL_MODEL, '/r', host)
+    await isRemoteInstallComplete(conn, QUIRKYD_INSTALL_MODEL, '/r', host)
     const cmd = mockExec.mock.calls.at(-1)?.[1] ?? ''
-    expect(ORCAD_INSTALL_MODEL.requiredArtifacts(host).length).toBeGreaterThan(0)
+    expect(QUIRKYD_INSTALL_MODEL.requiredArtifacts(host).length).toBeGreaterThan(0)
     expect(cmd).toContain("cd '/r'")
-    for (const artifact of ORCAD_INSTALL_MODEL.requiredArtifacts(host)) {
+    for (const artifact of QUIRKYD_INSTALL_MODEL.requiredArtifacts(host)) {
       expect(cmd).toContain(`test -f '${artifact}'`)
     }
-    expect(cmd).toContain(ORCAD_INSTALL_MODEL.installCompleteFilename)
+    expect(cmd).toContain(QUIRKYD_INSTALL_MODEL.installCompleteFilename)
   })
 })
 
@@ -461,13 +461,13 @@ describe('relay GC claim', () => {
 })
 
 describe('gcOldRemoteInstallVersions', () => {
-  // Stands in for orcad's liveness probe: only DEAD frees a dir, and an unanswered probe keeps it.
+  // Stands in for quirkyd's liveness probe: only DEAD frees a dir, and an unanswered probe keeps it.
   const collectOldVersions = (
     remoteHome = '/home/u',
-    currentDir = '/home/u/.orca-remote/orcad-0.1.0+bbb',
+    currentDir = '/home/u/.quirky-remote/quirkyd-0.1.0+bbb',
     host?: RemoteHostPlatform
   ): Promise<void> =>
-    gcOldRemoteInstallVersions(conn, ORCAD_INSTALL_MODEL, remoteHome, currentDir, host, {
+    gcOldRemoteInstallVersions(conn, QUIRKYD_INSTALL_MODEL, remoteHome, currentDir, host, {
       isDirLive: async (dir) => {
         const answer = await mockExec(conn, `liveness ${dir}`).catch((err: unknown) => {
           if (isUnconfirmedSshCommandTermination(err)) {
@@ -486,7 +486,7 @@ describe('gcOldRemoteInstallVersions', () => {
 
   it('removes a sibling that is complete, unlocked, and has no live socket', async () => {
     // ls listing
-    mockExec.mockResolvedValueOnce('orcad-0.1.0+aaa\norcad-0.1.0+bbb\n')
+    mockExec.mockResolvedValueOnce('quirkyd-0.1.0+aaa\nquirkyd-0.1.0+bbb\n')
     // For sibling "aaa": safety probes pass, then GC claims the install lock before removal.
     mockExec
       .mockResolvedValueOnce('OPEN')
@@ -506,10 +506,10 @@ describe('gcOldRemoteInstallVersions', () => {
 
     const lastCmd = mockExec.mock.calls.at(-1)?.[1] ?? ''
     expect(lastCmd).toContain('rm -rf')
-    expect(lastCmd).toContain('orcad-0.1.0+aaa.gc-tombstone')
+    expect(lastCmd).toContain('quirkyd-0.1.0+aaa.gc-tombstone')
     const commands = mockExec.mock.calls.map(([, command]) => command)
     expect(
-      commands.some((command) => command === "rm -rf '/home/u/.orca-remote/orcad-0.1.0+aaa'")
+      commands.some((command) => command === "rm -rf '/home/u/.quirky-remote/quirkyd-0.1.0+aaa'")
     ).toBe(false)
   })
 
@@ -517,11 +517,11 @@ describe('gcOldRemoteInstallVersions', () => {
     mockExec
       .mockResolvedValueOnce(
         [
-          'orcad-0.1.0+abc.gc-tombstone.123.456',
-          'orcad-0.1.0+abc.gc-tombstone.bad.456',
-          'xorcad-0.1.0+abc.gc-tombstone.123.456',
-          'orcad-0.1.0+abc.gc-tombstone.123.456.extra',
-          'orcad-0.1.0+abc.gc-tombstone.123.456/child',
+          'quirkyd-0.1.0+abc.gc-tombstone.123.456',
+          'quirkyd-0.1.0+abc.gc-tombstone.bad.456',
+          'xquirkyd-0.1.0+abc.gc-tombstone.123.456',
+          'quirkyd-0.1.0+abc.gc-tombstone.123.456.extra',
+          'quirkyd-0.1.0+abc.gc-tombstone.123.456/child',
           'logs'
         ].join('\n')
       )
@@ -533,7 +533,7 @@ describe('gcOldRemoteInstallVersions', () => {
       .map(([, command]) => command)
       .filter((command) => command.startsWith('rm -rf'))
     expect(removeCommands).toEqual([
-      "rm -rf '/home/u/.orca-remote/orcad-0.1.0+abc.gc-tombstone.123.456'"
+      "rm -rf '/home/u/.quirky-remote/quirkyd-0.1.0+abc.gc-tombstone.123.456'"
     ])
   })
 
@@ -541,19 +541,19 @@ describe('gcOldRemoteInstallVersions', () => {
     const windows = getRemoteHostPlatform('win32-x64')
     mockExec
       .mockResolvedValueOnce(
-        'orcad-v0.1.0.gc-tombstone.123.456\norcad-v0.1.0.gc-tombstone.latest.456\n'
+        'quirkyd-v0.1.0.gc-tombstone.123.456\nquirkyd-v0.1.0.gc-tombstone.latest.456\n'
       )
       .mockResolvedValueOnce('')
 
-    await collectOldVersions('C:/Users/u', 'C:/Users/u/.orca-remote/orcad-0.1.0+bbb', windows)
+    await collectOldVersions('C:/Users/u', 'C:/Users/u/.quirky-remote/quirkyd-0.1.0+bbb', windows)
 
     const removeScript = decodePowerShellCommand(mockExec.mock.calls[1]?.[1] ?? '')
-    expect(removeScript).toContain('orcad-v0.1.0.gc-tombstone.123.456')
-    expect(removeScript).not.toContain('orcad-v0.1.0.gc-tombstone.latest.456')
+    expect(removeScript).toContain('quirkyd-v0.1.0.gc-tombstone.123.456')
+    expect(removeScript).not.toContain('quirkyd-v0.1.0.gc-tombstone.latest.456')
   })
 
   it('retries orphan tombstone cleanup on a later GC pass', async () => {
-    const tombstone = 'orcad-0.1.0+abc.gc-tombstone.123.456'
+    const tombstone = 'quirkyd-0.1.0+abc.gc-tombstone.123.456'
     mockExec
       .mockResolvedValueOnce(tombstone)
       .mockRejectedValueOnce(new Error('remove failed'))
@@ -571,7 +571,7 @@ describe('gcOldRemoteInstallVersions', () => {
 
   it('retries only an unknown claim release and stops after observing a lost generation', async () => {
     mockExec
-      .mockResolvedValueOnce('orcad-0.1.0+aaa\n')
+      .mockResolvedValueOnce('quirkyd-0.1.0+aaa\n')
       .mockResolvedValueOnce('OPEN')
       .mockResolvedValueOnce('COMPLETE')
       .mockResolvedValueOnce('DEAD')
@@ -595,7 +595,7 @@ describe('gcOldRemoteInstallVersions', () => {
   })
 
   it('skips siblings that are missing .install-complete (mid-install or partial)', async () => {
-    mockExec.mockResolvedValueOnce('orcad-0.1.0+aaa\n')
+    mockExec.mockResolvedValueOnce('quirkyd-0.1.0+aaa\n')
     mockExec
       .mockResolvedValueOnce('OPEN') // not locked
       .mockResolvedValueOnce('PARTIAL') // missing .install-complete
@@ -605,7 +605,7 @@ describe('gcOldRemoteInstallVersions', () => {
   })
 
   it('skips siblings whose .install-lock is held and fresh', async () => {
-    mockExec.mockResolvedValueOnce('orcad-0.1.0+aaa\n')
+    mockExec.mockResolvedValueOnce('quirkyd-0.1.0+aaa\n')
     mockExec.mockResolvedValueOnce('LOCKED')
     // isLockStale: age ~now → not stale.
     mockExec.mockResolvedValueOnce('0\n')
@@ -615,7 +615,7 @@ describe('gcOldRemoteInstallVersions', () => {
   })
 
   it('removes a sibling with a stale lock + .install-complete (rm-lock failed mid-finalize)', async () => {
-    mockExec.mockResolvedValueOnce('orcad-0.1.0+aaa\n')
+    mockExec.mockResolvedValueOnce('quirkyd-0.1.0+aaa\n')
     mockExec.mockResolvedValueOnce('LOCKED')
     // isLockStale: age well above the stale window → stale.
     mockExec.mockResolvedValueOnce(`${21 * 60}\n`)
@@ -634,11 +634,11 @@ describe('gcOldRemoteInstallVersions', () => {
     await collectOldVersions()
     const lastCmd = mockExec.mock.calls.at(-1)?.[1] ?? ''
     expect(lastCmd).toContain('rm -rf')
-    expect(lastCmd).toContain('orcad-0.1.0+aaa')
+    expect(lastCmd).toContain('quirkyd-0.1.0+aaa')
   })
 
   it('skips siblings whose liveness probe reports them live', async () => {
-    mockExec.mockResolvedValueOnce('orcad-0.1.0+aaa\n')
+    mockExec.mockResolvedValueOnce('quirkyd-0.1.0+aaa\n')
     mockExec
       .mockResolvedValueOnce('OPEN')
       .mockResolvedValueOnce('COMPLETE')
@@ -650,7 +650,7 @@ describe('gcOldRemoteInstallVersions', () => {
 
   it('keeps a sibling when the install-lock probe fails or returns unexpected output', async () => {
     mockExec
-      .mockResolvedValueOnce('orcad-0.1.0+aaa\norcad-0.1.0+ccc\n')
+      .mockResolvedValueOnce('quirkyd-0.1.0+aaa\nquirkyd-0.1.0+ccc\n')
       .mockRejectedValueOnce(new Error('lock probe failed'))
       .mockResolvedValueOnce('INCONCLUSIVE')
 
@@ -661,7 +661,7 @@ describe('gcOldRemoteInstallVersions', () => {
 
   it('keeps a sibling when the liveness probe fails or returns unexpected output', async () => {
     mockExec
-      .mockResolvedValueOnce('orcad-0.1.0+aaa\norcad-0.1.0+ccc\n')
+      .mockResolvedValueOnce('quirkyd-0.1.0+aaa\nquirkyd-0.1.0+ccc\n')
       .mockResolvedValueOnce('OPEN')
       .mockResolvedValueOnce('COMPLETE')
       .mockRejectedValueOnce(new Error('liveness probe failed'))
@@ -675,13 +675,13 @@ describe('gcOldRemoteInstallVersions', () => {
   })
 
   it('does not consider the current dir as a GC candidate', async () => {
-    mockExec.mockResolvedValueOnce('orcad-0.1.0+aaa\n')
-    await collectOldVersions('/home/u', '/home/u/.orca-remote/orcad-0.1.0+aaa')
+    mockExec.mockResolvedValueOnce('quirkyd-0.1.0+aaa\n')
+    await collectOldVersions('/home/u', '/home/u/.quirky-remote/quirkyd-0.1.0+aaa')
     expect(mockExec.mock.calls.length).toBe(1) // only the listing
   })
 
   it('ignores entries that do not match the model version dir regex (allowlist)', async () => {
-    mockExec.mockResolvedValueOnce('logs\nbackup\norcad-0.1.0+aaa\n')
+    mockExec.mockResolvedValueOnce('logs\nbackup\nquirkyd-0.1.0+aaa\n')
     mockExec
       .mockResolvedValueOnce('OPEN')
       .mockResolvedValueOnce('COMPLETE')
@@ -699,14 +699,14 @@ describe('gcOldRemoteInstallVersions', () => {
     const cmds = mockExec.mock.calls.map(([, c]) => c)
     const rmCmds = cmds.filter((c) => c.startsWith('rm') && c.includes('gc-tombstone'))
     expect(rmCmds).toHaveLength(1)
-    expect(rmCmds[0]).toContain('orcad-0.1.0+aaa')
+    expect(rmCmds[0]).toContain('quirkyd-0.1.0+aaa')
     expect(rmCmds[0]).not.toContain('logs')
     expect(rmCmds[0]).not.toContain('backup')
   })
 
   it('does not remove a candidate claimed by repair after the initial lock probe', async () => {
     mockExec
-      .mockResolvedValueOnce('orcad-0.1.0+aaa\n')
+      .mockResolvedValueOnce('quirkyd-0.1.0+aaa\n')
       .mockResolvedValueOnce('OPEN')
       .mockResolvedValueOnce('COMPLETE')
       .mockResolvedValueOnce('DEAD') // liveness probe
@@ -722,7 +722,7 @@ describe('gcOldRemoteInstallVersions', () => {
     expect(
       commands.some(
         (command) =>
-          command.startsWith("rm -rf '/home/u/.orca-remote/orcad-0.1.0+aaa'") &&
+          command.startsWith("rm -rf '/home/u/.quirky-remote/quirkyd-0.1.0+aaa'") &&
           !command.includes('.install-lock')
       )
     ).toBe(false)
@@ -730,7 +730,7 @@ describe('gcOldRemoteInstallVersions', () => {
 
   it('does not move a candidate after losing the sibling claim generation', async () => {
     mockExec
-      .mockResolvedValueOnce('orcad-0.1.0+aaa\n')
+      .mockResolvedValueOnce('quirkyd-0.1.0+aaa\n')
       .mockResolvedValueOnce('OPEN')
       .mockResolvedValueOnce('COMPLETE')
       .mockResolvedValueOnce('DEAD')
@@ -750,7 +750,7 @@ describe('gcOldRemoteInstallVersions', () => {
 
   it('releases the GC claim after a confirmed move failure', async () => {
     mockExec
-      .mockResolvedValueOnce('orcad-0.1.0+aaa\n')
+      .mockResolvedValueOnce('quirkyd-0.1.0+aaa\n')
       .mockResolvedValueOnce('OPEN')
       .mockResolvedValueOnce('COMPLETE')
       .mockResolvedValueOnce('DEAD')
@@ -767,7 +767,7 @@ describe('gcOldRemoteInstallVersions', () => {
 
     const lastCommand = mockExec.mock.calls.at(-1)?.[1] ?? ''
     expect(lastCommand).toContain('rm -rf')
-    expect(lastCommand).toContain('orcad-0.1.0+aaa.gc-claim')
+    expect(lastCommand).toContain('quirkyd-0.1.0+aaa.gc-claim')
   })
 
   it('keeps the GC claim when remote move termination is unconfirmed', async () => {
@@ -775,7 +775,7 @@ describe('gcOldRemoteInstallVersions', () => {
       sshChannelCloseConfirmed: false
     })
     mockExec
-      .mockResolvedValueOnce('orcad-0.1.0+aaa\n')
+      .mockResolvedValueOnce('quirkyd-0.1.0+aaa\n')
       .mockResolvedValueOnce('OPEN')
       .mockResolvedValueOnce('COMPLETE')
       .mockResolvedValueOnce('DEAD')
@@ -791,7 +791,9 @@ describe('gcOldRemoteInstallVersions', () => {
 
     const releaseCommands = mockExec.mock.calls
       .map(([, command]) => command)
-      .filter((command) => command.includes('orcad-0.1.0+aaa.gc-claim') && command.startsWith('rm'))
+      .filter(
+        (command) => command.includes('quirkyd-0.1.0+aaa.gc-claim') && command.startsWith('rm')
+      )
     expect(releaseCommands).toHaveLength(0)
   })
 })

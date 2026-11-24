@@ -119,20 +119,20 @@ describe('usage keys on the Settings host', () => {
 
     expect(
       await screen.findByText(
-        'Build box has no Orca desktop app to send a session cookie from. Save an API key instead.'
+        'Build box has no Quirky desktop app to send a session cookie from. Save an API key instead.'
       )
     ).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Paste the Cookie header from DevTools')).toBeDisabled()
     expect(screen.getByPlaceholderText('Paste your MiniMax API key')).toBeEnabled()
   })
 
-  it('locks replacing a key the other Orca app on the host sealed, but still allows forgetting it', async () => {
+  it('locks replacing a key the other Quirky app on the host sealed, but still allows forgetting it', async () => {
     mocks.callMiniMax.mockResolvedValue({ ...miniMaxStatus, apiKeyUnreadable: 'sealed-elsewhere' })
     renderMiniMax()
 
     expect(
       await screen.findByText(
-        'Saved by another Orca app on Build box, which this one cannot read. Change it in that app, or forget it here.'
+        'Saved by another Quirky app on Build box, which this one cannot read. Change it in that app, or forget it here.'
       )
     ).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Paste your MiniMax API key')).toBeDisabled()
@@ -145,7 +145,7 @@ describe('usage keys on the Settings host', () => {
 
     expect(
       await screen.findByText(
-        'Orca on Build box cannot read the saved key. Replace it or forget it.'
+        'Quirky on Build box cannot read the saved key. Replace it or forget it.'
       )
     ).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Paste your MiniMax API key')).toBeEnabled()
@@ -157,7 +157,7 @@ describe('usage keys on the Settings host', () => {
     renderMiniMax()
 
     expect(
-      await screen.findByText('Update Orca on Build box to save this key there.')
+      await screen.findByText('Update Quirky on Build box to save this key there.')
     ).toBeInTheDocument()
     expect(screen.queryByText('Credentials not set')).not.toBeInTheDocument()
     expect(screen.getByPlaceholderText('Paste your MiniMax API key')).toBeDisabled()
@@ -182,7 +182,7 @@ describe('usage keys on the Settings host', () => {
     render(<ZcodePlanAccountsSection host={host} usageSettings={usageSettings} />)
 
     expect(
-      await screen.findByText('Update Orca on Build box to save this key there.')
+      await screen.findByText('Update Quirky on Build box to save this key there.')
     ).toBeInTheDocument()
     expect(screen.queryByText('No GLM Coding Plan linked')).not.toBeInTheDocument()
     expect(screen.getByPlaceholderText('Paste your GLM Coding Plan API key')).toBeDisabled()

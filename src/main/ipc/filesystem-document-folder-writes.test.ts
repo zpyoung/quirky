@@ -66,7 +66,7 @@ let note: string
 beforeEach(async () => {
   invalidateAuthorizedRootsCache()
   handlers.clear()
-  base = await mkdtemp(join(await realpath(tmpdir()), 'orca-document-folder-'))
+  base = await mkdtemp(join(await realpath(tmpdir()), 'quirky-document-folder-'))
   userData.path = join(base, 'user-data')
   docFolder = join(base, 'notes')
   note = join(docFolder, 'note.md')

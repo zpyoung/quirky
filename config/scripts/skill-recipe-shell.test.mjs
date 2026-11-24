@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 const run = promisify(execFile)
 const referenceRoot = resolve(
   import.meta.dirname,
-  '../../skill-guides/orca-per-workspace-env/references'
+  '../../skill-guides/quirky-per-workspace-env/references'
 )
 const vercel = await readFile(resolve(referenceRoot, 'provider-vercel.md'), 'utf8')
 const ssh = await readFile(resolve(referenceRoot, 'ssh-host.md'), 'utf8')
@@ -18,7 +18,7 @@ const cleanup = vercel.match(/```bash\n(cleanup_snapshot\(\) \{[\s\S]*?\n\})\n``
 async function executeShell(shell, script, env = {}) {
   try {
     const output = await run(shell, ['-c', script], {
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1', ...env }
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1', ...env }
     })
     return { ...output, code: 0 }
   } catch (error) {
@@ -81,7 +81,7 @@ exit 0`)
         const output = JSON.parse(result.stdout)
         expect(output.userData).toMatchObject({
           provider: 'vercel-sandbox',
-          resourceId: 'orca-fixture-123',
+          resourceId: 'quirky-fixture-123',
           snapshotId: 'snap_fixture'
         })
         expect(result.calls.map((args) => args.slice(0, 2))).toEqual([
@@ -112,13 +112,13 @@ exit 0`)
         ['sandbox', 'create'],
         ['sandbox', 'remove']
       ])
-      expect(result.calls[1]).toEqual(['sandbox', 'remove', 'orca-fixture-123'])
+      expect(result.calls[1]).toEqual(['sandbox', 'remove', 'quirky-fixture-123'])
       expect(result.stderr).not.toContain('unbound variable')
     })
 
     it('disables Git prompts when the Vercel token is absent', async () => {
       const prefix = vercel.match(
-        /-- bash -lc 'set -euo pipefail; cd "\$ORCA_PROJECT_ROOT"; \\\n([\s\S]*?)    git fetch/u
+        /-- bash -lc 'set -euo pipefail; cd "\$QUIRKY_PROJECT_ROOT"; \\\n([\s\S]*?)    git fetch/u
       )?.[1]
       expect(prefix).toBeDefined()
       const result = await runShell(
@@ -156,7 +156,7 @@ ${sync}`,
 async function runCreateRecipe(shell, overrides) {
   const script = vercel.match(/```bash\n(#!\/usr\/bin\/env bash[\s\S]*?)\n```/u)?.[1]
   expect(script).toBeDefined()
-  const directory = await mkdtemp(join(tmpdir(), 'orca-vercel-recipe-'))
+  const directory = await mkdtemp(join(tmpdir(), 'quirky-vercel-recipe-'))
   const bin = join(directory, 'bin')
   const log = join(directory, 'calls.jsonl')
   try {
@@ -189,8 +189,8 @@ ${script}`,
         VERCEL_PROJECT: '',
         VERCEL_CREATE_EXIT: '',
         GH_TOKEN: 'fixture-token',
-        ORCA_RECIPE_ID: 'fixture',
-        ORCA_VM_INSTANCE_ID: '123',
+        QUIRKY_RECIPE_ID: 'fixture',
+        QUIRKY_VM_INSTANCE_ID: '123',
         ...overrides
       }
     )

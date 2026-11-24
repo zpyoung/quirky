@@ -40,7 +40,7 @@ export async function resolveHeimdallWorkspaceSelector(
   if (requested !== 'active' && requested !== 'current') {
     return await normalizeWorktreeSelectorForCaller(requested, cwd, client)
   }
-  const folderWorkspaceId = process.env.ORCA_WORKSPACE_ID?.trim()
+  const folderWorkspaceId = process.env.QUIRKY_WORKSPACE_ID?.trim()
   if (!client.isRemote && folderWorkspaceId?.startsWith('folder:')) {
     return folderWorkspaceId
   }

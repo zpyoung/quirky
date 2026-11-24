@@ -66,7 +66,7 @@ export function buildWslCodexAppServerArgs(
 export function buildWslCodexLoginArgs(
   distro: string,
   linuxHomePath: string,
-  options: { orcaOpensSignInLink?: boolean } = {}
+  options: { quirkyOpensSignInLink?: boolean } = {}
 ): string[] {
   const command = [
     buildCodexPathLookup(),
@@ -75,8 +75,8 @@ export function buildWslCodexLoginArgs(
     '  exit 127',
     'fi',
     `export CODEX_HOME=${quotePosixShell(linuxHomePath)}`,
-    // Why: Orca opens the printed link itself; a distro opener would open a second tab.
-    ...(options.orcaOpensSignInLink ? ['export BROWSER=true'] : []),
+    // Why: Quirky opens the printed link itself; a distro opener would open a second tab.
+    ...(options.quirkyOpensSignInLink ? ['export BROWSER=true'] : []),
     'exec "$resolved" login'
   ].join('\n')
   return buildWslCodexShellArgs(distro, command)
@@ -84,7 +84,7 @@ export function buildWslCodexLoginArgs(
 
 function buildCodexPathLookup(): string {
   // Same skip as agent detection: otherwise detection can report the guest
-  // codex while this resolves the Windows one ahead of it on PATH, and Orca
+  // codex while this resolves the Windows one ahead of it on PATH, and Quirky
   // launches a different binary than the one it said was installed.
   return buildPosixCommandPathLookupScript(
     { kind: 'literal', value: 'codex' },

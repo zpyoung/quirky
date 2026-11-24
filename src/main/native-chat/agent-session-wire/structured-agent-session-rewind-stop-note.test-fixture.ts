@@ -30,8 +30,8 @@ export async function expectRawStopNoteRewindRecovery({
   const caller = { callerKey: 'desktop' }
   expect(await host.attach(caller, hostTestAttachParams(null))).toMatchObject({ ok: true })
   const journal = host['sessions'].get(HOST_TEST_SESSION)!.journal
-  const turn = { provider: 'orca', clientMessageId: 'kept-turn' } as const
-  const note = { provider: 'orca', clientMessageId: 'stop:kept-turn' } as const
+  const turn = { provider: 'quirky', clientMessageId: 'kept-turn' } as const
+  const note = { provider: 'quirky', clientMessageId: 'stop:kept-turn' } as const
   const noteId = agentJournalItemKey(note)
   const unconfirmed: AgentJournalItemBody = {
     kind: 'status',

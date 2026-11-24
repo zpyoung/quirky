@@ -37,9 +37,9 @@ async function isRegistered(path: string): Promise<boolean> {
 }
 
 beforeEach(async () => {
-  // realpath: macOS hands out /var/... temp paths while Git reports /private/var/..., and Orca
+  // realpath: macOS hands out /var/... temp paths while Git reports /private/var/..., and Quirky
   // matches the worktree it is removing against Git's own list.
-  scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'orca-worktree-removal-')))
+  scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'quirky-worktree-removal-')))
   repoPath = join(scratchDir, 'repo')
   workspaceRoot = join(scratchDir, 'workspaces')
   worktreePath = join(workspaceRoot, 'repo', 'feature')

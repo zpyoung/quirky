@@ -9,7 +9,7 @@ import type { JournalOperationReceipt } from '../agent-session-journal/journal-r
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 
 /** A per-process id, minted once per host process like the runtime's own
- *  `runtimeId` (`orca-runtime-runtime-id.ts`), stamped on the cards this process writes or hands
+ *  `runtimeId` (`quirky-runtime-runtime-id.ts`), stamped on the cards this process writes or hands
  *  off. No pause reads it: an older build holds every card another instance wrote. */
 let hostInstance = randomUUID()
 
@@ -30,7 +30,7 @@ export function structuredQueuePauses(journal: PauseJournal): DerivedQueuePause[
   return journal.queuedMessages.pauses()
 }
 
-/** The mark of a chat that stopped running with cards waiting — Orca quit or crashed, or the chat
+/** The mark of a chat that stopped running with cards waiting — Quirky quit or crashed, or the chat
  *  was closed — so they wait for its next turn (`queued-message-pause.ts`). Every open marks, and
  *  so does a person's close: the idle sweep never closes a chat with cards waiting, so its
  *  eviction never reopens one. `since`: where the chat stopped, for a mark written after a send

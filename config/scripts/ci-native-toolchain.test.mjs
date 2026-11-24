@@ -17,7 +17,7 @@ describe('CI native toolchain preparation', () => {
     ['node', 'false', '0', true],
     ['node', '', '0', true]
   ])('runtime=%s cache=%s probe=%s installs=%s', (runtime, hit, probeStatus, installs) => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-ci-native-toolchain-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-ci-native-toolchain-'))
     const log = join(directory, 'commands')
     const environment = join(directory, 'github-env')
     try {

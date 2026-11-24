@@ -19,7 +19,7 @@ async function fixture(): Promise<{
   lock: string
   reason: string
 }> {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'orca-discard-registration-')))
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-discard-registration-')))
   roots.push(root)
   const repo = join(root, 'repo')
   const prepared = join(root, 'prepared')

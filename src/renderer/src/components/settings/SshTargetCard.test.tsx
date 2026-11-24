@@ -94,9 +94,9 @@ describe('an SSH host its managed server does not serve', () => {
     const container = await renderCard({
       targetId: 'target-1',
       status: 'error',
-      error: 'This SSH host isn’t supported by this version of Orca.',
+      error: 'This SSH host isn’t supported by this version of Quirky.',
       reconnectAttempt: 0,
-      managedServer: { kind: 'relay', reason: 'orcad_unavailable', detail: 'unsupported_host' }
+      managedServer: { kind: 'relay', reason: 'quirkyd_unavailable', detail: 'unsupported_host' }
     })
 
     expect(container.textContent).not.toContain('This SSH host isn’t supported')
@@ -130,9 +130,9 @@ describe('the compact SSH host row', () => {
   it('marks a host held by a managed server with a chip', async () => {
     const container = await renderCard(undefined, {
       ...target,
-      orcadFence: { environmentId: 'env-1' }
+      quirkydFence: { environmentId: 'env-1' }
     })
 
-    expect(container.textContent).toContain('Orca server')
+    expect(container.textContent).toContain('Quirky server')
   })
 })

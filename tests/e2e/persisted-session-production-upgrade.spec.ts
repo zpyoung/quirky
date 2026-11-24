@@ -6,11 +6,11 @@ import {
   type Page,
   type TestInfo
 } from '@stablyai/playwright-test'
-import { DEFAULT_LOCAL_ORCA_PROFILE_ID } from '../../src/shared/orca-profiles'
+import { DEFAULT_LOCAL_QUIRKY_PROFILE_ID } from '../../src/shared/quirky-profiles'
 import { PTY_SESSION_ID_SEPARATOR } from '../../src/shared/pty-session-id-format'
-import { forwardElectronProcessLogs, test, expect } from './helpers/orca-app'
+import { forwardElectronProcessLogs, test, expect } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import { cleanupE2EDaemons, closeElectronAppForE2E } from './helpers/electron-process-shutdown'
 import { getElectronIsolatedKeychainArgs } from './helpers/electron-launch-args'
 import {
@@ -44,7 +44,7 @@ const FIXTURE_PATH = path.join(
 )
 // This fixture captures a legacy production schema boundary; the test runs the current build.
 const RESTORED_TITLE = 'Production agent session'
-const PACKAGED_OLD_EXECUTABLE_ENV = 'ORCA_PROFILE_STATE_PACKAGED_OLD_EXECUTABLE'
+const PACKAGED_OLD_EXECUTABLE_ENV = 'QUIRKY_PROFILE_STATE_PACKAGED_OLD_EXECUTABLE'
 
 type FixtureSession = {
   _fixtureProvenance?: unknown
@@ -65,8 +65,8 @@ function installProductionSessionFixture(
   const profilePath = path.join(
     userDataDir,
     'profiles',
-    DEFAULT_LOCAL_ORCA_PROFILE_ID,
-    'orca-data.json'
+    DEFAULT_LOCAL_QUIRKY_PROFILE_ID,
+    'quirky-data.json'
   )
   const profile = JSON.parse(readFileSync(profilePath, 'utf8')) as Record<string, unknown>
   const fixture = JSON.parse(readFileSync(FIXTURE_PATH, 'utf8')) as FixtureSession
@@ -95,10 +95,10 @@ function installProductionSessionFixture(
 }
 
 function materializeLegacyProfileJson(userDataDir: string): void {
-  const profileDirectory = path.join(userDataDir, 'profiles', DEFAULT_LOCAL_ORCA_PROFILE_ID)
+  const profileDirectory = path.join(userDataDir, 'profiles', DEFAULT_LOCAL_QUIRKY_PROFILE_ID)
   const databasePath = path.join(profileDirectory, 'profile-state.db')
-  const dataPath = path.join(profileDirectory, 'orca-data.json')
-  const opened = openProfileStateDatabaseReadOnly(databasePath, DEFAULT_LOCAL_ORCA_PROFILE_ID)
+  const dataPath = path.join(profileDirectory, 'quirky-data.json')
+  const opened = openProfileStateDatabaseReadOnly(databasePath, DEFAULT_LOCAL_QUIRKY_PROFILE_ID)
   try {
     writeFileSync(dataPath, `${readProfileStateSnapshot(opened.db).json}\n`)
   } finally {
@@ -107,8 +107,8 @@ function materializeLegacyProfileJson(userDataDir: string): void {
 }
 
 function readLegacyJsonArtifacts(userDataDir: string): Record<string, string> {
-  const profileDirectory = path.join(userDataDir, 'profiles', DEFAULT_LOCAL_ORCA_PROFILE_ID)
-  const dataPath = path.join(profileDirectory, 'orca-data.json')
+  const profileDirectory = path.join(userDataDir, 'profiles', DEFAULT_LOCAL_QUIRKY_PROFILE_ID)
+  const dataPath = path.join(profileDirectory, 'quirky-data.json')
   return Object.fromEntries(
     [dataPath, ...profileStateJsonExportPaths(dataPath)]
       .filter((file) => existsSync(file))
@@ -147,9 +147,9 @@ async function launchPackagedOldProfile(args: {
     env: {
       ...homeIsolation.env,
       NODE_ENV: 'production',
-      ORCA_BACKGROUND_LAUNCH: '1',
-      ORCA_E2E_HEADLESS: '1',
-      ORCA_BYPASS_SINGLE_INSTANCE_LOCK: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1',
+      QUIRKY_E2E_HEADLESS: '1',
+      QUIRKY_BYPASS_SINGLE_INSTANCE_LOCK: '1'
     }
   })
   forwardElectronProcessLogs(app, args.testInfo)
@@ -332,13 +332,13 @@ test('exports the latest SQLite state for rollback without mirroring ordinary sh
     const profileDirectory = path.join(
       session.userDataDir,
       'profiles',
-      DEFAULT_LOCAL_ORCA_PROFILE_ID
+      DEFAULT_LOCAL_QUIRKY_PROFILE_ID
     )
     const databasePath = path.join(profileDirectory, 'profile-state.db')
     await session.close(candidateApp)
     candidateApp = null
     expect(readLegacyJsonArtifacts(session.userDataDir)).toEqual(retainedJson)
-    const dataPath = path.join(profileDirectory, 'orca-data.json')
+    const dataPath = path.join(profileDirectory, 'quirky-data.json')
     expect(existsSync(databasePath)).toBe(true)
 
     await cleanupE2EDaemons(session.userDataDir)
@@ -376,7 +376,7 @@ test('real packaged old build reads the latest explicit JSON rollback before can
   const executablePath = process.env[PACKAGED_OLD_EXECUTABLE_ENV]
   test.skip(
     !executablePath || !existsSync(executablePath),
-    `${PACKAGED_OLD_EXECUTABLE_ENV} must point at an older packaged Orca executable`
+    `${PACKAGED_OLD_EXECUTABLE_ENV} must point at an older packaged Quirky executable`
   )
 
   const session = createRestartSession(testInfo)
@@ -408,7 +408,7 @@ test('real packaged old build reads the latest explicit JSON rollback before can
     const databasePath = path.join(
       session.userDataDir,
       'profiles',
-      DEFAULT_LOCAL_ORCA_PROFILE_ID,
+      DEFAULT_LOCAL_QUIRKY_PROFILE_ID,
       'profile-state.db'
     )
     expect(existsSync(databasePath)).toBe(true)
@@ -464,7 +464,7 @@ test('fails closed when a packaged old build mutates JSON outside an explicit ro
   const executablePath = process.env[PACKAGED_OLD_EXECUTABLE_ENV]
   test.skip(
     !executablePath || !existsSync(executablePath),
-    `${PACKAGED_OLD_EXECUTABLE_ENV} must point at an older packaged Orca executable`
+    `${PACKAGED_OLD_EXECUTABLE_ENV} must point at an older packaged Quirky executable`
   )
 
   const session = createRestartSession(testInfo)
@@ -493,12 +493,12 @@ test('fails closed when a packaged old build mutates JSON outside an explicit ro
     const profileDirectory = path.join(
       session.userDataDir,
       'profiles',
-      DEFAULT_LOCAL_ORCA_PROFILE_ID
+      DEFAULT_LOCAL_QUIRKY_PROFILE_ID
     )
     const databasePath = path.join(profileDirectory, 'profile-state.db')
     // Deliberately bypass rollback to reproduce an unsupported mixed-authority profile.
     materializeLegacyProfileJson(session.userDataDir)
-    const compatibilityPath = path.join(profileDirectory, 'orca-data.json')
+    const compatibilityPath = path.join(profileDirectory, 'quirky-data.json')
     expect(existsSync(databasePath)).toBe(true)
     expect(existsSync(compatibilityPath)).toBe(true)
 
@@ -530,7 +530,7 @@ test('fails closed when a packaged old build mutates JSON outside an explicit ro
       'both JSON and SQLite storage without a matching acceptance marker'
     )
     expect(existsSync(databasePath)).toBe(true)
-    const opened = openProfileStateDatabaseReadOnly(databasePath, DEFAULT_LOCAL_ORCA_PROFILE_ID)
+    const opened = openProfileStateDatabaseReadOnly(databasePath, DEFAULT_LOCAL_QUIRKY_PROFILE_ID)
     try {
       expect(JSON.parse(readProfileStateSnapshot(opened.db).json)).toMatchObject({
         settings: { terminalFontSize: 19 }
@@ -565,12 +565,12 @@ test('fails closed on a corrupt established SQLite profile and retains recovery 
     const profileDirectory = path.join(
       session.userDataDir,
       'profiles',
-      DEFAULT_LOCAL_ORCA_PROFILE_ID
+      DEFAULT_LOCAL_QUIRKY_PROFILE_ID
     )
-    const dataFile = path.join(profileDirectory, 'orca-data.json')
+    const dataFile = path.join(profileDirectory, 'quirky-data.json')
     const databaseFile = path.join(profileDirectory, 'profile-state.db')
     const retainedExports = readdirSync(profileDirectory).filter((name) =>
-      /^orca-data\.json\.sqlite-export\.\d+\.json$/.test(name)
+      /^quirky-data\.json\.sqlite-export\.\d+\.json$/.test(name)
     )
     expect(retainedExports.length).toBeGreaterThan(0)
     const jsonBeforeCorruption = readFileSync(dataFile)
@@ -582,7 +582,7 @@ test('fails closed on a corrupt established SQLite profile and retains recovery 
     expect(readFileSync(dataFile)).toEqual(jsonBeforeCorruption)
     expect(
       readdirSync(profileDirectory).filter((name) =>
-        /^orca-data\.json\.sqlite-export\.\d+\.json$/.test(name)
+        /^quirky-data\.json\.sqlite-export\.\d+\.json$/.test(name)
       )
     ).toEqual(retainedExports)
   } finally {

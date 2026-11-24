@@ -16,7 +16,7 @@ import { openWorkspaceLayoutFrameSync } from '@/runtime/workspace-layout-frame-s
 import { dropTabThroughLayoutOwner } from './tab-group-layout-owner-commands'
 import { moveTabToNewPaneColumn } from '../tab-bar/tab-move-to-pane-column'
 
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 // Main's answer to the window's layout commands and its frames, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
   (

@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
+import type { PipedProcessSpawner } from '@quirky/process-host/process-spec'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import { ROOT_ONLY_GRACEFUL_EXIT_MS } from '../provider-process/provider-process-close'
 import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../provider-process/provider-process-supervisor'
@@ -70,7 +70,7 @@ describe('JSON-lines RPC process ownership', () => {
     expect(spawn.mock.calls[0][0].env).not.toHaveProperty('STRIPPED')
     const pending = connection.request('get_state')
     child.stdout.write(
-      '{"type":"response","id":"orca-1","command":"get_state","success":true,"data":{"sessionFile":"/host/session.jsonl"}}\n'
+      '{"type":"response","id":"quirky-1","command":"get_state","success":true,"data":{"sessionFile":"/host/session.jsonl"}}\n'
     )
     expect(await pending).toEqual({ sessionFile: '/host/session.jsonl' })
     expect(await connection.close()).toEqual({ root: 'exited', tree: null })
@@ -104,7 +104,7 @@ describe('JSON-lines RPC process ownership', () => {
     expect(connection.rootVerdict).toBe('exited')
     expect(onExit).not.toHaveBeenCalled()
     child.stdout.end(
-      '{"type":"response","command":"get_state","id":"orca-1","success":true,"data":{}}\n{"type":"agent_settled"}\n'
+      '{"type":"response","command":"get_state","id":"quirky-1","success":true,"data":{}}\n{"type":"agent_settled"}\n'
     )
     await expect(request).resolves.toEqual({})
     await new Promise<void>((resolve) => setImmediate(resolve))

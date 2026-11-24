@@ -6,7 +6,7 @@ import {
   AgentSessionPromptAnswerRejectedError
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { ClaudeStreamJsonConnection } from './claude-stream-json-connection'
-import { ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV as SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
+import { QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV as SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
 import type {
   ClaudeStructuredSessionAdapter,
   ClaudeStructuredSessionEvent

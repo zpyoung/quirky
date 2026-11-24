@@ -8,10 +8,10 @@ import type { AgentSessionCapabilities } from '../../../shared/agent-session-cap
 import type { AgentSessionStoredAgent } from '../../../shared/agent-session-stored-agent'
 import type { AgentSessionModelOption } from '../../../shared/agent-session-wire'
 
-/** `agent` names the Orca agent whose sessions this describes; the storage fields bound its records. */
+/** `agent` names the Quirky agent whose sessions this describes; the storage fields bound its records. */
 export type StructuredAgentDefinition = AgentSessionStoredAgent & {
   capabilities: AgentSessionCapabilities
-  /** Whether Orca provides this agent's chat program on this host; absent when it never does. */
+  /** Whether Quirky provides this agent's chat program on this host; absent when it never does. */
   managedRuntime?: () => boolean
   /** How a session's options read and change while no child runs. */
   restingOptions: {

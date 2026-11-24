@@ -6,7 +6,7 @@ import {
 } from './markdown-editor-fixture'
 
 const DRAFT_SERIALIZATION_TIMEOUT_MS = 10_000
-const FIXTURE_DIRECTORY = '.orca-e2e-markdown-ordered-list'
+const FIXTURE_DIRECTORY = '.quirky-e2e-markdown-ordered-list'
 
 export {
   cleanupMarkdownFixture,

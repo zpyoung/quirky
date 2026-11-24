@@ -62,7 +62,7 @@ beforeAll(async () => {
   const cspHeader = await readShellCsp()
   bridgeVersion = await readBridgeProtocolVersion()
   faultGrant = await readBridgeFaultGrant()
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-held-press-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-held-press-'))
   const appDir = join(scratch, 'app')
   const routeDir = join(appDir, MOBILE_WEB_APP_ROUTE_ROOT)
   await mkdir(routeDir, { recursive: true })
@@ -97,7 +97,7 @@ beforeAll(async () => {
   const served = await createBundleServer({ outDir: built.outDir, cspHeader })
   server = served.server
   origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
 }, 600_000)
 
@@ -128,11 +128,11 @@ async function openProbe(pathname) {
   await page.goto(`${origin}/`, { waitUntil: 'load' })
   await page.waitForFunction(
     () =>
-      globalThis.__orcaHeldPressProbe !== undefined ||
-      (globalThis.__orcaRenderCheckFaults ?? []).length > 0,
+      globalThis.__quirkyHeldPressProbe !== undefined ||
+      (globalThis.__quirkyRenderCheckFaults ?? []).length > 0,
     { timeout: 60_000, polling: 100 }
   )
-  expect(await page.evaluate(() => globalThis.__orcaRenderCheckFaults ?? [])).toEqual([])
+  expect(await page.evaluate(() => globalThis.__quirkyRenderCheckFaults ?? [])).toEqual([])
   return { errors, page }
 }
 
@@ -180,7 +180,7 @@ async function holdLikeAndroidWebView(page, selector, { holdMs, read }) {
   return { midHold, afterRelease: await read(target) }
 }
 
-const pressOuts = (page) => page.evaluate(() => globalThis.__orcaHeldPressProbe.pressOuts())
+const pressOuts = (page) => page.evaluate(() => globalThis.__quirkyHeldPressProbe.pressOuts())
 
 describeRender(
   'held presses on the page',
@@ -236,7 +236,7 @@ describeRender(
 
     describe('the key bar', () => {
       const sentCount = async (page) =>
-        (await page.evaluate(() => globalThis.__orcaHeldPressProbe.sent())).length
+        (await page.evaluate(() => globalThis.__quirkyHeldPressProbe.sent())).length
 
       it('keeps repeating a held arrow key until the finger lifts', async () => {
         const { errors, page } = await openProbe(ROUTES.keys)
@@ -270,18 +270,20 @@ describeRender(
         const { errors, page } = await openProbe(ROUTES.keys)
         const key = await page.waitForSelector(`[aria-label="${TAP_KEY_LABEL}"]`)
         await key.tap()
-        await page.waitForFunction(() => globalThis.__orcaHeldPressProbe.sent().length === 1)
-        expect(await page.evaluate(() => globalThis.__orcaHeldPressProbe.sent())).toEqual(['\x1b'])
+        await page.waitForFunction(() => globalThis.__quirkyHeldPressProbe.sent().length === 1)
+        expect(await page.evaluate(() => globalThis.__quirkyHeldPressProbe.sent())).toEqual([
+          '\x1b'
+        ])
         expect(errors).toEqual([])
         await page.close()
       }, 300_000)
     })
 
     describe('the browser pane', () => {
-      const toasts = (page) => page.evaluate(() => globalThis.__orcaHeldPressProbe.toasts())
+      const toasts = (page) => page.evaluate(() => globalThis.__quirkyHeldPressProbe.toasts())
       const clicks = (page) =>
         page.evaluate(() =>
-          globalThis.__orcaHeldPressProbe
+          globalThis.__quirkyHeldPressProbe
             .requests()
             .filter((request) => request.method === 'browser.mouseClick')
             .map((request) => ({ button: request.params.button, page: request.params.page }))
@@ -314,7 +316,7 @@ describeRender(
         const { errors, page } = await openProbe(ROUTES.browser)
         const viewport = await page.waitForSelector(`#${BROWSER_VIEWPORT_ID}`)
         await viewport.tap()
-        await page.waitForFunction(() => globalThis.__orcaHeldPressProbe.requests().length > 0)
+        await page.waitForFunction(() => globalThis.__quirkyHeldPressProbe.requests().length > 0)
         expect(await clicks(page)).toEqual([{ button: 'left', page: 'held-press-page' }])
         expect(await toasts(page)).toEqual([])
         expect(errors).toEqual([])

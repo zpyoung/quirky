@@ -78,7 +78,7 @@ jobs:
       source_ref: ${{ steps.resolve.outputs.ref }}
       source_sha: ${{ steps.resolve.outputs.sha }}
       source_short_sha: ${{ steps.resolve.outputs.short_sha }}
-      ships_orcad_template: ${{ steps.orcad-template-support.outputs.ships }}
+      ships_quirkyd_template: ${{ steps.quirkyd-template-support.outputs.ships }}
     steps:
       # Why inlined (not m-s-abeer/update-gha-summary-with-workflow-inputs):
       # this job runs with contents:write and secret scope, so avoid executing
@@ -832,19 +832,19 @@ jobs:
           fi
           git push origin "$TAG"
 
-      # Why: a patch cut from a base older than #24155 has no orcad template to build or ship.
-      - name: Detect whether the tag ships the orcad template
-        id: orcad-template-support
+      # Why: a patch cut from a base older than #24155 has no quirkyd template to build or ship.
+      - name: Detect whether the tag ships the quirkyd template
+        id: quirkyd-template-support
         if: steps.tag.outputs.tag != '' || steps.version.outputs.recovered_tag != ''
         env:
           TAG: ${{ steps.tag.outputs.tag || steps.version.outputs.recovered_tag }}
         run: |
           set -euo pipefail
-          if git cat-file -e "refs/tags/${TAG}^{commit}:config/scripts/packaged-orcad-template.cjs" 2>/dev/null; then
+          if git cat-file -e "refs/tags/${TAG}^{commit}:config/scripts/packaged-quirkyd-template.cjs" 2>/dev/null; then
             echo "ships=true" >>"$GITHUB_OUTPUT"
           else
             echo "ships=false" >>"$GITHUB_OUTPUT"
-            echo "::notice::$TAG predates the orcad template; skipping its build and download."
+            echo "::notice::$TAG predates the quirkyd template; skipping its build and download."
           fi
 
       - name: Release E2E signal summary
@@ -966,14 +966,14 @@ jobs:
       - name: Run terminal rendering golden on Linux
         if: runner.os == 'Linux'
         run: |
-          xvfb-run --auto-servernum env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run test:e2e:terminal-rendering-golden
-          xvfb-run --auto-servernum env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run --if-present test:e2e:posix-profile-index-golden
+          xvfb-run --auto-servernum env SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1 pnpm run test:e2e:terminal-rendering-golden
+          xvfb-run --auto-servernum env SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1 pnpm run --if-present test:e2e:posix-profile-index-golden
 
       - name: Run terminal rendering golden on macOS
         if: runner.os == 'macOS'
         run: |
-          env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run test:e2e:terminal-rendering-golden
-          env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run --if-present test:e2e:posix-profile-index-golden
+          env SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1 pnpm run test:e2e:terminal-rendering-golden
+          env SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1 pnpm run --if-present test:e2e:posix-profile-index-golden
 
       - name: Upload Playwright traces
         if: failure()
@@ -1047,11 +1047,11 @@ jobs:
 
       - name: Run terminal rendering evidence on Linux
         if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run test:e2e:terminal-rendering-release-evidence
+        run: xvfb-run --auto-servernum env SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1 pnpm run test:e2e:terminal-rendering-release-evidence
 
       - name: Run terminal rendering evidence on macOS
         if: runner.os == 'macOS'
-        run: env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run test:e2e:terminal-rendering-release-evidence
+        run: env SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1 pnpm run test:e2e:terminal-rendering-release-evidence
 
       - name: Upload Playwright traces
         if: failure()
@@ -1062,16 +1062,16 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # Design D2: every desktop build ships the orcad template (server JS plus every target's
+  # Design D2: every desktop build ships the quirkyd template (server JS plus every target's
   # addons), merged from the node-server lanes that qualified each slot at this tag. It needs no
   # signing quota, so it runs beside the release gates instead of behind them.
-  orcad-template:
+  quirkyd-template:
     needs: cut
-    if: needs.cut.outputs.should_release == 'true' && needs.cut.outputs.ships_orcad_template == 'true'
+    if: needs.cut.outputs.should_release == 'true' && needs.cut.outputs.ships_quirkyd_template == 'true'
     permissions:
       contents: read
       actions: read
-    uses: ./.github/workflows/qualified-orcad-template.yml
+    uses: ./.github/workflows/qualified-quirkyd-template.yml
     with:
       ref: refs/tags/${{ needs.cut.outputs.tag }}
 
@@ -1108,10 +1108,10 @@ jobs:
     needs:
       - cut
       - create-release
-      - orcad-template
+      - quirkyd-template
       - release-preflight
       - release-javascript
-    # Why not the implicit success(): a tag without the orcad template skips that job on purpose.
+    # Why not the implicit success(): a tag without the quirkyd template skips that job on purpose.
     if: >-
       !cancelled() &&
       needs.cut.result == 'success' &&
@@ -1119,8 +1119,8 @@ jobs:
       needs.create-release.result == 'success' &&
       needs.release-preflight.result == 'success' &&
       needs.release-javascript.result == 'success' &&
-      (needs.orcad-template.result == 'success' ||
-        (needs.orcad-template.result == 'skipped' && needs.cut.outputs.ships_orcad_template == 'false'))
+      (needs.quirkyd-template.result == 'success' ||
+        (needs.quirkyd-template.result == 'skipped' && needs.cut.outputs.ships_quirkyd_template == 'false'))
     # Why: the actual mac build runs in release-mac-build.yml.
     runs-on: ubuntu-latest
     permissions:
@@ -1193,7 +1193,7 @@ jobs:
       - build-mac
       - verify-mac-build
       - terminal-rendering-golden
-    # Why explicit: a skipped orcad-template (tags that predate it) would skip every job after it.
+    # Why explicit: a skipped quirkyd-template (tags that predate it) would skip every job after it.
     # Fork: only the jobs in this fork's needs list; build and the skill-sharing gates do not run here.
     if: >-
       !cancelled() &&
@@ -1269,7 +1269,7 @@ jobs:
     needs:
       - cut
       - publish-release
-    # Why explicit: a skipped orcad-template (tags that predate it) would skip every job after it.
+    # Why explicit: a skipped quirkyd-template (tags that predate it) would skip every job after it.
     if: ${{ !cancelled() && needs.publish-release.result == 'success' && needs.cut.outputs.tag != '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -1299,7 +1299,7 @@ jobs:
     # A release created with GITHUB_TOKEN does not reliably emit a release
     # event to other workflows. Dispatch the trusted default-branch workflow;
     # it validates and checks out the released tag before deploying.
-    # Why explicit: a skipped orcad-template (tags that predate it) would skip every job after it.
+    # Why explicit: a skipped quirkyd-template (tags that predate it) would skip every job after it.
     if: ${{ !cancelled() && needs.publish-release.result == 'success' && needs.cut.outputs.tag != '' }}
     runs-on: ubuntu-latest
     permissions:
@@ -1334,7 +1334,7 @@ jobs:
       - cut
     # Why: publish-complete-draft-releases can expose a recovered RC without
     # running the build/publish jobs; still advance the RC cask to that tag.
-    # Fork: gated off. homebrew-bump PRs into stablyai/homebrew-orca with the
+    # Fork: gated off. homebrew-bump PRs into stablyai/homebrew-quirky with the
     # stablyai app key (BUFO_BOT_PRIVATE_KEY), which this fork does not have and
     # should not use — the fork ships no tap. Same call as PR #1 dropping
     # track-community-prs.yaml.

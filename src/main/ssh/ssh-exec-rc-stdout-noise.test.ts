@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { wrapRemoteCommandForPosixShell } from './ssh-posix-command-wrapper'
 import type { SshExecOptions } from './connection/ssh-exec-options'
 import { execCommand, isSshCommandExitError } from './remote-exec/remote-exec-command'
@@ -106,7 +106,7 @@ describe.skipIf(process.platform === 'win32' || !existsSync('/bin/bash'))(
     it.each(STARTUP_NOISE)(
       'finds a Node only the profile puts on PATH despite %s',
       async (_name, startup) => {
-        const home = await mkdtemp(join(tmpdir(), 'orca-login-shell-node-'))
+        const home = await mkdtemp(join(tmpdir(), 'quirky-login-shell-node-'))
         try {
           const nodePath = join(home, 'custom-node', 'bin', 'node')
           await mkdir(join(home, 'custom-node', 'bin'), { recursive: true })

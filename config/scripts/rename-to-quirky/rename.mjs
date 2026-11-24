@@ -162,7 +162,9 @@ function run(options) {
     try {
       for (const { from, to } of plan.moves) {
         mkdirSync(dirname(join(root, to)), { recursive: true })
-        execFileSync('git', ['-C', root, 'mv', '--', from, to], { stdio: ['ignore', 'ignore', 'pipe'] })
+        execFileSync('git', ['-C', root, 'mv', '--', from, to], {
+          stdio: ['ignore', 'ignore', 'pipe']
+        })
         removeEmptyParents(root, dirname(from))
       }
       for (const edit of edits) {
@@ -171,7 +173,9 @@ function run(options) {
     } catch (error) {
       const quoted = `'${root.replaceAll("'", `'\\''`)}'`
       console.error(`rename failed part-way: ${error.stderr?.toString().trim() || error.message}`)
-      console.error(`restore the tree with: git -C ${quoted} reset --hard && git -C ${quoted} clean -fd`)
+      console.error(
+        `restore the tree with: git -C ${quoted} reset --hard && git -C ${quoted} clean -fd`
+      )
       return { report, exitCode: 1 }
     }
   }
@@ -195,7 +199,9 @@ function main() {
   if (options.report) {
     writeFileSync(options.report, json)
     const { filesChanged, pathMoves } = outcome.report
-    console.log(`${options.dryRun ? 'dry run: ' : ''}${filesChanged} files changed, ${pathMoves.length} paths moved`)
+    console.log(
+      `${options.dryRun ? 'dry run: ' : ''}${filesChanged} files changed, ${pathMoves.length} paths moved`
+    )
   } else {
     process.stdout.write(json)
   }

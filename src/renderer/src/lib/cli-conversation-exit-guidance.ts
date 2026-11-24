@@ -11,12 +11,12 @@ export function cliConversationExitGuidance(
   return fromTerminal
     ? translate(
         'components.native-chat.resumeInNewChat.exitUnconfirmedFromTerminal',
-        "Orca can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then open this conversation from Session History.",
+        "Quirky can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then open this conversation from Session History.",
         values
       )
     : translate(
         'components.native-chat.resumeInNewChat.exitUnconfirmed',
-        "Orca can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then try again.",
+        "Quirky can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then try again.",
         values
       )
 }

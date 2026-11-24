@@ -34,7 +34,7 @@ const record = {
 describe('WSL host environment store', () => {
   let userDataPath: string
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-wsl-host-store-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-wsl-host-store-'))
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
   afterEach(() => {
@@ -54,7 +54,7 @@ describe('WSL host environment store', () => {
     expect(environment).toMatchObject({
       id: 'wsl:ubuntu',
       name: 'Ubuntu (WSL)',
-      orcadDeployment: { kind: 'wsl', distro: 'Ubuntu', localPort: 42000, remotePort: 6768 }
+      quirkydDeployment: { kind: 'wsl', distro: 'Ubuntu', localPort: 42000, remotePort: 6768 }
     })
     expect(environment.connectionDependency).toBeUndefined()
     expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.createdAt).toBe(100)

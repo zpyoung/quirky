@@ -5,17 +5,17 @@ import { toRemoteRuntimePtyId } from '../../shared/remote-runtime-pty-id'
 import { OrchestrationError } from './orchestration/orchestration-error'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const { store, makeRuntimeStoreWithWorkspaceSession } =
-  await import('./orca-runtime-test-fixtures.spec')
+  await import('./quirky-runtime-test-fixtures.spec')
 
 const WORKTREE_ID = 'repo-1::/tmp/worktree-a'
 
 type HostCall = (environmentId: string, method: string, params: unknown) => Promise<unknown>
 
 function pairedHostLeafRuntime(hostCall: HostCall, runtimeStore: typeof store = store) {
-  const runtime = new OrcaRuntimeService(runtimeStore)
+  const runtime = new QuirkyRuntimeService(runtimeStore)
   const localStops: string[] = []
   runtime.setPtyController({
     write: () => true,
@@ -70,7 +70,7 @@ function pairedHostLeafRuntime(hostCall: HostCall, runtimeStore: typeof store = 
   return { runtime, call, closeTerminalTab, localStops }
 }
 
-async function listedHandle(runtime: InstanceType<typeof OrcaRuntimeService>): Promise<string> {
+async function listedHandle(runtime: InstanceType<typeof QuirkyRuntimeService>): Promise<string> {
   const [terminal] = (await runtime.listTerminals()).terminals
   expect(terminal?.executionHostId).toBe('runtime:env-1')
   return terminal!.handle
@@ -143,7 +143,7 @@ describe('closing a terminal that a paired runtime runs', () => {
   it('retires the mirror of a terminal the owning host no longer knows, without claiming a stop', async () => {
     // The owner is a real runtime that never issued this handle; the RPC layer passes its
     // refusal code through, as `mapRuntimeError` does for `terminal_handle_stale`.
-    const owner = new OrcaRuntimeService(store)
+    const owner = new QuirkyRuntimeService(store)
     owner.syncWindowGraph(1, { tabs: [], leaves: [] })
     const { runtime, closeTerminalTab } = pairedHostLeafRuntime(async (_env, _method, params) => {
       const terminal =

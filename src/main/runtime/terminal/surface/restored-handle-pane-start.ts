@@ -1,13 +1,13 @@
 // Layout-owner builds: a CLI or orchestration send, wait or read on a handle whose pane main holds
 // with no terminal yet (a saved pane not started since restore) starts it through main's one
 // starter, then acts on the started terminal.
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { OrcaRuntimeWithGetTerminalInteractiveWait } from '../wait/terminal-interactive-wait'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QuirkyRuntimeWithGetTerminalInteractiveWait } from '../wait/terminal-interactive-wait'
 import { startedMainTerminalSurfaces } from './main-terminal-surfaces'
-import { MOBILE_TERMINAL_SURFACE_TIMEOUT_MS } from '../../orca-runtime-core'
+import { MOBILE_TERMINAL_SURFACE_TIMEOUT_MS } from '../../quirky-runtime-core'
 import type { RestoredPane } from '../recovery/restored-pane-start'
 
-export abstract class OrcaRuntimeWithRestoredHandlePaneStart extends OrcaRuntimeWithGetTerminalInteractiveWait {
+export abstract class QuirkyRuntimeWithRestoredHandlePaneStart extends QuirkyRuntimeWithGetTerminalInteractiveWait {
   /**
    * Null unless the handle names a saved pane main holds with no terminal yet; then the started
    * terminal's own handle, to act on until main's layout binds the pane and the caller's handle
@@ -34,7 +34,7 @@ export abstract class OrcaRuntimeWithRestoredHandlePaneStart extends OrcaRuntime
   }
 
   private restoredPaneToStart(handle: string): RestoredPane | null {
-    if (!ORCA_LAYOUT_OWNER_IS_MAIN || this.getLivePtyForHandle(handle)) {
+    if (!QUIRKY_LAYOUT_OWNER_IS_MAIN || this.getLivePtyForHandle(handle)) {
       return null
     }
     let leaf

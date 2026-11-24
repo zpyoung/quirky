@@ -1,11 +1,11 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
-// `worker-start --terminal orca_session_id:<id>`: a chat adopted as a worker, on the
+// `worker-start --terminal quirky_session_id:<id>`: a chat adopted as a worker, on the
 // coordinator-mail rig. Its task is a queued send, read the way the terminal path reads its own
 // write; a stop or a failed start never touches the chat.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatOrcaSessionAddress } from '../../shared/orca-session-address'
-import { testOrcaSessionId } from '../../shared/orca-session-address-test-fixture'
+import { formatQuirkySessionAddress } from '../../shared/quirky-session-address'
+import { testQuirkySessionId } from '../../shared/quirky-session-address-test-fixture'
 import type { FakeConnection } from './structured-chat-coordinator-fake-codex-fixture'
 import {
   COORDINATOR,
@@ -32,7 +32,7 @@ type WorkspaceLookup = {
   ) => Promise<Awaited<ReturnType<typeof placeWorkerAgent>>['worktree']>
 }
 
-const WORKER = formatOrcaSessionAddress(testOrcaSessionId(PEER_CHAT))
+const WORKER = formatQuirkySessionAddress(testQuirkySessionId(PEER_CHAT))
 
 beforeEach(() => {
   vi.spyOn<WorkspaceLookup, 'showManagedTerminalWorkspace'>(
@@ -108,14 +108,14 @@ describe('worker-start --terminal names a chat', () => {
     })
     const dispatchId = String(receipt.dispatchId)
     const task = turnText(worker.turns[0]!)
-    expect(task).toContain(`Your Orca session ID is: ${WORKER}`)
+    expect(task).toContain(`Your Quirky session ID is: ${WORKER}`)
     expect(task).toContain('The coordinator cannot see this chat')
     expect(task).toContain('it will send this chat a fresh')
     expect(task).not.toContain('this terminal')
     expect(task).not.toMatch(/exit the shell/i)
     expect(db.getDispatchContextById(dispatchId)).toMatchObject({
       assignee_handle: WORKER,
-      assignee_orca_session_id: PEER_CHAT,
+      assignee_quirky_session_id: PEER_CHAT,
       assignee_pane_key: null,
       process_incarnation: null
     })
@@ -212,7 +212,7 @@ describe('worker-start --terminal refuses a chat before anything is created', ()
   it('when it is the coordinator itself', async () => {
     await openChat(COORDINATOR)
     const { taskId } = await coordinatorRunAndTask()
-    const self = formatOrcaSessionAddress(testOrcaSessionId(COORDINATOR))
+    const self = formatQuirkySessionAddress(testQuirkySessionId(COORDINATOR))
 
     await expectNothingCreated(
       await refusal({ task: taskId, terminal: self }),

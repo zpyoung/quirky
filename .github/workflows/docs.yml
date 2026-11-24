@@ -172,7 +172,7 @@ jobs:
           fi
           echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
 
-          # Stable tags cut before the docs package was merged are valid Orca
+          # Stable tags cut before the docs package was merged are valid Quirky
           # releases, but cannot produce a docs deployment. Skip them before
           # requesting the protected production environment.
           docs_source_available=false

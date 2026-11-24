@@ -2,7 +2,7 @@ import './unused-default-rpc-methods.test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../shared/protocol-version'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import { OrchestrationDb } from '../orchestration/db'
 import {
   defineMethod,
@@ -33,7 +33,7 @@ afterEach(() => {
 function createDispatcher(methods: readonly RpcAnyMethodDeclaration[]): RpcDispatcher {
   const db = new OrchestrationDb(':memory:')
   databases.push(db)
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   runtime.setOrchestrationDb(db)
   vi.spyOn(runtime, 'getTerminalPromptRequestBinding').mockReturnValue({
     ptyId: 'pty-prompt',
@@ -85,7 +85,7 @@ describe('RpcDispatcher unary transport parity', () => {
         text: 'go',
         enter: true,
         agentPrompt: true,
-        client: { id: 'orca-cli', type: 'desktop' }
+        client: { id: 'quirky-cli', type: 'desktop' }
       },
       'post-write'
     )
@@ -174,7 +174,7 @@ describe('RpcDispatcher unary transport parity', () => {
 
   it('refuses a streaming method over one-shot dispatch for a pinned non-owner caller', async () => {
     const dispatcher = new RpcDispatcher({
-      runtime: new OrcaRuntimeService(),
+      runtime: new QuirkyRuntimeService(),
       methods: [
         defineStreamingMethod({
           name: 'terminal.read',

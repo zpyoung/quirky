@@ -13,5 +13,5 @@ export function profileStateBuildCompatibilityError(
   ) {
     return null
   }
-  return 'This build predates SQLite profile storage. Quit Orca and run the current CLI’s “orca profile state rollback --latest-json --profile-id <id>” for each profile before installing it manually.'
+  return 'This build predates SQLite profile storage. Quit Quirky and run the current CLI’s “quirky profile state rollback --latest-json --profile-id <id>” for each profile before installing it manually.'
 }

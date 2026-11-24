@@ -3,14 +3,14 @@ const { copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync } = require('node:f
 const { tmpdir } = require('node:os')
 const { join, resolve } = require('node:path')
 
-const SHIPIT_SCHEDULING_ADDON = 'orca_shipit_scheduling.node'
+const SHIPIT_SCHEDULING_ADDON = 'quirky_shipit_scheduling.node'
 
 function buildMacShipItScheduling(resourcesDir, arch) {
   if (process.platform !== 'darwin' || !['x64', 'arm64'].includes(arch)) {
     throw new Error(`Cannot build macOS installer scheduling for ${process.platform}/${arch}`)
   }
   const root = resolve(__dirname, '../..')
-  const workDir = mkdtempSync(join(tmpdir(), `orca-shipit-scheduling-${arch}-`))
+  const workDir = mkdtempSync(join(tmpdir(), `quirky-shipit-scheduling-${arch}-`))
   try {
     cpSync(join(root, 'native/macos-shipit-scheduling'), workDir, { recursive: true })
     execFileSync(

@@ -1,5 +1,5 @@
 /**
- * Phone paired with a desktop that is itself a client of an `orca serve` host.
+ * Phone paired with a desktop that is itself a client of an `quirky serve` host.
  *
  * BASELINE, not the goal: today the phone sees only the desktop's own workspaces, because the
  * desktop main process never holds its paired servers' workspaces. The mirror slice (S2) flips the
@@ -7,7 +7,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchPhoneMirrorTopology } from './helpers/phone-mirror-topology'
 import { RuntimeClient } from '../../src/cli/runtime/client'
 import type { RuntimeWorktreePsSummary } from '../../src/shared/runtime-worktree-contracts'

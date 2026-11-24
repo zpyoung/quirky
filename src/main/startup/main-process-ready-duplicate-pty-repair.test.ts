@@ -33,7 +33,7 @@ const fixture = vi.hoisted(() => {
   return value
 })
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('electron', () => ({
   app: { isPackaged: false, on: vi.fn(), once: vi.fn(), getPath: () => fixture.userData },
   ipcMain: { handle: vi.fn(), removeHandler: vi.fn(), on: vi.fn(), removeListener: vi.fn() },
@@ -41,8 +41,8 @@ vi.mock('electron', () => ({
 }))
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: false } }))
 vi.mock('./main-process-state', () => ({ mainProcessState: fixture.state }))
-vi.mock('../runtime/orca-runtime', () => ({
-  OrcaRuntimeService: class {
+vi.mock('../runtime/quirky-runtime', () => ({
+  QuirkyRuntimeService: class {
     readonly sidebarFacts = null
     readonly agentTransitions = { seedRestoredRows() {} }
     attachAgentStatusStore() {
@@ -70,7 +70,7 @@ vi.mock('../runtime/agent-state-rules/agent-state-rules-override', () => ({
   startAgentStateRulesOverride: () => {}
 }))
 vi.mock('../artifacts/artifact-cloud-service', () => ({ ArtifactCloudService: class {} }))
-vi.mock('./wsl-orcad-account-env-wiring', () => ({ installWslOrcadAccountShim: vi.fn() }))
+vi.mock('./wsl-quirkyd-account-env-wiring', () => ({ installWslQuirkydAccountShim: vi.fn() }))
 vi.mock('../codex/codex-hook-reconcile', () => ({ startCodexHooks: vi.fn() }))
 vi.mock('../star-nag/service', () => ({
   StarNagService: class {
@@ -114,8 +114,8 @@ vi.mock('./startup-diagnostics', () => ({ logStartupMilestone: vi.fn() }))
 vi.mock('../opencode/opencode-status-plugin-startup-refresh', () => ({
   refreshInstalledOpenCodeStatusPlugins: vi.fn()
 }))
-vi.mock('../orcad/orcad-artifact-cache-retention', () => ({
-  pruneDesktopOrcadArtifactCache: vi.fn()
+vi.mock('../quirkyd/quirkyd-artifact-cache-retention', () => ({
+  pruneDesktopQuirkydArtifactCache: vi.fn()
 }))
 
 import { initializeReadyRuntimeServices } from './main-process-ready-runtime'
@@ -175,7 +175,7 @@ it('finishes the duplicate-terminal repair before ready services resolve, even b
   inner.writeSerializedState(Buffer.from(duplicatePtyProfile()))
   const authority = new DelayedAuthority(inner)
   const store = new Store({
-    dataFile: join(directory, 'orca-data.json'),
+    dataFile: join(directory, 'quirky-data.json'),
     profileStateAuthority: authority
   })
   stores.push(store)

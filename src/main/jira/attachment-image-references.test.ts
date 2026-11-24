@@ -40,7 +40,7 @@ describe('lazy Jira image references', () => {
     const { jiraRequestBinary } = await import('./authenticated-request')
     const images = await loadIssueImageAttachments(client, metadata, ['1'], 'reference')
     const markdown = createMediaMarkdownResolver(images, ['1'])({ id: 'media-id', alt: 'shot.png' })
-    expect(markdown).toMatch(/^!\[shot.png\]\(orca-jira-image:\/\/attachment\/[0-9a-f-]+\)$/)
+    expect(markdown).toMatch(/^!\[shot.png\]\(quirky-jira-image:\/\/attachment\/[0-9a-f-]+\)$/)
     expect(markdown).not.toContain('data:')
     expect(jiraRequestBinary).not.toHaveBeenCalled()
   })

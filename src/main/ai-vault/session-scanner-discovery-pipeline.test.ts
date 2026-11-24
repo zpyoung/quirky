@@ -19,7 +19,7 @@ let root: string
 beforeEach(async () => {
   fsMocks.readdir.mockReset().mockImplementation(fs.readdir)
   fsMocks.stat.mockReset().mockImplementation(fs.stat)
-  root = await fs.mkdtemp(join(tmpdir(), 'orca-fresh-discovery-'))
+  root = await fs.mkdtemp(join(tmpdir(), 'quirky-fresh-discovery-'))
 })
 
 afterEach(async () => {

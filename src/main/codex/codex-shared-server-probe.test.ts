@@ -9,7 +9,7 @@ const { readWindowsProcessCreationTime } = vi.hoisted(() => ({
 }))
 vi.mock('../windows/windows-process-table', () => ({ readWindowsProcessCreationTime }))
 
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { probeCodexSharedServer } from './codex-shared-server-probe'
 
 const originalPlatform = process.platform

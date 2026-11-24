@@ -29,7 +29,7 @@ function attachSetupDecisionRecovery(error: unknown, replayingLaunch: boolean): 
       SETUP_DECISION_NEXT_STEP,
       ...(replayingLaunch && error instanceof RuntimeRpcFailureError
         ? [
-            'This launch was refused before creation. Remove --retry-launch for the changed request so Orca uses a new launch ID.'
+            'This launch was refused before creation. Remove --retry-launch for the changed request so Quirky uses a new launch ID.'
           ]
         : [])
     ]

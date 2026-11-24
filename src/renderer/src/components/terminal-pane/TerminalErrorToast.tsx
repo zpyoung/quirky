@@ -47,7 +47,7 @@ function tokenPattern(source: string): { match: RegExp; replaceAll: RegExp } {
 // Capture the leading boundary so replacement can restore it.
 const TERMINAL_HOST_GONE = tokenPattern('(^|[^a-z0-9_])terminal_host_gone(?=$|[^a-z0-9_])')
 const LEGACY_TERMINAL_HOST_GONE_PATTERN =
-  /(^|[^a-z])connect (?:ENOENT|ECONNREFUSED) [^\r\n]*orca-terminal-host-v[^\r\n]*/i
+  /(^|[^a-z])connect (?:ENOENT|ECONNREFUSED) [^\r\n]*quirky-terminal-host-v[^\r\n]*/i
 // A reattach the host answered "no such session" for: the SSH provider's expiry token, the relay's
 // raw not-found string when nothing mapped it, or a daemon generation old enough to still refuse a
 // pane respawning onto an id it is tearing down (#18046). None proves the shell died — the copy
@@ -125,7 +125,7 @@ export function isPaneOwnerRecoveryError(error: string): boolean {
 function humanizeUnreattachableSession(error: string): string {
   const explanation = translate(
     'auto.components.terminal.pane.TerminalErrorToast.sessionUnavailable',
-    "Orca couldn't reattach to this pane's terminal session on the host. Open a new terminal to continue."
+    "Quirky couldn't reattach to this pane's terminal session on the host. Open a new terminal to continue."
   )
   // Why a replacer: a translation containing `$&` or `$1` would otherwise be read as a substitution.
   return UNREATTACHABLE_SESSIONS.reduce(
@@ -162,18 +162,18 @@ export function humanizeTerminalError(error: string): string {
     const explanation = isPaneOwnerUnverifiedError(humanized)
       ? translate(
           'auto.components.terminal.pane.TerminalErrorToast.42b283ecfc',
-          "Orca couldn't safely reconnect this terminal because the host couldn't verify its saved session. Orca left the saved session unchanged. Click Retry to try reconnecting now. If it still cannot reconnect, open a new terminal."
+          "Quirky couldn't safely reconnect this terminal because the host couldn't verify its saved session. Quirky left the saved session unchanged. Click Retry to try reconnecting now. If it still cannot reconnect, open a new terminal."
         )
       : translate(
           'auto.components.terminal.pane.TerminalErrorToast.ownerUnknown',
-          "Orca couldn't verify this terminal's owner."
+          "Quirky couldn't verify this terminal's owner."
         )
     humanized = humanized.replaceAll(PANE_OWNER_UNVERIFIED_MARKER, () => explanation)
   }
   humanized = humanized.replaceAll(PANE_OWNER_CHANGED_MARKER, () =>
     translate(
       'auto.components.terminal.pane.TerminalErrorToast.ownerUnknown',
-      "Orca couldn't verify this terminal's owner."
+      "Quirky couldn't verify this terminal's owner."
     )
   )
   humanized = humanized.replace(SOURCE_RESTORE_REQUIRED.replaceAll, () =>
@@ -185,7 +185,7 @@ export function humanizeTerminalError(error: string): string {
   humanized = humanized.replace(OWNER_HOST_MISMATCH.replaceAll, () =>
     translate(
       'auto.components.terminal.pane.TerminalErrorToast.ownerHostMismatch',
-      "This terminal's saved session belongs to another host connection, so Orca can't reattach it here. Open a new terminal to continue."
+      "This terminal's saved session belongs to another host connection, so Quirky can't reattach it here. Open a new terminal to continue."
     )
   )
   if (humanized.includes(REMOTE_TERMINAL_CLOSED_MARKER)) {

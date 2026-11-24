@@ -12,7 +12,7 @@ import type {
 import type { WorkspaceSessionState } from '../workspace-session-state-types'
 import { folderWorkspaceKey } from '../workspace-scope'
 
-export const GIT_KEY = 'repo-1::/Users/dev/orca'
+export const GIT_KEY = 'repo-1::/Users/dev/quirky'
 export const FOLDER_KEY = folderWorkspaceKey('notes-1')
 export const SSH_KEY = 'repo-ssh::/home/dev/api'
 export const SERVER_KEY = 'repo-server::/srv/app'

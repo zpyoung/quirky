@@ -11,13 +11,13 @@ import {
   STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
 } from '../../shared/protocol-version'
 import { fakeClaude } from './claude-structured-fake-connection-test-fixture'
-import { claudeSessionIdForOrcaSession } from '../claude/claude-structured-launch-resolution'
-import { ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
+import { claudeSessionIdForQuirkySession } from '../claude/claude-structured-launch-resolution'
+import { QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
 import { attachFingerprintFields } from '../native-chat/agent-session-wire/structured-agent-session-attach'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { StructuredAgentSessionStatusSink } from '../native-chat/agent-session-wire/structured-agent-session-status-feed'
 import { AgentHookServer, _internals } from '../agent-hooks/server'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import type { RpcRequest, RpcResponse } from './rpc/core'
 import type { ClaudeStructuredAuthPolicy } from '../claude-accounts/claude-structured-auth-policy'
 import { RpcDispatcher } from './rpc/dispatcher'
@@ -32,7 +32,7 @@ import { createStructuredAgentSessionLogger } from '../native-chat/agent-session
 import { claudeProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
 
 const SESSION = 'claude-integration-1'
-const PROVIDER_SESSION = claudeSessionIdForOrcaSession(SESSION)
+const PROVIDER_SESSION = claudeSessionIdForQuirkySession(SESSION)
 const WORKSPACE = 'workspace-claude'
 // Why 'runtime': this file exercises the Claude structured integration over agentSession.*, not the
 // mobile surface — nothing here asserts anything mobile-specific, and its sibling integration
@@ -215,7 +215,7 @@ beforeEach(async () => {
     ANTHROPIC_AUTH_TOKEN: 'configured-token',
     ANTHROPIC_BASE_URL: 'https://gateway.example.test'
   }
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-structured-integration-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-structured-integration-'))
   recordAccountHomePath = join(root, 'claude-home')
   transcriptPath = join(root, 'claude-home', 'projects', 'workspace', `${PROVIDER_SESSION}.jsonl`)
   await mkdir(join(root, 'claude-home', 'projects', 'workspace'), { recursive: true })
@@ -274,7 +274,7 @@ beforeEach(async () => {
     cleanupSubscriptionsByPrefix: () => {}
   }
   dispatcher = new RpcDispatcher({
-    runtime: runtime as unknown as OrcaRuntimeService,
+    runtime: runtime as unknown as QuirkyRuntimeService,
     methods: STRUCTURED_AGENT_SESSION_METHODS
   })
 })
@@ -397,7 +397,7 @@ describe('a structured Claude session over agentSession.*', () => {
     await waitForStructuredAgentSessionRecovery()
 
     const guidance = itemsOf(await subscribe()).find((item) => item.body?.kind === 'status')
-    // The adapter typed the refusal, so the row names the situation rather than quoting Orca.
+    // The adapter typed the refusal, so the row names the situation rather than quoting Quirky.
     expect(guidance?.body).toMatchObject({
       kind: 'status',
       text: "Claude isn't signed in. Run `claude auth login`, or choose an account in Claude Accounts settings.",
@@ -576,7 +576,7 @@ describe('a structured Claude session over agentSession.*', () => {
       ANTHROPIC_AUTH_TOKEN: 'configured-token',
       ANTHROPIC_BASE_URL: 'https://gateway.example.test',
       CLAUDE_CONFIG_DIR: join(root, 'claude-home'),
-      [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: expect.any(String)
+      [QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV]: expect.any(String)
     })
     // System auth: the user's own shell key is their sign-in, exactly as on the
     // terminal path, and the configured overlay still wins over it.
@@ -636,7 +636,7 @@ describe('a structured Claude session over agentSession.*', () => {
     )
 
     // A background task can wake Claude after the preceding dispatch settled.
-    // This assistant frame opens the provider-owned turn without an Orca send
+    // This assistant frame opens the provider-owned turn without an Quirky send
     // echo; Stop must target that frame's id rather than the settled user row.
     claude.live().handlers.onMessage?.({
       type: 'assistant',

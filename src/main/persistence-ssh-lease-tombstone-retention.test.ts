@@ -18,7 +18,7 @@ vi.mock('electron', () => ({
 
 describe('operator-closed SSH lease tombstones', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {

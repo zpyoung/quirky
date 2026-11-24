@@ -58,7 +58,7 @@
       "statusLine": "ステータスライン",
       "statusLineAvailable": "カスタムステータスラインを検出",
       "statusLineChained": "連携済み",
-      "statusLineConsent": "Orca は既存のステータスラインコマンドを保持して実行します。",
+      "statusLineConsent": "Quirky は既存のステータスラインコマンドを保持して実行します。",
       "statusLineDisabled": "未有効",
       "statusLineDrifted": "カスタムステータスラインが変更されました",
       "statusLineError": "確認が必要",

@@ -31,7 +31,7 @@ export type StoredWebRuntimeEnvironment = Omit<PublicKnownRuntimeEnvironment, 'e
   }[]
 }
 
-const ENVIRONMENT_STORAGE_KEY = 'orca.web.runtimeEnvironment.v1'
+const ENVIRONMENT_STORAGE_KEY = 'quirky.web.runtimeEnvironment.v1'
 
 // Why memory: a session-only pairing's code must not outlive the page (#17399).
 let sessionEnvironment: StoredWebRuntimeEnvironment | null = null
@@ -153,7 +153,7 @@ export function createStoredWebRuntimeEnvironment(args: {
   const compatibleEnvironmentIds = sameHost?.compatibleEnvironmentIds ?? []
   return {
     id,
-    name: args.name.trim() || 'Orca Server',
+    name: args.name.trim() || 'Quirky Server',
     createdAt: sameHost?.createdAt ?? now,
     updatedAt: now,
     // Why bump: request fences compare revisions, and the device token they captured is gone.

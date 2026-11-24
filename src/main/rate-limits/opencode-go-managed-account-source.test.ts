@@ -53,7 +53,7 @@ async function enrollSelectedAccount(): Promise<string> {
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-go-managed-caller-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-go-managed-caller-'))
   systemDataHome = join(root, 'system-data')
   const original = getAppEnvironment()
   setAppEnvironment({
@@ -62,7 +62,7 @@ beforeEach(() => {
   })
   metadataPath = join(root, 'managed-data-accounts', 'opencode', 'accounts.json')
   for (const key of Object.keys(process.env)) {
-    if (key.startsWith('ORCA_DATA_ACCOUNT_')) {
+    if (key.startsWith('QUIRKY_DATA_ACCOUNT_')) {
       vi.stubEnv(key, undefined)
     }
   }
@@ -142,14 +142,14 @@ describe('OpenCode Go execution-host managed account lookup', () => {
       const inheritedProfile: Record<string, string> = {
         ...baseline,
         ...selected,
-        ORCA_DATA_ACCOUNT_PROVIDER: 'opencode',
-        ORCA_DATA_ACCOUNT_DATA_HOME: selected.XDG_DATA_HOME,
-        ORCA_DATA_ACCOUNT_STATE_HOME: selected.XDG_STATE_HOME
+        QUIRKY_DATA_ACCOUNT_PROVIDER: 'opencode',
+        QUIRKY_DATA_ACCOUNT_DATA_HOME: selected.XDG_DATA_HOME,
+        QUIRKY_DATA_ACCOUNT_STATE_HOME: selected.XDG_STATE_HOME
       }
-      expect(inheritedProfile.ORCA_DATA_ACCOUNT_ORIGINAL_ENV).not.toContain(
+      expect(inheritedProfile.QUIRKY_DATA_ACCOUNT_ORIGINAL_ENV).not.toContain(
         'system-inline-placeholder'
       )
-      expect(JSON.parse(baseline.ORCA_DATA_ACCOUNT_ORIGINAL_ENV)).toMatchObject({
+      expect(JSON.parse(baseline.QUIRKY_DATA_ACCOUNT_ORIGINAL_ENV)).toMatchObject({
         OPENCODE_AUTH_CONTENT: null,
         inlineAuthReference: expect.any(String)
       })

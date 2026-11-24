@@ -13,7 +13,7 @@ import { hasConfiguredSourceControlTextGenerationDefaults } from './source-contr
 type CreatePullRequest = (stacked?: boolean, fields?: PullRequestGenerationFields) => Promise<void>
 
 /**
- * Create PR on a ready branch: when the composer still holds Orca's seeded placeholders and a PR
+ * Create PR on a ready branch: when the composer still holds Quirky's seeded placeholders and a PR
  * agent is configured, run the composer's own generation and create from its result, like the
  * prepare-branch path does.
  */

@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
     addRepoPath: vi.fn(),
     fetchWorktrees: vi.fn(),
     setHideDefaultBranchWorkspace: vi.fn(),
-    clearOrcaHookTrustForRepo: vi.fn(),
+    clearQuirkyHookTrustForRepo: vi.fn(),
     repos: [] as Repo[]
   },
   toastSuccess: vi.fn(),

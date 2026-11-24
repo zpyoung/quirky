@@ -16,7 +16,7 @@ import esbuild from 'esbuild'
  */
 const mobileRoot = path.join(import.meta.dirname, '..')
 
-/** The oldest WebView Orca supports, matching the engine bundle's own floor (#7030). */
+/** The oldest WebView Quirky supports, matching the engine bundle's own floor (#7030). */
 const TARGET = 'chrome74'
 
 const ENTRY = path.join(mobileRoot, 'src', 'terminal', 'document', 'native-document-entry.ts')

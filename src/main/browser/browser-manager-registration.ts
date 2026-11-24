@@ -160,7 +160,7 @@ export abstract class BrowserManagerRegistration extends BrowserManagerGuestPoli
     this.annotationViewportBridgeOpsByTabId.delete(browserTabId)
   }
 
-  // Why: headless orca serve has no <webview> window; back pages with offscreen WebContents and skip the webview-only setup.
+  // Why: headless quirky serve has no <webview> window; back pages with offscreen WebContents and skip the webview-only setup.
   registerOffscreenGuest({
     browserPageId,
     worktreeId,
@@ -204,7 +204,7 @@ export abstract class BrowserManagerRegistration extends BrowserManagerGuestPoli
     // Cancel all active grab ops before tearing down registrations
     this.grabSessionController.cancelAll('evicted')
     for (const downloadId of this.downloadsById.keys()) {
-      this.cancelDownloadInternal(downloadId, 'Orca is shutting down.')
+      this.cancelDownloadInternal(downloadId, 'Quirky is shutting down.')
     }
     browserDownloadDestinationReservations.clear()
     for (const browserTabId of this.webContentsIdByTabId.keys()) {

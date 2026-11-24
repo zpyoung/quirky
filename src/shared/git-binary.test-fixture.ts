@@ -1,11 +1,11 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 type GitResult = { stdout: string; stderr: string }
 
 export class GitBinaryTestFixture {
   private container = ''
-  private readonly image = process.env.ORCA_GIT_COMPAT_IMAGE
-  private readonly binary = process.env.ORCA_GIT_COMPAT_BINARY ?? 'git'
+  private readonly image = process.env.QUIRKY_GIT_COMPAT_IMAGE
+  private readonly binary = process.env.QUIRKY_GIT_COMPAT_BINARY ?? 'git'
   readonly executionRoot: string
 
   constructor(

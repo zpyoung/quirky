@@ -18,7 +18,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "all": {
                   "approvedAt": 1767225600000
@@ -51,7 +51,7 @@
     "f35a1e7f7cdb": {
       "name": "ui.set#1",
       "ordinal": 2,
-      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"trustedOrcaHooks\":{\"repo-1\":{\"all\":{\"approvedAt\":1767225600000}}}}}"
+      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"trustedQuirkyHooks\":{\"repo-1\":{\"all\":{\"approvedAt\":1767225600000}}}}}"
     },
     "f3b516f62081": {
       "status": "rejected",

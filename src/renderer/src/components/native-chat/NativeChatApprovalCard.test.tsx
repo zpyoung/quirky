@@ -7,10 +7,10 @@ import { NativeChatApprovalCard } from './NativeChatApprovalCard'
 afterEach(cleanup)
 
 describe('NativeChatApprovalCard', () => {
-  describe("a subject of a kind this build cannot draw: a newer Orca's", () => {
+  describe("a subject of a kind this build cannot draw: a newer Quirky's", () => {
     // A subject kind a newer build wrote; this build draws only plans.
     const NEWER_SUBJECT = JSON.parse('{"kind":"diff","path":"a.ts"}')
-    const NEEDS_NEWER_ORCA = 'This request needs a newer version of Orca.'
+    const NEEDS_NEWER_QUIRKY = 'This request needs a newer version of Quirky.'
 
     function renderNewer(detail: string | undefined) {
       const onChoose = vi.fn()
@@ -35,7 +35,7 @@ describe('NativeChatApprovalCard', () => {
 
     it('with no detail: says so, answers nothing, and only its cancel reaches the host', () => {
       const { onChoose, onCancel } = renderNewer(undefined)
-      expect(screen.getByText(NEEDS_NEWER_ORCA)).toBeTruthy()
+      expect(screen.getByText(NEEDS_NEWER_QUIRKY)).toBeTruthy()
       for (const label of ['Approve', 'Deny']) {
         const option = screen.getByRole('button', { name: label })
         expect(option.hasAttribute('disabled')).toBe(true)
@@ -54,7 +54,7 @@ describe('NativeChatApprovalCard', () => {
       expect(document.querySelector('[data-native-chat-approval-detail]')?.textContent).toContain(
         '# Release'
       )
-      expect(screen.getByText(NEEDS_NEWER_ORCA)).toBeTruthy()
+      expect(screen.getByText(NEEDS_NEWER_QUIRKY)).toBeTruthy()
       fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
       expect(screen.getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(true)
       expect(onChoose).not.toHaveBeenCalled()
@@ -72,7 +72,7 @@ describe('NativeChatApprovalCard', () => {
           onChoose={onChoose}
         />
       )
-      expect(screen.queryByText(NEEDS_NEWER_ORCA)).toBeNull()
+      expect(screen.queryByText(NEEDS_NEWER_QUIRKY)).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: 'Approve plan' }))
       expect(onChoose).toHaveBeenCalledWith('allow')
     })

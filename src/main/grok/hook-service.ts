@@ -10,7 +10,7 @@ import {
   writeManagedScript
 } from '../agent-hooks/installer-utils'
 import { refreshManagedScriptIfPresent } from '../agent-hooks/managed-hook-script-refresh'
-import { isOrcaOwnedRemnant, removeManagedGrokHookEntries } from './grok-hook-config-cleanup'
+import { isQuirkyOwnedRemnant, removeManagedGrokHookEntries } from './grok-hook-config-cleanup'
 import { buildInstalledGrokConfig, GROK_EVENTS, GROK_TOOL_EVENT_MATCHER } from './grok-hook-config'
 import { installRemoteGrokHook } from './grok-hook-remote-install'
 import {
@@ -45,9 +45,9 @@ export function getGrokToolEventMatcherForTests(): string {
 function getConfigPath(): string {
   // Why: Grok loads trusted global hook files from $GROK_HOME/hooks/*.json
   // (or ~/.grok when unset). Honor GROK_HOME so install/status match the same
-  // home Grok and transcript lookup use; keep Orca entries in a dedicated file
+  // home Grok and transcript lookup use; keep Quirky entries in a dedicated file
   // so user-authored hook files stay untouched.
-  return join(resolveGrokHomeDir(), 'hooks', 'orca-status.json')
+  return join(resolveGrokHomeDir(), 'hooks', 'quirky-status.json')
 }
 
 /** Test seam: the command registered for `scriptPath` on the current platform. */
@@ -159,7 +159,7 @@ export class GrokHookService {
     // setting back on is an equally explicit choice, and the later one. Without this the toggle
     // silently does nothing forever and the only way back is deleting a file in a hidden directory.
     // A symlinked empty config is also respected unless its content and file identity match the
-    // marker written by Orca's own prior cleanup.
+    // marker written by Quirky's own prior cleanup.
     const configIsSymlink = isSymbolicLinkSync(configPath)
     const reinstallsOwnSymlinkCleanup =
       configIsSymlink &&
@@ -239,7 +239,7 @@ export class GrokHookService {
     // Why the symlink check: unlinking would delete the user's link, not our file. A config they
     // symlinked into a dotfiles repo is theirs -- strip our entries and write through it instead.
     // writeHooksJson already resolves the link, so the file they version-control stays connected.
-    if (isOrcaOwnedRemnant(cleanup.config) && !isSymbolicLinkSync(configPath)) {
+    if (isQuirkyOwnedRemnant(cleanup.config) && !isSymbolicLinkSync(configPath)) {
       rmSync(configPath, { force: true })
     } else {
       writeHooksJson(configPath, cleanup.config)
@@ -282,7 +282,7 @@ export class GrokHookService {
       return notInstalledStatus(configPath)
     }
     const configIsSymlink = await isGrokHookConfigSymlink(configPath)
-    const unlinkable = isOrcaOwnedRemnant(cleanup.config) && !configIsSymlink
+    const unlinkable = isQuirkyOwnedRemnant(cleanup.config) && !configIsSymlink
     const serialized = `${JSON.stringify(cleanup.config, null, 2)}\n`
     const updated = unlinkable
       ? await removeGrokHookConfigIfUnchanged(configPath, snapshot.raw, mutationOptions)

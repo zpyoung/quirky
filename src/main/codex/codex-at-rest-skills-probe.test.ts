@@ -73,7 +73,10 @@ describe('a resting Codex chat lists the skills Codex would load', () => {
       CODEX_HOME: '/home/me/.codex',
       CUSTOM_AGENT_ENV: 'configured'
     })
-    expect(invocations[0]?.envToDelete).toEqual(['ORCA_CHAT_SCRATCH_DIR', 'ORCA_CHAT_VISUALS_DIR'])
+    expect(invocations[0]?.envToDelete).toEqual([
+      'QUIRKY_CHAT_SCRATCH_DIR',
+      'QUIRKY_CHAT_VISUALS_DIR'
+    ])
     settling.forEach((resolve) => resolve())
   })
 

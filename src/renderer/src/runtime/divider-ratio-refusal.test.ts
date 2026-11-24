@@ -17,7 +17,7 @@ import { layoutApplyTestTransport } from './layout-apply-test-transport.test-fix
 import { loadMainLayoutModel } from './main-loaded-layout-frames.test-fixture'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 // The test opens its own stream: boot's document-long one would outlive the test's transport.
 vi.mock('./workspace-layout-frame-sync', async (importOriginal) => ({
   ...(await importOriginal<object>()),

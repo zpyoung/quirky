@@ -6,7 +6,7 @@ const { listRepoWorktreesMock } = vi.hoisted(() => ({ listRepoWorktreesMock: vi.
 
 vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn(), removeHandler: vi.fn() },
-  app: { getPath: () => '/tmp/orca-test' }
+  app: { getPath: () => '/tmp/quirky-test' }
 }))
 vi.mock('../../../repo-worktrees', () => ({
   listRepoWorktreesForDetectedScan: listRepoWorktreesMock

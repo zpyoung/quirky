@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { OrcaHooks } from '../../../../shared/orca-yaml-hook-types'
+import type { QuirkyHooks } from '../../../../shared/quirky-yaml-hook-types'
 import type { ProjectHostSetup } from '../../../../shared/project-types'
 import { DEFAULT_APP_FONT_FAMILY } from '../../../../shared/constants'
 import { useAppStore } from '../../store'
@@ -91,7 +91,7 @@ export function useSettingsStoreModel() {
   )
 
   const [repoHooksMap, setRepoHooksMap] = useState<
-    Record<string, { hasHooks: boolean; hooks: OrcaHooks | null; mayNeedUpdate: boolean }>
+    Record<string, { hasHooks: boolean; hooks: QuirkyHooks | null; mayNeedUpdate: boolean }>
   >({})
   const systemPrefersDark = useSystemPrefersDark()
   const isWindows = isWindowsUserAgent()

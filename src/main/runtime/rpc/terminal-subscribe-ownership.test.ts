@@ -1,6 +1,6 @@
 import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { RuntimeSubscriptionRegistry } from '../runtime-subscription-registry'
 import type { RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
@@ -15,7 +15,7 @@ function stubRuntime(
   registry: ReturnType<typeof createSubscriptionRegistryDouble>,
   waiters: Waiter[],
   overrides: Record<string, unknown> = {}
-): OrcaRuntimeService {
+): QuirkyRuntimeService {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This partial runtime supplies the terminal RPC methods these tests invoke.
   return {
     getRuntimeId: () => 'test-runtime',
@@ -45,7 +45,7 @@ function stubRuntime(
       return vi.fn()
     }),
     ...overrides
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 }
 
 const makeRequest = (params: unknown): RpcRequest => ({

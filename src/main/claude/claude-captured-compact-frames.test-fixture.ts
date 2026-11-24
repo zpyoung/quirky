@@ -1,5 +1,5 @@
 // Claude Code 2.1.283 (SDK 0.3.251) stream-json captures of `/compact`, driven through `query()` with
-// streaming input and cut to the protocol fields Orca reads. The session id and the summary text
+// streaming input and cut to the protocol fields Quirky reads. The session id and the summary text
 // are replaced, and every frame carried `session_id: CAPTURED_COMPACT_SESSION_ID`; frame order,
 // uuids and the relative clock (`at`, ms) are the captured ones.
 //

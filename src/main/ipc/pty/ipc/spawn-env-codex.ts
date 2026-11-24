@@ -38,6 +38,6 @@ export async function assemblePtyIpcSpawnCodexEnv(ctx: PtyIpcSpawnState): Promis
   ctx.selectedCodexHomePath = hostEnv.selectedCodexHomePath
   ctx.codexResumeHomeSelected = hostEnv.codexResumeHomeSelected
   ctx.skipCodexHomeEnv = hostEnv.skipCodexHomeEnv
-  ctx.stripInheritedOrcaCodexHome = hostEnv.stripInheritedOrcaCodexHome
+  ctx.stripInheritedQuirkyCodexHome = hostEnv.stripInheritedQuirkyCodexHome
   ctx.spawnTiming.mark('host_env')
 }

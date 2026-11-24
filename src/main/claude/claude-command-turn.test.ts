@@ -22,7 +22,7 @@ import {
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
 
 const COMMAND_IDENTITY: AgentJournalItemIdentity = {
-  provider: 'orca',
+  provider: 'quirky',
   clientMessageId: 'command-turn:cmd-1'
 }
 const COMMAND_KEY = agentJournalItemKey(COMMAND_IDENTITY)
@@ -31,7 +31,7 @@ const RUNNING = {
   kind: 'turn' as const,
   turnId: 'compact:cmd-1',
   state: 'running' as const,
-  userItemId: 'orca:submission:cmd-1',
+  userItemId: 'quirky:submission:cmd-1',
   requestedAt: 900,
   startedAt: 1_000
 }
@@ -84,7 +84,7 @@ function harness() {
   const frame = (message: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
     translator.handle({
       type: 'message',
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: { session_id: CAPTURED_COMPACT_SESSION_ID, ...message },
       observedAt: 5_000,
       ...extra
@@ -94,7 +94,7 @@ function harness() {
       clientMessageId: 'cmd-1',
       turnId: RUNNING.turnId,
       identity: COMMAND_IDENTITY,
-      resultIdentity: { provider: 'orca', clientMessageId: 'command-result:cmd-1' },
+      resultIdentity: { provider: 'quirky', clientMessageId: 'command-result:cmd-1' },
       running: RUNNING,
       providerSessionId: CAPTURED_COMPACT_SESSION_ID,
       sentUuid
@@ -136,7 +136,7 @@ describe('a captured /compact as the open Claude turn', () => {
     // Not the continuation summary, not the command's echo, not a lifecycle opcode row.
     expect(drawn()).toEqual([
       {
-        key: agentJournalItemKey({ provider: 'orca', clientMessageId: 'command-result:cmd-1' }),
+        key: agentJournalItemKey({ provider: 'quirky', clientMessageId: 'command-result:cmd-1' }),
         body: { kind: 'status', text: 'Context compacted', presentation: 'compaction' },
         turnScope: IN_COMMAND
       }
@@ -163,7 +163,7 @@ describe('a captured /compact as the open Claude turn', () => {
 
   it('reads a compaction with no boundary and no stop as a failure, with Claude’s reason', () => {
     const { replay, commandTurn, drawn } = harness()
-    // The stopped capture without Orca's stop: Claude reported the compaction failed.
+    // The stopped capture without Quirky's stop: Claude reported the compaction failed.
     replay(CAPTURED_COMPACT_STOPPED_THEN_SEND.filter((event) => !('interrupt' in event)))
 
     expect(commandTurn()).toMatchObject({ state: 'completed', outcome: 'failure' })

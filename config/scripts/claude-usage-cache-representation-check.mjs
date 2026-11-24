@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import {
   loadClaudeUsageBenchmarkScanner,
   readClaudeUsageBenchmarkBaselineSources
@@ -26,7 +26,7 @@ assert(
   Number.isSafeInteger(usageKeys) && usageKeys > 7,
   'usage-keys must be an integer above seven'
 )
-process.env.ORCA_CLAUDE_USAGE_APPEND_BENCH_BASELINE = values['baseline-ref']
+process.env.QUIRKY_CLAUDE_USAGE_APPEND_BENCH_BASELINE = values['baseline-ref']
 
 function serializationIndent(source) {
   const indent = /jsonIndent:\s*(\d+)/.exec(source)
@@ -75,7 +75,7 @@ function usageRecord(cwd, index, inputTokens = 100) {
   })}\n`
 }
 
-const home = await mkdtemp(join(tmpdir(), 'orca-claude-cache-representation-'))
+const home = await mkdtemp(join(tmpdir(), 'quirky-claude-cache-representation-'))
 try {
   const project = join(home, '.claude', 'projects', 'benchmark')
   const cwd = join(home, 'repo')
@@ -90,7 +90,7 @@ try {
     cwd: ROOT,
     timeoutMs: 10_000,
     maxOutputBytes: 1024 * 1024,
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
   })
   assert.equal(storeRead.code, 0, storeRead.stderr)
   const currentStore = await readFile(join(ROOT, ...STORE_PATH.split('/')), 'utf8')

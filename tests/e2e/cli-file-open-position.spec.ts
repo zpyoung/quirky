@@ -1,17 +1,17 @@
 import { writeFileSync, rmSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { runProcess } from '@orca/process-host'
-import { expect, test } from './helpers/orca-app'
+import { runProcess } from '@quirky/process-host'
+import { expect, test } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 // The fixture's hidden renderer is driven and captured through Playwright's CDP connection.
 test('CLI file positioning preserves background navigation and reveals the requested line', async ({
   electronApp,
-  orcaPage
+  quirkyPage
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  const root = await orcaPage.evaluate(
+  await waitForSessionReady(quirkyPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  const root = await quirkyPage.evaluate(
     (id) =>
       Object.values(window.__store?.getState().worktreesByRepo ?? {})
         .flat()
@@ -39,13 +39,13 @@ test('CLI file positioning preserves background navigation and reveals the reque
         '--json',
         ...flags
       ],
-      env: { ...process.env, ORCA_USER_DATA_PATH: userDataDir },
+      env: { ...process.env, QUIRKY_USER_DATA_PATH: userDataDir },
       timeoutMs: 30_000
     })
     expect(result.code, result.stderr).toBe(0)
   }
   const cursor = () =>
-    orcaPage.evaluate(() => {
+    quirkyPage.evaluate(() => {
       const probe = window.__monacoEditorE2E
       const snapshot = probe?.snapshot()
       return {
@@ -58,14 +58,14 @@ test('CLI file positioning preserves background navigation and reveals the reque
   mkdirSync(proofDir, { recursive: true })
   try {
     await open(['--focus'])
-    await expect(orcaPage.locator('.editor-header-path').first()).toContainText(relativePath)
+    await expect(quirkyPage.locator('.editor-header-path').first()).toContainText(relativePath)
     await expect.poll(async () => (await cursor()).line).toBe(1)
     await testInfo.attach('before-default-file-open.png', {
-      body: await orcaPage.screenshot({ path: path.join(proofDir, 'before.png') }),
+      body: await quirkyPage.screenshot({ path: path.join(proofDir, 'before.png') }),
       contentType: 'image/png'
     })
     await open(['--line', '300', '--column', '7'])
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       () =>
         new Promise<void>((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
@@ -73,7 +73,7 @@ test('CLI file positioning preserves background navigation and reveals the reque
     )
     expect(await cursor()).toMatchObject({ line: 1, column: 1 })
     await open([])
-    await orcaPage.evaluate((id) => {
+    await quirkyPage.evaluate((id) => {
       const state = window.__store?.getState()
       const tab = state?.getActiveTab(id)
       if (!state || !tab) {
@@ -82,13 +82,15 @@ test('CLI file positioning preserves background navigation and reveals the reque
       state.createTab(id)
       state.activateTab(tab.id)
     }, worktreeId)
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       () =>
         new Promise<void>((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
         )
     )
-    expect(await orcaPage.evaluate(() => window.__store?.getState().pendingEditorReveal)).toBeNull()
+    expect(
+      await quirkyPage.evaluate(() => window.__store?.getState().pendingEditorReveal)
+    ).toBeNull()
     expect(await cursor()).toMatchObject({ line: 1, column: 1 })
     await open(['--line', '300', '--column', '7', '--focus'])
     await expect
@@ -105,12 +107,12 @@ test('CLI file positioning preserves background navigation and reveals the reque
       )
       .toBe(true)
     await testInfo.attach('after-line-300-column-7.png', {
-      body: await orcaPage.screenshot({ path: path.join(proofDir, 'after.png') }),
+      body: await quirkyPage.screenshot({ path: path.join(proofDir, 'after.png') }),
       contentType: 'image/png'
     })
     await open(['--line', '1', '--focus'])
     await expect.poll(async () => (await cursor()).line).toBe(1)
-    const split = await orcaPage.evaluate((id) => {
+    const split = await quirkyPage.evaluate((id) => {
       const state = window.__store?.getState()
       const tab = state?.getActiveTab(id)
       if (!state || !tab) {
@@ -122,15 +124,15 @@ test('CLI file positioning preserves background navigation and reveals the reque
       }
       return { tabId: tab.id, groupId: tab.groupId, siblingGroupId }
     }, worktreeId)
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       () =>
         new Promise<void>((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
         )
     )
     await expect.poll(async () => (await cursor()).line).toBe(1)
-    const targetProbe = await orcaPage.evaluateHandle(() => window.__monacoEditorE2E)
-    await orcaPage.evaluate(
+    const targetProbe = await quirkyPage.evaluateHandle(() => window.__monacoEditorE2E)
+    await quirkyPage.evaluate(
       ({ id, split }) => {
         const state = window.__store?.getState()
         const tab = state?.unifiedTabsByWorktree[id]?.find((item) => item.id === split.tabId)
@@ -146,22 +148,22 @@ test('CLI file positioning preserves background navigation and reveals the reque
       },
       { id: worktreeId, split }
     )
-    await expect(orcaPage.locator('.monaco-editor:visible')).toHaveCount(2)
-    const siblingProbe = await orcaPage.evaluateHandle(() => window.__monacoEditorE2E)
+    await expect(quirkyPage.locator('.monaco-editor:visible')).toHaveCount(2)
+    const siblingProbe = await quirkyPage.evaluateHandle(() => window.__monacoEditorE2E)
     expect(await targetProbe.evaluate((target, sibling) => target === sibling, siblingProbe)).toBe(
       false
     )
     await expect
       .poll(() => siblingProbe.evaluate((probe) => probe?.snapshot().selection?.positionLineNumber))
       .toBe(1)
-    await orcaPage
+    await quirkyPage
       .locator('.monaco-editor:visible')
       .first()
       .getByRole('textbox', { name: 'Editor content' })
       .focus()
     await expect
       .poll(() =>
-        orcaPage.evaluate(
+        quirkyPage.evaluate(
           (id) => window.__store?.getState().activeGroupIdByWorktree[id],
           worktreeId
         )
@@ -183,7 +185,7 @@ test('CLI file positioning preserves background navigation and reveals the reque
       })
     ).toEqual({ line: 1, column: 1 })
     expect(
-      await orcaPage.evaluate(
+      await quirkyPage.evaluate(
         (id) => window.__store?.getState().activeGroupIdByWorktree[id],
         worktreeId
       )
@@ -200,7 +202,7 @@ test('CLI file positioning preserves background navigation and reveals the reque
       )
       .toBe(true)
     await testInfo.attach('same-file-split-target-only.png', {
-      body: await orcaPage.screenshot({ path: path.join(proofDir, 'split.png') }),
+      body: await quirkyPage.screenshot({ path: path.join(proofDir, 'split.png') }),
       contentType: 'image/png'
     })
     await targetProbe.dispose()

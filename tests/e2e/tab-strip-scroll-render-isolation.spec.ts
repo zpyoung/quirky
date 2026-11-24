@@ -7,7 +7,7 @@
  */
 
 import type { Locator, Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady, waitForActiveWorktree, ensureTerminalVisible } from './helpers/store'
 
 const STRIP = '.terminal-tab-strip'
@@ -153,17 +153,17 @@ async function expectThumbToTrackStrip(strip: Locator): Promise<void> {
 }
 
 test.describe('Tab strip scroll render isolation', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
   })
 
   test('scrolls a long strip without re-rendering its tabs, and the thumb keeps up', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const worktreeId = await waitForActiveWorktree(orcaPage)
-    const strip = orcaPage.locator(STRIP).first()
+    const worktreeId = await waitForActiveWorktree(quirkyPage)
+    const strip = quirkyPage.locator(STRIP).first()
     await expect(strip).toBeVisible()
     const tabIds: string[] = []
     for (let i = 0; i < 12; i++) {
@@ -171,20 +171,20 @@ test.describe('Tab strip scroll render isolation', () => {
       if (range >= MIN_SCROLL_RANGE_PX) {
         break
       }
-      tabIds.push(...(await addBackgroundTerminalTabs(orcaPage, worktreeId, 10)))
+      tabIds.push(...(await addBackgroundTerminalTabs(quirkyPage, worktreeId, 10)))
       await expect
         .poll(() => strip.evaluate((el) => el.querySelectorAll('[data-tab-strip-slot]').length))
         .toBeGreaterThan(tabIds.length)
     }
 
-    await startRecordingTabRenders(orcaPage)
+    await startRecordingTabRenders(quirkyPage)
     // New terminals retitle their tabs after opening, longer on a loaded machine; wait for quiet.
     await expect
       .poll(
         async () => {
-          await takeTabRenders(orcaPage)
-          await orcaPage.waitForTimeout(1_500)
-          return (await takeTabRenders(orcaPage)).length
+          await takeTabRenders(quirkyPage)
+          await quirkyPage.waitForTimeout(1_500)
+          return (await takeTabRenders(quirkyPage)).length
         },
         { timeout: 45_000 }
       )
@@ -203,14 +203,14 @@ test.describe('Tab strip scroll render isolation', () => {
           await strip.evaluate((el, left) => {
             el.scrollLeft = left
           }, START_SCROLL_LEFT_PX)
-          await orcaPage.waitForTimeout(1_500)
+          await quirkyPage.waitForTimeout(1_500)
           return strip.evaluate((el) => el.scrollLeft)
         },
         { timeout: 30_000 }
       )
       .toBe(START_SCROLL_LEFT_PX)
     // That scroll flipped the end-edge flags; the commit it caused is not the scroll under test.
-    await takeTabRenders(orcaPage)
+    await takeTabRenders(quirkyPage)
     // Why wheel events dispatched in the page: real input waits for a frame per step, and CI's hidden
     // window draws about one a second. The strip's own wheel handler still does the scrolling.
     await strip.evaluate(
@@ -230,15 +230,15 @@ test.describe('Tab strip scroll render isolation', () => {
     )
     // Why "many tabs": before the fix every scroll step re-rendered all of them in one commit;
     // a single tab can still update itself (a late retitle).
-    expect((await takeTabRenders(orcaPage)).filter((tabs) => tabs >= 3)).toEqual([])
+    expect((await takeTabRenders(quirkyPage)).filter((tabs) => tabs >= 3)).toEqual([])
     await expectThumbToTrackStrip(strip)
 
     // Control: switching tabs re-renders at least the tab it activates, so the recorder sees tabs.
-    await orcaPage.evaluate((tabId) => window.__store!.getState().setActiveTab(tabId), tabIds[0])
-    await expect.poll(async () => (await takeTabRenders(orcaPage)).length).toBeGreaterThan(0)
+    await quirkyPage.evaluate((tabId) => window.__store!.getState().setActiveTab(tabId), tabIds[0])
+    await expect.poll(async () => (await takeTabRenders(quirkyPage)).length).toBeGreaterThan(0)
 
     // Tabs opening grow the strip without a scroll event.
-    await addBackgroundTerminalTabs(orcaPage, worktreeId, 10)
+    await addBackgroundTerminalTabs(quirkyPage, worktreeId, 10)
     await expectThumbToTrackStrip(strip)
 
     // A narrower pane shrinks the strip and the track without a scroll event.

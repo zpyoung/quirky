@@ -13,7 +13,7 @@ import {
 import { adverseCaseKey } from '../../config/scripts/check-job-log-watchdog-protocol.mjs'
 
 const launcher = vi.hoisted(() => vi.fn())
-vi.mock('@orca/process-host', () => ({ runProcess: launcher }))
+vi.mock('@quirky/process-host', () => ({ runProcess: launcher }))
 afterEach(() => {
   launcher.mockReset()
   context.censoredBaselines?.clear()
@@ -256,7 +256,7 @@ describe('performance watchdog failure precedence and completeness', () => {
       expect.objectContaining({
         timeoutMs: 10000,
         maxOutputBytes: 65536,
-        env: expect.objectContaining({ ORCA_BACKGROUND_LAUNCH: '1' })
+        env: expect.objectContaining({ QUIRKY_BACKGROUND_LAUNCH: '1' })
       })
     )
   })

@@ -16,7 +16,7 @@ function writeJson(filePath, value) {
 }
 
 function makeProject({ sourceText, enCatalog, esCatalog = {}, upstreamEn = {}, upstreamEs = {} }) {
-  const root = mkdtempSync(path.join(tmpdir(), 'orca-fork-locales-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'quirky-fork-locales-'))
   const featureDir = path.join(root, 'src/renderer/src/components/fork-chat')
   const localesDir = path.join(featureDir, 'locales')
   const upstreamLocales = path.join(root, 'src/renderer/src/i18n/locales')
@@ -86,8 +86,8 @@ describe('fork-localization-catalog-check', () => {
       sourceText: "translate('components.chat.label', 'Chat {{name}}')\n",
       enCatalog: { components: { chat: { label: 'Chat {{name}}' } } },
       esCatalog: { components: { chat: { label: 'Chat {{name}}' } } },
-      upstreamEn: { app: { title: 'Orca' } },
-      upstreamEs: { app: { title: 'Orca' } }
+      upstreamEn: { app: { title: 'Quirky' } },
+      upstreamEs: { app: { title: 'Quirky' } }
     })
     const seam = path.join(root, 'src/renderer/src/components/Seam.tsx')
     writeFileSync(seam, "translate('components.chat.label', 'Chat {{name}}')\n", 'utf8')
@@ -120,8 +120,8 @@ describe('runUpstreamVerifierWithForkCatalogs', () => {
       sourceText: "translate('components.chat.label', 'Chat {{name}}')\n",
       enCatalog: { components: { chat: { label: 'Chat {{name}}' } } },
       esCatalog: { components: { chat: { label: 'Chat {{name}}' } } },
-      upstreamEn: { app: { title: 'Orca' } },
-      upstreamEs: { app: { title: 'Orca' } }
+      upstreamEn: { app: { title: 'Quirky' } },
+      upstreamEs: { app: { title: 'Quirky' } }
     })
     const trackedFiles = [
       path.join(upstreamLocales, 'en.json'),
@@ -143,11 +143,11 @@ describe('runUpstreamVerifierWithForkCatalogs', () => {
 
     expect(result).toBe(0)
     expect(seenEnglish).toEqual({
-      app: { title: 'Orca' },
+      app: { title: 'Quirky' },
       components: { chat: { label: 'Chat {{name}}' } }
     })
     expect(seenSpanish).toEqual({
-      app: { title: 'Orca' },
+      app: { title: 'Quirky' },
       components: { chat: { label: 'Chat {{name}}' } }
     })
     expect(seenOther).toBe(otherFileContentBefore)

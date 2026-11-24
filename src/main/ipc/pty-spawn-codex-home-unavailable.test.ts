@@ -29,7 +29,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -114,7 +114,7 @@ describe('registerPtyHandlers Codex launch refusal on an unreadable managed home
   const RESUME_SESSION = {
     key: 'session_id' as const,
     id: 'resume-session-1',
-    transcriptPath: '/tmp/orca-codex-rollout.jsonl'
+    transcriptPath: '/tmp/quirky-codex-rollout.jsonl'
   }
 
   function makeAuthUnreadable(): void {
@@ -443,7 +443,7 @@ describe('registerPtyHandlers Codex launch refusal on an unreadable managed home
     }
   )
 
-  // Why: only an Orca-launched Codex may wait for Codex's hook hashes; a plain terminal never does.
+  // Why: only an Quirky-launched Codex may wait for Codex's hook hashes; a plain terminal never does.
   describe('which spawns launch prep may make wait', () => {
     it('marks a Codex launch, and not a plain terminal, on the local spawn path', async () => {
       readFileSyncMock.mockReturnValue(TEST_CODEX_AUTH_JSON)

@@ -5,7 +5,7 @@ import type { Repo } from '../../../shared/repo-types'
 import type { Worktree } from '../../../shared/worktree/types'
 import { composeWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 
-vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+vi.mock('../../../shared/sidebar-inputs-switch', () => ({ QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true }))
 
 const worktree: Worktree = {
   id: 'repo-1::/tmp/shell-only',

@@ -44,7 +44,7 @@ function resolveLaunchHostFact(
   return {
     platform: requireExecutionHostPlatform(fact),
     isLocalHost: fact.kind === 'known' && fact.hostKind === 'local',
-    // Why: an SSH target (nested ones too) runs the relay shim as plain `orca`.
+    // Why: an SSH target (nested ones too) runs the relay shim as plain `quirky`.
     isSshHost: fact.kind === 'known' && fact.hostKind === 'ssh'
   }
 }

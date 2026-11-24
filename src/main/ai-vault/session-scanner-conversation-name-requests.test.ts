@@ -27,8 +27,8 @@ function turn(sessionId: string, at: string, role: 'user' | 'assistant', content
 // #29973: naming a chat runs a one-shot `claude -p` in the chat's folder, and the CLI saves that
 // run next to the chat. Listed, it read as the chat, and opening it resumed the naming request.
 describe('scanAiVaultSessions chat-naming requests', () => {
-  it('lists the chat but not the request Orca ran to name it', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-name-request-'))
+  it('lists the chat but not the request Quirky ran to name it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-name-request-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     const projectDir = join(roots.claudeProjectsDir, '-tmp-worktree')
@@ -54,7 +54,7 @@ describe('scanAiVaultSessions chat-naming requests', () => {
   })
 
   it('keeps a real conversation that only quotes the naming prompt later', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-name-request-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-name-request-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     const projectDir = join(roots.claudeProjectsDir, '-tmp-worktree')
@@ -75,7 +75,7 @@ describe('scanAiVaultSessions chat-naming requests', () => {
   })
 
   it('keeps a naming request someone opened and kept chatting in', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-name-request-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-name-request-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     const projectDir = join(roots.claudeProjectsDir, '-tmp-worktree')

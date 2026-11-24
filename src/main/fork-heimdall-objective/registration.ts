@@ -1,5 +1,5 @@
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { getJudgmentQuestionPolicy } from '../../shared/fork-heimdall/judgment/registry'
 import type { JudgmentPersistencePort } from '../fork-heimdall/judgment/store'
 import { readJudgmentAccess } from '../fork-heimdall/judgment/access-store'
@@ -21,7 +21,7 @@ export type ObjectiveRegistration = {
 
 export function registerObjectiveKind(
   kernel: ObjectiveKernelRegistration,
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   storageAuthority: 'desktop' | 'runtime' = 'desktop',
   judgmentPersistence?: JudgmentPersistencePort

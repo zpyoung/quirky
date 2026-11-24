@@ -18,7 +18,7 @@ describe('claude background task rows', () => {
     // two frames and printed twice before this owner existed.
     const identities = new Set(
       items.map((item) =>
-        item.identity.provider === 'orca' ? item.identity.clientMessageId : item.identity.provider
+        item.identity.provider === 'quirky' ? item.identity.clientMessageId : item.identity.provider
       )
     )
     expect([...identities]).toEqual(['claude-background-task:byjnee2no'])

@@ -35,12 +35,12 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
 import type { StructuredAgentRegistry } from '../native-chat/agent-session-wire/structured-agent-registry'
 
-const SESSION = 'orca-session'
+const SESSION = 'quirky-session'
 const journals = createTrackedJournalOpener()
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-context-unloaded-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-context-unloaded-'))
 })
 
 afterEach(async () => {

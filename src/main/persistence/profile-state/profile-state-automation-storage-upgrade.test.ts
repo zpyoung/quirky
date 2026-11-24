@@ -25,7 +25,7 @@ afterEach(() => {
 })
 
 function databasePath(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-automation-upgrade-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-automation-upgrade-'))
   directories.push(directory)
   return join(directory, 'profile-state.db')
 }

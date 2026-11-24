@@ -28,7 +28,7 @@ afterEach(() =>
 )
 
 function inventory(entries) {
-  const root = mkdtempSync(join(tmpdir(), 'orca-release-parity-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-release-parity-'))
   directories.push(root)
   const files = Object.entries(entries).map(([path, content]) => {
     mkdirSync(dirname(join(root, path)), { recursive: true })

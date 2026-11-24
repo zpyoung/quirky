@@ -24,7 +24,7 @@ const managedTarget: SshTarget = {
   host: 'example.com',
   port: 22,
   username: 'deploy',
-  orcadFence: { environmentId: 'env-managed' }
+  quirkydFence: { environmentId: 'env-managed' }
 }
 
 describe('ssh:connect and a held managed re-pair failure', () => {

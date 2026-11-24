@@ -12,7 +12,7 @@ function failureTitle(kind: RemotePairingFailureKind): string {
     case 'host-identity-mismatch':
       return translate(
         'auto.components.settings.RuntimeHostAccessForm.identityMismatch',
-        'The reached Orca host does not match this access link'
+        'The reached Quirky host does not match this access link'
       )
     case 'access-link-invalid':
       return translate(
@@ -22,7 +22,7 @@ function failureTitle(kind: RemotePairingFailureKind): string {
     case 'protocol-incompatible':
       return translate(
         'auto.components.settings.RuntimeHostAccessForm.incompatible',
-        'Orca versions are not compatible'
+        'Quirky versions are not compatible'
       )
     case 'connection-interrupted':
       return translate(

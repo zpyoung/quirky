@@ -98,8 +98,8 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       'wt-1',
       undefined,
       {
-        runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-        envVars: { ORCA_WORKTREE_PATH: '/tmp/worktrees/wt-1' }
+        runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
+        envVars: { QUIRKY_WORKTREE_PATH: '/tmp/worktrees/wt-1' }
       },
       undefined,
       {
@@ -127,8 +127,8 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     })
     expect(createdTabStartups(store)['tab-1']).toEqual({ command: 'pnpm dev' })
     expect(createdTabStartups(store)['tab-2']).toEqual({
-      command: 'bash /tmp/repo/.git/orca/setup-runner.sh',
-      env: { ORCA_WORKTREE_PATH: '/tmp/worktrees/wt-1' }
+      command: 'bash /tmp/repo/.git/quirky/setup-runner.sh',
+      env: { QUIRKY_WORKTREE_PATH: '/tmp/worktrees/wt-1' }
     })
   })
 
@@ -174,7 +174,7 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     })
 
     ensureWorktreeHasInitialTerminal(store, 'wt-1', undefined, {
-      runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
+      runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
       envVars: {}
     })
 

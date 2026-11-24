@@ -5,7 +5,7 @@ export const PROFILE_STATE_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['profile', 'state', 'exports'],
     summary: 'List retained SQLite backups and JSON exports for profile-state recovery',
-    usage: 'orca profile state exports [--profile-id <id>] [--json]',
+    usage: 'quirky profile state exports [--profile-id <id>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'profile-id']
   },
   {
@@ -14,7 +14,7 @@ export const PROFILE_STATE_COMMAND_SPECS: CommandSpec[] = [
     summary:
       'Restore a SQLite backup or retained JSON export, or keep the current JSON or SQLite profile',
     usage:
-      'orca profile state rollback (--backup <id> | --revision <revision> | --current-json | --current-sqlite | --latest-json) [--profile-id <id>] [--json]',
+      'quirky profile state rollback (--backup <id> | --revision <revision> | --current-json | --current-sqlite | --latest-json) [--profile-id <id>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'revision',
@@ -26,19 +26,19 @@ export const PROFILE_STATE_COMMAND_SPECS: CommandSpec[] = [
     ],
     notes: [
       '--profile-id selects another profile without changing the active profile. Prepare each profile before installing a JSON-only build.',
-      'Orca must be stopped. Recovery validates the selected artifact and archives the current database family, JSON, and retained recovery artifacts before replacing state.',
+      'Quirky must be stopped. Recovery validates the selected artifact and archives the current database family, JSON, and retained recovery artifacts before replacing state.',
       '--backup restores SQLite authority; --revision restores a JSON export for an older compatible runtime.',
       '--latest-json exports the latest SQLite state and restores it as JSON before launching an older JSON-only build. The current database and recovery artifacts are archived.',
-      '--current-json keeps the current orca-data.json, including edits from an older build. It replaces SQLite state without merging; both copies are archived. The next SQLite-capable start imports the selected JSON.',
+      '--current-json keeps the current quirky-data.json, including edits from an older build. It replaces SQLite state without merging; both copies are archived. The next SQLite-capable start imports the selected JSON.',
       '--current-sqlite keeps the current SQLite state and discards JSON edits from an older build. The JSON is archived, then rewritten from SQLite.'
     ],
     examples: [
-      'orca profile state exports',
-      'orca profile state rollback --backup <id>',
-      'orca profile state rollback --revision 1',
-      'orca profile state rollback --latest-json',
-      'orca profile state rollback --current-json',
-      'orca profile state rollback --current-sqlite'
+      'quirky profile state exports',
+      'quirky profile state rollback --backup <id>',
+      'quirky profile state rollback --revision 1',
+      'quirky profile state rollback --latest-json',
+      'quirky profile state rollback --current-json',
+      'quirky profile state rollback --current-sqlite'
     ]
   }
 ]

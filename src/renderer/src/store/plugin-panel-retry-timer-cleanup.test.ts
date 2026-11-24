@@ -8,7 +8,7 @@ type PanelStore = typeof usePluginPanelsStore
 
 function plugin(): PluginHostListEntry {
   return {
-    pluginKey: 'orca-samples.current',
+    pluginKey: 'quirky-samples.current',
     consentFingerprint: 'test',
     name: 'Current',
     version: '1',

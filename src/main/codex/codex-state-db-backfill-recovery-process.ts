@@ -1,4 +1,4 @@
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import type { ChildProcessHandle } from '@quirky/process-host/process-spec'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { CODEX_READ_ONLY_APP_SERVER_ARGS } from '../codex-cli/codex-read-only-app-server-args'
 import { terminateCodexProbeChild } from '../rate-limits/codex-probe-termination'
@@ -12,7 +12,7 @@ import { guardSupervisedProviderGroup } from '../provider-process/provider-group
 
 const BACKFILL_RECOVERY_KILL_SITE = 'codex-state-db-backfill-recovery'
 // Codex drains on its stdin end, as the Codex connection's root-only close asks; one value
-// for the spawn spec (a gone Orca) and the stop (Orca stopping it), so they cannot drift.
+// for the spawn spec (a gone Quirky) and the stop (Quirky stopping it), so they cannot drift.
 const BACKFILL_RECOVERY_CLOSE_REQUEST: ProviderCloseRequest = 'stdin-end'
 
 export type CodexBackfillRecoveryProcess = {
@@ -27,7 +27,7 @@ export function spawnCodexBackfillRecoveryProcess(
   resolveCommand: () => string
 ): CodexBackfillRecoveryProcess {
   const command = resolveCommand()
-  // Kept alive up to an hour; on POSIX the supervisor stops it with Orca, however Orca exits.
+  // Kept alive up to an hour; on POSIX the supervisor stops it with Quirky, however Quirky exits.
   const spawnSpec = createProviderSpawnSpec(
     { command, args: [...CODEX_READ_ONLY_APP_SERVER_ARGS], cwd: codexHomePath },
     withCliRuntimeOnPath(command, {

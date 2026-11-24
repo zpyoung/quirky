@@ -5,7 +5,7 @@ import type {
   RuntimeMobileSessionTabsResult
 } from '../../shared/runtime-types'
 import type { TabGroupLayoutNode } from '../../shared/tab-types'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 const WT = 'repo-1::/tmp/worktree-a'
 
@@ -29,7 +29,7 @@ const file: RuntimeMobileSessionSnapshotTab = {
 }
 
 function createRuntime() {
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   const frames: RuntimeMobileSessionTabsResult[] = []
   runtime.onMobileSessionTabsChanged((frame) => frames.push(frame))
   const publishWindowTabs = (

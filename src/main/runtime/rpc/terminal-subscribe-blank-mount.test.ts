@@ -3,12 +3,12 @@ import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './dispatcher'
 import type { RpcRequest } from './core'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { TERMINAL_METHODS } from './methods/terminal'
 import { createSubscriptionRegistryDouble } from './subscription-registry-test-double'
 import type { RuntimeTerminalWait } from '../../../shared/runtime-types'
 
-function stubRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeService {
+function stubRuntime(overrides: Partial<QuirkyRuntimeService> = {}): QuirkyRuntimeService {
   return {
     getRuntimeId: () => 'test-runtime',
     subscribeToPtyExit: vi.fn(() => vi.fn()),
@@ -22,7 +22,7 @@ function stubRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeSe
     serializeRendererTerminalBuffer: async () => null,
     hasHeadlessTerminalState: () => true,
     ...overrides
-  } as OrcaRuntimeService
+  } as QuirkyRuntimeService
 }
 
 const makeRequest = (method: string, params?: unknown): RpcRequest => ({

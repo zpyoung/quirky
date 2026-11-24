@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { MessageRow, OrchestrationDb, RunRow } from '../../runtime/orchestration/db'
 import { OrchestrationError } from '../../runtime/orchestration/orchestration-error'
 import { checkRunMailbox } from '../../runtime/rpc/methods/orchestration/messaging/check-run'
@@ -27,7 +27,7 @@ type MailboxCheckResult = {
 }
 
 export async function drainHeimdallMailbox(input: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   enrollment: WatcherEnrollment
   run: RunRow
   cursor: MailboxCursor

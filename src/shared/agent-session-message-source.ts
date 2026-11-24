@@ -1,9 +1,9 @@
 // Who a chat message is from when it is not the person at the composer: another agent, through
-// Orca. Carried on the message body (`AgentJournalMessageItem.from`), outside every fingerprint.
+// Quirky. Carried on the message body (`AgentJournalMessageItem.from`), outside every fingerprint.
 
 import { z } from 'zod'
 import { normalizeAgentSessionConversationName } from './agent-session-conversation-name'
-import { isOrcaSessionId, type OrcaSessionId } from './orca-session-address'
+import { isQuirkySessionId, type QuirkySessionId } from './quirky-session-address'
 import type { OrchestrationPartyIdentity } from './orchestration-party-identity'
 import { openEnum, salvagedField, salvagedOptional, salvagingArray } from './zod-salvage'
 
@@ -14,7 +14,7 @@ import { openEnum, salvagedField, salvagedOptional, salvagingArray } from './zod
  */
 export type AgentMessageSender = Readonly<{
   party: Omit<OrchestrationPartyIdentity, 'paneKey'>
-  /** What Orca called the sender when it wrote, kept for when it is gone; null when it had none. */
+  /** What Quirky called the sender when it wrote, kept for when it is gone; null when it had none. */
   name: string | null
 }>
 
@@ -38,7 +38,7 @@ export type OrchestrationTaskMessage = Readonly<{
   dispatchId: string
 }>
 
-/** What Orca delivers for other agents, one shape per message kind. */
+/** What Quirky delivers for other agents, one shape per message kind. */
 export type OrchestrationAgentMessage = OrchestrationMailNotice | OrchestrationTaskMessage
 
 export type AgentMessageSource = Readonly<{
@@ -63,8 +63,8 @@ export function agentMessageSenderName(value: unknown): string | null {
   return normalizeAgentSessionConversationName(value)
 }
 
-const orcaSessionIdSchema = z.custom<OrcaSessionId>(
-  (value) => typeof value === 'string' && isOrcaSessionId(value)
+const quirkySessionIdSchema = z.custom<QuirkySessionId>(
+  (value) => typeof value === 'string' && isQuirkySessionId(value)
 )
 
 const mailNoticeSchema = z.object({
@@ -85,7 +85,7 @@ const senderSchema = z.object({
   party: z.object({
     address: z.string().min(1),
     terminalHandle: z.string().nullable(),
-    orcaSessionId: orcaSessionIdSchema.nullable()
+    quirkySessionId: quirkySessionIdSchema.nullable()
   }),
   name: z.unknown().transform(agentMessageSenderName)
 })

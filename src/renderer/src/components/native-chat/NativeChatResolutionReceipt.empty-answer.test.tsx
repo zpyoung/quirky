@@ -25,7 +25,7 @@ const emptyInput: AgentJournalQuestionItem = {
 }
 
 describe('an explicitly empty text answer', () => {
-  it('reads as answered with nothing, not as an answer Orca cannot read', () => {
+  it('reads as answered with nothing, not as an answer Quirky cannot read', () => {
     render(<NativeChatResolutionReceipt body={emptyInput} />)
 
     expect(screen.getByText('Empty answer')).toBeInTheDocument()

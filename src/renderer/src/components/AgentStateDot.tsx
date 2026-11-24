@@ -36,11 +36,11 @@ export type AgentDotState =
   | 'done'
   | 'idle'
   // Why: the pane still has a live PTY but its reporting stream has gone quiet past
-  // the staleness window. Distinct from 'idle' because Orca has evidence something is
+  // the staleness window. Distinct from 'idle' because Quirky has evidence something is
   // held there, and never rendered as 'done' or 'working' — it asserts nothing about
-  // the agent, only about what Orca last heard.
+  // the agent, only about what Quirky last heard.
   | 'unverifiable'
-  // Why: the turn ended and Orca cannot prove how. An outcome like 'failed', drawn with the
+  // Why: the turn ended and Quirky cannot prove how. An outcome like 'failed', drawn with the
   // 'unverifiable' glyph because it too reports missing evidence, never a finish.
   | 'unconfirmed'
   // Why: the sidebar's title-based status flow (StatusIndicator/WorktreeCard)

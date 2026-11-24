@@ -45,7 +45,7 @@ let clientCreations: { apiKey: string; provider: 'typesafe' | 'openrouter' }[]
 let dependencies: JudgmentServiceDependencies
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-judgment-service-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-judgment-service-'))
   database = new HeimdallDatabase(root)
   ledger = new HeimdallLedgerStore(database)
   calls = 0

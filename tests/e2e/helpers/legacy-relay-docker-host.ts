@@ -1,6 +1,6 @@
 /**
  * A Docker SSH host left exactly as a 1.4.224 desktop leaves it on quit: that release's relay
- * running detached with a live shell, under `~/.orca-remote/relay-<version>/`.
+ * running detached with a live shell, under `~/.quirky-remote/relay-<version>/`.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15, with src/main/ssh/legacy-relay/.
  */
 import { execFileSync } from 'node:child_process'
@@ -22,11 +22,11 @@ export type DockerRelayInstance = { sockPath: string; relayPtyId: string }
 
 /**
  * Bundles the release's relay on the runner and lays it out on the host. Its `node-pty` is the
- * glibc-floor prebuild the orcad template carries: node-pty is N-API, so it loads on the host's Node.
+ * glibc-floor prebuild the quirkyd template carries: node-pty is N-API, so it loads on the host's Node.
  */
 export async function installReleasedRelayOnDockerHost(
   target: DockerSshHostTarget,
-  orcadTemplateDir: string
+  quirkydTemplateDir: string
 ): Promise<DockerReleasedRelay> {
   const built: unknown = JSON.parse(
     execFileSync(
@@ -49,15 +49,15 @@ export async function installReleasedRelayOnDockerHost(
     throw new Error('Building the released relay printed no bundle')
   }
   const { bundleDir, version } = built
-  const dir = `/root/.orca-remote/relay-${version}`
-  const staging = mkdtempSync(path.join(os.tmpdir(), 'orca-legacy-relay-'))
+  const dir = `/root/.quirky-remote/relay-${version}`
+  const staging = mkdtempSync(path.join(os.tmpdir(), 'quirky-legacy-relay-'))
   try {
     // Why the host's arch: a Docker host on an arm64 machine runs arm64 containers.
     const arch = execDockerSshHostTargetCommand(target, 'uname -m') === 'aarch64' ? 'arm64' : 'x64'
     const pty = path.join(staging, 'node_modules', 'node-pty')
-    cpSync(path.join(orcadTemplateDir, 'node_modules', 'node-pty'), pty, { recursive: true })
+    cpSync(path.join(quirkydTemplateDir, 'node_modules', 'node-pty'), pty, { recursive: true })
     cpSync(
-      path.join(orcadTemplateDir, 'targets', `linux-${arch}-glibc`, 'node_modules', 'node-pty'),
+      path.join(quirkydTemplateDir, 'targets', `linux-${arch}-glibc`, 'node_modules', 'node-pty'),
       pty,
       {
         recursive: true

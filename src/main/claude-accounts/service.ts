@@ -67,7 +67,7 @@ export class ClaudeAccountService {
     return this.cancelPendingClaudeLogin?.() ?? false
   }
 
-  /** Lets the desktop open a WSL sign-in's link; orcad never sets one. */
+  /** Lets the desktop open a WSL sign-in's link; quirkyd never sets one. */
   setWslSignInLinkOpener(opener: ((signInLink: string) => void) | null): void {
     this.openWslSignInLink = opener
   }

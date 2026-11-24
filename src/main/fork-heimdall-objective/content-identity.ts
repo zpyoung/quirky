@@ -52,7 +52,7 @@ function sha256(parts: readonly string[]): string {
 
 export function isObjectiveMetadataPath(relativePath: string, caseInsensitive = false): boolean {
   const candidate = caseInsensitive ? relativePath.toLowerCase() : relativePath
-  return candidate === '.orca' || candidate.startsWith('.orca/')
+  return candidate === '.quirky' || candidate.startsWith('.quirky/')
 }
 
 export function parseObjectiveDirtyPaths(

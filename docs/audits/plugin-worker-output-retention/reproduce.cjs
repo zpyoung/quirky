@@ -5,7 +5,7 @@ const { PassThrough } = require('node:stream')
 const { once, EventEmitter } = require('node:events')
 const { load, loadSources, sha, read } = require('./sources.cjs')
 
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function')
 const suffix = 'retained-output-tail'
 

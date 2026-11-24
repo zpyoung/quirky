@@ -5,7 +5,7 @@ const { load, loadSources, read, sha } = require('./sources.cjs')
 const { exercise } = require('./scenario.cjs')
 
 async function run({ readSource = read, output, sourceLabel = 'working-tree' } = {}) {
-  assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+  assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
   const phases = {}
   for (const phase of ['before', 'fixed']) {
     const loaded = await load(phase, readSource)

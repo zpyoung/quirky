@@ -4,7 +4,7 @@ import type {
   OrchestrationWorkerReadSource
 } from '../../../../../../shared/orchestration-worker-output'
 import type { RuntimeTerminalState } from '../../../../../../shared/runtime-types'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import {
   createWorkerOutputSourceIdentity,
@@ -16,7 +16,7 @@ import { readWorkerTranscript } from '../../../../orchestration/worker-transcrip
 import { isWslHookRelayConnectionId } from '../../../../../../shared/wsl-hook-relay-contract'
 
 export async function readExactWorkerOutput(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   dispatchId: string
   terminalHandle: string
   workerState: string

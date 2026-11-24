@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 // this normalizer test focused instead of booting the full Store fixture.
 vi.mock('electron', () => ({
   app: {
-    getPath: () => '/tmp/orca-persistence-right-sidebar-tab-test'
+    getPath: () => '/tmp/quirky-persistence-right-sidebar-tab-test'
   },
   safeStorage: {
     isEncryptionAvailable: () => false,
@@ -34,14 +34,14 @@ describe('normalizeRightSidebarTab', () => {
   })
 
   it('preserves well-formed plugin panel tabs', () => {
-    expect(normalizeRightSidebarTab('plugin:orca-samples.my-plugin/dashboard')).toBe(
-      'plugin:orca-samples.my-plugin/dashboard'
+    expect(normalizeRightSidebarTab('plugin:quirky-samples.my-plugin/dashboard')).toBe(
+      'plugin:quirky-samples.my-plugin/dashboard'
     )
   })
 
   it('normalizes malformed plugin tabs to the default tab', () => {
-    expect(normalizeRightSidebarTab('plugin:orca-samples.my-plugin')).toBe('explorer')
-    expect(normalizeRightSidebarTab('plugin:orca-samples.my-plugin/panel/extra')).toBe('explorer')
+    expect(normalizeRightSidebarTab('plugin:quirky-samples.my-plugin')).toBe('explorer')
+    expect(normalizeRightSidebarTab('plugin:quirky-samples.my-plugin/panel/extra')).toBe('explorer')
     expect(normalizeRightSidebarTab('plugin:My_Plugin/Panel!')).toBe('explorer')
   })
 

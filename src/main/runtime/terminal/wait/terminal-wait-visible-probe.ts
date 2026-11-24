@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithCreateAgentPromptRenderGate } from '../input/terminal-agent-prompt-render'
+import { QuirkyRuntimeWithCreateAgentPromptRenderGate } from '../input/terminal-agent-prompt-render'
 import type {
   RuntimeProviderSnapshotReadOptions,
   TerminalWaiter
@@ -6,7 +6,7 @@ import type {
 import {
   TUI_IDLE_VISIBLE_PROBE_SETTLE_MARGIN_MS,
   VISIBLE_TERMINAL_SNAPSHOT_TIMEOUT_MS
-} from '../../orca-runtime-postlude'
+} from '../../quirky-runtime-postlude'
 import { withTimeout } from '../../runtime-async-boundaries'
 import {
   detectTerminalWaitBlockedReason,
@@ -15,7 +15,7 @@ import {
   tuiIdleNeedsVisibleScreenProbe
 } from '../../terminal-wait-detection'
 import { readsTrustedScreen } from '../../agent-state-rules/agent-state-rules-engine'
-import { restoreProjectedComposerDraft } from '../../orca-runtime-terminal-projection'
+import { restoreProjectedComposerDraft } from '../../quirky-runtime-terminal-projection'
 import type {
   RuntimeTerminalWait,
   RuntimeTerminalWaitBlockedReason
@@ -34,7 +34,7 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 // poll reads, and its first frame lands after the wait starts, so a single look sees a blank screen.
 const TUI_IDLE_VISIBLE_PROBE_RETRY_MS = 1_000
 
-export abstract class OrcaRuntimeWithStartTuiIdleVisibleReadProbe extends OrcaRuntimeWithCreateAgentPromptRenderGate {
+export abstract class QuirkyRuntimeWithStartTuiIdleVisibleReadProbe extends QuirkyRuntimeWithCreateAgentPromptRenderGate {
   /** One bounded look at the provider's screen for an adopted PTY whose retained
    *  readiness metadata was lost. Deliberately single-shot: it answers "is the
    *  screen already showing a settled prompt", and the poll above owns every

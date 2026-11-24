@@ -53,7 +53,7 @@ export function claudeQueryAsyncCanceller(
 export type ClaudeControlOptions = { timeoutMs?: number }
 
 /**
- * Run one native Query control method under Orca's deadline and error classification.
+ * Run one native Query control method under Quirky's deadline and error classification.
  *
  * The SDK owns correlation but applies no deadline, so the timeout stays here. `null` means
  * none: the request then settles only on the CLI's answer or on the query closing under it.
@@ -89,7 +89,7 @@ export function runClaudeControl<T>(
   })
 }
 
-/** The native control surface Orca drives, one method per Query control request. */
+/** The native control surface Quirky drives, one method per Query control request. */
 export type ClaudeControlSurface = {
   interrupt: (
     options?: ClaudeControlOptions & { cancelQueued?: boolean }

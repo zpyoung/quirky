@@ -108,10 +108,10 @@ export function useRuntimeServerRowState(
 
 function getRevokedDescription(name: string, repairRoute: RuntimePairingRepairRoute): string {
   if (repairRoute === 'ssh') {
-    // Why: Orca pairs a managed server over SSH by itself; it reaches here only when that failed.
+    // Why: Quirky pairs a managed server over SSH by itself; it reaches here only when that failed.
     return translate(
       'auto.components.settings.RuntimeEnvironmentsPane.managedAccessRevoked',
-      "{{value0}} no longer accepts this computer, and Orca couldn't pair with it again over SSH. Connect to try again.",
+      "{{value0}} no longer accepts this computer, and Quirky couldn't pair with it again over SSH. Connect to try again.",
       { value0: name }
     )
   }

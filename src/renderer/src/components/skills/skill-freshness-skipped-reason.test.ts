@@ -27,13 +27,13 @@ describe('skippedReason', () => {
   it('leads with the harder blocker when several placements are off', () => {
     expect(skippedReason([row('duplicate'), row('read-only')])).toContain('read-only location')
     expect(skippedReason([row('duplicate'), row('external-link')])).toContain(
-      'pointing outside Orca’s skill folders'
+      'pointing outside Quirky’s skill folders'
     )
   })
 
   it('does not let a project copy outrank the placement that blocked the update', () => {
     // Why by row and not by chip: the scan-limit sentinel is also project-scoped and
-    // carries 'inaccessible', which would otherwise claim a read failure Orca never hit.
+    // carries 'inaccessible', which would otherwise claim a read failure Quirky never hit.
     expect(skippedReason([row('duplicate'), projectRow()])).toContain('separate copy')
     expect(skippedReason([row('duplicate'), projectRow('inaccessible')])).toContain('separate copy')
   })

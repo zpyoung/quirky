@@ -30,16 +30,16 @@ function StateIcon({ state }: { state: SkillRowState }): React.JSX.Element | nul
   }
 }
 
-function notFromOrcaTooltip(lockSource: string | null): string {
+function notFromQuirkyTooltip(lockSource: string | null): string {
   return lockSource
     ? translate(
-        'auto.components.skills.SkillUpdateRow.notFromOrcaSourceTip',
-        'Installed from {{value0}}. Selecting it replaces it with Orca’s version.',
+        'auto.components.skills.SkillUpdateRow.notFromQuirkySourceTip',
+        'Installed from {{value0}}. Selecting it replaces it with Quirky’s version.',
         { value0: lockSource }
       )
     : translate(
-        'auto.components.skills.SkillUpdateRow.notFromOrcaNoRecordTip',
-        'No Orca install record for this copy. Selecting it replaces it with Orca’s version.'
+        'auto.components.skills.SkillUpdateRow.notFromQuirkyNoRecordTip',
+        'No Quirky install record for this copy. Selecting it replaces it with Quirky’s version.'
       )
 }
 
@@ -61,7 +61,7 @@ function StateBadge({
       </Badge>
     )
   }
-  if (state === 'available' && !group.orcaOwned) {
+  if (state === 'available' && !group.quirkyOwned) {
     // Why: quiet on purpose; the copy is offered, not recommended.
     return (
       <Tooltip>
@@ -70,12 +70,12 @@ function StateBadge({
             tabIndex={0}
             className="inline-flex shrink-0 cursor-help items-center gap-1 rounded-sm text-xs font-normal text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            {translate('auto.components.skills.SkillUpdateRow.notFromOrca', 'Not from Orca')}
+            {translate('auto.components.skills.SkillUpdateRow.notFromQuirky', 'Not from Quirky')}
             <Info className="size-3" />
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs text-pretty">
-          {notFromOrcaTooltip(group.lockSource)}
+          {notFromQuirkyTooltip(group.lockSource)}
         </TooltipContent>
       </Tooltip>
     )

@@ -15,11 +15,14 @@ afterEach(() => {
 })
 
 function createPath(): string {
-  return join(mkdtempSync(join(tmpdir(), 'orca-browser-route-binding-capacity-')), 'bindings.json')
+  return join(
+    mkdtempSync(join(tmpdir(), 'quirky-browser-route-binding-capacity-')),
+    'bindings.json'
+  )
 }
 
 function partitionAt(index: number): string {
-  return `persist:orca-browser-v1-${index.toString(16).padStart(64, '0')}`
+  return `persist:quirky-browser-v1-${index.toString(16).padStart(64, '0')}`
 }
 
 /** Persisted v2 state, written directly so entry shapes older builds wrote can be replayed. */

@@ -6,7 +6,7 @@ import { isPairedWebClientWindow } from './desktop-window-chrome'
 import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from './worktree-runtime-owner'
 import { expectsBrowserClientHosting } from '../../../shared/browser-client-hosting-eligibility'
 import {
-  getOrcadSshDeployment,
+  getQuirkydSshDeployment,
   type PublicKnownRuntimeEnvironment
 } from '../../../shared/runtime-environments'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
@@ -98,12 +98,12 @@ export type RuntimeBrowserHostingState = {
     string,
     { status: Pick<RuntimeStatus, 'capabilities' | 'deviceScope'> | null }
   >
-  runtimeEnvironments?: readonly Pick<PublicKnownRuntimeEnvironment, 'id' | 'orcadDeployment'>[]
+  runtimeEnvironments?: readonly Pick<PublicKnownRuntimeEnvironment, 'id' | 'quirkydDeployment'>[]
   settings?: Pick<GlobalSettings, 'browserClientHostedRemoteEnabled'> | null
 }
 
 /**
- * A runtime with no browser of its own (orcad) whose pages this desktop hosts, network tunnelled
+ * A runtime with no browser of its own (quirkyd) whose pages this desktop hosts, network tunnelled
  * through the runtime. A managed SSH deployment keeps desktop tabs on its SSH browser route.
  */
 export function runtimeHostsPagesOnThisDesktop(
@@ -114,7 +114,7 @@ export function runtimeHostsPagesOnThisDesktop(
     return false
   }
   const environment = state.runtimeEnvironments?.find((entry) => entry.id === runtimeEnvironmentId)
-  if (environment && getOrcadSshDeployment(environment)) {
+  if (environment && getQuirkydSshDeployment(environment)) {
     return false
   }
   const status = state.runtimeStatusByEnvironmentId?.get(runtimeEnvironmentId)?.status

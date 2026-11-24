@@ -16,7 +16,7 @@ import type {
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { QueuedMessageNotConsumableError } from '../agent-session-journal/queued-message-consume-error'
-import { refusingNewerOrcaJournal } from '../agent-session-journal/journal-open-failure'
+import { refusingNewerQuirkyJournal } from '../agent-session-journal/journal-open-failure'
 import type { QueuedMessageRow } from '../agent-session-journal/queued-message-table'
 import {
   journalRowReceiptResult,
@@ -99,7 +99,7 @@ export function mutateQueued<TValue>(
     context,
     caller,
     envelope,
-    { ...plan, run: (ctx) => refusingNewerOrcaJournal(plan.run(ctx)) },
+    { ...plan, run: (ctx) => refusingNewerQuirkyJournal(plan.run(ctx)) },
     openForWrite(context, envelope)
   )
 }

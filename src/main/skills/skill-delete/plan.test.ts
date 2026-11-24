@@ -18,7 +18,7 @@ afterEach(async () => {
 })
 
 async function fixture(): Promise<{ home: string }> {
-  const home = await mkdtemp(join(tmpdir(), 'orca-skill-delete-plan-'))
+  const home = await mkdtemp(join(tmpdir(), 'quirky-skill-delete-plan-'))
   roots.push(home)
   return { home }
 }
@@ -130,7 +130,7 @@ describe('buildSkillDeletePlan placement enumeration', () => {
     'deletes the links of a repo skill whose content lives outside every root',
     async () => {
       // The shape that bit a real user: `<repo>/.agents/skills/<name>` is a link
-      // to a tool-managed directory elsewhere on disk. The links are Orca's to
+      // to a tool-managed directory elsewhere on disk. The links are Quirky's to
       // remove; the content behind them is not.
       const { home } = await fixture()
       const repo = join(home, 'projects', 'app')

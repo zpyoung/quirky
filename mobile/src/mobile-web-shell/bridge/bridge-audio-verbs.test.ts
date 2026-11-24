@@ -3,7 +3,7 @@
  * shell's capture answers. Named off the table rather than counted, because the count was four
  * until #22072 retired the wake-lock verb and a number in a header has nothing to hold it.
  *
- * The handler is driven through its engine seam rather than through `@orca/expo-two-way-audio`,
+ * The handler is driven through its engine seam rather than through `@quirky/expo-two-way-audio`,
  * for the reason the media verbs' device half is driven through one: the arms worth pinning — a
  * denied microphone, a ring that filled, a read after the capture ended — are exactly the ones a
  * simulator makes expensive, and none of them is a fact about Swift.

@@ -29,7 +29,7 @@ import {
   type OpenCodeSessionBinding
 } from './opencode-session-registry'
 
-/** Per-listener-instance caches needing per-PTY teardown; Orca's main process and the relay each get their own, never shared. */
+/** Per-listener-instance caches needing per-PTY teardown; Quirky's main process and the relay each get their own, never shared. */
 export type HookListenerState = {
   warnedVersions: Set<string>
   warnedEnvs: Set<string>

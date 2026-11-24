@@ -1,5 +1,5 @@
 {
-  "comment": "Adapted by Orca: isolate comment nesting and protect strings, escapes, and comments inside math. See typst-LICENSE.txt for pinned upstream provenance.",
+  "comment": "Adapted by Quirky: isolate comment nesting and protect strings, escapes, and comments inside math. See typst-LICENSE.txt for pinned upstream provenance.",
   "name": "typst",
   "patterns": [{ "include": "#markup" }],
   "repository": {

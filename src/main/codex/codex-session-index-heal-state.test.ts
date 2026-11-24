@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 function createPaths(systemSessionsRoot = WINDOWS_SESSIONS_ROOT): CodexSessionIndexHealPaths {
-  const stateDir = mkdtempSync(join(tmpdir(), 'orca-codex-heal-state-'))
+  const stateDir = mkdtempSync(join(tmpdir(), 'quirky-codex-heal-state-'))
   tempRoots.push(stateDir)
   return {
     auditLogPath: join(stateDir, 'audit.jsonl'),

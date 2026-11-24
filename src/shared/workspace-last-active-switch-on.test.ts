@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { getWorkspaceLastActiveAt, withCleanupVisitEvidence } from './workspace-last-active'
 import { makeCleanupCandidate as candidate } from './workspace-last-active.test-fixture'
 
-vi.mock('./sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+vi.mock('./sidebar-inputs-switch', () => ({ QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true }))
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const NOW = 100 * DAY_MS

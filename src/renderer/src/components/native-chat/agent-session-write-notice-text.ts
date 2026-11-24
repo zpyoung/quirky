@@ -63,17 +63,23 @@ const SENTENCES: Record<AgentSessionWriteNoticeSentence, () => string> = {
     translate('components.native-chat.writeNotice.historyUnusable', COPY.historyUnusable),
   historyUnavailable: () =>
     translate('components.native-chat.writeNotice.historyUnavailable', COPY.historyUnavailable),
-  savedByNewerOrca: () =>
-    translate('components.native-chat.writeNotice.savedByNewerOrca', COPY.savedByNewerOrca),
-  updateOrcaToKeepUsing: () =>
+  savedByNewerQuirky: () =>
+    translate('components.native-chat.writeNotice.savedByNewerQuirky', COPY.savedByNewerQuirky),
+  updateQuirkyToKeepUsing: () =>
     translate(
-      'components.native-chat.writeNotice.updateOrcaToKeepUsing',
-      COPY.updateOrcaToKeepUsing
+      'components.native-chat.writeNotice.updateQuirkyToKeepUsing',
+      COPY.updateQuirkyToKeepUsing
     ),
-  chatSavedByNewerOrca: () =>
-    translate('components.native-chat.writeNotice.chatSavedByNewerOrca', COPY.chatSavedByNewerOrca),
-  updateOrcaToOpenChat: () =>
-    translate('components.native-chat.writeNotice.updateOrcaToOpenChat', COPY.updateOrcaToOpenChat),
+  chatSavedByNewerQuirky: () =>
+    translate(
+      'components.native-chat.writeNotice.chatSavedByNewerQuirky',
+      COPY.chatSavedByNewerQuirky
+    ),
+  updateQuirkyToOpenChat: () =>
+    translate(
+      'components.native-chat.writeNotice.updateQuirkyToOpenChat',
+      COPY.updateQuirkyToOpenChat
+    ),
   unsupported: () => translate('components.native-chat.writeNotice.unsupported', COPY.unsupported),
   notAvailable: () =>
     translate('components.native-chat.writeNotice.notAvailable', COPY.notAvailable),

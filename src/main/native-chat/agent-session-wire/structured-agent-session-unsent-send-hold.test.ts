@@ -1,4 +1,4 @@
-// A message the host accepted while the agent was starting, then Orca quit or crashed, or the chat
+// A message the host accepted while the agent was starting, then Quirky quit or crashed, or the chat
 // closed, before handing it over: it is kept as an ordinary card at the head of the queue, never
 // sent on its own; like every card the chat closed with, it follows the chat's next accepted turn
 // (or a Resume, Send now, Edit or Delete). Against the real host, store and journal.
@@ -37,7 +37,7 @@ const MAIL_SOURCE: AgentMessageSource = {
   kind: 'agent',
   senders: [
     {
-      party: { address: 'agent:coordinator', terminalHandle: null, orcaSessionId: null },
+      party: { address: 'agent:coordinator', terminalHandle: null, quirkySessionId: null },
       name: null
     }
   ],
@@ -83,7 +83,7 @@ function sendRequest(text: string, delivery?: 'queue-if-active') {
 /** Lets the spawn `acceptWhileStarting` holds finish; until then the message stays queued. */
 let releaseStart = (): void => {}
 
-/** Accepted while the agent is starting, and never handed over: Orca stops during its spawn. */
+/** Accepted while the agent is starting, and never handed over: Quirky stops during its spawn. */
 async function acceptWhileStarting(
   request: Parameters<QueuedMessageTestRig['host']['send']>[1],
   // Sent with it, so each is accepted before the spawn takes the chat's lane.
@@ -136,7 +136,7 @@ function dispatchedTexts(): string[] {
   )
 }
 
-describe('a message accepted while the agent starts, then Orca stops', () => {
+describe('a message accepted while the agent starts, then Quirky stops', () => {
   it.each([
     { how: 'quit', restart: () => quitRestart() },
     { how: 'crash', restart: async () => rig.crashRestartHostProcess() }
@@ -316,7 +316,7 @@ describe('the next accepted turn releases a kept card', () => {
     const id = await acceptWhileStarting(sendRequest('the kept words'))
     await quitRestart()
     expect(await rig.drafts()).toEqual([{ messageId: id, ...KEPT }])
-    // A /compact runs, so the Send now waits behind it, and Orca quits before it is handed over.
+    // A /compact runs, so the Send now waits behind it, and Quirky quits before it is handed over.
     const fields = { command: 'compact' as const }
     expect(
       await rig.host.conversationCommand(QUEUED_RIG_CALLER, {
@@ -339,7 +339,7 @@ describe('the next accepted turn releases a kept card', () => {
 
 // The queue stops with delivery at quit, so a quit makes no hand-off only the next process could
 // settle: the queued cards come back as a crash leaves them, under the restart's hold.
-describe('cards queued behind a working turn, then Orca stops', () => {
+describe('cards queued behind a working turn, then Quirky stops', () => {
   it.each(['quit', 'crash'] as const)(
     'after a %s they wait under the restart hold, not kept, with no hand-off made',
     async (how) => {
@@ -726,7 +726,7 @@ describe("the reopen's mark", () => {
     }
   )
 
-  // An idle eviction is Orca's own act: the person sees the same rows, and nothing new is held.
+  // An idle eviction is Quirky's own act: the person sees the same rows, and nothing new is held.
   it('an idle-sweep eviction of a stopped chat writes nothing, and its Stop row stays', async () => {
     await observationClock.restoreBeforeCleanup(() => rig.dispose())
     observationClock.start()

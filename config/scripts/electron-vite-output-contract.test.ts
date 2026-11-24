@@ -22,7 +22,7 @@ import { createRequire } from 'node:module'
 import configureElectronVite, { electronViteConfig } from '../../electron.vite.config'
 import { BOOTSTRAP_FATAL_EXIT_GUARD_KEY } from '../../src/main/startup/bootstrap-fatal-exit-guard'
 import { FOREIGN_SQLITE_READER_ENTRY_FILENAME } from '../../src/main/foreign-sqlite-readers/foreign-sqlite-reader-entry-path'
-import { ORCAD_CHILD_ENTRY_POINTS } from './orcad-entry-build.mjs'
+import { QUIRKYD_CHILD_ENTRY_POINTS } from './quirkyd-entry-build.mjs'
 
 type BootstrapProcessMock = EventEmitter & {
   env: Record<string, string>
@@ -89,8 +89,8 @@ describe('Electron Vite output contract', () => {
         ['0', 'stable', 'hidden'],
         ['0', 'rc', 'hidden']
       ] as const) {
-        vi.stubEnv('ORCA_CI_MAIN_SOURCEMAPS', setting)
-        vi.stubEnv('ORCA_BUILD_IDENTITY', identity)
+        vi.stubEnv('QUIRKY_CI_MAIN_SOURCEMAPS', setting)
+        vi.stubEnv('QUIRKY_BUILD_IDENTITY', identity)
         vi.resetModules()
         const { electronViteConfig: configured } = await import('../../electron.vite.config')
         expect(configured.main?.build?.sourcemap).toBe(expected)
@@ -109,11 +109,11 @@ describe('Electron Vite output contract', () => {
 
   it('can skip main source maps during development without changing build output settings', () => {
     try {
-      vi.stubEnv('ORCA_DEV_MAIN_SOURCEMAPS', undefined)
+      vi.stubEnv('QUIRKY_DEV_MAIN_SOURCEMAPS', undefined)
       const defaults = configureElectronVite({ command: 'serve', mode: 'development' })
       expect(defaults.main?.build?.sourcemap).toBe('hidden')
       expect(defaults.main?.build?.minify).toBe(false)
-      vi.stubEnv('ORCA_DEV_MAIN_SOURCEMAPS', '0')
+      vi.stubEnv('QUIRKY_DEV_MAIN_SOURCEMAPS', '0')
       const development = configureElectronVite({ command: 'serve', mode: 'development' })
       expect(development.main?.build?.sourcemap).toBe(false)
       expect(development.main?.build?.minify).toBe(false)
@@ -163,14 +163,14 @@ describe('Electron Vite output contract', () => {
     }
 
     const entryName = nodePath.parse(FOREIGN_SQLITE_READER_ENTRY_FILENAME).name
-    expect(input[entryName]).toBe(nodePath.resolve(ORCAD_CHILD_ENTRY_POINTS.foreignSqliteReader))
+    expect(input[entryName]).toBe(nodePath.resolve(QUIRKYD_CHILD_ENTRY_POINTS.foreignSqliteReader))
     const outputFilename = output.entryFileNames.replace('[name]', entryName)
     expect(outputFilename).toBe(FOREIGN_SQLITE_READER_ENTRY_FILENAME)
 
-    const appRoot = join(tmpdir(), 'orca-sqlite-unpack-app')
+    const appRoot = join(tmpdir(), 'quirky-sqlite-unpack-app')
     const matcher = new FileMatcher(
       appRoot,
-      join(tmpdir(), 'orca-sqlite-unpack-destination'),
+      join(tmpdir(), 'quirky-sqlite-unpack-destination'),
       (value: string) => value,
       electronBuilderConfig.asarUnpack
     )
@@ -191,7 +191,7 @@ describe('Electron Vite output contract', () => {
     for (const name of [
       'gitlab/project-ref-parser',
       'macos-tree-clone',
-      'orca-profiles/profile-index-store',
+      'quirky-profiles/profile-index-store',
       'persistence/profile-state/profile-state-access',
       'persistence/profile-state/profile-state-active-location',
       'persistence/profile-state/profile-state-backup-path',
@@ -211,7 +211,7 @@ describe('Electron Vite output contract', () => {
     expect(electronBuilderConfig.asarUnpack).toContain('out/main/asar-transparent-fs.js')
     expect(electronBuilderConfig.asarUnpack).toContain('out/main/persistence/profile-state/**')
     expect(electronBuilderConfig.asarUnpack).toContain(
-      'out/main/orca-profiles/profile-index-store.js'
+      'out/main/quirky-profiles/profile-index-store.js'
     )
     expect(electronBuilderConfig.asarUnpack).toContain(
       'out/main/startup/http1-compatibility-marker.js'
@@ -236,8 +236,8 @@ describe('Electron Vite output contract', () => {
     expect(external('electron/common')).toBe(true)
     expect(external('fs')).toBe(true)
     expect(external('node:fs')).toBe(true)
-    expect(external('@orca/process-host')).toBe(true)
-    expect(external('@orca/process-host/spawn-observer')).toBe(true)
+    expect(external('@quirky/process-host')).toBe(true)
+    expect(external('@quirky/process-host/spawn-observer')).toBe(true)
     expect(external('@xterm/headless')).toBe(false)
     expect(external('@xterm/addon-serialize')).toBe(false)
     expect(external('tldts')).toBe(false)
@@ -292,7 +292,7 @@ describe('Electron Vite output contract', () => {
   })
 
   it('records the bootstrap failure it exits on, since the guard hides Electron dialog', () => {
-    const logDirectory = mkdtempSync(join(tmpdir(), 'orca-bootstrap-fatal-'))
+    const logDirectory = mkdtempSync(join(tmpdir(), 'quirky-bootstrap-fatal-'))
     const logPath = join(logDirectory, 'fatal.log')
     const stderrWrites: string[] = []
 
@@ -313,7 +313,7 @@ describe('Electron Vite output contract', () => {
   })
 
   it('creates the parent directory an overridden log path names but does not have', () => {
-    const logDirectory = mkdtempSync(join(tmpdir(), 'orca-bootstrap-fatal-'))
+    const logDirectory = mkdtempSync(join(tmpdir(), 'quirky-bootstrap-fatal-'))
     const logPath = join(logDirectory, 'nested', 'diagnostics', 'fatal.log')
 
     try {
@@ -329,7 +329,7 @@ describe('Electron Vite output contract', () => {
   })
 
   it('falls back to the default location when the overridden log path is unwritable', () => {
-    const logDirectory = mkdtempSync(join(tmpdir(), 'orca-bootstrap-fatal-'))
+    const logDirectory = mkdtempSync(join(tmpdir(), 'quirky-bootstrap-fatal-'))
     const fallbackDirectory = join(logDirectory, 'fallback')
 
     try {
@@ -353,7 +353,7 @@ describe('Electron Vite output contract', () => {
     )
   })
 
-  it('gives the dev terminal daemon helper the TCC identity watched by Orca', () => {
+  it('gives the dev terminal daemon helper the TCC identity watched by Quirky', () => {
     // Asserted on the values rather than the source text: the ids moved into
     // dev-electron-bundle-identity.mjs so every dev bundle signs to one cdhash.
     expect(DEV_HELPER_BUNDLE_ID).toBe(`${DEV_BUNDLE_ID}.helper`)

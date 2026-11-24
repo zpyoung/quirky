@@ -1,29 +1,29 @@
 /**
- * Windows SSH-host cells for managed orcad: a real Win32-OpenSSH server on 127.0.0.1, provisioned
+ * Windows SSH-host cells for managed quirkyd: a real Win32-OpenSSH server on 127.0.0.1, provisioned
  * by config/ci/windows-ssh-provider/. `.github/workflows/ssh-windows-hosts.yml` runs them.
  */
 import { readFileSync } from 'node:fs'
 import { isWindowsServerTarget, type WindowsServerTarget } from '../../shared/node-runtime-pin'
 import type { SshTarget } from '../../shared/ssh-types'
 
-/** Managed orcad on the pinned node.exe, per DefaultShell: deploy, readiness, stop request, exit. */
-export const WINDOWS_ORCAD_CELL_IDS = ['orcad-cmd', 'orcad-powershell'] as const
-export type WindowsOrcadCellId = (typeof WINDOWS_ORCAD_CELL_IDS)[number]
+/** Managed quirkyd on the pinned node.exe, per DefaultShell: deploy, readiness, stop request, exit. */
+export const WINDOWS_QUIRKYD_CELL_IDS = ['quirkyd-cmd', 'quirkyd-powershell'] as const
+export type WindowsQuirkydCellId = (typeof WINDOWS_QUIRKYD_CELL_IDS)[number]
 
-export function isWindowsOrcadCellId(id: string): id is WindowsOrcadCellId {
-  return WINDOWS_ORCAD_CELL_IDS.some((candidate) => candidate === id)
+export function isWindowsQuirkydCellId(id: string): id is WindowsQuirkydCellId {
+  return WINDOWS_QUIRKYD_CELL_IDS.some((candidate) => candidate === id)
 }
 
-/** The app connects a relay-era host and converts it to managed orcad (tests/e2e). */
-export const WINDOWS_CONVERT_CELL_ID = 'orcad-convert'
+/** The app connects a relay-era host and converts it to managed quirkyd (tests/e2e). */
+export const WINDOWS_CONVERT_CELL_ID = 'quirkyd-convert'
 
-/** The bundled CLI against a managed host (tests/e2e/ssh-orcad-windows-cli-matrix.spec.ts). */
-export const WINDOWS_CLI_MATRIX_CELL_IDS = ['orcad-cli-managed', 'orcad-cli-convert'] as const
+/** The bundled CLI against a managed host (tests/e2e/ssh-quirkyd-windows-cli-matrix.spec.ts). */
+export const WINDOWS_CLI_MATRIX_CELL_IDS = ['quirkyd-cli-managed', 'quirkyd-cli-convert'] as const
 export type WindowsCliMatrixCellId = (typeof WINDOWS_CLI_MATRIX_CELL_IDS)[number]
 
 /** Written by config/ci/windows-ssh-provider/invoke-windows-host-cells.ps1, one per run. */
 export type WindowsHostCellDescriptor = {
-  cell: WindowsOrcadCellId | typeof WINDOWS_CONVERT_CELL_ID | WindowsCliMatrixCellId
+  cell: WindowsQuirkydCellId | typeof WINDOWS_CONVERT_CELL_ID | WindowsCliMatrixCellId
   target: WindowsServerTarget
   host: string
   port: number
@@ -50,7 +50,7 @@ export function parseWindowsHostCellDescriptor(text: string): WindowsHostCellDes
   }
   const record = Object.fromEntries(Object.entries(parsed))
   const cell =
-    WINDOWS_ORCAD_CELL_IDS.find((id) => id === record.cell) ??
+    WINDOWS_QUIRKYD_CELL_IDS.find((id) => id === record.cell) ??
     WINDOWS_CLI_MATRIX_CELL_IDS.find((id) => id === record.cell) ??
     (record.cell === WINDOWS_CONVERT_CELL_ID ? WINDOWS_CONVERT_CELL_ID : undefined)
   if (!cell) {

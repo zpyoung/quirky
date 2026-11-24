@@ -6,7 +6,7 @@ import { CodexAppServerRequestError } from './codex-app-server-connection'
 import { acquired, fakeCodex } from './codex-structured-session-adapter-fixture'
 
 describe('Codex compaction refused at the request', () => {
-  it("carries Codex's message as the detail, apart from Orca's wrapper", async () => {
+  it("carries Codex's message as the detail, apart from Quirky's wrapper", async () => {
     const codex = fakeCodex({
       'thread/compact/start': () => {
         throw new CodexAppServerRequestError(

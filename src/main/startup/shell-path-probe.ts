@@ -1,7 +1,7 @@
 import { delimiter, win32 as pathWin32 } from 'node:path'
 import { resolveWindowsShellStartupFamily } from '../../shared/windows-terminal-shell'
 
-export const SHELL_PATH_DELIMITER = '__ORCA_SHELL_PATH__'
+export const SHELL_PATH_DELIMITER = '__QUIRKY_SHELL_PATH__'
 
 /** Build the login PATH probe in the selected shell's native syntax. */
 export function shellPathProbe(shell: string): { args: string[]; pathDelimiter: string } {

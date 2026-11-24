@@ -75,9 +75,9 @@ function benchmark(options) {
   const repo = git(options.repo, ['rev-parse', '--show-toplevel'])
   const base = git(repo, ['rev-parse', '--verify', `${options.base}^{commit}`])
   const retargetBase = git(repo, ['rev-parse', '--verify', `${base}~20^{commit}`])
-  const scratchRoot = mkdtempSync(path.join(path.dirname(repo), '.orca-create-bench-'))
+  const scratchRoot = mkdtempSync(path.join(path.dirname(repo), '.quirky-create-bench-'))
   const samples = { baseline: [], prepare: [], submit: [], retarget: [], cancel: [] }
-  const prefix = `orca-create-bench-${process.pid}-${Date.now()}`
+  const prefix = `quirky-create-bench-${process.pid}-${Date.now()}`
 
   try {
     for (let index = 0; index < options.iterations; index += 1) {
@@ -101,7 +101,7 @@ function benchmark(options) {
             'worktree',
             'lock',
             '--reason',
-            `orca-create-preparation:v1:${process.pid}:${index}`,
+            `quirky-create-preparation:v1:${process.pid}:${index}`,
             preparedPath
           ])
         })
@@ -120,14 +120,26 @@ function benchmark(options) {
       const retargetPath = path.join(scratchRoot, `retarget-${index}`)
       git(repo, ['worktree', 'add', '--detach', '--no-checkout', retargetPath, base])
       git(retargetPath, ['reset', '--hard', base])
-      git(repo, ['worktree', 'lock', '--reason', 'orca-create-preparation:v1:bench', retargetPath])
+      git(repo, [
+        'worktree',
+        'lock',
+        '--reason',
+        'quirky-create-preparation:v1:bench',
+        retargetPath
+      ])
       samples.retarget.push(time(() => git(retargetPath, ['reset', '--hard', retargetBase])))
       removeWorktree(repo, retargetPath, undefined, true)
 
       const cancelledPath = path.join(scratchRoot, `cancel-${index}`)
       git(repo, ['worktree', 'add', '--detach', '--no-checkout', cancelledPath, base])
       git(cancelledPath, ['reset', '--hard', base])
-      git(repo, ['worktree', 'lock', '--reason', 'orca-create-preparation:v1:bench', cancelledPath])
+      git(repo, [
+        'worktree',
+        'lock',
+        '--reason',
+        'quirky-create-preparation:v1:bench',
+        cancelledPath
+      ])
       samples.cancel.push(time(() => removeWorktree(repo, cancelledPath, undefined, true)))
     }
   } finally {

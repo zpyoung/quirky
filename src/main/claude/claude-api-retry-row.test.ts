@@ -42,7 +42,7 @@ function apiRetry(attempt: number, fields: Record<string, unknown> = {}): Record
 let root = ''
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-api-retry-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-api-retry-'))
 })
 
 afterEach(async () => {
@@ -60,7 +60,7 @@ async function statusRowsFor(frames: Record<string, unknown>[]) {
   deferred.bind({ journal, fence: 1, publish: vi.fn() })
   const translator = createClaudeJournalTranslator({ sink: deferred.sink, fallbackIdPrefix: '1' })
   for (const frame of frames) {
-    translator.handle({ type: 'message', sessionId: 'orca-session', message: frame })
+    translator.handle({ type: 'message', sessionId: 'quirky-session', message: frame })
     await deferred.drained()
   }
   return journal

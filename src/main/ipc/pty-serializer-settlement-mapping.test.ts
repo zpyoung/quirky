@@ -29,7 +29,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -87,7 +87,7 @@ describe('registerPtyHandlers', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-cli',
       leafId: '11111111-1111-4111-8111-111111111111',
-      env: { ORCA_PANE_KEY: ` ${paneKey} ` }
+      env: { QUIRKY_PANE_KEY: ` ${paneKey} ` }
     })
     const replacementGen = (await handlers.get('pty:declarePendingPaneSerializer')!(null, {
       paneKey
@@ -153,7 +153,7 @@ describe('registerPtyHandlers', () => {
         worktreeId: 'wt-1',
         tabId: 'tab-reused',
         leafId: '33333333-3333-4333-8333-333333333333',
-        env: { ORCA_PANE_KEY: paneKey }
+        env: { QUIRKY_PANE_KEY: paneKey }
       })
     }
 
@@ -234,7 +234,7 @@ describe('registerPtyHandlers', () => {
     expect(hasPendingRendererSerializerForPaneKey(paneKey)).toBe(false)
     expect(sender.once).not.toHaveBeenCalled()
   })
-  it('ignores renderer-provided ORCA_TERMINAL_HANDLE for local PTY spawns', async () => {
+  it('ignores renderer-provided QUIRKY_TERMINAL_HANDLE for local PTY spawns', async () => {
     const runtime = {
       setPtyController: vi.fn(),
       noteTerminalSpawnCommand: vi.fn(),
@@ -248,13 +248,13 @@ describe('registerPtyHandlers', () => {
     await handlers.get('pty:spawn')!(null, {
       cols: 80,
       rows: 24,
-      env: { ORCA_TERMINAL_HANDLE: 'term_untrusted', ORCA_WSL_CLI_DIR: 'C:\\stale' }
+      env: { QUIRKY_TERMINAL_HANDLE: 'term_untrusted', QUIRKY_WSL_CLI_DIR: 'C:\\stale' }
     })
 
     const spawnCall = spawnMock.mock.calls.at(-1)!
     const env = spawnCall[2].env as Record<string, string>
-    expect(env.ORCA_TERMINAL_HANDLE).toBe('term_trusted')
-    expect(env.ORCA_WSL_CLI_DIR).toBeUndefined()
+    expect(env.QUIRKY_TERMINAL_HANDLE).toBe('term_trusted')
+    expect(env.QUIRKY_WSL_CLI_DIR).toBeUndefined()
     expect(runtime.preAllocateHandleForPty).toHaveBeenCalledWith(expect.any(String))
   })
 })

@@ -14,7 +14,7 @@ function named(label: string): string {
   )
 }
 
-/** What an offered chat was doing when Orca went away, read from the offer's own stop-time
+/** What an offered chat was doing when Quirky went away, read from the offer's own stop-time
  *  snapshot. Null when the host sent none — an older host, or an offer recorded by a build that
  *  captured no snapshot — which the dialog's own wording already covers. */
 export function resumeActivityLabel(

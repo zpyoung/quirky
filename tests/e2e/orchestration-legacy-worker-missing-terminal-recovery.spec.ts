@@ -3,9 +3,9 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import os from 'node:os'
 import path from 'node:path'
 import type { ElectronApplication } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import {
   ensureTerminalVisible,
   getActiveTabId,
@@ -27,7 +27,7 @@ import { FAKE_AGENT_PASTE_END_SCANNER_SOURCE } from './helpers/fake-agent-paste-
 import { FAKE_CODEX_LAUNCH_PROBES_SOURCE } from './helpers/fake-codex-launch-probes'
 
 const PROVIDER_SESSION_ID = 'e2e-missing-legacy-worker'
-const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-missing-legacy-worker-'))
+const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-missing-legacy-worker-'))
 const spawnLedgerPath = path.join(fakeCliDir, 'spawn.jsonl')
 const interruptionLedgerPath = path.join(fakeCliDir, 'interruption.jsonl')
 const fakeCodexCommand = buildFakeAgentCommandOverride(
@@ -43,7 +43,7 @@ function appendLedger(envName, event) {
   } catch {}
 }
 ${FAKE_CODEX_LAUNCH_PROBES_SOURCE}
-appendLedger('ORCA_E2E_SPAWN_LEDGER', { event: 'spawn' })
+appendLedger('QUIRKY_E2E_SPAWN_LEDGER', { event: 'spawn' })
 process.stdout.write('\\u001b]0;Codex Ready\\u0007OpenAI Codex\\nmodel: e2e\\ndirectory: e2e\\n')
 let acknowledged = false
 ${FAKE_AGENT_PASTE_END_SCANNER_SOURCE}
@@ -55,7 +55,7 @@ process.stdin.on('data', (chunk) => {
     process.stdout.write('\\x1b[?25h')
   }
   if (input.includes('\\x03')) {
-    appendLedger('ORCA_E2E_INTERRUPTION_LEDGER', { event: 'stdin-ctrl-c' })
+    appendLedger('QUIRKY_E2E_INTERRUPTION_LEDGER', { event: 'stdin-ctrl-c' })
   }
   if (!acknowledged) {
     fakeAgentMaybeAck(pasteEndScan, input, (mode) => {
@@ -69,7 +69,7 @@ process.stdin.on('data', (chunk) => {
 process.stdin.setRawMode?.(true)
 for (const signal of ['SIGINT', 'SIGHUP', 'SIGTERM']) {
   process.on(signal, () => {
-    appendLedger('ORCA_E2E_INTERRUPTION_LEDGER', { event: 'signal', signal })
+    appendLedger('QUIRKY_E2E_INTERRUPTION_LEDGER', { event: 'signal', signal })
     process.exit(0)
   })
 }
@@ -203,8 +203,8 @@ test('a missing legacy worker cannot spawn a replacement during restart recovery
 
   const session = createRestartSession(testInfo, {
     PATH: `${fakeCliDir}${path.delimiter}${process.env.PATH ?? ''}`,
-    ORCA_E2E_SPAWN_LEDGER: spawnLedgerPath,
-    ORCA_E2E_INTERRUPTION_LEDGER: interruptionLedgerPath
+    QUIRKY_E2E_SPAWN_LEDGER: spawnLedgerPath,
+    QUIRKY_E2E_INTERRUPTION_LEDGER: interruptionLedgerPath
   })
   let firstApp: ElectronApplication | null = null
   let secondApp: ElectronApplication | null = null

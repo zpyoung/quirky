@@ -3,7 +3,10 @@ import type { CommandHandler } from '../dispatch'
 import { getRequiredStringFlag } from '../flags'
 import { RuntimeClientError } from '../runtime-client'
 import { validateAskSpec } from '../../shared/fork-ask-question-tool/ask-question-schema'
-import type { AskEnvelope, AskRegisteredEnvelope } from '../../shared/fork-ask-question-tool/ask-answer-envelope'
+import type {
+  AskEnvelope,
+  AskRegisteredEnvelope
+} from '../../shared/fork-ask-question-tool/ask-answer-envelope'
 import {
   formatAskValidationErrors,
   getOptionalPositiveSafeIntegerFlag,
@@ -14,7 +17,7 @@ import { registerAskWithRetry } from './ask-cli-register'
 import { waitAskChunkWithRetry } from './ask-cli-wait'
 
 /**
- * CLI handlers for `orca ask`, `orca ask wait`, and `orca ask cancel` (tech.md C5). Every
+ * CLI handlers for `quirky ask`, `quirky ask wait`, and `quirky ask cancel` (tech.md C5). Every
  * printed line is bare JSON, in `--json` mode and out of it, because the consumer is always
  * a model (logic.md § Answer contract).
  */

@@ -51,7 +51,7 @@ export abstract class BrowserManagerGuestPopupPolicy extends BrowserManagerNavig
           return { action: 'deny' }
         }
         if (
-          this.openLinkInOrcaTab(
+          this.openLinkInQuirkyTab(
             ownerContext.browserTabId,
             externalUrl,
             disposition !== 'background-tab'
@@ -59,7 +59,7 @@ export abstract class BrowserManagerGuestPopupPolicy extends BrowserManagerNavig
         ) {
           this.forwardOrQueuePopupEvent(guest.id, {
             origin: safeOrigin(externalUrl),
-            action: 'opened-in-orca'
+            action: 'opened-in-quirky'
           })
         }
         // Why: a recognized new-tab intent must never fall through to a native popup if its renderer vanished mid-open.
@@ -99,7 +99,7 @@ export abstract class BrowserManagerGuestPopupPolicy extends BrowserManagerNavig
         return {
           action: 'allow',
           overrideBrowserWindowOptions: SAFE_POPUP_WINDOW_OPTIONS,
-          // Why: default child windows lack an address bar; host in an Orca origin-bar window so the destination is verifiable.
+          // Why: default child windows lack an address bar; host in an Quirky origin-bar window so the destination is verifiable.
           createWindow: (options: PopupChildWindowOptions) =>
             openAsTabWithoutOpener(options) ??
             this.createPopupChildWindowWithOriginBar(guest, url, {
@@ -162,10 +162,10 @@ export abstract class BrowserManagerGuestPopupPolicy extends BrowserManagerNavig
     const opened =
       owner !== null &&
       (tab.clicked || this.tryConsumePageInitiatedTab(owner.rootGuestWebContentsId)) &&
-      this.openLinkInOrcaTab(owner.browserTabId, url, tab.activate)
+      this.openLinkInQuirkyTab(owner.browserTabId, url, tab.activate)
     this.forwardOrQueuePopupEvent(opener.id, {
       origin: safeOrigin(url),
-      action: opened ? 'opened-in-orca' : 'blocked'
+      action: opened ? 'opened-in-quirky' : 'blocked'
     })
     if (options.webContents && !options.nativeWindow) {
       // Why: discarding directly avoids flashing an origin-bar window that would close at once.

@@ -33,7 +33,7 @@ export type ServeInitReaperDeps = {
 export type ServeInitReaperOutcome = 'not-pid1' | 'reexec' | 'unavailable'
 
 const NO_REAPER_WARNING =
-  '[serve] Orca is PID 1 and cannot reap orphaned processes, so they stay zombies. Run it under an init (docker run --init, tini, or bash).'
+  '[serve] Quirky is PID 1 and cannot reap orphaned processes, so they stay zombies. Run it under an init (docker run --init, tini, or bash).'
 
 const EVAL_FLAGS = new Set(['-e', '--eval', '-p', '--print'])
 
@@ -59,8 +59,8 @@ function servedCommand(deps: ServeInitReaperDeps): ServedCommand | null {
     delete env.ELECTRON_RUN_AS_NODE
     // Why: the image's own CLI redirect moves these aside again; restore what the user set.
     for (const name of ['NODE_OPTIONS', 'NODE_REPL_EXTERNAL_MODULE']) {
-      const saved = env[`ORCA_${name}`]
-      delete env[`ORCA_${name}`]
+      const saved = env[`QUIRKY_${name}`]
+      delete env[`QUIRKY_${name}`]
       if (saved) {
         env[name] = saved
       }
@@ -85,7 +85,7 @@ export function reexecServeUnderInitReaper(deps: ServeInitReaperDeps): ServeInit
   try {
     deps.execve(
       bash,
-      ['bash', '-c', SERVE_INIT_REAPER_SCRIPT, 'orca-serve-init', ...command.args],
+      ['bash', '-c', SERVE_INIT_REAPER_SCRIPT, 'quirky-serve-init', ...command.args],
       command.env
     )
   } catch (error) {

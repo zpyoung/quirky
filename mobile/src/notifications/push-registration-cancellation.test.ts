@@ -40,7 +40,7 @@ const token: MobilePushToken = {
   token: 'a'.repeat(64),
   apnsEnvironment: 'sandbox'
 }
-const records = () => JSON.parse(storage.get('orca:remotePushHostRegistrations') ?? '{}')
+const records = () => JSON.parse(storage.get('quirky:remotePushHostRegistrations') ?? '{}')
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => {
@@ -67,7 +67,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   resetPushRegistrationForTests()
   storage.clear()
-  storage.set('orca:pushServiceNotificationsEnabled', 'true')
+  storage.set('quirky:pushServiceNotificationsEnabled', 'true')
   vi.mocked(getDevicePushToken).mockResolvedValue(token)
   vi.mocked(addPushTokenListener).mockReturnValue(() => {})
   vi.mocked(removeHost).mockReset()
@@ -151,7 +151,7 @@ it('waits for the Android notification channel before registering a token', asyn
 it('completes disable while native token acquisition remains unresolved, and rejects late tokens', async () => {
   vi.useFakeTimers()
   storage.set(
-    'orca:remotePushHostRegistrations',
+    'quirky:remotePushHostRegistrations',
     JSON.stringify({
       registeredHostIds: ['host'],
       pendingUnregisterHostIds: []
@@ -170,7 +170,7 @@ it('completes disable while native token acquisition remains unresolved, and rej
     'notifications.unregisterPush'
   )
   await vi.advanceTimersByTimeAsync(2_000)
-  expect(storage.get('orca:pushServiceNotificationsEnabled')).toBe('false')
+  expect(storage.get('quirky:pushServiceNotificationsEnabled')).toBe('false')
   expect(records()).toEqual({ registeredHostIds: [], pendingUnregisterHostIds: [] })
   expect(connection.sendRequest.mock.calls.map(([method]) => method)).toContain(
     'notifications.unregisterPush'

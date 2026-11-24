@@ -6,7 +6,7 @@ import {
   startDaemonAdapterHarness,
   waitFor
 } from '../../daemon/daemon-pty-adapter-test-harness'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { setPtyHostBindings, type PtyIpcSurface } from '../pty-host-bindings'
 import { consumeSyntheticKillExit, rememberSyntheticKillExit } from './delivery/exit'
 import { installPtyKillIpcHandler } from './ipc/renderer-kill'
@@ -25,7 +25,7 @@ const PTY_ID = 'repo::/tmp/late-exit-audit@@terminal'
 const TAB_ID = '00000000-0000-4000-8000-000000000001'
 const LEAF_ID = '00000000-0000-4000-8000-000000000002'
 
-class LateExitRuntime extends OrcaRuntimeService {
+class LateExitRuntime extends QuirkyRuntimeService {
   observeExit(listener: () => void): void {
     this.ptyExitListenersByPtyId.set(PTY_ID, new Set([listener]))
   }

@@ -19,7 +19,7 @@ export function IpynbCellRunPrompt({
     <IpynbRunPrompt
       executionCount={run && !run.committed ? run.executionCount : executionCount}
       state={run?.finishedAt === null ? 'running' : queued ? 'queued' : 'idle'}
-      // Only a kernel execution has a duration worth showing, not an Orca notice.
+      // Only a kernel execution has a duration worth showing, not an Quirky notice.
       duration={
         run?.finishedAt && run.executionCount !== null
           ? formatToolDuration(run.finishedAt - run.startedAt)

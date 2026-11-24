@@ -10,7 +10,7 @@
  * past MAX_CANON (1024 on macOS), and cmd caps a line at 8191. Decided here, where the line exists,
  * so the answer is a fact about what was built rather than a prediction of it.
  *
- * `startup-line-typed-length.live-shell.test.ts` types lines through Orca's own ready barrier and
+ * `startup-line-typed-length.live-shell.test.ts` types lines through Quirky's own ready barrier and
  * submission into real shells, including one whose config outlasts the barrier's 1.5 s cap so the
  * line lands while the terminal is still line-buffered. Only zsh read a multi-line line whole in
  * both cases, and only while each of its lines stayed short; a long single line was lost there.

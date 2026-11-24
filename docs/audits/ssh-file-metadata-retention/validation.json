@@ -1,25 +1,25 @@
 {
   "productTests": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts src/main/providers/ssh-filesystem-provider.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/relay/fs-handler-stream.test.ts",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts src/main/providers/ssh-filesystem-provider.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/relay/fs-handler-stream.test.ts",
     "passed": 124,
     "files": 5,
     "newTests": 9,
     "exitCode": 0
   },
   "baselineOverlay": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/ssh-file-metadata-retention/before.config.mjs src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/ssh-file-metadata-retention/before.config.mjs src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts",
     "passed": 22,
     "expectedFailed": 1,
     "failure": "64 foreign frame params objects remain reachable before this reader receives metadata.",
     "exitCode": 1
   },
   "transportIntegration": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/relay/fs-stream-pty-echo-backpressure.integration.test.ts",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/relay/fs-stream-pty-echo-backpressure.integration.test.ts",
     "passed": 3,
     "exitCode": 0
   },
   "typecheck": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm tc:node",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm tc:node",
     "exitCode": 0
   },
   "portableProof": {
@@ -105,27 +105,27 @@
   "quality": [
     {
       "label": "ordinary lint",
-      "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec oxlint --no-ignore --deny-warnings  src/main/ssh/ssh-filesystem-stream-reader.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts docs/audits/ssh-file-metadata-retention/sources.cjs docs/audits/ssh-file-metadata-retention/relay-fixture.mjs docs/audits/ssh-file-metadata-retention/scenario.test.mjs docs/audits/ssh-file-metadata-retention/vitest.config.mjs docs/audits/ssh-file-metadata-retention/before.config.mjs",
+      "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec oxlint --no-ignore --deny-warnings  src/main/ssh/ssh-filesystem-stream-reader.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts docs/audits/ssh-file-metadata-retention/sources.cjs docs/audits/ssh-file-metadata-retention/relay-fixture.mjs docs/audits/ssh-file-metadata-retention/scenario.test.mjs docs/audits/ssh-file-metadata-retention/vitest.config.mjs docs/audits/ssh-file-metadata-retention/before.config.mjs",
       "exitCode": 0
     },
     {
       "label": "casting",
-      "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec oxlint --no-ignore --deny-warnings --config config/oxlint-code-quality-casting.json src/main/ssh/ssh-filesystem-stream-reader.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts docs/audits/ssh-file-metadata-retention/sources.cjs docs/audits/ssh-file-metadata-retention/relay-fixture.mjs docs/audits/ssh-file-metadata-retention/scenario.test.mjs docs/audits/ssh-file-metadata-retention/vitest.config.mjs docs/audits/ssh-file-metadata-retention/before.config.mjs",
+      "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec oxlint --no-ignore --deny-warnings --config config/oxlint-code-quality-casting.json src/main/ssh/ssh-filesystem-stream-reader.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts docs/audits/ssh-file-metadata-retention/sources.cjs docs/audits/ssh-file-metadata-retention/relay-fixture.mjs docs/audits/ssh-file-metadata-retention/scenario.test.mjs docs/audits/ssh-file-metadata-retention/vitest.config.mjs docs/audits/ssh-file-metadata-retention/before.config.mjs",
       "exitCode": 1
     },
     {
       "label": "type-aware",
-      "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec oxlint --no-ignore --deny-warnings --type-aware --config config/oxlint-code-quality-type-aware.json src/main/ssh/ssh-filesystem-stream-reader.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts docs/audits/ssh-file-metadata-retention/sources.cjs docs/audits/ssh-file-metadata-retention/relay-fixture.mjs docs/audits/ssh-file-metadata-retention/scenario.test.mjs docs/audits/ssh-file-metadata-retention/vitest.config.mjs docs/audits/ssh-file-metadata-retention/before.config.mjs",
+      "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec oxlint --no-ignore --deny-warnings --type-aware --config config/oxlint-code-quality-type-aware.json src/main/ssh/ssh-filesystem-stream-reader.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts docs/audits/ssh-file-metadata-retention/sources.cjs docs/audits/ssh-file-metadata-retention/relay-fixture.mjs docs/audits/ssh-file-metadata-retention/scenario.test.mjs docs/audits/ssh-file-metadata-retention/vitest.config.mjs docs/audits/ssh-file-metadata-retention/before.config.mjs",
       "exitCode": 0
     },
     {
       "label": "native code quality",
-      "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec oxlint --no-ignore --deny-warnings --config config/oxlint-code-quality-native-plugins.json src/main/ssh/ssh-filesystem-stream-reader.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts docs/audits/ssh-file-metadata-retention/sources.cjs docs/audits/ssh-file-metadata-retention/relay-fixture.mjs docs/audits/ssh-file-metadata-retention/scenario.test.mjs docs/audits/ssh-file-metadata-retention/vitest.config.mjs docs/audits/ssh-file-metadata-retention/before.config.mjs",
+      "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec oxlint --no-ignore --deny-warnings --config config/oxlint-code-quality-native-plugins.json src/main/ssh/ssh-filesystem-stream-reader.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts docs/audits/ssh-file-metadata-retention/sources.cjs docs/audits/ssh-file-metadata-retention/relay-fixture.mjs docs/audits/ssh-file-metadata-retention/scenario.test.mjs docs/audits/ssh-file-metadata-retention/vitest.config.mjs docs/audits/ssh-file-metadata-retention/before.config.mjs",
       "exitCode": 0
     },
     {
       "label": "anti-slop",
-      "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec oxlint --no-ignore --deny-warnings --config config/oxlint-anti-slop.json src/main/ssh/ssh-filesystem-stream-reader.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts docs/audits/ssh-file-metadata-retention/sources.cjs docs/audits/ssh-file-metadata-retention/relay-fixture.mjs docs/audits/ssh-file-metadata-retention/scenario.test.mjs docs/audits/ssh-file-metadata-retention/vitest.config.mjs docs/audits/ssh-file-metadata-retention/before.config.mjs",
+      "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec oxlint --no-ignore --deny-warnings --config config/oxlint-anti-slop.json src/main/ssh/ssh-filesystem-stream-reader.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts docs/audits/ssh-file-metadata-retention/sources.cjs docs/audits/ssh-file-metadata-retention/relay-fixture.mjs docs/audits/ssh-file-metadata-retention/scenario.test.mjs docs/audits/ssh-file-metadata-retention/vitest.config.mjs docs/audits/ssh-file-metadata-retention/before.config.mjs",
       "exitCode": 0
     }
   ],
@@ -216,7 +216,7 @@
     }
   },
   "changedCodeGate": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm run check:code-quality:changed",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm run check:code-quality:changed",
     "exitCode": 0,
     "newFindings": 0,
     "observedGlobalChangedFiles": 392,

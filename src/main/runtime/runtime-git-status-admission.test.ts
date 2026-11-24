@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { GitAdmissionEvent } from '../../shared/git-admission-state'
 import { GitAdmissionScheduler } from '../git/command-runner/git-subprocess-admission'
 import type * as GitStatusModule from '../git/status'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import { RpcDispatcher } from './rpc/dispatcher'
 import { GIT_METHODS } from './rpc/methods/git'
 import { RuntimeGitStatusCommands } from './runtime-git-status-commands'
@@ -39,7 +39,7 @@ describe('runtime git status admission', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getRuntimeGitStatus: commands.getRuntimeGitStatus.bind(commands)
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     for (const admissionTier of ['background', 'interactive', 'future-tier']) {

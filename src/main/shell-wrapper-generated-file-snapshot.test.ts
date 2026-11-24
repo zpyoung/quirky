@@ -1,5 +1,5 @@
 /**
- * Byte-for-byte snapshots of every shell wrapper file Orca generates, for all
+ * Byte-for-byte snapshots of every shell wrapper file Quirky generates, for all
  * three transports (local PTY, daemon/SSH, relay overlay).
  *
  * Why: the zsh generators were unified behind one builder; these fixtures were
@@ -57,9 +57,9 @@ async function expectWrapperFiles(transport: string, root: string): Promise<void
 }
 
 /**
- * Every shell name the wrapper is allowed to write that is not Orca-namespaced.
+ * Every shell name the wrapper is allowed to write that is not Quirky-namespaced.
  *
- * Each is a deliberate contract with the shell or with Orca's own features, not
+ * Each is a deliberate contract with the shell or with Quirky's own features, not
  * scratch space: the history path, the config dir, the two PATH-shaped exports
  * agent overlays need, and the prompt-hook arrays the readiness and OSC 133
  * markers register through.
@@ -100,7 +100,7 @@ function foreignGlobalsWritten(content: string): string[] {
       LINE_START_ASSIGNMENT.exec(line)?.[1],
       ...[...line.matchAll(INLINE_EXPORT)].map((match) => match[1])
     ]) {
-      if (name && !/^_{0,2}orca_/i.test(name) && !CONTRACT_GLOBALS.has(name)) {
+      if (name && !/^_{0,2}quirky_/i.test(name) && !CONTRACT_GLOBALS.has(name)) {
         names.add(name)
       }
     }
@@ -117,15 +117,15 @@ describePosix('generated shell wrapper files', () => {
   let previousUserDataPath: string | undefined
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'orca-wrapper-snapshot-'))
-    previousUserDataPath = process.env.ORCA_USER_DATA_PATH
+    root = mkdtempSync(join(tmpdir(), 'quirky-wrapper-snapshot-'))
+    previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
   })
 
   afterEach(() => {
     if (previousUserDataPath === undefined) {
-      delete process.env.ORCA_USER_DATA_PATH
+      delete process.env.QUIRKY_USER_DATA_PATH
     } else {
-      process.env.ORCA_USER_DATA_PATH = previousUserDataPath
+      process.env.QUIRKY_USER_DATA_PATH = previousUserDataPath
     }
     rmSync(root, { recursive: true, force: true })
   })
@@ -136,7 +136,7 @@ describePosix('generated shell wrapper files', () => {
   })
 
   it('daemon wrappers', async () => {
-    process.env.ORCA_USER_DATA_PATH = root
+    process.env.QUIRKY_USER_DATA_PATH = root
     getDaemonShellLaunchConfig('/bin/zsh', STARTUP_COMMAND_FEATURES)
     await expectWrapperFiles('daemon', getDaemonShellReadyWrapperRoot())
   })
@@ -151,22 +151,25 @@ describePosix('generated shell wrapper files', () => {
     [
       'daemon',
       (): void => {
-        process.env.ORCA_USER_DATA_PATH = root
+        process.env.QUIRKY_USER_DATA_PATH = root
         getDaemonShellLaunchConfig('/bin/zsh', STARTUP_COMMAND_FEATURES)
       },
       (): string => getDaemonShellReadyWrapperRoot()
     ]
-  ])('%s wrappers write no shell global outside Orca’s namespace', (_transport, generate, dir) => {
-    generate()
+  ])(
+    '%s wrappers write no shell global outside Quirky’s namespace',
+    (_transport, generate, dir) => {
+      generate()
 
-    for (const [, relativePath] of WRAPPER_FILES) {
-      const content = readFileSync(join(dir(), relativePath), 'utf8')
-      expect({ [relativePath]: foreignGlobalsWritten(content) }).toEqual({ [relativePath]: [] })
+      for (const [, relativePath] of WRAPPER_FILES) {
+        const content = readFileSync(join(dir(), relativePath), 'utf8')
+        expect({ [relativePath]: foreignGlobalsWritten(content) }).toEqual({ [relativePath]: [] })
+      }
     }
-  })
+  )
 
   it('fish shell-ready init commands', async () => {
-    process.env.ORCA_USER_DATA_PATH = root
+    process.env.QUIRKY_USER_DATA_PATH = root
     const local = getLocalShellLaunchConfig('/usr/bin/fish', STARTUP_COMMAND_FEATURES)
     const daemon = getDaemonShellLaunchConfig('/usr/bin/fish', STARTUP_COMMAND_FEATURES)
     await expect(local.args?.[2]).toMatchFileSnapshot(snapshotPath('local', 'fish-init'))

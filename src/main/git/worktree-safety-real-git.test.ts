@@ -15,7 +15,7 @@ import { getBranchConflictKind, getBranchConflictKindViaExec } from './repo-bran
 import { clearGitCapabilityStateForTests } from './git-capability-state'
 import { GitBinaryTestFixture } from '../../shared/git-binary.test-fixture'
 
-const expectedVersion = process.env.ORCA_GIT_COMPAT_VERSION
+const expectedVersion = process.env.QUIRKY_GIT_COMPAT_VERSION
 let fixture: GitBinaryTestFixture
 let root = ''
 let repo = ''
@@ -38,7 +38,7 @@ async function initializeRepo(cwd: string): Promise<void> {
 }
 
 beforeAll(async () => {
-  root = await realpath(await mkdtemp(join(tmpdir(), 'orca-worktree-safety-')))
+  root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-worktree-safety-')))
   fixture = new GitBinaryTestFixture(root)
   await fixture.start()
   const { stdout } = await fixture.exec(['--version'])

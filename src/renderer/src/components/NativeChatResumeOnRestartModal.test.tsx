@@ -90,7 +90,7 @@ it('offers exactly Dismiss all and the resume action', async () => {
 })
 
 // Rows the sidebar showed as working for different reasons must read differently.
-it('says under each chat what it was doing when Orca went away', async () => {
+it('says under each chat what it was doing when Quirky went away', async () => {
   rpc.mockResolvedValue({
     sessions: [
       { ...offered[0], activity: { state: 'working', prompts: [], tasks: [] } },
@@ -139,7 +139,7 @@ it('fully dismisses the offer only through Dismiss all', async () => {
 })
 
 // Bookkeeping must never gate the user's own action: the dialog closes either way, and a dismissal
-// Orca could not confirm shows as the offer still sitting in the status bar, not as a toast.
+// Quirky could not confirm shows as the offer still sitting in the status bar, not as a toast.
 it('keeps a dismissal the host never confirmed in the status bar, without trapping the dialog', async () => {
   rpc.mockImplementation(async (_target, method) => {
     if (method === 'agentSession.restartResumable') {
@@ -501,7 +501,7 @@ it('reports the chats a lost resume request named once, as failed, until it is r
   continueFails = false
   await act(async () => show?.())
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
-    'Orca couldn’t resume this chat. Open it to continue manually.'
+    'Quirky couldn’t resume this chat. Open it to continue manually.'
   )
   await act(async () => button('Retry').click())
   expect(calls().at(-1)).toEqual(['agentSession.restartContinue', { sessionIds: ['b'] }])

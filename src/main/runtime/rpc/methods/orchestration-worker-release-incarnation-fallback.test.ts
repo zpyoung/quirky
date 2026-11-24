@@ -2,17 +2,17 @@ import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { ORCHESTRATION_METHODS } from './orchestration'
 import { eraseRpcMethods, type RpcContext } from '../core'
 import { OrchestrationDb } from '../../orchestration/db'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { completeWorkerTerminalRelease } from './orchestration/worker/worker-release-completion'
 
 describe('orchestration worker release incarnation fallback', () => {
   let db: OrchestrationDb
   let dbOpen = false
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let ctx: RpcContext
   let activeRunId: string
   let inspectProcessLiveness: MockInstance<
-    OrcaRuntimeService['inspectTerminalProcessIncarnationLiveness']
+    QuirkyRuntimeService['inspectTerminalProcessIncarnationLiveness']
   >
 
   const coordinatorPaneKey = 'tab_coord:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
@@ -22,7 +22,7 @@ describe('orchestration worker release incarnation fallback', () => {
   function setup(): void {
     db = new OrchestrationDb(':memory:')
     dbOpen = true
-    runtime = new OrcaRuntimeService()
+    runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     inspectProcessLiveness = vi
       .spyOn(runtime, 'inspectTerminalProcessIncarnationLiveness')
@@ -74,7 +74,7 @@ describe('orchestration worker release incarnation fallback', () => {
       status: 'running',
       exitCode: null
     })
-    vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('orca')
+    vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('quirky')
     vi.spyOn(runtime, 'sendTerminalAgentPrompt').mockResolvedValue({
       handle: 'term_worker',
       accepted: true,

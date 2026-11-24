@@ -41,7 +41,7 @@ export function isClaudeSubagentTask(message: Record<string, unknown>): boolean 
     return true
   }
   // Releases predating `task_type` still name the child in `subagent_type`. A
-  // task_type Orca does not recognise is NOT covered: it is a type this build
+  // task_type Quirky does not recognise is NOT covered: it is a type this build
   // has no reason to believe is an agent.
   return (
     (message.task_type === undefined || message.task_type === null) &&

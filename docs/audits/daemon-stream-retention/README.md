@@ -3,7 +3,7 @@
 Run from the worktree root after installing dependencies:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/daemon-stream-retention/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/daemon-stream-retention/reproduce.mjs
 ```
 
 The script bundles the current `DaemonStreamDataBatcher` with esbuild, then uses real loopback TCP sockets. It pauses the reader, feeds at most 8 MiB, honors the producer-pause callback, resumes the reader, and closes every socket in `finally`. It starts no PTY, agent, or application window. Output includes the bundle hash, queued payload sizes, RSS, and drain outcome.
@@ -27,7 +27,7 @@ The last 32 MiB retained another 33,596,928 queued payload bytes. The held queue
 The original measurement used Node v26.6.0 on macOS; the current reproduction records its runtime and should be run on the supported Node 24 toolchain. The historical build command was:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/daemon-stream-retention/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/daemon-stream-retention/reproduce.mjs
 ```
 
 This proves a current stalled-consumer retaining path. It does not attribute issue #19831's whole-system memory total to this path; that report lacks per-process measurements.

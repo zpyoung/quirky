@@ -48,7 +48,7 @@ describe('beginTerminalDockGutterDrag', () => {
   it('fires exactly one PTY resize on a committed release, after live row updates', async () => {
     const pane = makeFakePane()
     let flushCount = 0
-    pane.container.addEventListener('orca-pane-pty-resize-hold-flush', () => {
+    pane.container.addEventListener('quirky-pane-pty-resize-hold-flush', () => {
       flushCount += 1
     })
     const liveRows: number[] = []
@@ -91,7 +91,7 @@ describe('beginTerminalDockGutterDrag', () => {
   it('cancels without committing or resizing when the drag aborts', async () => {
     const pane = makeFakePane()
     let flushCount = 0
-    pane.container.addEventListener('orca-pane-pty-resize-hold-flush', () => {
+    pane.container.addEventListener('quirky-pane-pty-resize-hold-flush', () => {
       flushCount += 1
     })
     const liveRows: number[] = []
@@ -126,7 +126,7 @@ describe('beginTerminalDockGutterDrag', () => {
   it('settles exactly once, with no PTY resize, on a window blur with no prior movement', () => {
     const pane = makeFakePane()
     let flushCount = 0
-    pane.container.addEventListener('orca-pane-pty-resize-hold-flush', () => {
+    pane.container.addEventListener('quirky-pane-pty-resize-hold-flush', () => {
       flushCount += 1
     })
     const committedRows: number[] = []
@@ -157,7 +157,7 @@ describe('beginTerminalDockGutterDrag', () => {
   it('settles exactly once, with no PTY resize, when a release lands back on the starting row after moving away', async () => {
     const pane = makeFakePane()
     let flushCount = 0
-    pane.container.addEventListener('orca-pane-pty-resize-hold-flush', () => {
+    pane.container.addEventListener('quirky-pane-pty-resize-hold-flush', () => {
       flushCount += 1
     })
     const committedRows: number[] = []
@@ -192,7 +192,7 @@ describe('beginTerminalDockGutterDrag', () => {
   it('allows a fresh drag to commit normally after a prior drag was cancelled', async () => {
     const pane = makeFakePane()
     let flushCount = 0
-    pane.container.addEventListener('orca-pane-pty-resize-hold-flush', () => {
+    pane.container.addEventListener('quirky-pane-pty-resize-hold-flush', () => {
       flushCount += 1
     })
     const committedRows: number[] = []
@@ -259,7 +259,7 @@ describe('beginTerminalDockGutterDrag', () => {
   it('commits the final rows before the hold flushes, so a caller-driven mount change lands under the same flush', async () => {
     const pane = makeFakePane()
     let flushCount = 0
-    pane.container.addEventListener('orca-pane-pty-resize-hold-flush', () => {
+    pane.container.addEventListener('quirky-pane-pty-resize-hold-flush', () => {
       flushCount += 1
     })
     const order: string[] = []
@@ -354,7 +354,7 @@ describe('beginTerminalDockGutterDrag', () => {
   it('fits and flushes against the settled geometry, not a stale one, on a release that lands before the next frame applies the final row change', async () => {
     const pane = makeFakePane()
     let flushCount = 0
-    pane.container.addEventListener('orca-pane-pty-resize-hold-flush', () => {
+    pane.container.addEventListener('quirky-pane-pty-resize-hold-flush', () => {
       flushCount += 1
     })
     // Stands in for gutterRows-driven DOM geometry that a React state update commits

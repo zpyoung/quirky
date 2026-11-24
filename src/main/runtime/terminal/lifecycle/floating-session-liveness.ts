@@ -1,14 +1,14 @@
-import { OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory } from './pty-controller-inventory-refresh'
+import { QuirkyRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory } from './pty-controller-inventory-refresh'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { indexFloatingSnapshotPtyBindings } from '../../floating-snapshot-pty-bindings'
 import type {
   RuntimeLeafRecord,
   RuntimePtyWorktreeRecord
 } from '../../runtime-terminal-state-records'
-import { DISCONNECTED_PTY_RECORD_MAX } from '../../orca-runtime-postlude'
+import { DISCONNECTED_PTY_RECORD_MAX } from '../../quirky-runtime-postlude'
 import { notifyHeimdallMailboxArrival } from '../../../fork-heimdall/mailbox-wake-registry'
 
-export abstract class OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness extends OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory {
+export abstract class QuirkyRuntimeWithRefreshFloatingWorkspacePtyLiveness extends QuirkyRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory {
   protected refreshFloatingWorkspacePtyLiveness(): Set<string> | null {
     const controller = this.ptyController
     if (!controller?.hasPty) {

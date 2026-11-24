@@ -40,7 +40,7 @@ export function summarizeSshBulkRemove(args: {
       reason === 'managed-server'
         ? translate(
             'auto.components.settings.sshBulkRemove.skippedManaged',
-            '{{label}} has an Orca server.',
+            '{{label}} has an Quirky server.',
             { label: target.label }
           )
         : translate(

@@ -22,7 +22,9 @@ export const ASK_PREVIEW_DESIGN_TOKEN_ALLOWLIST = [
   '--radius'
 ] as const
 
-export function buildAskPreviewThemeTokenCss(styles: { getPropertyValue(name: string): string }): string {
+export function buildAskPreviewThemeTokenCss(styles: {
+  getPropertyValue(name: string): string
+}): string {
   const declarations: string[] = []
   for (const token of ASK_PREVIEW_DESIGN_TOKEN_ALLOWLIST) {
     const value = styles.getPropertyValue(token).trim()

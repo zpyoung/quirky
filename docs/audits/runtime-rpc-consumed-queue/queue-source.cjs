@@ -7,7 +7,7 @@ const esbuild = require('esbuild')
 const { applyPatch, parsePatch, reversePatch } = require('diff')
 const versions = require('./source-versions.json')
 
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function')
 const root = path.resolve(__dirname, '../../..')
 const readText = (file) => readFileSync(file, 'utf8').replace(/\r\n/g, '\n')

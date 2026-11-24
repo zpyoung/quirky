@@ -253,7 +253,7 @@ function FileExplorerFiles(): React.JSX.Element {
     <>
       <div
         ref={rowScrolling.setExplorerShellRef}
-        data-orca-explorer-shell
+        data-quirky-explorer-shell
         data-selected-folder-relative-path={
           selectedNode?.isDirectory ? selectedNode.relativePath : undefined
         }

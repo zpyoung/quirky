@@ -196,7 +196,7 @@ export function filterAutomationListRows(
   )
 }
 
-/** External jobs have no Orca agent, so any agent filter excludes them — matching the old view. */
+/** External jobs have no Quirky agent, so any agent filter excludes them — matching the old view. */
 export function filterExternalAutomationListEntries(
   entries: readonly ExternalAutomationListEntry[],
   filter: AutomationListFilter

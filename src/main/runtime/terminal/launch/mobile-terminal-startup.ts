@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithRunCreateMobileSessionTerminal } from './mobile-terminal-renderer-create'
+import { QuirkyRuntimeWithRunCreateMobileSessionTerminal } from './mobile-terminal-renderer-create'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
 import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -52,7 +52,7 @@ function normalizeOriginConnectionId(connectionId: string | null | undefined): s
   return connectionId?.trim() || null
 }
 
-export abstract class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends OrcaRuntimeWithRunCreateMobileSessionTerminal {
+export abstract class QuirkyRuntimeWithResolveMobileSessionTerminalCommand extends QuirkyRuntimeWithRunCreateMobileSessionTerminal {
   /** The `--resume` launch for a pane's recorded agent session, as the host window's cold restore builds it. */
   protected resolveMobileSessionResumeCommand(
     workspace: TerminalWorkspaceLaunchScope,
@@ -128,7 +128,7 @@ export abstract class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends
         // Why: mobile may be iOS while the shell host is Windows/macOS/Linux or SSH Linux; quote for the host shell.
         platform: launchRuntime.platform,
         shell: agentLaunchQuotingShell(launchRuntime),
-        // Why: SSH runs the CLI through the relay shim (plain `orca`), so the Linux-only `orca-ide` rename must not apply.
+        // Why: SSH runs the CLI through the relay shim (plain `quirky`), so the Linux-only `quirky-ide` rename must not apply.
         isRemote: Boolean(workspace.connectionId)
       }),
       prompt: opts.agentPrompt ?? '',

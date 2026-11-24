@@ -75,10 +75,10 @@ describe('getPRForBranch', () => {
   it('resolves fork PRs from the upstream PR repo with the origin head owner', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
       candidates: [
-        { owner: 'stablyai', repo: 'orca' },
-        { owner: 'fork', repo: 'orca' }
+        { owner: 'stablyai', repo: 'quirky' },
+        { owner: 'fork', repo: 'quirky' }
       ],
-      headRepo: { owner: 'fork', repo: 'orca' }
+      headRepo: { owner: 'fork', repo: 'quirky' }
     })
     ghExecFileAsyncMock.mockResolvedValueOnce({
       stdout: JSON.stringify([
@@ -104,8 +104,8 @@ describe('getPRForBranch', () => {
     )
     expect(pr).toMatchObject({
       number: 1738,
-      prRepo: { owner: 'stablyai', repo: 'orca' },
-      headRepo: { owner: 'fork', repo: 'orca' }
+      prRepo: { owner: 'stablyai', repo: 'quirky' },
+      headRepo: { owner: 'fork', repo: 'quirky' }
     })
   })
 

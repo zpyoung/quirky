@@ -3,7 +3,7 @@
  * Runs hidden; browser-agent-input-focus-isolation-native.spec.ts repeats it in a visible window.
  */
 
-import { test } from './helpers/orca-app'
+import { test } from './helpers/quirky-app'
 import {
   runAgentClicksScenario,
   runAgentCrossSiteFrameScenario,
@@ -13,36 +13,36 @@ import {
 import { runAgentClickDuringUserCompositionScenario } from './helpers/browser-agent-composition-scenario'
 
 test('agent keys and text reach the page without leaving the user’s terminal', async ({
-  orcaPage
+  quirkyPage
 }) => {
   test.setTimeout(120_000)
-  await runAgentKeysScenario(orcaPage)
+  await runAgentKeysScenario(quirkyPage)
 })
 
 test('agent clicks and presses reach the page without leaving the user’s terminal', async ({
-  orcaPage
+  quirkyPage
 }) => {
   test.setTimeout(120_000)
-  await runAgentClicksScenario(orcaPage)
+  await runAgentClicksScenario(quirkyPage)
 })
 
-test('agent shortcut keys stay in the page instead of running Orca shortcuts', async ({
-  orcaPage
+test('agent shortcut keys stay in the page instead of running Quirky shortcuts', async ({
+  quirkyPage
 }) => {
   test.setTimeout(120_000)
-  await runAgentShortcutsScenario(orcaPage)
+  await runAgentShortcutsScenario(quirkyPage)
 })
 
 test('agent keys and text reach a focused cross-site frame without moving the user’s focus', async ({
-  orcaPage
+  quirkyPage
 }) => {
   test.setTimeout(120_000)
-  await runAgentCrossSiteFrameScenario(orcaPage)
+  await runAgentCrossSiteFrameScenario(quirkyPage)
 })
 
 test('an agent click is refused while the user composes with an IME in the terminal', async ({
-  orcaPage
+  quirkyPage
 }) => {
   test.setTimeout(120_000)
-  await runAgentClickDuringUserCompositionScenario(orcaPage)
+  await runAgentClickDuringUserCompositionScenario(quirkyPage)
 })

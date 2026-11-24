@@ -197,7 +197,7 @@ export type RateLimitState = {
    */
   minimaxApiKeyConfigured: boolean
   /**
-   * True when main resolved an OpenCode Go API key (Orca settings,
+   * True when main resolved an OpenCode Go API key (Quirky settings,
    * OPENCODE_API_KEY, or what OpenCode stored on /connect). The key itself
    * never leaves main; the status bar ORs this with the session cookie to
    * decide whether the OpenCode Go bar stays visible.
@@ -212,7 +212,7 @@ export type RateLimitState = {
    */
   cursorAuthConfigured: boolean
   /**
-   * True when a GLM Coding Plan API key is saved in Orca's AI Provider
+   * True when a GLM Coding Plan API key is saved in Quirky's AI Provider
    * Accounts. The key itself never leaves main; the status bar uses this to
    * keep the ZCode bar visible across reloads between snapshot refreshes.
    */

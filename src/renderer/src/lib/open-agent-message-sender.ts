@@ -164,7 +164,7 @@ async function lookUpSender(
 /** A host before the lookup: a chat open here under its root id, as one never `/clear`ed is, or a
  *  terminal by its handle; anything else needs that host updated. */
 function lookUpOnOlderHost(party: Sender['party'], host: RuntimeClientTarget): Lookup {
-  const sessionId = party.orcaSessionId
+  const sessionId = party.quirkySessionId
   if (sessionId) {
     const state = useAppStore.getState()
     const tabsByWorktree = state.unifiedTabsByWorktree
@@ -200,7 +200,7 @@ function showLookupFailure(failure: LookupFailure): void {
       failure === 'older-host'
         ? ['unsupported']
         : failure === 'update'
-          ? ['updateOrcaToOpenChat']
+          ? ['updateQuirkyToOpenChat']
           : ['unreachable', 'tryAgain']
     )
   )

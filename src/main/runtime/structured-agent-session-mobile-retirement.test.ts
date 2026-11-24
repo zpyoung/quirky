@@ -74,7 +74,7 @@ describe('host prompt delivery and retirement', () => {
   ] as const)(
     'withdraws the prompt beside %s (announced earlier: %s)',
     async (outcome, announcedEarlier) => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-prompt-retirement-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-prompt-retirement-'))
       const controller = new RuntimeMobileNotificationController()
       try {
         let items = [USER, turn()]

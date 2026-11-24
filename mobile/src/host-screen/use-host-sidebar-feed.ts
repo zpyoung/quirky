@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import {
   SIDEBAR_INPUTS_SEMANTICS_VERSION,
   type SidebarInputsChangedEvent
@@ -95,4 +95,6 @@ export function useHostSidebarFeed(client: RpcClient | null): HostSidebarFeedCon
 /** Switch point: a page built without the feed reads none. */
 export const useSwitchedHostSidebarFeed: (
   client: RpcClient | null
-) => HostSidebarFeedControls | null = ORCA_SIDEBAR_INPUTS_IS_MAIN ? useHostSidebarFeed : () => null
+) => HostSidebarFeedControls | null = QUIRKY_SIDEBAR_INPUTS_IS_MAIN
+  ? useHostSidebarFeed
+  : () => null

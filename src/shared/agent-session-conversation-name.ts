@@ -1,4 +1,4 @@
-// The conversation name Orca recorded for one structured chat, normalized once
+// The conversation name Quirky recorded for one structured chat, normalized once
 // at the single boundary that writes it.
 //
 // The text is free-form and provider-supplied, so it is bounded and flattened

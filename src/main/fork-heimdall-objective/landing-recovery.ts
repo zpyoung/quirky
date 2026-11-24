@@ -25,7 +25,7 @@ import type { ObjectiveStore } from './objective-store'
 import { computeObjectiveWorktreeContentDigest } from './objective-workspace-manifest'
 import type { RecordLandingArgs } from './objective-store-data'
 
-const ATTEMPT_TRAILER = 'Orca-Heimdall-Attempt'
+const ATTEMPT_TRAILER = 'Quirky-Heimdall-Attempt'
 
 type LandingAction = CommitLocalBranchAction | PushRefAction | OpenHostedReviewAction
 

@@ -1,4 +1,4 @@
-// R3 gate (docs/reference/node-runtime-design.html, D7.1): swapping the process that hosts orcad
+// R3 gate (docs/reference/node-runtime-design.html, D7.1): swapping the process that hosts quirkyd
 // or the daemon is not a daemon protocol change, so one PR must not do both. A bump riding along
 // with a runtime swap would strand every live terminal on upgrade and rollback at once.
 // Usage: node check-runtime-launcher-protocol-ratchet.mjs --base <ref>
@@ -8,23 +8,23 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { DAEMON_PROTOCOL_SOURCE_PATH, parseDaemonProtocolFacts } from './daemon-protocol-facts.mjs'
 
-/** Files that decide which runtime executable launches orcad or the terminal daemon. */
+/** Files that decide which runtime executable launches quirkyd or the terminal daemon. */
 export const RUNTIME_LAUNCHER_PATHS = [
-  // orcad handoff to its bundled runtime, and the pinned runtimes it can hand off to.
-  'src/main/orcad/orcad-bundled-runtime.ts',
-  'src/main/orcad/launcher.ts',
-  'config/scripts/orcad-entry-build.mjs',
+  // quirkyd handoff to its bundled runtime, and the pinned runtimes it can hand off to.
+  'src/main/quirkyd/quirkyd-bundled-runtime.ts',
+  'src/main/quirkyd/launcher.ts',
+  'config/scripts/quirkyd-entry-build.mjs',
   'src/shared/node-runtime-pin.ts',
   'src/main/node-runtime/pinned-runtime-materializer.ts',
   'src/main/node-runtime/runtime-archive-download.ts',
-  'src/main/managed-server/install/orcad-remote-node-runtime.ts',
-  // orcad slot layout: which runtime file a packaged slot carries.
-  'src/shared/orcad-artifacts.ts',
-  'config/scripts/build-orcad.mjs',
-  'config/scripts/build-orcad-node.mjs',
-  'config/scripts/build-orcad-template.mjs',
+  'src/main/managed-server/install/quirkyd-remote-node-runtime.ts',
+  // quirkyd slot layout: which runtime file a packaged slot carries.
+  'src/shared/quirkyd-artifacts.ts',
+  'config/scripts/build-quirkyd.mjs',
+  'config/scripts/build-quirkyd-node.mjs',
+  'config/scripts/build-quirkyd-template.mjs',
   // Remote slot runtime selection.
-  'src/main/managed-server/install/orcad-remote-runtime.ts',
+  'src/main/managed-server/install/quirkyd-remote-runtime.ts',
   // Terminal daemon host launch: which executable the daemon child is forked from.
   'src/main/daemon/daemon-launched-child.ts',
   'src/main/daemon/daemon-launched-child-spawn.ts',
@@ -33,7 +33,7 @@ export const RUNTIME_LAUNCHER_PATHS = [
   'src/main/daemon/daemon-host-manifest.ts'
 ]
 
-export const RUNTIME_PROTOCOL_OVERRIDE_ENV = 'ORCA_ALLOW_RUNTIME_LAUNCHER_PROTOCOL_BUMP'
+export const RUNTIME_PROTOCOL_OVERRIDE_ENV = 'QUIRKY_ALLOW_RUNTIME_LAUNCHER_PROTOCOL_BUMP'
 export const RUNTIME_PROTOCOL_OVERRIDE_LABEL = 'allow-runtime-launcher-protocol-bump'
 
 function git(repoRoot, args) {

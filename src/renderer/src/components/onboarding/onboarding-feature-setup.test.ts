@@ -6,8 +6,8 @@ import type {
 import {
   buildAgentFeatureSkillInstallCommand,
   COMPUTER_USE_SKILL_NAME,
-  ORCA_CLI_SKILL_NAME,
-  ORCA_LINEAR_SKILL_NAME,
+  QUIRKY_CLI_SKILL_NAME,
+  QUIRKY_LINEAR_SKILL_NAME,
   ORCHESTRATION_SKILL_NAME
 } from '@/lib/agent-feature-install-commands'
 import { BROWSER_USE_ENABLED_STORAGE_KEY } from '@/lib/browser-use-setup-state'
@@ -24,13 +24,13 @@ import {
 } from './onboarding-feature-setup'
 import { getOnboardingFeatureSetupAgentRuntime } from './onboarding-feature-setup-runtime'
 import { SKILLS_CLI_VERSION } from '../../../../shared/agent-feature-install-commands'
-import { ORCA_SKILLS_REPOSITORY_URL } from '../../../../shared/fork-skills-repository/skills-repository-url'
+import { QUIRKY_SKILLS_REPOSITORY_URL } from '../../../../shared/fork-skills-repository/skills-repository-url'
 
 const ALL_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
-  ORCA_CLI_SKILL_NAME,
+  QUIRKY_CLI_SKILL_NAME,
   COMPUTER_USE_SKILL_NAME,
   ORCHESTRATION_SKILL_NAME,
-  ORCA_LINEAR_SKILL_NAME
+  QUIRKY_LINEAR_SKILL_NAME
 ])
 const ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
   ORCHESTRATION_SKILL_NAME
@@ -38,7 +38,7 @@ const ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCo
 
 const GRANTED_COMPUTER_USE_STATUS: ComputerUsePermissionStatusResult = {
   platform: 'darwin',
-  helperAppPath: '/Applications/Orca Computer Use.app',
+  helperAppPath: '/Applications/Quirky Computer Use.app',
   helperUnavailableReason: null,
   permissions: [
     { id: 'accessibility', status: 'granted' },
@@ -48,7 +48,7 @@ const GRANTED_COMPUTER_USE_STATUS: ComputerUsePermissionStatusResult = {
 
 const OPENED_COMPUTER_USE_SETUP: ComputerUsePermissionSetupResult = {
   platform: 'darwin',
-  helperAppPath: '/Applications/Orca.app',
+  helperAppPath: '/Applications/Quirky.app',
   openedSettings: true,
   launchedHelper: true
 }
@@ -109,7 +109,7 @@ describe('onboarding feature setup runner', () => {
 
     expect(text).toBe(ALL_SKILL_INSTALL_COMMAND)
     expect(text).toBe(
-      `npx skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${ORCA_BUILD_COMMIT} --skill orca-cli --skill computer-use --skill orchestration --skill orca-linear --global`
+      `npx skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${QUIRKY_BUILD_COMMIT} --skill quirky-cli --skill computer-use --skill orchestration --skill quirky-linear --global`
     )
   })
 
@@ -160,7 +160,7 @@ describe('onboarding feature setup runner', () => {
       getComputerUsePermissionStatus: vi.fn(
         async (): Promise<ComputerUsePermissionStatusResult> => ({
           platform: 'darwin',
-          helperAppPath: '/Applications/Orca Computer Use.app',
+          helperAppPath: '/Applications/Quirky Computer Use.app',
           helperUnavailableReason: null,
           permissions: [
             { id: 'accessibility', status: 'not-granted' },
@@ -275,7 +275,7 @@ describe('onboarding feature setup runner', () => {
     const unavailableStatus: ComputerUsePermissionStatusResult = {
       platform: 'darwin',
       helperAppPath: null,
-      helperUnavailableReason: 'Orca Computer Use.app was not found',
+      helperUnavailableReason: 'Quirky Computer Use.app was not found',
       permissions: [
         { id: 'accessibility', status: 'not-granted' },
         { id: 'screenshots', status: 'not-granted' }
@@ -296,7 +296,7 @@ describe('onboarding feature setup runner', () => {
     expect(openComputerUsePermissionSetup).not.toHaveBeenCalled()
     expect(result.warnings).toContainEqual({
       featureId: 'computerUse',
-      message: 'Orca Computer Use.app was not found'
+      message: 'Quirky Computer Use.app was not found'
     })
   })
 })

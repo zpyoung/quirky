@@ -9,10 +9,10 @@ The fix calls the existing `stopTuiHistoryCatchup` callback after the verified t
 From the repository root with existing dependencies installed:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/tui-transcript-close/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/tui-transcript-close/reproduce.mjs
 ```
 
-The proof uses the actual structured host, record store, journal, handoff coordinator, and transcript watcher against a temporary synthetic Codex transcript. Only provider process acquisition/stop is a test transport; no real shell or Orca window launches. It removes the single cleanup call in a temporary Vite transform for the baseline, then runs the same four tests against the fixed source. It uses the repository's `runProcess` and cleans temporary configurations/module files. Source hashes are recorded in `results.json`.
+The proof uses the actual structured host, record store, journal, handoff coordinator, and transcript watcher against a temporary synthetic Codex transcript. Only provider process acquisition/stop is a test transport; no real shell or Quirky window launches. It removes the single cleanup call in a temporary Vite transform for the baseline, then runs the same four tests against the fixed source. It uses the repository's `runProcess` and cleans temporary configurations/module files. Source hashes are recorded in `results.json`.
 
 | Version    | Passed | Failed |
 | ---------- | -----: | -----: |

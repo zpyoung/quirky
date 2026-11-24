@@ -12,9 +12,9 @@ const {
   canceledNativeRejection
 } = require('./scenario.cjs')
 
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function')
-process.env.ORCA_APP_VERSION = 'synthetic-cwd-validation-audit'
+process.env.QUIRKY_APP_VERSION = 'synthetic-cwd-validation-audit'
 function checkCrlfLoader() {
   const baseline = loadSources()
   let syntheticCrlfReads = 0

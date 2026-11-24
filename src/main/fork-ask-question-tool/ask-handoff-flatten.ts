@@ -101,7 +101,9 @@ function parseAnswerLine(question: AskQuestion, text: string): AskAnswer | null 
         return null
       }
       const option = findOptionByValueOrLabel(question.options, raw)
-      return option ? { value: option.value, label: option.label, source: 'option' } : { value: raw, source: 'other' }
+      return option
+        ? { value: option.value, label: option.label, source: 'option' }
+        : { value: raw, source: 'other' }
     }
     case 'multiselect': {
       const tokens = text
@@ -152,7 +154,12 @@ function parseAnswerLine(question: AskQuestion, text: string): AskAnswer | null 
   }
 }
 
-function applyWholeReplyToFirstQuestion(spec: AskSpec, reply: string, answers: AskAnswers, skipped: string[]): void {
+function applyWholeReplyToFirstQuestion(
+  spec: AskSpec,
+  reply: string,
+  answers: AskAnswers,
+  skipped: string[]
+): void {
   const [first, ...rest] = spec.questions
   if (first) {
     const answer = buildFallbackAnswer(first, reply)

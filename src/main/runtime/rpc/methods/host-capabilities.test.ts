@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 
 const { isGitBashAvailable } = vi.hoisted(() => ({
   isGitBashAvailable: vi.fn()
@@ -23,7 +23,7 @@ describe('host capability RPC methods', () => {
 
   it('reports shell capability probes through explicit methods', async () => {
     isGitBashAvailable.mockReturnValue(true)
-    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: HOST_CAPABILITY_METHODS })
 
     await expect(

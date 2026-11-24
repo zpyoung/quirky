@@ -35,9 +35,9 @@ function inheritedProfile(): Record<string, string> {
     XDG_STATE_HOME: join(tmpdir(), 'old-account', 'state'),
     OPENCODE_DB: 'opencode.db',
     OPENCODE_AUTH_CONTENT: '',
-    ORCA_DATA_ACCOUNT_DATA_HOME: join(tmpdir(), 'old-account', 'data'),
-    ORCA_DATA_ACCOUNT_STATE_HOME: join(tmpdir(), 'old-account', 'state'),
-    ORCA_DATA_ACCOUNT_PROVIDER: 'opencode'
+    QUIRKY_DATA_ACCOUNT_DATA_HOME: join(tmpdir(), 'old-account', 'data'),
+    QUIRKY_DATA_ACCOUNT_STATE_HOME: join(tmpdir(), 'old-account', 'state'),
+    QUIRKY_DATA_ACCOUNT_PROVIDER: 'opencode'
   }
 }
 
@@ -54,7 +54,7 @@ describe('managed account inherited environment', () => {
       const env: Record<string, string> = {}
       applyManagedDataAccountEnvironment(env, { launchCommand: `sleep 30 && ${agent}` })
       expect(env.XDG_DATA_HOME).toBe(selected.value.XDG_DATA_HOME)
-      expect(env.ORCA_DATA_ACCOUNT_PROVIDER).toBe(agent === 'devin' ? 'devin' : 'opencode')
+      expect(env.QUIRKY_DATA_ACCOUNT_PROVIDER).toBe(agent === 'devin' ? 'devin' : 'opencode')
     }
   )
 
@@ -72,11 +72,11 @@ describe('managed account inherited environment', () => {
     expect(env.XDG_STATE_HOME).toBeUndefined()
     expect(env.OPENCODE_DB).toBe('user.db')
     expect(env.OPENCODE_AUTH_CONTENT).toBe('user-config')
-    expect(Object.keys(env).some((key) => key.startsWith('ORCA_DATA_ACCOUNT'))).toBe(false)
+    expect(Object.keys(env).some((key) => key.startsWith('QUIRKY_DATA_ACCOUNT'))).toBe(false)
     const final = createDaemonPtyEnvironment({ sessionId: 'test', cols: 80, rows: 24, env })
     expect(final.XDG_DATA_HOME).toBe(join(tmpdir(), 'user-data'))
     expect(final.XDG_STATE_HOME).toBeUndefined()
-    expect(final.ORCA_DATA_ACCOUNT_DATA_HOME).toBeUndefined()
+    expect(final.QUIRKY_DATA_ACCOUNT_DATA_HOME).toBeUndefined()
   })
 
   it('keeps a fresh selection after the daemon restores its own parent profile', () => {
@@ -104,6 +104,6 @@ describe('managed account inherited environment', () => {
     expect(env.XDG_DATA_HOME).toBeUndefined()
     expect(env.XDG_STATE_HOME).toBeUndefined()
     expect(env.OPENCODE_DB).toBeUndefined()
-    expect(Object.keys(env).some((key) => key.startsWith('ORCA_DATA_ACCOUNT'))).toBe(false)
+    expect(Object.keys(env).some((key) => key.startsWith('QUIRKY_DATA_ACCOUNT'))).toBe(false)
   })
 })

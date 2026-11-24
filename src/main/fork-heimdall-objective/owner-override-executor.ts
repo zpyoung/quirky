@@ -2,7 +2,7 @@ import {
   ReportValidationProvenanceSchema,
   type ActionOutcome
 } from '../../shared/fork-heimdall/effect-certainty'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { getLatestAttempts } from '../../shared/fork-heimdall/ledger-queries'
 import type { AttemptEntry, WatcherLedger } from '../../shared/fork-heimdall/ledger-types'
 import type { ExecuteContext } from '../../shared/fork-heimdall/kind-contract'
@@ -116,7 +116,7 @@ export async function acceptOwnerReport(args: {
   binding: ObjectiveSnapshotBinding
   context: ExecuteContext<ObjectiveWorld>
   objectiveStore: ObjectiveStore
-  runtime?: OrcaRuntimeService
+  runtime?: QuirkyRuntimeService
 }): Promise<ActionOutcome> {
   const origin = findObjectiveDispatchAttempt(args.context.ledger, args.action.dispatchId)
   if (

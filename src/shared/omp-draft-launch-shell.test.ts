@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { buildAgentDraftLaunchPlan } from './tui-agent-startup'
 
 const shells = ['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish'].filter(
@@ -23,7 +23,7 @@ it.each(
 )(
   'clears the draft and preserves status in $shell (nounset=$nounset)',
   async ({ shell, nounset }) => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-omp-draft-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-omp-draft-'))
     try {
       const config = join(root, 'fresh settings.yml')
       const calls = join(root, 'calls')
@@ -39,12 +39,12 @@ it.each(
       }
       const define =
         shell === 'fish'
-          ? 'function omp; printf "%s\\n" "$ORCA_OMP_PREFILL" >> "$CAPTURE"; printf agent-stderr >&2; return 17; end; '
-          : 'omp() { printf "%s\\n" "$ORCA_OMP_PREFILL" >> "$CAPTURE"; printf agent-stderr >&2; return 17; }; '
+          ? 'function omp; printf "%s\\n" "$QUIRKY_OMP_PREFILL" >> "$CAPTURE"; printf agent-stderr >&2; return 17; end; '
+          : 'omp() { printf "%s\\n" "$QUIRKY_OMP_PREFILL" >> "$CAPTURE"; printf agent-stderr >&2; return 17; }; '
       const observe =
         shell === 'fish'
-          ? '; set -l result $status; set -q ORCA_OMP_PREFILL; and exit 91; exit $result'
-          : '; result=$?; test -z "${ORCA_OMP_PREFILL+x}" || exit 91; exit "$result"'
+          ? '; set -l result $status; set -q QUIRKY_OMP_PREFILL; and exit 91; exit $result'
+          : '; result=$?; test -z "${QUIRKY_OMP_PREFILL+x}" || exit 91; exit "$result"'
       for (const present of [true, false]) {
         if (!present) {
           await rm(config)
@@ -53,7 +53,7 @@ it.each(
           program: shell,
           args: ['-c', (nounset ? 'set -u; ' : '') + define + plan.launchCommand + observe],
           cwd: root,
-          env: { ...process.env, ...plan.env, ORCA_OMP_FRESH_CONFIG: config, CAPTURE: calls }
+          env: { ...process.env, ...plan.env, QUIRKY_OMP_FRESH_CONFIG: config, CAPTURE: calls }
         })
         expect(result.code, result.stderr).toBe(present ? 17 : 1)
         expect(result.stderr).toContain(

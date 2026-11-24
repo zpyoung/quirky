@@ -28,7 +28,7 @@ export function buildNewTabAgentMenuRows(args: {
   settings: NewTabAgentMenuSettings | null | undefined
   /** The agents detected on the workspace's machine. */
   detectedOnHost: readonly TuiAgent[] | null
-  /** The agents Orca can open as a chat. */
+  /** The agents Quirky can open as a chat. */
   chatAgents: readonly TuiAgent[]
   hostChatAnswer: (agent: TuiAgent) => HostChatAnswer
 }): NewTabAgentMenuRow[] {

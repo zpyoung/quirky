@@ -5,14 +5,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { _resetSecretStoreForTests, setSecretStore } from '../../shared/secret-store'
 import { savedCredentialUnreadable } from './saved-credential-readability'
 
-const PREFIX = 'orca-test-key:v1:'
+const PREFIX = 'quirky-test-key:v1:'
 const SEAL = 'sealed-here:'
 
 let dir: string
 let path: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-saved-credential-readability-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-saved-credential-readability-'))
   path = join(dir, 'key.enc')
   setSecretStore({
     isEncryptionAvailable: () => true,

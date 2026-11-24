@@ -6,9 +6,9 @@ describe('worktreePathComparisonKey bytes', () => {
   it.each<[string, NodeJS.Platform, string]>([
     ['/home/dev/Repo/', 'linux', 'posix:/home/dev/Repo'],
     ['/home/dev/./a/../Repo', 'win32', 'posix:/home/dev/Repo'],
-    ['/private/tmp/orca/feature', 'darwin', 'posix:/tmp/orca/feature'],
+    ['/private/tmp/quirky/feature', 'darwin', 'posix:/tmp/quirky/feature'],
     ['/private/tmp', 'darwin', 'posix:/tmp'],
-    ['/private/tmp/orca/feature', 'linux', 'posix:/private/tmp/orca/feature'],
+    ['/private/tmp/quirky/feature', 'linux', 'posix:/private/tmp/quirky/feature'],
     ['C:/Workspaces/Feature', 'darwin', 'windows:c:\\workspaces\\feature'],
     ['\\\\Server\\Share\\Feature', 'linux', 'windows:\\\\server\\share\\feature'],
     ['//server/share/Feature', 'darwin', 'windows:\\\\server\\share\\feature'],

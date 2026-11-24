@@ -85,7 +85,7 @@ export class AcpTimelineTranslator {
     return this.finishPrompt(clientMessageId, result.stopReason, at)
   }
 
-  /** The prompt failed: the agent's own error answer, or an answer Orca could not read (then no
+  /** The prompt failed: the agent's own error answer, or an answer Quirky could not read (then no
    *  words are the agent's, and the row says only that the turn failed). A closed connection never
    *  reaches here. */
   promptFailed(clientMessageId: string, error: Error, at: number): ProviderTimelineEvent[] {

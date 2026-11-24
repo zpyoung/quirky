@@ -26,11 +26,11 @@ describe('renderer document navigation', () => {
   }
 
   it('accepts the packaged renderer document but not a blocked external load', () => {
-    const fixture = createFixture('file:///opt/orca/renderer/index.html')
+    const fixture = createFixture('file:///opt/quirky/renderer/index.html')
 
     fixture.navigate?.({}, 'https://github.com/stablyai/orca/issues', false, true)
     expect(fixture.onStarted).not.toHaveBeenCalled()
-    fixture.navigate?.({}, 'file:///opt/orca/renderer/index.html?reload=1', false, true)
+    fixture.navigate?.({}, 'file:///opt/quirky/renderer/index.html?reload=1', false, true)
     expect(fixture.onStarted).toHaveBeenCalledOnce()
   })
 
@@ -131,14 +131,14 @@ describe('renderer document navigation', () => {
   it('does not cancel a navigation after its document commits', () => {
     const cancel = vi.fn()
     const fixture = createFixture(
-      'file:///opt/orca/renderer/index.html',
+      'file:///opt/quirky/renderer/index.html',
       vi.fn(() => cancel)
     )
 
-    fixture.navigate?.({}, 'file:///opt/orca/renderer/index.html?reload=1', false, true)
+    fixture.navigate?.({}, 'file:///opt/quirky/renderer/index.html?reload=1', false, true)
     fixture.commitNavigation?.(
       {},
-      'file:///opt/orca/renderer/index.html?reload=1',
+      'file:///opt/quirky/renderer/index.html?reload=1',
       -1,
       '',
       true,
@@ -149,7 +149,7 @@ describe('renderer document navigation', () => {
       {},
       -3,
       'aborted',
-      'file:///opt/orca/renderer/index.html?reload=1',
+      'file:///opt/quirky/renderer/index.html?reload=1',
       true,
       1,
       1

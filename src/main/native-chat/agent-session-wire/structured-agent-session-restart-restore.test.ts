@@ -21,7 +21,7 @@ import { restoreStructuredAgentSessionsOnRestart } from './structured-agent-sess
 import { recordingStructuredAgentSessionLogger } from './structured-agent-session-logger-test-support'
 
 // The restore under test is mocked; the host database only fills the deps' shape.
-const stateDirectory = mkdtempSync(join(tmpdir(), 'orca-restart-restore-'))
+const stateDirectory = mkdtempSync(join(tmpdir(), 'quirky-restart-restore-'))
 afterAll(() => {
   closeTestJournalHostDatabases()
   rmSync(stateDirectory, { recursive: true, force: true })

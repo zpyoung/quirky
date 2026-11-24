@@ -17,7 +17,7 @@ import { restoreProfileStateDatabaseBackup } from './profile-state-database-reco
 vi.mock('electron', () => ({
   app: {
     getPath: () => tmpdir(),
-    getName: () => 'orca-test',
+    getName: () => 'quirky-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
     on: () => {},
@@ -37,11 +37,11 @@ vi.mock('../../ssh/config/ssh-config-parser', () => ({
 }))
 
 it('can publish an explicit JSON export at a reused revision after SQLite rollback', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-database-rollback-export-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-database-rollback-export-'))
   const directory = join(root, 'profiles', 'rollback-export')
   mkdirSync(directory, { recursive: true })
   const databasePath = join(directory, 'profile-state.db')
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const profileId = 'rollback-export'
   const stores: Store[] = []
   try {
@@ -99,10 +99,10 @@ it('can publish an explicit JSON export at a reused revision after SQLite rollba
 })
 
 it('leaves an explicit rollback path when stale JSON conflicts with SQLite', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-store-profile-state-compat-failure-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-store-profile-state-compat-failure-'))
   const directory = join(root, 'profiles', 'profile-authority-test')
   mkdirSync(directory, { recursive: true })
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const databasePath = join(directory, 'profile-state.db')
   writeFileSync(dataFile, JSON.stringify({ settings: { theme: 'light' } }), 'utf8')
 

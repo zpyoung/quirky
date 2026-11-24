@@ -1,10 +1,10 @@
 import type { AgentSessionRecord } from '../../../../../shared/agent-session-record'
 import {
-  formatOrcaSessionAddress,
-  type OrcaSessionId
-} from '../../../../../shared/orca-session-address'
+  formatQuirkySessionAddress,
+  type QuirkySessionId
+} from '../../../../../shared/quirky-session-address'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as CODES } from '../../../../../shared/orchestration-session-caller-codes'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 import type { WorkerStartModeReceipt } from '../orchestration-worker-start-mode'
 import { observeChatAssignee } from '../../../orchestration/chat-assignee'
 import type { OrchestrationDb } from '../../../orchestration/db'
@@ -15,12 +15,12 @@ import { refuseUndeliverableSessionRecipient } from './messaging/session-recipie
 
 const NO_EFFECTS = 'No effects were applied.'
 
-/** A chat has no pane or process; its Dispatch names it by its Orca session ID alone. */
+/** A chat has no pane or process; its Dispatch names it by its Quirky session ID alone. */
 export const CHAT_WORKER_AUTHORITY = { paneKey: null, processIncarnation: null } as const
 
 /** The chat a Dispatch assignee party names; null for a terminal or a structured worker. */
-export function chatAssigneeOf(party: OrchestrationParty): OrcaSessionId | null {
-  return party.terminalHandle === null ? party.orcaSessionId : null
+export function chatAssigneeOf(party: OrchestrationParty): QuirkySessionId | null {
+  return party.terminalHandle === null ? party.quirkySessionId : null
 }
 
 /**
@@ -28,15 +28,15 @@ export function chatAssigneeOf(party: OrchestrationParty): OrcaSessionId | null 
  * task and the coordinator's mail reach it the same way. Returns the session running it now.
  */
 export async function admitChatAssignee(
-  runtime: Pick<OrcaRuntimeService, 'ensureStructuredAgentSessionHost'>,
-  sessionId: OrcaSessionId,
+  runtime: Pick<QuirkyRuntimeService, 'ensureStructuredAgentSessionHost'>,
+  sessionId: QuirkySessionId,
   db: OrchestrationDb
 ): Promise<AgentSessionRecord> {
   // A failed install leaves no store, which the refusal below names.
   await runtime.ensureStructuredAgentSessionHost().catch(() => undefined)
   const store = readAgentSessionRecordStore()
   const refusal = refuseUndeliverableSessionRecipient(
-    { sessionId, address: formatOrcaSessionAddress(sessionId) },
+    { sessionId, address: formatQuirkySessionAddress(sessionId) },
     store,
     db,
     NO_EFFECTS
@@ -57,14 +57,14 @@ export async function admitChatAssignee(
 
 /** A coordinator can't be its own worker: it would answer its own task forever. */
 export function refuseChatSelfAssignment(args: {
-  sessionId: OrcaSessionId
-  coordinatorSessionId: OrcaSessionId | null | undefined
+  sessionId: QuirkySessionId
+  coordinatorSessionId: QuirkySessionId | null | undefined
   remedy: string
 }): void {
   if (args.sessionId === args.coordinatorSessionId) {
     throw new OrchestrationError(
       'terminal_is_coordinator',
-      `${formatOrcaSessionAddress(args.sessionId)} is this coordinator's own Orca session ID. ${args.remedy}`
+      `${formatQuirkySessionAddress(args.sessionId)} is this coordinator's own Quirky session ID. ${args.remedy}`
     )
   }
 }
@@ -72,12 +72,12 @@ export function refuseChatSelfAssignment(args: {
 /** A chat adopted as a worker is given the task, not launched; the decided mode stands. */
 export function chatWorkerMode(
   mode: WorkerStartModeReceipt,
-  chat: OrcaSessionId | null
+  chat: QuirkySessionId | null
 ): WorkerStartModeReceipt {
   return chat
     ? {
         ...mode,
-        detail: `--terminal names the chat ${formatOrcaSessionAddress(chat)}; its task goes to that chat and no agent is launched.`
+        detail: `--terminal names the chat ${formatQuirkySessionAddress(chat)}; its task goes to that chat and no agent is launched.`
       }
     : mode
 }

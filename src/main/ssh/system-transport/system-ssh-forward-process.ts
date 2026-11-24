@@ -35,7 +35,7 @@ export function spawnSystemSshPortForward(
     )
   }
   const args = buildSystemSshPortForwardArgs(target, localPort, remoteHost, remotePort, options)
-  // Why: port-forward ssh processes are not wired to Orca credential prompts;
+  // Why: port-forward ssh processes are not wired to Quirky credential prompts;
   // system SSH forwards must authenticate via OpenSSH config, agent, or control socket.
   return spawn(sshPath, args, {
     stdio: ['ignore', 'ignore', 'pipe'],
@@ -53,7 +53,7 @@ export function buildSystemSshPortForwardArgs(
   const args = buildForwardProcessSshArgs(target, options)
   const destinationIndex = args.lastIndexOf('--')
   // Why `no`: this second login re-reads the host's ssh_config, so a LocalForward/RemoteForward
-  // there collides with the one Orca's main connection already holds, and `yes` exits on it.
+  // there collides with the one Quirky's main connection already holds, and `yes` exits on it.
   // ClearAllForwardings would also drop this -L; stopOnOwnListenFailure checks ours instead.
   const forwardArgs = [
     '-N',

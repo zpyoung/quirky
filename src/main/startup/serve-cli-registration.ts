@@ -13,11 +13,11 @@ export async function registerCliForHeadlessServe(): Promise<void> {
       }
     }).install()
     console.log(
-      `[serve] orca CLI install: ${cliStatus.state}${cliStatus.commandPath ? ` (${cliStatus.commandPath})` : ''}`
+      `[serve] quirky CLI install: ${cliStatus.state}${cliStatus.commandPath ? ` (${cliStatus.commandPath})` : ''}`
     )
   } catch (error) {
     console.warn(
-      '[serve] orca CLI install skipped:',
+      '[serve] quirky CLI install skipped:',
       error instanceof Error ? error.message : String(error)
     )
   }

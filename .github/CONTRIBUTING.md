@@ -11,7 +11,7 @@ pnpm install
 pnpm dev
 ```
 
-Set `ORCA_DEV_MAIN_SOURCEMAPS=0` before `pnpm dev` to cut main-process rebuild cost when you don't
+Set `QUIRKY_DEV_MAIN_SOURCEMAPS=0` before `pnpm dev` to cut main-process rebuild cost when you don't
 need its source maps.
 
 ## Rules

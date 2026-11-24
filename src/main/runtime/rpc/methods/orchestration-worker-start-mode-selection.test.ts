@@ -4,12 +4,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { OrchestrationDb } from '../../orchestration/db'
 import { ORCHESTRATION_METHODS } from './orchestration'
 
 const STRUCTURED_HANDLE = 'structworker_abc'
-// A real Orca session ID: a minted worker's preamble names it by this, not its handle.
+// A real Quirky session ID: a minted worker's preamble names it by this, not its handle.
 const STRUCTURED_SESSION_ID = '9c2e4b7a-1d3f-4a6e-8b5c-7f0a2d9e6c41'
 const TERMINAL_HANDLE = 'term_worker'
 
@@ -48,7 +48,7 @@ const STRUCTURED_DEFAULT = {
 describe('worker-start honours the settings default', () => {
   const coordinatorPaneKey = 'tab_coord:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let runId: string
 
   beforeEach(() => {
@@ -56,7 +56,7 @@ describe('worker-start honours the settings default', () => {
     createExistingWorktreeWorkerTerminal.mockClear()
     sendStructuredWorkerPreamble.mockClear()
     db = new OrchestrationDb(':memory:')
-    runtime = new OrcaRuntimeService()
+    runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     runId = db.createRun({
       objective: 'Settings-driven worker mode',
@@ -87,7 +87,7 @@ describe('worker-start honours the settings default', () => {
       status: 'running',
       exitCode: null
     })
-    vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('orca')
+    vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('quirky')
     vi.spyOn(runtime, 'sendTerminalAgentPrompt').mockResolvedValue({
       handle: TERMINAL_HANDLE,
       accepted: true,
@@ -161,7 +161,9 @@ describe('worker-start honours the settings default', () => {
     expect(createStructuredWorkerSessionForWorktree).toHaveBeenCalledTimes(1)
     expect(createExistingWorktreeWorkerTerminal).not.toHaveBeenCalled()
     const preamble = sendStructuredWorkerPreamble.mock.calls[0]![0].preamble
-    expect(preamble).toContain(`Your Orca session ID is: orca_session_id:${STRUCTURED_SESSION_ID}`)
+    expect(preamble).toContain(
+      `Your Quirky session ID is: quirky_session_id:${STRUCTURED_SESSION_ID}`
+    )
     expect(preamble).toContain('The coordinator cannot see this chat')
     expect(preamble).toContain('it will send this chat a fresh')
     expect(preamble).not.toContain('this terminal')

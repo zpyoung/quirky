@@ -26,7 +26,7 @@ import {
 vi.mock('electron', () => ({
   app: {
     getPath: () => tmpdir(),
-    getName: () => 'orca-test',
+    getName: () => 'quirky-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
     on: () => {},
@@ -74,7 +74,7 @@ afterEach(() => {
 })
 
 function createDirectory(): string {
-  const root = mkdtempSync(join(tmpdir(), 'orca-profile-state-bootstrap-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-profile-state-bootstrap-'))
   temporaryDirectories.push(root)
   const directory = join(root, 'profiles', 'profile-bootstrap-test')
   mkdirSync(directory, { recursive: true })
@@ -87,7 +87,7 @@ function paths(directory: string): {
   profileId: string
 } {
   return {
-    dataFile: join(directory, 'orca-data.json'),
+    dataFile: join(directory, 'quirky-data.json'),
     databaseFile: profileStateDatabaseFile(directory),
     profileId: 'profile-bootstrap-test'
   }
@@ -270,7 +270,7 @@ describe('profile state authority bootstrap', () => {
       'Profile state storage changed while creating an empty database'
     )
     expect(readFileSync(options.dataFile, 'utf8')).toBe(source)
-    expect(readdirSync(dirname(options.dataFile))).toEqual(['orca-data.json'])
+    expect(readdirSync(dirname(options.dataFile))).toEqual(['quirky-data.json'])
   })
 
   it.each(['legacy-backup', 'sqlite-export'])(

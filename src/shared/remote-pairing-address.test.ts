@@ -30,18 +30,18 @@ describe('remote pairing address', () => {
     ['10.0.0.8', 'lan'],
     ['fd7a:115c:a1e0::1', 'lan'],
     ['fe80::1', 'lan'],
-    ['orca.example.com', 'public'],
+    ['quirky.example.com', 'public'],
     ['devbox', 'custom']
   ] as const)('classifies %s as %s', (hostname, expected) => {
     expect(classifyRemotePairingHostname(hostname)).toBe(expected)
   })
 
   it('extracts a sanitized display endpoint without credentials', () => {
-    expect(parseHostAccessLink(accessLink('wss://orca.example.com/runtime'))).toEqual({
+    expect(parseHostAccessLink(accessLink('wss://quirky.example.com/runtime'))).toEqual({
       ok: true,
       value: {
-        pairing: expect.objectContaining({ endpoint: 'wss://orca.example.com/runtime' }),
-        displayEndpoint: 'orca.example.com',
+        pairing: expect.objectContaining({ endpoint: 'wss://quirky.example.com/runtime' }),
+        displayEndpoint: 'quirky.example.com',
         endpointKind: 'public'
       }
     })
@@ -57,11 +57,11 @@ describe('remote pairing address', () => {
       ok: false,
       kind: 'invalid-input'
     })
-    expect(parseHostAccessLink(accessLink('https://orca.example.com'))).toMatchObject({
+    expect(parseHostAccessLink(accessLink('https://quirky.example.com'))).toMatchObject({
       ok: false,
       kind: 'unsupported-destination'
     })
-    expect(parseHostAccessLink(accessLink('wss://orca.example.com/#fragment'))).toMatchObject({
+    expect(parseHostAccessLink(accessLink('wss://quirky.example.com/#fragment'))).toMatchObject({
       ok: false,
       kind: 'unsupported-destination'
     })
@@ -69,7 +69,7 @@ describe('remote pairing address', () => {
       ok: false,
       kind: 'non-connectable-destination'
     })
-    expect(parseHostAccessLink(accessLink('wss://orca.example.com:0'))).toMatchObject({
+    expect(parseHostAccessLink(accessLink('wss://quirky.example.com:0'))).toMatchObject({
       ok: false,
       kind: 'non-connectable-destination'
     })
@@ -89,7 +89,7 @@ describe('remote pairing address', () => {
   it('rejects mobile-only access grants', () => {
     const link = encodePairingOffer({
       v: PAIRING_OFFER_VERSION,
-      endpoint: 'wss://orca.example.com',
+      endpoint: 'wss://quirky.example.com',
       deviceToken: 'token',
       publicKeyB64: 'key',
       scope: 'mobile'

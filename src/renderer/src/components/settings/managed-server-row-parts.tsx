@@ -1,5 +1,5 @@
 import { ArrowUpCircle, RefreshCw, RotateCcw, ServerOff, Trash2, Wrench } from 'lucide-react'
-import type { OrcadManagedRuntimeStatus } from '../../../../shared/orcad-managed-runtime'
+import type { QuirkydManagedRuntimeStatus } from '../../../../shared/quirkyd-managed-runtime'
 import { translate } from '@/i18n/i18n'
 import { LoadingSpinner } from '../LoadingSpinner'
 import { Button } from '../ui/button'
@@ -14,7 +14,7 @@ import type { ManagedServerLifecycle } from './use-managed-server-lifecycle'
 
 // Why: a status that never loaded is unknown, not exited; only a loaded status may say "Not running".
 export function managedServerVersionLabel(
-  status: OrcadManagedRuntimeStatus | null,
+  status: QuirkydManagedRuntimeStatus | null,
   statusError: string | null
 ): string {
   if (status) {
@@ -63,8 +63,8 @@ export function ManagedServerDetailLines({
     <div className="space-y-0.5 text-xs text-muted-foreground">
       <p>
         {translate(
-          'auto.components.settings.managedServers.row.orcaVersion',
-          'Orca on this host: {{version}}',
+          'auto.components.settings.managedServers.row.quirkyVersion',
+          'Quirky on this host: {{version}}',
           {
             version: managedServerVersionLabel(status, statusError)
           }
@@ -190,8 +190,8 @@ export function ManagedServerConfirmations({
     return (
       <ConfirmStrip
         message={translate(
-          'auto.components.settings.managedServers.row.stopOrcaDescription',
-          'Stops Orca on the SSH host and removes it from this list.'
+          'auto.components.settings.managedServers.row.stopQuirkyDescription',
+          'Stops Quirky on the SSH host and removes it from this list.'
         )}
         confirmLabel={translate(
           'auto.components.settings.managedServers.row.confirmStop',
@@ -269,8 +269,8 @@ export function ManagedServerMenuItems({
       <DropdownMenuItem disabled={disabled} onSelect={() => void run('update')}>
         <ArrowUpCircle />
         {translate(
-          'auto.components.settings.managedServers.row.updateOrcaOnHost',
-          'Update Orca on this host'
+          'auto.components.settings.managedServers.row.updateQuirkyOnHost',
+          'Update Quirky on this host'
         )}
       </DropdownMenuItem>
       {status?.rollbackAvailable ? (

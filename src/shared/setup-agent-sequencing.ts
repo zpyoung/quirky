@@ -14,8 +14,8 @@ import { quotePowerShellLiteral } from './powershell-native-argument'
 const DEFAULT_WAIT_TIMEOUT_SECONDS = 2 * 60 * 60
 // Exported so the gate and its tests share one definition.
 export const SETUP_COMPLETE_MESSAGE = 'Setup finished; starting agent.'
-export const SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV = 'ORCA_SEQUENCED_STARTUP_COMMAND'
-export const SETUP_AGENT_SEQUENCE_STARTUP_SCRIPT_ENV = 'ORCA_SEQUENCED_STARTUP_SCRIPT'
+export const SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV = 'QUIRKY_SEQUENCED_STARTUP_COMMAND'
+export const SETUP_AGENT_SEQUENCE_STARTUP_SCRIPT_ENV = 'QUIRKY_SEQUENCED_STARTUP_SCRIPT'
 
 export type SequencedSetupAgentCommands = {
   setupCommand: string
@@ -131,7 +131,7 @@ function buildPosixStartupScript(
     // Why: failure and timeout announce themselves; a silent success left
     // "Waiting for setup..." as the pane's last line forever.
     // Why here and not first: setup may be what puts codex on PATH, and this
-    // `bash -lc` never reads Orca's shell wrapper, so it defines the function itself.
+    // `bash -lc` never reads Quirky's shell wrapper, so it defines the function itself.
     `if [ "$status" = "0" ]; then echo ${quotePosixShellUnlessPlainNoAt(SETUP_COMPLETE_MESSAGE)} >&2;\n${getPosixCodexShellLaunchPreflight() + getPosixClaudeShellFunction()}if [ -n "\${${SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV}:-}" ]; then eval "\$${SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV}"; exit "$?"; else ${startupSuccessCommand}; fi; fi;`,
     'echo "Setup failed; skipping agent startup." >&2;',
     'exit "${status:-1}";',
@@ -205,9 +205,9 @@ function buildWindowsSetupCommand(
     'Remove-Item -LiteralPath $marker, $tmp -Force -ErrorAction SilentlyContinue',
     '$processInfo = [System.Diagnostics.ProcessStartInfo]::new()',
     '$processInfo.FileName = $env:ComSpec',
-    '$processInfo.Arguments = \'/d /s /v:on /c ""!ORCA_SETUP_RUNNER!""\'',
+    '$processInfo.Arguments = \'/d /s /v:on /c ""!QUIRKY_SETUP_RUNNER!""\'',
     '$processInfo.UseShellExecute = $false',
-    '$processInfo.EnvironmentVariables["ORCA_SETUP_RUNNER"] = $runner',
+    '$processInfo.EnvironmentVariables["QUIRKY_SETUP_RUNNER"] = $runner',
     '$process = [System.Diagnostics.Process]::Start($processInfo)',
     '$process.WaitForExit()',
     '$setupStatus = $process.ExitCode',
@@ -244,12 +244,12 @@ function buildWindowsStartupCommand(
     // relief had been attempted. `-ErrorAction Stop` is what routes a non-terminating
     // failure into the catch at all. Still never throws: a diagnostic is worth a line of
     // stderr, but not the startup this gate exists to run.
-    "$orcaProgress = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'",
+    "$quirkyProgress = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'",
     'try { Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force -ErrorAction Stop } ' +
-      'catch { [Console]::Error.WriteLine("Orca: could not relax the execution policy for this " + ' +
+      'catch { [Console]::Error.WriteLine("Quirky: could not relax the execution policy for this " + ' +
       '"session (" + $_.FullyQualifiedErrorId + "). A startup command that runs a .ps1 " + ' +
       '"may be blocked.") }',
-    '$ProgressPreference = $orcaProgress',
+    '$ProgressPreference = $quirkyProgress',
     `$marker = ${quotePowerShellLiteral(markerPath)}`,
     'if ([string]::IsNullOrWhiteSpace($marker)) {',
     '  [Console]::Error.WriteLine("Missing setup marker path.")',

@@ -9,7 +9,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { OrchestrationDb } from '../../orchestration/db'
 import { structuredWorkerIdentities } from '../../structured-worker-identity'
 
@@ -91,7 +91,7 @@ function fakes() {
     getNestedWorkerMaxDepth: () => 3,
     getRuntimeId: () => 'epoch-1',
     ensureStructuredAgentSessionHost: async () => {},
-    getTerminalOrchestrationCliCommand: () => 'orca',
+    getTerminalOrchestrationCliCommand: () => 'quirky',
     getStructuredAgentSessionCreateSupport: async () => ({ supported: true }),
     getOrchestrationDispatchAuthority: () => ({
       paneKey: 'pane',
@@ -103,7 +103,7 @@ function fakes() {
     getTerminalProcessIncarnation: vi.fn(() => 'inc_1'),
     getTerminalPaneKey: vi.fn(() => 'pane_1'),
     retireStructuredAgentSessionTabFromSnapshot
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the start path calls only these three methods.
   const db = {
     createStartingWorkerDispatch: () => ({

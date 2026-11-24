@@ -139,7 +139,7 @@ export function PluginMarketplaceSourceDialog({
           <DialogDescription>
             {translate(
               'auto.components.settings.PluginMarketplaceSourceDialog.description',
-              'Marketplaces are pinned Git repositories. Orca uses your existing system Git credentials for private repositories.'
+              'Marketplaces are pinned Git repositories. Quirky uses your existing system Git credentials for private repositories.'
             )}
           </DialogDescription>
         </DialogHeader>
@@ -154,7 +154,7 @@ export function PluginMarketplaceSourceDialog({
             <p className="text-xs text-muted-foreground">
               {translate(
                 'auto.components.settings.PluginMarketplaceSourceDialog.urlDescription',
-                'Use an HTTPS or SSH repository URL containing orca-marketplace.json.'
+                'Use an HTTPS or SSH repository URL containing quirky-marketplace.json.'
               )}
             </p>
           </div>

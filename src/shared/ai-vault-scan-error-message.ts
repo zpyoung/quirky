@@ -35,7 +35,7 @@ function humanize(text: string): string | null {
     return 'Too many session scans in flight. Wait a moment, then refresh.'
   }
   if (new RegExp(String.raw`^${SCANNER} entry not found: `).test(text)) {
-    return 'The session scanner is missing from this Orca install. Reinstalling Orca restores it.'
+    return 'The session scanner is missing from this Quirky install. Reinstalling Quirky restores it.'
   }
   if (new RegExp(String.raw`^${SCANNER}\b`).test(text)) {
     return `The session scanner stopped unexpectedly. ${RETRY}`

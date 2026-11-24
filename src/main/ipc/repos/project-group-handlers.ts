@@ -20,7 +20,7 @@ import {
 } from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import { withLedgerErrorCode, type RepoRemovalRuntime } from './ledger-removal-guard'
 import { activeNestedRepoScans, runNestedRepoScanForIpc } from './nested-repo-scan-ipc'
-import { visibleProjectGroups } from '../../ssh/orcad-retained-source'
+import { visibleProjectGroups } from '../../ssh/quirkyd-retained-source'
 
 export function registerProjectGroupHandlers(
   mainWindow: BrowserWindow,

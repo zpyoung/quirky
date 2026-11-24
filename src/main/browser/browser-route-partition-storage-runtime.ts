@@ -11,7 +11,7 @@ import {
   releaseBrowserRoutePartitionStorage,
   type BrowserRoutePartitionStorageDependencies
 } from './browser-route-partition-storage-lifecycle'
-import { activeBrowserRoutePartitionOrcaProfileId } from './browser-route-partition-binding-runtime'
+import { activeBrowserRoutePartitionQuirkyProfileId } from './browser-route-partition-binding-runtime'
 import { browserRoutePartitionStorageDependencies } from './browser-route-partition-storage-dependencies'
 
 export type BrowserRoutePartitionStorageClear = {
@@ -31,14 +31,14 @@ export type BrowserRoutePartitionStorageClear = {
 export async function collectOrphanedBrowserRoutePartitionStorage(
   listLocalSshTargetIds?: () => string[]
 ): Promise<string[]> {
-  const orcaProfileId = activeBrowserRoutePartitionOrcaProfileId()
-  if (!orcaProfileId) {
+  const quirkyProfileId = activeBrowserRoutePartitionQuirkyProfileId()
+  if (!quirkyProfileId) {
     return []
   }
   const dependencies = storageDependencies()
   const liveStorageScopes = new Set(
     listEnvironments(app.getPath('userData')).map((environment) =>
-      deriveBrowserRoutePartitionStorageScope({ orcaProfileId, environmentId: environment.id })
+      deriveBrowserRoutePartitionStorageScope({ quirkyProfileId, environmentId: environment.id })
     )
   )
   if (!listLocalSshTargetIds) {
@@ -46,7 +46,7 @@ export async function collectOrphanedBrowserRoutePartitionStorage(
   }
   for (const targetId of listLocalSshTargetIds()) {
     liveStorageScopes.add(
-      deriveLocalSshBrowserRoutePartitionStorageScope({ orcaProfileId, targetId })
+      deriveLocalSshBrowserRoutePartitionStorageScope({ quirkyProfileId, targetId })
     )
   }
   const orphans = findOrphanedBrowserRoutePartitions(dependencies, liveStorageScopes)
@@ -67,14 +67,14 @@ export async function collectOrphanedBrowserRoutePartitionStorage(
 export async function clearBrowserRoutePartitionStorageForEnvironment(
   environmentId: string
 ): Promise<BrowserRoutePartitionStorageClear> {
-  const orcaProfileId = activeBrowserRoutePartitionOrcaProfileId()
-  if (!orcaProfileId) {
+  const quirkyProfileId = activeBrowserRoutePartitionQuirkyProfileId()
+  if (!quirkyProfileId) {
     return { clearedPartitions: [], livePartitions: [] }
   }
   const dependencies = storageDependencies()
   const partitions = findBrowserRoutePartitionsForStorageScope(
     dependencies,
-    deriveBrowserRoutePartitionStorageScope({ orcaProfileId, environmentId })
+    deriveBrowserRoutePartitionStorageScope({ quirkyProfileId, environmentId })
   )
   if (partitions.length === 0) {
     return { clearedPartitions: [], livePartitions: [] }
@@ -88,14 +88,14 @@ export async function clearBrowserRoutePartitionStorageForEnvironment(
 export async function clearBrowserRoutePartitionStorageForLocalSshTarget(
   targetId: string
 ): Promise<BrowserRoutePartitionStorageClear> {
-  const orcaProfileId = activeBrowserRoutePartitionOrcaProfileId()
-  if (!orcaProfileId) {
+  const quirkyProfileId = activeBrowserRoutePartitionQuirkyProfileId()
+  if (!quirkyProfileId) {
     return { clearedPartitions: [], livePartitions: [] }
   }
   const dependencies = storageDependencies()
   const partitions = findBrowserRoutePartitionsForStorageScope(
     dependencies,
-    deriveLocalSshBrowserRoutePartitionStorageScope({ orcaProfileId, targetId })
+    deriveLocalSshBrowserRoutePartitionStorageScope({ quirkyProfileId, targetId })
   )
   if (partitions.length === 0) {
     return { clearedPartitions: [], livePartitions: [] }

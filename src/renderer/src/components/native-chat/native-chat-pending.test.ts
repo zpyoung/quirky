@@ -56,7 +56,7 @@ function imageMessage(id: string, ...paths: string[]): NativeChatMessage {
 const pendingOf = (id: string, text: string): NativeChatPendingSend => ({ id, text, sentAt: 100 })
 
 describe('prunePendingSends', () => {
-  it.each(['/remote/.orca/drops/Screenshot 2026-09-20 at 18.25.43.png', '/tmp/local photo.png'])(
+  it.each(['/remote/.quirky/drops/Screenshot 2026-09-20 at 18.25.43.png', '/tmp/local photo.png'])(
     'reconciles a pasted attachment path recorded as text: %s',
     (path) => {
       const pending = [

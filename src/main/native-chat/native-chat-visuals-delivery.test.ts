@@ -8,7 +8,7 @@ import {
   parseNativeChatVisualDirectiveLine
 } from '../../shared/native-chat-visual-directive'
 import { NATIVE_CHAT_VISUAL_THEME_TOKENS } from '../../shared/native-chat-visual-shell'
-import { ORCAD_NATIVE_CHAT_VISUALS_ARTIFACTS } from '../../shared/orcad-artifacts'
+import { QUIRKYD_NATIVE_CHAT_VISUALS_ARTIFACTS } from '../../shared/quirkyd-artifacts'
 import {
   createNativeChatVisualsDelivery,
   NATIVE_CHAT_SCRATCH_DIR_ENV,
@@ -42,7 +42,7 @@ afterEach(() => {
 })
 
 function tempDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-visuals-delivery-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-visuals-delivery-'))
   scratch.push(dir)
   return dir
 }
@@ -118,7 +118,7 @@ describe('preparing a chat for visuals', () => {
     )
   })
 
-  it("never hands a chat another chat's folder that Orca itself inherited", async () => {
+  it("never hands a chat another chat's folder that Quirky itself inherited", async () => {
     const inherited = { PATH: '/bin', [NATIVE_CHAT_SCRATCH_DIR_ENV]: '/parent-chat' }
     const visuals = { folder: '/mine', skill: SKILL }
     for (const platform of ['darwin', 'win32'] as const) {
@@ -171,7 +171,7 @@ describe('the bundled skill', () => {
   })
 
   it('ships every file in the headless server build too', () => {
-    const shipped = ORCAD_NATIVE_CHAT_VISUALS_ARTIFACTS.map((file) =>
+    const shipped = QUIRKYD_NATIVE_CHAT_VISUALS_ARTIFACTS.map((file) =>
       file.slice('native-chat-visuals/'.length)
     )
     expect(shipped).toEqual([
@@ -183,7 +183,7 @@ describe('the bundled skill', () => {
   })
 
   it('teaches the reply line the renderer parses, with its limits', () => {
-    const example = SKILL_TEXT.split('\n').find((line) => line.startsWith('::orca-visual{'))
+    const example = SKILL_TEXT.split('\n').find((line) => line.startsWith('::quirky-visual{'))
     expect(example && parseNativeChatVisualDirectiveLine(example)).toEqual({
       file: 'latency-by-region-7c1e.html',
       title: 'Latency by region'

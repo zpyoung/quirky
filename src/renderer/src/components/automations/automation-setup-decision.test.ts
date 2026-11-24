@@ -10,7 +10,7 @@ import {
 const repo: Repo = {
   id: 'repo-1',
   path: '/repo',
-  displayName: 'orca',
+  displayName: 'quirky',
   badgeColor: 'blue',
   addedAt: 1,
   kind: 'git',
@@ -28,7 +28,7 @@ function setup(overrides: Partial<ProjectHostSetup> = {}): ProjectHostSetup {
     hostId: 'local',
     repoId: 'repo-1',
     path: '/repo',
-    displayName: 'orca',
+    displayName: 'quirky',
     setupState: 'ready',
     setupMethod: 'legacy-repo',
     createdAt: 1,
@@ -63,7 +63,7 @@ describe('automation setup decision defaults', () => {
     ).toBe(expectedDecision)
   })
 
-  it('hides setup choice outside Orca new-run automations with setup', () => {
+  it('hides setup choice outside Quirky new-run automations with setup', () => {
     const baseArgs = {
       repoId: 'repo-1',
       repos: [repo],
@@ -111,7 +111,7 @@ describe('automation setup decision defaults', () => {
     ).toBe('skip')
   })
 
-  it('shows setup choice for shared orca.yaml setup and default tabs', () => {
+  it('shows setup choice for shared quirky.yaml setup and default tabs', () => {
     expect(
       getVisibleAutomationSetupDecision({
         workspaceMode: 'new_per_run',

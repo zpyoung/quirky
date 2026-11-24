@@ -69,7 +69,7 @@ function toolResult(
  *  so nothing that merely looks like one inside the body can match. */
 const BOUNDED_TEXT_MARKERS = [
   /\n… \(\d+ bytes\)$/,
-  /\n\[Orca: output truncated — \d+ bytes total, digest [0-9a-f]+\]$/
+  /\n\[Quirky: output truncated — \d+ bytes total, digest [0-9a-f]+\]$/
 ]
 
 /** Recovers the clipped body from a bounded payload's text, and says whether a

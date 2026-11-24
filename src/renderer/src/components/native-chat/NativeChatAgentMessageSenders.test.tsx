@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import type { AgentMessageSource } from '../../../../shared/agent-session-message-source'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
-import { isOrcaSessionId, type OrcaSessionId } from '../../../../shared/orca-session-address'
+import { isQuirkySessionId, type QuirkySessionId } from '../../../../shared/quirky-session-address'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { NativeChatAgentMessageSenders } from './NativeChatAgentMessageSenders'
@@ -21,11 +21,11 @@ const WORKTREE = 'wt-coder'
 const TAB = 'tab-coder'
 const LEAF = '11111111-1111-4111-8111-111111111111'
 const HANDLE = 'term_coder'
-const SESSION = orcaSessionId('22222222-2222-4222-8222-222222222222')
+const SESSION = quirkySessionId('22222222-2222-4222-8222-222222222222')
 const initialState = useAppStore.getInitialState()
 
-function orcaSessionId(id: string): OrcaSessionId {
-  if (!isOrcaSessionId(id)) {
+function quirkySessionId(id: string): QuirkySessionId {
+  if (!isQuirkySessionId(id)) {
     throw new Error(`not a session id: ${id}`)
   }
   return id
@@ -84,7 +84,7 @@ function source(
     kind: 'agent',
     senders: [
       {
-        party: { address: HANDLE, terminalHandle: HANDLE, orcaSessionId: null, ...party },
+        party: { address: HANDLE, terminalHandle: HANDLE, quirkySessionId: null, ...party },
         name
       }
     ],
@@ -139,9 +139,9 @@ describe('the name a sender is shown under', () => {
     useAppStore.setState({ unifiedTabsByWorktree: { [WORKTREE]: [chatTab()] } })
     renderSenders(
       source({
-        address: `orca_session_id:${SESSION}`,
+        address: `quirky_session_id:${SESSION}`,
         terminalHandle: null,
-        orcaSessionId: SESSION
+        quirkySessionId: SESSION
       })
     )
     expect(screen.getByRole('button', { name: 'Port the parser' })).toBeInTheDocument()
@@ -151,7 +151,7 @@ describe('the name a sender is shown under', () => {
     useAppStore.setState({ unifiedTabsByWorktree: { [WORKTREE]: [chatTab()] } })
     renderSenders(
       source(
-        { address: `orca_session_id:${SESSION}`, terminalHandle: null, orcaSessionId: SESSION },
+        { address: `quirky_session_id:${SESSION}`, terminalHandle: null, quirkySessionId: SESSION },
         'Port the parser task'
       )
     )

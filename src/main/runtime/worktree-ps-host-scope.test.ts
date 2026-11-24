@@ -21,7 +21,7 @@ vi.mock('../git/worktree', async (importOriginal) => ({
   listWorktreesStrict: listWorktreesStrictMock
 }))
 
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 const LOCAL_REPO_ID = 'repo-local'
@@ -102,7 +102,7 @@ describe('worktree.ps host coverage', () => {
   })
 
   it('names every host the page covers', async () => {
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    const runtime = new QuirkyRuntimeService(makeStore() as never)
 
     const result = await runtime.getWorktreePs(10_000)
 
@@ -111,7 +111,7 @@ describe('worktree.ps host coverage', () => {
   })
 
   it('keeps a remote row in the page when the cap cannot hold every local row', async () => {
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    const runtime = new QuirkyRuntimeService(makeStore() as never)
 
     const result = await runtime.getWorktreePs(2)
 

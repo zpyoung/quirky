@@ -1,4 +1,4 @@
-export const ORCA_PROJECT_FIELDS = `
+export const QUIRKY_PROJECT_FIELDS = `
   id
   slugId
   name
@@ -55,8 +55,8 @@ export const ORCA_PROJECT_FIELDS = `
   }
 `
 
-export const ORCA_PROJECT_DETAIL_FIELDS = `
-  ${ORCA_PROJECT_FIELDS}
+export const QUIRKY_PROJECT_DETAIL_FIELDS = `
+  ${QUIRKY_PROJECT_FIELDS}
   projectMilestones(first: 20) {
     nodes {
       id
@@ -88,7 +88,7 @@ export const ORCA_PROJECT_DETAIL_FIELDS = `
   }
 `
 
-export const ORCA_ISSUE_FIELDS = `
+export const QUIRKY_ISSUE_FIELDS = `
   id
   identifier
   title
@@ -122,10 +122,10 @@ export const ORCA_ISSUE_FIELDS = `
 `
 
 export const PROJECTS_QUERY = `
-  query OrcaLinearProjects($first: Int, $filter: ProjectFilter, $orderBy: PaginationOrderBy) {
+  query QuirkyLinearProjects($first: Int, $filter: ProjectFilter, $orderBy: PaginationOrderBy) {
     projects(first: $first, filter: $filter, orderBy: $orderBy) {
       nodes {
-        ${ORCA_PROJECT_FIELDS}
+        ${QUIRKY_PROJECT_FIELDS}
       }
       pageInfo {
         hasNextPage
@@ -135,10 +135,10 @@ export const PROJECTS_QUERY = `
 `
 
 export const SEARCH_PROJECTS_QUERY = `
-  query OrcaLinearProjectSearch($term: String!, $first: Int, $after: String) {
+  query QuirkyLinearProjectSearch($term: String!, $first: Int, $after: String) {
     searchProjects(term: $term, first: $first, after: $after) {
       nodes {
-        ${ORCA_PROJECT_FIELDS}
+        ${QUIRKY_PROJECT_FIELDS}
       }
       pageInfo {
         hasNextPage
@@ -149,26 +149,26 @@ export const SEARCH_PROJECTS_QUERY = `
 `
 
 export const PROJECT_QUERY = `
-  query OrcaLinearProject($id: String!) {
+  query QuirkyLinearProject($id: String!) {
     project(id: $id) {
-      ${ORCA_PROJECT_DETAIL_FIELDS}
+      ${QUIRKY_PROJECT_DETAIL_FIELDS}
     }
   }
 `
 
 export const CREATE_PROJECT_MUTATION = `
-  mutation OrcaLinearProjectCreate($input: ProjectCreateInput!) {
+  mutation QuirkyLinearProjectCreate($input: ProjectCreateInput!) {
     projectCreate(input: $input) {
       success
       project {
-        ${ORCA_PROJECT_DETAIL_FIELDS}
+        ${QUIRKY_PROJECT_DETAIL_FIELDS}
       }
     }
   }
 `
 
 export const PROJECT_ISSUES_QUERY = `
-  query OrcaLinearProjectIssues(
+  query QuirkyLinearProjectIssues(
     $id: String!,
     $first: Int,
     $after: String,
@@ -177,7 +177,7 @@ export const PROJECT_ISSUES_QUERY = `
     project(id: $id) {
       issues(first: $first, after: $after, orderBy: $orderBy) {
         nodes {
-          ${ORCA_ISSUE_FIELDS}
+          ${QUIRKY_ISSUE_FIELDS}
         }
         pageInfo {
           hasNextPage
@@ -189,7 +189,7 @@ export const PROJECT_ISSUES_QUERY = `
 `
 
 export const PROJECT_TEAMS_QUERY = `
-  query OrcaLinearProjectTeams($id: String!, $first: Int, $after: String) {
+  query QuirkyLinearProjectTeams($id: String!, $first: Int, $after: String) {
     project(id: $id) {
       teams(first: $first, after: $after) {
         nodes {

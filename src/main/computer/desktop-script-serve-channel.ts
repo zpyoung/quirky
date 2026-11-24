@@ -3,7 +3,7 @@ import type {
   PipedChildProcess,
   PipedProcessSpawner,
   PipedProcessSpec
-} from '@orca/process-host/process-spec'
+} from '@quirky/process-host/process-spec'
 import { ownRetainedString } from '../../shared/own-retained-string'
 
 /** The child streams required by the serve protocol; avoids a node:child_process import. */

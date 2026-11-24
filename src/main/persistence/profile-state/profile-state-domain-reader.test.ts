@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 function createDatabase(): { directory: string; databasePath: string } {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-profile-state-domain-reader-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-state-domain-reader-'))
   temporaryDirectories.push(directory)
   return { directory, databasePath: profileStateDatabaseFile(directory) }
 }

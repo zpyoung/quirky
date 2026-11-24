@@ -31,7 +31,7 @@ describe('OMP model command capability', () => {
       expect(surface.getSnapshot()[0].settable).toBe(canSwitchOmpModel === true)
       if (canSwitchOmpModel) {
         await surface.setOption('model', 'openai/b')
-        expect(dispatchCommand).toHaveBeenCalledWith('/orca-model openai/b')
+        expect(dispatchCommand).toHaveBeenCalledWith('/quirky-model openai/b')
       } else {
         await expect(surface.setOption('model', 'openai/b')).rejects.toThrow()
         expect(dispatchCommand).not.toHaveBeenCalled()
@@ -40,7 +40,7 @@ describe('OMP model command capability', () => {
   )
 
   it('preserves only the recognized capability through normalization and remote projection', () => {
-    for (const command of ['orca-model', 'arbitrary-command', undefined]) {
+    for (const command of ['quirky-model', 'arbitrary-command', undefined]) {
       const payload = normalizeAgentStatusPayload({
         state: 'done',
         agentType: 'omp',
@@ -50,7 +50,7 @@ describe('OMP model command capability', () => {
         throw new Error('expected status')
       }
       expect(pickParsedAgentStatusPayload(payload).modelSwitchCommand).toBe(
-        command === 'orca-model' ? command : undefined
+        command === 'quirky-model' ? command : undefined
       )
     }
   })

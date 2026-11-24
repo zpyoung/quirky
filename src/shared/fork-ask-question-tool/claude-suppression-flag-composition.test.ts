@@ -171,7 +171,7 @@ describe('applyClaudeSuppressionFlagsToResumeCommand', () => {
     expect(result).toBe(`${captured} ${disallowedPair}`)
   })
 
-  it("strips exactly Orca's own token pairs when the fresh verdict drops to null", () => {
+  it("strips exactly Quirky's own token pairs when the fresh verdict drops to null", () => {
     const captured = `claude --resume abc ${disallowedPair} ${systemPromptPair}`
     const result = applyClaudeSuppressionFlagsToResumeCommand({
       agent: 'claude',

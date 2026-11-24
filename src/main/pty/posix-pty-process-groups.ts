@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { hasControllingTty } from '../../shared/posix-controlling-terminal'
 import { recordSelfInitiatedTreeKill } from '../crash-reporting/self-initiated-tree-kill-log'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
-import { runProcess, runProcessSync } from '@orca/process-host'
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import { runProcess, runProcessSync } from '@quirky/process-host'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 
 const PROCESS_TABLE_TIMEOUT_MS = 1_000
 const PROCESS_TABLE_MAX_BYTES = 1024 * 1024
@@ -200,7 +200,7 @@ export function getPosixPtyProcessGroups(
     return null
   }
   // Why: a development daemon can inherit its launch TTY. Never group-signal
-  // when Orca itself shares the PTY; fall back to the already-scoped root kill.
+  // when Quirky itself shares the PTY; fall back to the already-scoped root kill.
   if (rows.some((row) => row.pid === currentPid && row.tty === root.tty)) {
     return null
   }

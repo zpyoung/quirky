@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { Store } from '../persistence'
 import {
   getSshTargetIdForExecutionHost,
@@ -174,7 +174,7 @@ async function loadConflicts(
 }
 
 export async function resolveHostedReviewSitterGitExecution(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   definition: HostedReviewSitterDefinition
 ): Promise<HostedReviewSitterGitExecution> {

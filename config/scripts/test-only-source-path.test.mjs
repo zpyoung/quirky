@@ -18,8 +18,8 @@ describe('isTestOnlySourcePath', () => {
       'src/main/a/__tests__/reader.ts',
       'src/main/a/__fixtures__/reader.ts',
       'src/main/a/test-support/reader.ts',
-      'src/main/runtime/orca-runtime-tests/setup.ts',
-      'src/main/runtime/orca-runtime-test-mocks/store.ts'
+      'src/main/runtime/quirky-runtime-tests/setup.ts',
+      'src/main/runtime/quirky-runtime-test-mocks/store.ts'
     ]) {
       expect(isTestOnlySourcePath(file), file).toBe(true)
     }

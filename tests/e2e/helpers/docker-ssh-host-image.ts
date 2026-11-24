@@ -32,15 +32,15 @@ function hashDockerFixtureDirectory(fixtureDir: string): string {
 function fixtureImage(root: string): string {
   const fixtureDir = path.join(root, 'tests', 'e2e', 'fixtures', 'docker-ssh-host')
   const digest = hashDockerFixtureDirectory(fixtureDir)
-  return `orca-e2e-ssh-host:${digest}`
+  return `quirky-e2e-ssh-host:${digest}`
 }
 
 export function getDockerSshHostImage(): string {
-  return process.env.ORCA_E2E_SSH_DOCKER_IMAGE ?? fixtureImage(process.cwd())
+  return process.env.QUIRKY_E2E_SSH_DOCKER_IMAGE ?? fixtureImage(process.cwd())
 }
 
 export function prepareDockerSshHostImage(root: string): void {
-  if (process.env.ORCA_E2E_SSH_DOCKER_IMAGE) {
+  if (process.env.QUIRKY_E2E_SSH_DOCKER_IMAGE) {
     return
   }
   const fixtureDir = path.join(root, 'tests', 'e2e', 'fixtures', 'docker-ssh-host')
@@ -53,7 +53,7 @@ export function prepareDockerSshHostImage(root: string): void {
 }
 
 export function ensureDockerSshHostImage(root: string): void {
-  if (process.env.ORCA_E2E_SSH_DOCKER_IMAGE) {
+  if (process.env.QUIRKY_E2E_SSH_DOCKER_IMAGE) {
     return
   }
   const image = fixtureImage(root)

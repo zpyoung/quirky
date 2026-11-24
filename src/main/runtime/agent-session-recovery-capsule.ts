@@ -274,7 +274,7 @@ export class AgentSessionRecoveryCapsule {
     })
   }
 
-  /** `keep` names records this host does not list; they stay for the Orca that can act on them. */
+  /** `keep` names records this host does not list; they stay for the Quirky that can act on them. */
   clearAll(now: number, keep: KeepRecord = () => false): Promise<number> {
     return withFileTransactionLock(this.filePath, async () => {
       let state: Pick<RecoveryCapsuleState, 'entries' | 'failed'>

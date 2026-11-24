@@ -6,7 +6,7 @@ import {
   decodeTerminalStreamFrame,
   decodeTerminalStreamText
 } from '../../../shared/terminal-stream-protocol'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import type { RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
 import { TERMINAL_METHODS } from './methods/terminal'
@@ -23,9 +23,9 @@ const request: RpcRequest = {
   }
 }
 
-function asRuntime(double: Record<string, unknown>): OrcaRuntimeService {
+function asRuntime(double: Record<string, unknown>): QuirkyRuntimeService {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: terminal.subscribe reads only the members the double provides.
-  return double as unknown as OrcaRuntimeService
+  return double as unknown as QuirkyRuntimeService
 }
 
 type PaneDouble = {
@@ -43,7 +43,7 @@ type PaneDouble = {
   pendingOutput?: string
   /** Output offset at the end of the pending chunk. */
   pendingOutputSeq?: number
-  waitForRendererTerminalSerializer: OrcaRuntimeService['waitForRendererTerminalSerializer']
+  waitForRendererTerminalSerializer: QuirkyRuntimeService['waitForRendererTerminalSerializer']
 }
 
 function subscribeMobile(pane: PaneDouble) {

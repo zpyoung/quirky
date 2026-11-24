@@ -8,25 +8,25 @@ import {
 
 describe('create project defaults', () => {
   it('builds the POSIX default project parent', () => {
-    expect(getDefaultCreateProjectParent('/Users/alice')).toBe('/Users/alice/orca/projects')
+    expect(getDefaultCreateProjectParent('/Users/alice')).toBe('/Users/alice/quirky/projects')
   })
 
   it('builds the Windows default project parent', () => {
     expect(getDefaultCreateProjectParent('C:\\Users\\alice')).toBe(
-      'C:\\Users\\alice\\orca\\projects'
+      'C:\\Users\\alice\\quirky\\projects'
     )
   })
 
   it('derives the runtime project default from a resolved server home', () => {
-    expect(getDefaultCreateProjectParent('/home/alice')).toBe('/home/alice/orca/projects')
+    expect(getDefaultCreateProjectParent('/home/alice')).toBe('/home/alice/quirky/projects')
   })
 
   it('joins path previews without mixing separators', () => {
-    expect(joinCreateProjectPath('/home/alice/orca/projects', 'demo')).toBe(
-      '/home/alice/orca/projects/demo'
+    expect(joinCreateProjectPath('/home/alice/quirky/projects', 'demo')).toBe(
+      '/home/alice/quirky/projects/demo'
     )
-    expect(joinCreateProjectPath('C:\\Users\\alice\\orca\\projects', 'demo')).toBe(
-      'C:\\Users\\alice\\orca\\projects\\demo'
+    expect(joinCreateProjectPath('C:\\Users\\alice\\quirky\\projects', 'demo')).toBe(
+      'C:\\Users\\alice\\quirky\\projects\\demo'
     )
   })
 
@@ -36,16 +36,16 @@ describe('create project defaults', () => {
         step: 'create',
         createParent: '',
         activeRuntimeEnvironmentId: null,
-        defaultParent: '/Users/alice/orca/projects',
+        defaultParent: '/Users/alice/quirky/projects',
         createStepAutoFilled: false
       })
-    ).toEqual({ parent: '/Users/alice/orca/projects' })
+    ).toEqual({ parent: '/Users/alice/quirky/projects' })
     expect(
       getCreateProjectDefaultParentAutoFill({
         step: 'create',
         createParent: '/tmp/project',
         activeRuntimeEnvironmentId: null,
-        defaultParent: '/Users/alice/orca/projects',
+        defaultParent: '/Users/alice/quirky/projects',
         createStepAutoFilled: false
       })
     ).toBeNull()
@@ -54,7 +54,7 @@ describe('create project defaults', () => {
         step: 'create',
         createParent: '',
         activeRuntimeEnvironmentId: null,
-        defaultParent: '/Users/alice/orca/projects',
+        defaultParent: '/Users/alice/quirky/projects',
         createStepAutoFilled: true
       })
     ).toBeNull()
@@ -66,7 +66,7 @@ describe('create project defaults', () => {
         step: 'create',
         createParent: '',
         activeRuntimeEnvironmentId: 'env-1',
-        defaultParent: '/Users/alice/orca/projects',
+        defaultParent: '/Users/alice/quirky/projects',
         createStepAutoFilled: false
       })
     ).toBeNull()
@@ -75,22 +75,22 @@ describe('create project defaults', () => {
   it('uses a short local summary only for the local default parent', () => {
     expect(
       formatCreateProjectParentSummary({
-        parent: '/Users/alice/orca/projects',
-        defaultParent: '/Users/alice/orca/projects'
+        parent: '/Users/alice/quirky/projects',
+        defaultParent: '/Users/alice/quirky/projects'
       })
-    ).toBe('~/orca/projects')
+    ).toBe('~/quirky/projects')
     expect(
       formatCreateProjectParentSummary({
-        parent: '/home/alice/orca/projects',
-        defaultParent: '/home/alice/orca/projects'
+        parent: '/home/alice/quirky/projects',
+        defaultParent: '/home/alice/quirky/projects'
       })
-    ).toBe('~/orca/projects')
+    ).toBe('~/quirky/projects')
     expect(
       formatCreateProjectParentSummary({
-        parent: 'C:\\Users\\alice\\orca\\projects',
-        defaultParent: 'C:\\Users\\alice\\orca\\projects'
+        parent: 'C:\\Users\\alice\\quirky\\projects',
+        defaultParent: 'C:\\Users\\alice\\quirky\\projects'
       })
-    ).toBe('~/orca/projects')
+    ).toBe('~/quirky/projects')
     expect(
       formatCreateProjectParentSummary({
         parent: '',
@@ -100,11 +100,11 @@ describe('create project defaults', () => {
     ).toBe('host folder not selected')
     expect(
       formatCreateProjectParentSummary({
-        parent: '/Users/alice/orca/projects',
-        defaultParent: '/Users/alice/orca/projects',
+        parent: '/Users/alice/quirky/projects',
+        defaultParent: '/Users/alice/quirky/projects',
         isRemoteHost: true
       })
-    ).toBe('/Users/alice/orca/projects')
+    ).toBe('/Users/alice/quirky/projects')
     expect(
       formatCreateProjectParentSummary({
         parent: '',
@@ -123,15 +123,15 @@ describe('create project defaults', () => {
     ).toBe('J:\\PROJECTS')
     expect(
       formatCreateProjectParentSummary({
-        parent: '/data/orca/projects',
-        defaultParent: '/data/orca/projects'
+        parent: '/data/quirky/projects',
+        defaultParent: '/data/quirky/projects'
       })
-    ).toBe('/data/orca/projects')
+    ).toBe('/data/quirky/projects')
     expect(
       formatCreateProjectParentSummary({
-        parent: 'D:\\code\\orca\\projects',
-        defaultParent: 'D:\\code\\orca\\projects'
+        parent: 'D:\\code\\quirky\\projects',
+        defaultParent: 'D:\\code\\quirky\\projects'
       })
-    ).toBe('D:\\code\\orca\\projects')
+    ).toBe('D:\\code\\quirky\\projects')
   })
 })

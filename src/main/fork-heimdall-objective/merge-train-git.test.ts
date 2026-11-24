@@ -48,7 +48,7 @@ type RepositoryFixture = {
 
 async function repositoryFixture(): Promise<RepositoryFixture> {
   return createMergeTrainRepositoryFixture(temporaryDirectories, {
-    tempPrefix: 'orca-objective-merge-train-',
+    tempPrefix: 'quirky-objective-merge-train-',
     repoId: 'merge-train-test-repo',
     userName: 'Merge Train Test',
     userEmail: 'merge-train@example.test'
@@ -95,8 +95,8 @@ describe('objective merge train Git mechanics', () => {
     await git(fixture.source, ['add', '--', 'shared.txt'])
     await writeFile(join(fixture.source, 'shared.txt'), 'final worktree\n')
     await writeFile(join(fixture.source, 'untracked.txt'), 'untracked\n')
-    await mkdir(join(fixture.source, '.orca'), { recursive: true })
-    await writeFile(join(fixture.source, '.orca', 'watcher.json'), '{"state":"owned"}\n')
+    await mkdir(join(fixture.source, '.quirky'), { recursive: true })
+    await writeFile(join(fixture.source, '.quirky', 'watcher.json'), '{"state":"owned"}\n')
 
     const result = await createObjectiveNodeCommit(
       fixture.sourceTarget,
@@ -118,14 +118,14 @@ describe('objective merge train Git mechanics', () => {
     expect(await readFile(join(fixture.source, 'shared.txt'), 'utf8')).toBe('final worktree\n')
     expect(await gitText(fixture.source, ['show', 'HEAD:untracked.txt'])).toBe('untracked')
     expect(await gitText(fixture.source, ['show', '--format=%B', '--no-patch', 'HEAD'])).toBe(
-      'Implement the node\n\nworker commit two\n\nworker commit one\n\nOrca-Heimdall-Task: implement-node'
+      'Implement the node\n\nworker commit two\n\nworker commit one\n\nQuirky-Heimdall-Task: implement-node'
     )
     expect(
-      (await git(fixture.source, ['ls-tree', '-r', '--name-only', 'HEAD', '--', '.orca'])).stdout
+      (await git(fixture.source, ['ls-tree', '-r', '--name-only', 'HEAD', '--', '.quirky'])).stdout
     ).toBe('')
     expect(
       (await git(fixture.source, ['status', '--porcelain', '--untracked-files=all'])).stdout
-    ).toBe('?? .orca/watcher.json\n')
+    ).toBe('?? .quirky/watcher.json\n')
   })
 
   it('commits only explicitly reported ignored output files', async () => {
@@ -219,7 +219,7 @@ describe('objective merge train Git mechanics', () => {
 
   it('normalizes the commit even when a worker has pre-planted a hook at the old fixed hooksPath', async () => {
     const fixture = await repositoryFixture()
-    const staleHooksDir = join(fixture.source, '.git', 'orca-objective-empty-hooks')
+    const staleHooksDir = join(fixture.source, '.git', 'quirky-objective-empty-hooks')
     await mkdir(staleHooksDir, { recursive: true })
     const staleHookPath = join(staleHooksDir, 'pre-commit')
     await writeFile(staleHookPath, '#!/bin/sh\nexit 1\n')
@@ -261,16 +261,16 @@ describe('objective merge train Git mechanics', () => {
     )
 
     expect(await gitText(fixture.source, ['show', '--format=%B', '--no-patch', 'HEAD'])).toBe(
-      'Retain worker notes\n\nworker commit\n\ndetailed work notes\n\nOrca-Heimdall-Task: worker-notes'
+      'Retain worker notes\n\nworker commit\n\ndetailed work notes\n\nQuirky-Heimdall-Task: worker-notes'
     )
   })
 
-  it('strips a duplicate Orca-Heimdall-Task trailer already present in a worker commit body', async () => {
+  it('strips a duplicate Quirky-Heimdall-Task trailer already present in a worker commit body', async () => {
     const fixture = await repositoryFixture()
     await writeFile(join(fixture.source, 'notes.txt'), 'notes\n')
     await commitAll(
       fixture.source,
-      'worker commit\n\nwith a body line\n\nOrca-Heimdall-Task: stale-task'
+      'worker commit\n\nwith a body line\n\nQuirky-Heimdall-Task: stale-task'
     )
 
     await createObjectiveNodeCommit(
@@ -291,9 +291,9 @@ describe('objective merge train Git mechanics', () => {
       'HEAD'
     ])
     expect(finalMessage).toBe(
-      'Strip the stale trailer\n\nworker commit\n\nwith a body line\n\nOrca-Heimdall-Task: fresh-task'
+      'Strip the stale trailer\n\nworker commit\n\nwith a body line\n\nQuirky-Heimdall-Task: fresh-task'
     )
-    expect(finalMessage.match(/Orca-Heimdall-Task:/gu)).toHaveLength(1)
+    expect(finalMessage.match(/Quirky-Heimdall-Task:/gu)).toHaveLength(1)
   })
 
   it('bounds the carried-over worker body to OBJECTIVE_REPORT_SUMMARY_MAX_LENGTH', async () => {
@@ -319,7 +319,7 @@ describe('objective merge train Git mechanics', () => {
       '--no-patch',
       'HEAD'
     ])
-    const trailer = '\n\nOrca-Heimdall-Task: bounded-task'
+    const trailer = '\n\nQuirky-Heimdall-Task: bounded-task'
     expect(finalMessage.endsWith(trailer)).toBe(true)
     const body = finalMessage.slice('Bound the carried body\n\n'.length, -trailer.length)
     expect(body.length).toBe(OBJECTIVE_REPORT_SUMMARY_MAX_LENGTH)
@@ -352,8 +352,8 @@ describe('objective merge train Git mechanics', () => {
 
   it('creates and applies one commit for a successful node with no file changes', async () => {
     const fixture = await repositoryFixture()
-    await mkdir(join(fixture.source, '.orca'), { recursive: true })
-    await writeFile(join(fixture.source, '.orca', 'report.json'), '{}\n')
+    await mkdir(join(fixture.source, '.quirky'), { recursive: true })
+    await writeFile(join(fixture.source, '.quirky', 'report.json'), '{}\n')
 
     const normalized = await createObjectiveNodeCommit(
       fixture.sourceTarget,
@@ -404,8 +404,8 @@ describe('objective merge train Git mechanics', () => {
       leaseGuard
     )
     await writeFile(join(fixture.enrolled, 'operator.txt'), 'do not sweep\n')
-    await mkdir(join(fixture.enrolled, '.orca'), { recursive: true })
-    await writeFile(join(fixture.enrolled, '.orca', 'control.json'), '{}\n')
+    await mkdir(join(fixture.enrolled, '.quirky'), { recursive: true })
+    await writeFile(join(fixture.enrolled, '.quirky', 'control.json'), '{}\n')
 
     const result = await applyObjectiveNodeCommit(
       fixture.enrolledTarget,
@@ -465,8 +465,8 @@ describe('objective merge train Git mechanics', () => {
     )
     await writeFile(join(fixture.enrolled, 'shared.txt'), 'from enrolled\n')
     const enrolledHead = await commitAll(fixture.enrolled, 'enrolled change')
-    await mkdir(join(fixture.enrolled, '.orca'), { recursive: true })
-    await writeFile(join(fixture.enrolled, '.orca', 'control.json'), '{}\n')
+    await mkdir(join(fixture.enrolled, '.quirky'), { recursive: true })
+    await writeFile(join(fixture.enrolled, '.quirky', 'control.json'), '{}\n')
 
     const result = await applyObjectiveNodeCommit(
       fixture.enrolledTarget,
@@ -492,7 +492,7 @@ describe('objective merge train Git mechanics', () => {
     ).rejects.toBeDefined()
     expect(
       (await git(fixture.enrolled, ['status', '--porcelain', '--untracked-files=all'])).stdout
-    ).toBe('?? .orca/control.json\n')
+    ).toBe('?? .quirky/control.json\n')
   })
 
   it('retains every raw conflict path while bounding the display report', async () => {

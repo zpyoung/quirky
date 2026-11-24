@@ -171,7 +171,7 @@ export function finishUploadSweep(db: Database.Database, uploadId: string): void
 
 /**
  * Claims nothing can use any more: their chat has no record, or their upload is gone from disk
- * (removed outside Orca). Re-derived on every sweep, so a claim cannot outlive what it protects.
+ * (removed outside Quirky). Re-derived on every sweep, so a claim cannot outlive what it protects.
  * Synchronous with the facts it reads, so a claim written meanwhile is judged on today's facts.
  */
 export function pruneAgentSessionAttachmentClaims(

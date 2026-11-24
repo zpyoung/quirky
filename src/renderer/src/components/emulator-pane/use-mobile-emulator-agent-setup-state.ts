@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { ORCA_CLI_SKILL_NAME } from '@/lib/agent-feature-install-commands'
+import { QUIRKY_CLI_SKILL_NAME } from '@/lib/agent-feature-install-commands'
 import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,
   useInstalledAgentSkill
@@ -8,7 +8,7 @@ import {
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { translate } from '@/i18n/i18n'
 
-// Why: Orca terminals already provide the `orca` command, so agent control only needs the skill.
+// Why: Quirky terminals already provide the `quirky` command, so agent control only needs the skill.
 export function useMobileEmulatorAgentSetupState(enabled = true): {
   cliSkillError: string | null
   cliSkillInstalled: boolean
@@ -26,7 +26,7 @@ export function useMobileEmulatorAgentSetupState(enabled = true): {
     loading: cliSkillLoading,
     error: cliSkillError,
     refresh: refreshCliSkill
-  } = useInstalledAgentSkill(ORCA_CLI_SKILL_NAME, {
+  } = useInstalledAgentSkill(QUIRKY_CLI_SKILL_NAME, {
     enabled,
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
@@ -65,7 +65,7 @@ export function useMobileEmulatorAgentSetupState(enabled = true): {
       toast.message(
         translate(
           'auto.components.emulator.pane.use.mobile.emulator.agent.setup.state.skillNotInstalled',
-          'The Orca CLI skill is not installed yet.'
+          'The Quirky CLI skill is not installed yet.'
         )
       )
     } catch (error) {

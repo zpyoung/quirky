@@ -243,7 +243,7 @@ describe.runIf(process.platform !== 'win32')(
     })
 
     it('holds the Codex home until a canceled agent has stopped through its supervisor', async () => {
-      const folder = mkdtempSync(join(tmpdir(), 'orca-supervised-cancel-'))
+      const folder = mkdtempSync(join(tmpdir(), 'quirky-supervised-cancel-'))
       const pids: number[] = []
       try {
         const home = join(folder, 'codex-home')
@@ -314,7 +314,7 @@ require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)
     })
 
     it('stops an agent through its supervisor once its output passes the limit', async () => {
-      const folder = mkdtempSync(join(tmpdir(), 'orca-supervised-output-limit-'))
+      const folder = mkdtempSync(join(tmpdir(), 'quirky-supervised-output-limit-'))
       const pids: number[] = []
       try {
         const pidFile = join(folder, 'agent-pid')
@@ -358,7 +358,7 @@ setInterval(() => {}, 60000)
     })
 
     it('stops a Codex discovery through its supervisor once its output passes the limit, holding the home', async () => {
-      const folder = mkdtempSync(join(tmpdir(), 'orca-supervised-discovery-limit-'))
+      const folder = mkdtempSync(join(tmpdir(), 'quirky-supervised-discovery-limit-'))
       const pids: number[] = []
       try {
         const home = join(folder, 'codex-home')

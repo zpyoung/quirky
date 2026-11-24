@@ -12,7 +12,7 @@ import { createTerminalTabNavigationActions } from '../terminals/terminal-tab-na
 import { createTerminalTabPresentationActions } from '../terminals/terminal-tab-presentation'
 import { createTerminalTabAppearanceActions } from '../terminals/terminal-tab-appearance'
 import { routeTerminalTabChangesThroughLayoutOwner } from '../terminals/terminal-tab-layout-owner-actions'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { createTerminalPtyBindingActions } from '../terminals/terminal-pty-bindings'
 import { createTerminalPtyReleaseActions } from '../terminals/terminal-pty-release'
 import { createTerminalUnverifiedPtyLossActions } from '../terminals/terminal-unverified-pty-loss'
@@ -103,7 +103,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
 function withLayoutOwnerTerminalTabChanges<
   T extends Parameters<typeof routeTerminalTabChangesThroughLayoutOwner>[0]
 >(actions: T, get: TerminalStoreGet): T {
-  return ORCA_LAYOUT_OWNER_IS_MAIN
+  return QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? { ...actions, ...routeTerminalTabChangesThroughLayoutOwner(actions, get) }
     : actions
 }

@@ -46,6 +46,6 @@ assert.throws(
   /Source drift/
 )
 writeFileSync(
-  process.env.ORCA_PLUGIN_LOG_LOADER_OUTPUT ?? path.join(__dirname, 'loader-results.json'),
+  process.env.QUIRKY_PLUGIN_LOG_LOADER_OUTPUT ?? path.join(__dirname, 'loader-results.json'),
   `${JSON.stringify({ observations, currentDependencyContextPaths: versions.currentDependencyContextPaths, driftRejected: true }, null, 2)}\n`
 )

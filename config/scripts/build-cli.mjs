@@ -2,7 +2,7 @@ import { availableParallelism } from 'node:os'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { runProcess, runProcessSync } from '@orca/process-host'
+import { runProcess, runProcessSync } from '@quirky/process-host'
 import { resolvePinnedBunExecutable } from './pinned-bun-executable.mjs'
 import { describeProcessFailure } from './process-failure-message.mjs'
 import { isDirectInvocation } from './script-entry-detection.mjs'
@@ -20,11 +20,11 @@ export async function buildCli({
   outDir = 'out',
   check = runTypecheckProjects,
   execute = runProcess,
-  compiler = process.env.ORCA_CLI_BUILD_COMPILER ?? 'bun',
+  compiler = process.env.QUIRKY_CLI_BUILD_COMPILER ?? 'bun',
   resolveBunExecutable = (directory) => resolvePinnedBunExecutable(directory, runProcessSync)
 } = {}) {
   if (compiler !== 'bun' && compiler !== 'tsrs') {
-    throw new Error(`Invalid ORCA_CLI_BUILD_COMPILER: ${compiler}`)
+    throw new Error(`Invalid QUIRKY_CLI_BUILD_COMPILER: ${compiler}`)
   }
   const emitArguments = [
     '-p',

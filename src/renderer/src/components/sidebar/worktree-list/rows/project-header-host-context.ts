@@ -4,10 +4,10 @@ import {
   type ExecutionHostId
 } from '../../../../../../shared/execution-host'
 import {
-  annotateManagedOrcadExecutionHosts,
+  annotateManagedQuirkydExecutionHosts,
   indexExecutionHostsById,
-  type ManagedOrcadEnvironmentSummary
-} from '../../../../../../shared/managed-orcad-execution-host'
+  type ManagedQuirkydEnvironmentSummary
+} from '../../../../../../shared/managed-quirkyd-execution-host'
 import {
   buildProjectGroupingIndex,
   getProjectGroupingForRepo,
@@ -29,13 +29,13 @@ export function getProjectHeaderHostContexts(args: {
   rows: readonly HostSectionRow[]
   visibleProjectRepoIdsBySection?: ReadonlyMap<string, ReadonlySet<string>>
   hosts: readonly ExecutionHostRegistryEntry[]
-  runtimeEnvironments?: readonly ManagedOrcadEnvironmentSummary[]
+  runtimeEnvironments?: readonly ManagedQuirkydEnvironmentSummary[]
   sshConnectionStates?: ReadonlyMap<string, Pick<SshConnectionState, 'managedServer'>>
   repoMap: Map<string, Repo>
   projectGrouping?: ProjectGroupingModel
 }): ReadonlyMap<string, ProjectHeaderHostContext> {
   const hostRegistry = new Map(args.hosts.map((host) => [host.id, host]))
-  annotateManagedOrcadExecutionHosts({
+  annotateManagedQuirkydExecutionHosts({
     hosts: hostRegistry,
     // Preserve authoritative aliases; feed options need owner configuration to fill them in.
     runtimeEnvironments: (args.runtimeEnvironments ?? []).filter((environment) => {

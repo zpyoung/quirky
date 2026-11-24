@@ -115,12 +115,12 @@ function seededProfile(): string {
 const SEED = seededProfile()
 
 async function openStore() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-owner-report-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-owner-report-'))
   const inner = new ProfileStateSqliteAuthority(join(directory, 'profile-state.db'), 'owner-report')
   inner.writeSerializedState(Buffer.from(SEED))
   const authority = new DelayedAuthority(inner)
   const store = new Store({
-    dataFile: join(directory, 'orca-data.json'),
+    dataFile: join(directory, 'quirky-data.json'),
     profileStateAuthority: authority
   })
   await store.flushPendingOrThrowAsync()

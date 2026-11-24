@@ -6,7 +6,7 @@ import {
   layoutContainsLeafId
 } from '../restoring-sessions/terminal-layout-normalization'
 import { createMinimalPersistedTerminalTab } from '../restoring-sessions/session-owner-fields'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { placedSplitRoot } from '../terminal-topology/terminal-pane-placement-graft'
 import { tabRowPtyIdAfterLeafBinding } from './terminal-tab-pty-ownership'
 import type { PersistPtyBindingArgs } from './pty-binding-persistence'
@@ -114,7 +114,7 @@ export function applyPtyBinding(
       terminalMembershipChanged = true
       // Why: splitPane spawns before its snapshot reaches main; add a minimal leaf so a crash can't strand the pane's binding.
       // Switch point: main's tree is drawn back, so it places the leaf where the window split it.
-      layout.root = (ORCA_LAYOUT_OWNER_IS_MAIN &&
+      layout.root = (QUIRKY_LAYOUT_OWNER_IS_MAIN &&
         placedSplitRoot(layout.root, args.leafId, args.placement)) || {
         type: 'split',
         direction: 'vertical',

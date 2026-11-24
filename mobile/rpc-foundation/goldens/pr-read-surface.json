@@ -44,8 +44,8 @@
           "ok": true,
           "result": {
             "host": "github.com",
-            "owner": "orca",
-            "repo": "orca"
+            "owner": "quirky",
+            "repo": "quirky"
           }
         }
       }
@@ -96,8 +96,8 @@
         "ok": true,
         "result": {
           "host": "github.com",
-          "owner": "orca",
-          "repo": "orca"
+          "owner": "quirky",
+          "repo": "quirky"
         }
       }
     },
@@ -409,8 +409,8 @@
         "ok": true,
         "result": {
           "host": "github.com",
-          "owner": "orca",
-          "repo": "orca"
+          "owner": "quirky",
+          "repo": "quirky"
         }
       },
       "work-item": {
@@ -513,8 +513,8 @@
         "ok": true,
         "result": {
           "host": "github.com",
-          "owner": "orca",
-          "repo": "orca"
+          "owner": "quirky",
+          "repo": "quirky"
         }
       }
     },
@@ -590,8 +590,8 @@
         "ok": true,
         "result": {
           "host": "github.com",
-          "owner": "orca",
-          "repo": "orca"
+          "owner": "quirky",
+          "repo": "quirky"
         }
       }
     },
@@ -767,8 +767,8 @@
         "ok": true,
         "result": {
           "host": "github.com",
-          "owner": "orca",
-          "repo": "orca"
+          "owner": "quirky",
+          "repo": "quirky"
         }
       },
       "work-item": {
@@ -899,8 +899,8 @@
         "ok": true,
         "result": {
           "host": "github.com",
-          "owner": "orca",
-          "repo": "orca"
+          "owner": "quirky",
+          "repo": "quirky"
         }
       }
     },
@@ -1053,8 +1053,8 @@
         "ok": true,
         "result": {
           "host": "github.com",
-          "owner": "orca",
-          "repo": "orca"
+          "owner": "quirky",
+          "repo": "quirky"
         }
       },
       "work-item": {
@@ -1266,8 +1266,8 @@
         "ok": true,
         "result": {
           "host": "github.com",
-          "owner": "orca",
-          "repo": "orca"
+          "owner": "quirky",
+          "repo": "quirky"
         }
       },
       "work-item": {

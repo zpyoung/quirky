@@ -26,7 +26,7 @@ vi.mock('node:os', async () => {
 const { ClaudeRuntimePathResolver } = await import('./runtime-paths')
 
 beforeEach(() => {
-  testState.fakeHomeDir = mkdtempSync(join(tmpdir(), 'orca-claude-runtime-paths-'))
+  testState.fakeHomeDir = mkdtempSync(join(tmpdir(), 'quirky-claude-runtime-paths-'))
   testState.previousConfigDir = process.env.CLAUDE_CONFIG_DIR
   delete process.env.CLAUDE_CONFIG_DIR
 })

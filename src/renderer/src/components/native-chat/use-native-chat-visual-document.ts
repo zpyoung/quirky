@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ORCA_EDITOR_FILE_SAVED_EVENT } from '@/components/editor/editor-autosave'
+import { QUIRKY_EDITOR_FILE_SAVED_EVENT } from '@/components/editor/editor-autosave'
 import { getRuntimeTargetForFileOwner } from '@/lib/file-owner-runtime-target'
 import { useAppStore } from '@/store'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -94,8 +94,8 @@ function useEditorSavesOf(target: RuntimeClientTarget, path: string | null): num
         setSaves((count) => count + 1)
       }
     }
-    window.addEventListener(ORCA_EDITOR_FILE_SAVED_EVENT, onSaved)
-    return () => window.removeEventListener(ORCA_EDITOR_FILE_SAVED_EVENT, onSaved)
+    window.addEventListener(QUIRKY_EDITOR_FILE_SAVED_EVENT, onSaved)
+    return () => window.removeEventListener(QUIRKY_EDITOR_FILE_SAVED_EVENT, onSaved)
   }, [environmentId, path])
   return saves
 }

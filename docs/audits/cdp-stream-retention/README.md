@@ -3,7 +3,7 @@
 From the worktree root:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/cdp-stream-retention/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/cdp-stream-retention/reproduce.mjs
 ```
 
 This bundles the current response writer and connects real loopback WebSockets. The reader pauses while the producer sends at most 128 MiB. The script starts no Electron application or PTY and closes all sockets. `before.json` records the same experiment against the unbounded writer; `after.json` records the fixed writer.

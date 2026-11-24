@@ -7,7 +7,7 @@ import { wrapWindowsDirectCmdHookCommand } from '../agent-hooks/windows-direct-c
 import { getWindowsSystem32Path } from '../agent-hooks/windows-powershell-hook-launcher'
 
 // Why: Copilot's user-level hook files can use VS Code-compatible PascalCase
-// names, which match the event vocabulary already normalized by Orca's hook
+// names, which match the event vocabulary already normalized by Quirky's hook
 // server and avoid wrapper-side event remapping.
 export const COPILOT_EVENTS = [
   'SessionStart',
@@ -18,7 +18,7 @@ export const COPILOT_EVENTS = [
   'PostToolUseFailure',
   // Why: GitHub's current reference documents subagentStart with only the
   // camelCase payload shape. The wrapper passes the event name separately, so
-  // Orca can normalize it without depending on a PascalCase payload.
+  // Quirky can normalize it without depending on a PascalCase payload.
   'subagentStart',
   'SubagentStop',
   'PreCompact',
@@ -30,7 +30,7 @@ export const COPILOT_EVENTS = [
 
 export function getManagedCommand(scriptPath: string, eventName: string): string {
   if (process.platform !== 'win32') {
-    return wrapPosixHookCommand(scriptPath, { ORCA_COPILOT_HOOK_EVENT: eventName })
+    return wrapPosixHookCommand(scriptPath, { QUIRKY_COPILOT_HOOK_EVENT: eventName })
   }
   // Why an argument, not the hook `env` map: every Copilot version runs the command text, so the
   // event survives runners that ignore `env`, and each event keeps a distinct managed command.
@@ -39,7 +39,7 @@ export function getManagedCommand(scriptPath: string, eventName: string): string
   // without `/d`, so a printing cmd AutoRun would land ahead of the `{}` Copilot parses.
   return direct
     ? `${getWindowsSystem32Path('cmd.exe')} /d /c ${direct} ${eventName}`
-    : wrapWindowsHookCommand(scriptPath, { ORCA_COPILOT_HOOK_EVENT: eventName })
+    : wrapWindowsHookCommand(scriptPath, { QUIRKY_COPILOT_HOOK_EVENT: eventName })
 }
 
 export function getManagedHookDefinition(command: string): HookDefinition {

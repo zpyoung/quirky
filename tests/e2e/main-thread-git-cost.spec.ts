@@ -9,11 +9,11 @@
  * way to split spawn initiation from stdout drain from porcelain parsing — the
  * churn probe reports spawn initiation only (the whole run for synchronous launches).
  *
- * Run: ORCA_GIT_COST_BENCH=1 ORCA_BACKGROUND_LAUNCH=1 \
+ * Run: QUIRKY_GIT_COST_BENCH=1 QUIRKY_BACKGROUND_LAUNCH=1 \
  *   npx playwright test tests/e2e/main-thread-git-cost.spec.ts \
  *   --config tests/playwright.config.ts --project electron-headless --workers=1
  */
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -38,9 +38,9 @@ type MainThreadReport = {
 
 type Phase = { label: string; repos: number; concurrency: number; seconds: number }
 
-const FILES_PER_REPO = Number(process.env.ORCA_GIT_COST_FILES ?? 400)
-const PHASE_SECONDS = Number(process.env.ORCA_GIT_COST_PHASE_SECONDS ?? 20)
-const MAX_REPOS = Number(process.env.ORCA_GIT_COST_REPOS ?? 24)
+const FILES_PER_REPO = Number(process.env.QUIRKY_GIT_COST_FILES ?? 400)
+const PHASE_SECONDS = Number(process.env.QUIRKY_GIT_COST_PHASE_SECONDS ?? 20)
+const MAX_REPOS = Number(process.env.QUIRKY_GIT_COST_REPOS ?? 24)
 
 const PHASES: Phase[] = [
   { label: 'idle', repos: 0, concurrency: 0, seconds: PHASE_SECONDS },
@@ -52,18 +52,18 @@ const PHASES: Phase[] = [
 ]
 
 test.use({
-  orcaAppExtraEnv: { ORCA_MAIN_THREAD_DIAGNOSTICS: '1', ORCA_BACKGROUND_LAUNCH: '1' }
+  quirkyAppExtraEnv: { QUIRKY_MAIN_THREAD_DIAGNOSTICS: '1', QUIRKY_BACKGROUND_LAUNCH: '1' }
 })
 
 test.describe('main-thread git orchestration cost', () => {
   test.skip(
-    process.env.ORCA_GIT_COST_BENCH !== '1',
-    'Diagnostic bench; set ORCA_GIT_COST_BENCH=1 to run'
+    process.env.QUIRKY_GIT_COST_BENCH !== '1',
+    'Diagnostic bench; set QUIRKY_GIT_COST_BENCH=1 to run'
   )
   test.setTimeout((PHASES.reduce((sum, phase) => sum + phase.seconds, 0) + 600) * 1000)
 
   test('measures spawn / drain / parse split under git churn', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }, testInfo) => {
     const reports: MainThreadReport[] = []
@@ -90,14 +90,14 @@ test.describe('main-thread git orchestration cost', () => {
       }
     })
 
-    const churnRoot = mkdtempSync(path.join(tmpdir(), 'orca-git-cost-'))
+    const churnRoot = mkdtempSync(path.join(tmpdir(), 'quirky-git-cost-'))
     const profileDir = path.join(testInfo.outputDir, 'main-profiles')
     mkdirSync(profileDir, { recursive: true })
     const results: Record<string, unknown>[] = []
     try {
       const repos = createGitChurnRepos(churnRoot, MAX_REPOS, FILES_PER_REPO)
       const registration = await registerGitChurnRepos(
-        orcaPage,
+        quirkyPage,
         repos.map((repo) => repo.path)
       )
       expect(
@@ -111,14 +111,14 @@ test.describe('main-thread git orchestration cost', () => {
         const startedAt = Date.now()
         if (phase.concurrency > 0) {
           await startGitChurnLoad(
-            orcaPage,
+            quirkyPage,
             repos.slice(0, phase.repos).map((repo) => repo.path),
             { concurrency: phase.concurrency, admissionTier: 'status' }
           )
         }
         await new Promise((resolve) => setTimeout(resolve, phase.seconds * 1000))
         const churn: GitChurnStats | null =
-          phase.concurrency > 0 ? await stopGitChurnLoad(orcaPage) : null
+          phase.concurrency > 0 ? await stopGitChurnLoad(quirkyPage) : null
         const endedAt = Date.now()
         const wallMs = await stopMainProfiler(electronApp, profilePath)
         // Skip the first window: it straddles the previous phase's tail.
@@ -144,7 +144,7 @@ test.describe('main-thread git orchestration cost', () => {
         console.log(`[git-cost] ${JSON.stringify(results.at(-1))}`)
       }
     } finally {
-      await stopGitChurnLoad(orcaPage).catch(() => null)
+      await stopGitChurnLoad(quirkyPage).catch(() => null)
       rmSync(churnRoot, { recursive: true, force: true })
     }
     const summaryPath = path.join(profileDir, 'summary.json')
@@ -194,7 +194,7 @@ async function startMainProfiler(electronApp: {
     await post('Profiler.enable')
     await post('Profiler.setSamplingInterval', { interval: intervalUs })
     await post('Profiler.start')
-    scope.__orcaGitCostProfiler = { session, post, startedAt: Date.now() }
+    scope.__quirkyGitCostProfiler = { session, post, startedAt: Date.now() }
   }, 500)
 }
 
@@ -208,7 +208,7 @@ async function stopMainProfiler(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: same bench-owned global installed above.
     const scope = globalThis as unknown as Record<string, unknown>
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shape startMainProfiler stored on this same global, in this same process.
-    const handle = scope.__orcaGitCostProfiler as {
+    const handle = scope.__quirkyGitCostProfiler as {
       session: { disconnect: () => void }
       post: (method: string, params?: { interval?: number }) => Promise<Record<string, unknown>>
       startedAt: number
@@ -219,7 +219,7 @@ async function stopMainProfiler(
       .getBuiltinModule('node:fs')
       .writeFileSync(target, JSON.stringify(profile), { mode: 0o600 })
     handle.session.disconnect()
-    delete scope.__orcaGitCostProfiler
+    delete scope.__quirkyGitCostProfiler
     return wallMs
   }, outPath)
 }

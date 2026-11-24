@@ -26,7 +26,7 @@ describe('Endpoint file lifecycle', () => {
   let userDataPath: string
 
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-endpoint-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-endpoint-'))
   })
 
   afterEach(() => {
@@ -41,14 +41,14 @@ describe('Endpoint file lifecycle', () => {
       expect(filePath).toBeTruthy()
       expect(existsSync(filePath!)).toBe(true)
       const contents = readFileSync(filePath!, 'utf8')
-      const expectedPort = server.buildPtyEnv().ORCA_AGENT_HOOK_PORT
-      const expectedToken = server.buildPtyEnv().ORCA_AGENT_HOOK_TOKEN
+      const expectedPort = server.buildPtyEnv().QUIRKY_AGENT_HOOK_PORT
+      const expectedToken = server.buildPtyEnv().QUIRKY_AGENT_HOOK_TOKEN
       const prefix = process.platform === 'win32' ? 'set ' : ''
-      expect(contents).toContain(`${prefix}ORCA_AGENT_HOOK_PORT=${expectedPort}`)
-      expect(contents).toContain(`${prefix}ORCA_AGENT_HOOK_TOKEN=${expectedToken}`)
-      expect(contents).toContain(`${prefix}ORCA_AGENT_HOOK_ENV=development`)
-      expect(contents).toContain(`${prefix}ORCA_AGENT_HOOK_VERSION=1`)
-      expect(contents).toContain(`${prefix}ORCA_AGENT_HOOK_TRANSPORT=raw-json-v1`)
+      expect(contents).toContain(`${prefix}QUIRKY_AGENT_HOOK_PORT=${expectedPort}`)
+      expect(contents).toContain(`${prefix}QUIRKY_AGENT_HOOK_TOKEN=${expectedToken}`)
+      expect(contents).toContain(`${prefix}QUIRKY_AGENT_HOOK_ENV=development`)
+      expect(contents).toContain(`${prefix}QUIRKY_AGENT_HOOK_VERSION=1`)
+      expect(contents).toContain(`${prefix}QUIRKY_AGENT_HOOK_TRANSPORT=raw-json-v1`)
     } finally {
       server.stop()
     }
@@ -74,14 +74,14 @@ describe('Endpoint file lifecycle', () => {
     const server = new AgentHookServer()
     await server.start({ env: 'production', userDataPath })
     const firstPath = server.endpointFilePath
-    const firstToken = server.buildPtyEnv().ORCA_AGENT_HOOK_TOKEN
+    const firstToken = server.buildPtyEnv().QUIRKY_AGENT_HOOK_TOKEN
     server.stop()
 
     await server.start({ env: 'production', userDataPath })
     try {
       const secondPath = server.endpointFilePath
-      const secondPort = server.buildPtyEnv().ORCA_AGENT_HOOK_PORT
-      const secondToken = server.buildPtyEnv().ORCA_AGENT_HOOK_TOKEN
+      const secondPort = server.buildPtyEnv().QUIRKY_AGENT_HOOK_PORT
+      const secondToken = server.buildPtyEnv().QUIRKY_AGENT_HOOK_TOKEN
       // Path is stable (so PTYs stamped before restart can still find the file)
       expect(secondPath).toBe(firstPath)
       // Contents refresh with a new token so stale-env survivors reach the live server.
@@ -89,16 +89,16 @@ describe('Endpoint file lifecycle', () => {
       expect(secondToken).not.toBe(firstToken)
       const contents = readFileSync(secondPath!, 'utf8')
       // Why: assert on token (randomUUID, can't collide), not port — listen(0) may legitimately reuse the ephemeral port and flake a port check.
-      expect(contents).toContain(`ORCA_AGENT_HOOK_PORT=${secondPort}`)
-      expect(contents).toContain(`ORCA_AGENT_HOOK_TOKEN=${secondToken}`)
-      expect(contents).not.toContain(`ORCA_AGENT_HOOK_TOKEN=${firstToken}`)
+      expect(contents).toContain(`QUIRKY_AGENT_HOOK_PORT=${secondPort}`)
+      expect(contents).toContain(`QUIRKY_AGENT_HOOK_TOKEN=${secondToken}`)
+      expect(contents).not.toContain(`QUIRKY_AGENT_HOOK_TOKEN=${firstToken}`)
     } finally {
       server.stop()
     }
   })
 
   it('leaves the endpoint file in place on stop()', async () => {
-    // Why: stop() leaves the file (stale = fail-open); unlinking would race a concurrent Orca instance rewriting it between token-check and unlink (TOCTOU).
+    // Why: stop() leaves the file (stale = fail-open); unlinking would race a concurrent Quirky instance rewriting it between token-check and unlink (TOCTOU).
     const server = new AgentHookServer()
     await server.start({ env: 'production', userDataPath })
     const filePath = server.endpointFilePath!
@@ -107,12 +107,12 @@ describe('Endpoint file lifecycle', () => {
     expect(existsSync(filePath)).toBe(true)
   })
 
-  it('buildPtyEnv includes ORCA_AGENT_HOOK_ENDPOINT when the server is running', async () => {
+  it('buildPtyEnv includes QUIRKY_AGENT_HOOK_ENDPOINT when the server is running', async () => {
     const server = new AgentHookServer()
     await server.start({ env: 'production', userDataPath })
     try {
       const env = server.buildPtyEnv()
-      expect(env.ORCA_AGENT_HOOK_ENDPOINT).toBe(server.endpointFilePath)
+      expect(env.QUIRKY_AGENT_HOOK_ENDPOINT).toBe(server.endpointFilePath)
     } finally {
       server.stop()
     }
@@ -125,8 +125,10 @@ describe('Endpoint file lifecycle', () => {
     await secondServer.start({ env: 'development', userDataPath, endpointNamespace: 'dev-b' })
     try {
       expect(firstServer.endpointFilePath).not.toBe(secondServer.endpointFilePath)
-      expect(firstServer.buildPtyEnv().ORCA_AGENT_HOOK_ENDPOINT).toBe(firstServer.endpointFilePath)
-      expect(secondServer.buildPtyEnv().ORCA_AGENT_HOOK_ENDPOINT).toBe(
+      expect(firstServer.buildPtyEnv().QUIRKY_AGENT_HOOK_ENDPOINT).toBe(
+        firstServer.endpointFilePath
+      )
+      expect(secondServer.buildPtyEnv().QUIRKY_AGENT_HOOK_ENDPOINT).toBe(
         secondServer.endpointFilePath
       )
       expect(existsSync(firstServer.endpointFilePath!)).toBe(true)
@@ -137,15 +139,15 @@ describe('Endpoint file lifecycle', () => {
     }
   })
 
-  it('buildPtyEnv omits ORCA_AGENT_HOOK_ENDPOINT when no userDataPath was provided', async () => {
+  it('buildPtyEnv omits QUIRKY_AGENT_HOOK_ENDPOINT when no userDataPath was provided', async () => {
     // Why: the endpoint file is opt-in via userDataPath; without it, hooks fall back to v1 behavior (no ENDPOINT key).
     const server = new AgentHookServer()
     await server.start({ env: 'production' })
     try {
       const env = server.buildPtyEnv()
-      expect(env.ORCA_AGENT_HOOK_ENDPOINT).toBeUndefined()
-      expect(env.ORCA_AGENT_HOOK_PORT).toBeTruthy()
-      expect(env.ORCA_AGENT_HOOK_TOKEN).toBeTruthy()
+      expect(env.QUIRKY_AGENT_HOOK_ENDPOINT).toBeUndefined()
+      expect(env.QUIRKY_AGENT_HOOK_PORT).toBeTruthy()
+      expect(env.QUIRKY_AGENT_HOOK_TOKEN).toBeTruthy()
     } finally {
       server.stop()
     }
@@ -183,10 +185,10 @@ describe('Endpoint file lifecycle', () => {
     await server.start({ env: 'bad;value', userDataPath })
     try {
       expect(existsSync(server.endpointFilePath!)).toBe(false)
-      expect(server.buildPtyEnv().ORCA_AGENT_HOOK_ENDPOINT).toBeUndefined()
+      expect(server.buildPtyEnv().QUIRKY_AGENT_HOOK_ENDPOINT).toBeUndefined()
       // PORT/TOKEN still flow via PTY env — fail-open to v1 behavior.
-      expect(server.buildPtyEnv().ORCA_AGENT_HOOK_PORT).toBeTruthy()
-      expect(server.buildPtyEnv().ORCA_AGENT_HOOK_TOKEN).toBeTruthy()
+      expect(server.buildPtyEnv().QUIRKY_AGENT_HOOK_PORT).toBeTruthy()
+      expect(server.buildPtyEnv().QUIRKY_AGENT_HOOK_TOKEN).toBeTruthy()
     } finally {
       server.stop()
     }
@@ -200,9 +202,12 @@ describe('Endpoint file lifecycle', () => {
     await server.start({ env: 'production', userDataPath })
     try {
       const filePath = server.endpointFilePath!
-      const expectedPort = server.buildPtyEnv().ORCA_AGENT_HOOK_PORT
+      const expectedPort = server.buildPtyEnv().QUIRKY_AGENT_HOOK_PORT
       // Why: source the file exactly as the managed hook script does, catching drift from the KEY=VALUE shape before users do.
-      const out = execFileSync('/bin/sh', ['-c', `. "${filePath}" && echo "$ORCA_AGENT_HOOK_PORT"`])
+      const out = execFileSync('/bin/sh', [
+        '-c',
+        `. "${filePath}" && echo "$QUIRKY_AGENT_HOOK_PORT"`
+      ])
         .toString()
         .trim()
       expect(out).toBe(expectedPort)

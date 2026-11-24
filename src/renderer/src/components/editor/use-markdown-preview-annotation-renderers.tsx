@@ -92,7 +92,7 @@ export function useMarkdownPreviewAnnotationRenderers({
         // stack) are transient review state, not document content. They render
         // inside `.markdown-body`, so mark the container for PDF export
         // exclusion — the extract scrub and export CSS both honor this.
-        <div className="markdown-annotation-controls" data-orca-export-hide="true">
+        <div className="markdown-annotation-controls" data-quirky-export-hide="true">
           <button
             type="button"
             className="markdown-annotation-add"
@@ -140,7 +140,7 @@ export function useMarkdownPreviewAnnotationRenderers({
                     <>
                       <button
                         type="button"
-                        className="orca-diff-comment-pill-btn"
+                        className="quirky-diff-comment-pill-btn"
                         title={
                           copiedReviewNoteId === comment.id
                             ? translate(

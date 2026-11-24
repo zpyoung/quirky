@@ -16,7 +16,7 @@ const { values } = parseArgs({
     output: { type: 'string' }
   }
 })
-process.env.ORCA_CLAUDE_USAGE_APPEND_BENCH_BASELINE = values['baseline-ref']
+process.env.QUIRKY_CLAUDE_USAGE_APPEND_BENCH_BASELINE = values['baseline-ref']
 
 function writeReport(report) {
   console.log(JSON.stringify(report))
@@ -36,7 +36,7 @@ if (process.platform === 'win32' || process.getuid?.() === 0) {
     platform: process.platform
   })
 } else {
-  const home = await mkdtemp(join(tmpdir(), 'orca-claude-discovery-coverage-'))
+  const home = await mkdtemp(join(tmpdir(), 'quirky-claude-discovery-coverage-'))
   const denied = join(home, '.claude', 'projects', 'denied')
   try {
     const project = join(home, '.claude', 'projects', 'valid')

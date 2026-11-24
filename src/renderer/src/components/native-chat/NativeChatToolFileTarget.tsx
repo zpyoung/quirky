@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { createNativeChatFileHref } from '../../../../shared/native-chat-href-routing'
 
 /** The file a tool row names: its base name on screen, the full path in its title and
- *  accessible name. With a link handler it opens the file in Orca instead of toggling the row. */
+ *  accessible name. With a link handler it opens the file in Quirky instead of toggling the row. */
 export function NativeChatToolFileTarget({
   path,
   label,

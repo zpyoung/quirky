@@ -539,8 +539,8 @@ describe('registerSettingsHandlers', () => {
     ) => Promise<unknown>
 
     await handler(settingsInvokeEvent, {
-      pluginConsents: { 'orca-samples.demo': 'sha256-forged' },
-      disabledPlugins: ['orca-samples.demo']
+      pluginConsents: { 'quirky-samples.demo': 'sha256-forged' },
+      disabledPlugins: ['quirky-samples.demo']
     })
 
     expect(store.updateSettings).toHaveBeenCalledWith(

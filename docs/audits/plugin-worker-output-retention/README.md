@@ -12,7 +12,7 @@ The fix uses the existing `ownRetainedString` copier for incomplete segments ret
 - `src/main/plugins/plugin-host-process.ts` installs the parser on child stdout and stderr at lines 101–102, with UTF-8 decoding in the parser. The production sink passes through `plugin-worker-manager.ts:148` and `plugin-service.ts:94` to `plugin-log-buffer.ts:14`, which stores the original string without copying it.
 - The parser retains at most one incomplete line per stream. The default five active workers allow ten live stdout/stderr buffers. Worker slots are acquired before startup. Idle workers are reaped after five minutes, checked every minute; stream end clears parser buffering.
 - The log ring belongs to the long-lived `PluginService`, not the worker. Worker exit and stream end preserve its last 200 entries per plugin. Ring eviction releases the entries. Several lines can share one parent; the backing allocation must be counted once.
-- This is a main-process plugin path. The plugin-system setting gates activation (`src/main/startup/main-process-plugins.ts:59–62`). It is not a terminal daemon or renderer retention path. The plugin `orca.log` IPC message is a separate producer.
+- This is a main-process plugin path. The plugin-system setting gates activation (`src/main/startup/main-process-plugins.ts:59–62`). It is not a terminal daemon or renderer retention path. The plugin `quirky.log` IPC message is a separate producer.
 - `PluginService.getLogs` and its IPC handler expose the existing ring. Reading or serializing a concatenated string can flatten it and shorten its parent retention, but does not remove the service's ring entries.
 
 ## Reproduce
@@ -20,13 +20,13 @@ The fix uses the existing `ownRetainedString` copier for incomplete segments ret
 From the repository root with the project's dependencies installed:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/plugin-worker-output-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/plugin-worker-output-retention/reproduce.cjs
 ```
 
-For Electron, run the installed Electron executable with `ELECTRON_RUN_AS_NODE=1`, `ORCA_BACKGROUND_LAUNCH=1`, and the same arguments. This uses Node mode without opening an app window. For example, on macOS:
+For Electron, run the installed Electron executable with `ELECTRON_RUN_AS_NODE=1`, `QUIRKY_BACKGROUND_LAUNCH=1`, and the same arguments. This uses Node mode without opening an app window. For example, on macOS:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --expose-gc --max-old-space-size=192 docs/audits/plugin-worker-output-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --expose-gc --max-old-space-size=192 docs/audits/plugin-worker-output-retention/reproduce.cjs
 ```
 
 The runner writes `node-results.json` or `electron-results.json` beside itself. Pass `--output <path>` to preserve the captured reports. It uses inert PassThrough streams, no OS child process or network, a 192 MiB heap limit, and a 30-second deadline.
@@ -57,9 +57,9 @@ Behavior comparisons cover blank and split lines, null/empty streams, CRLF, end 
 ## Validation
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/plugins/plugin-worker-output-retention.test.ts src/main/plugins/plugin-worker-output-buffer.test.ts src/main/plugins/plugin-host-process.test.ts src/shared/own-retained-string.test.ts
-ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/plugin-worker-output-retention/before.config.mjs src/main/plugins/plugin-worker-output-retention.test.ts src/main/plugins/plugin-worker-output-buffer.test.ts
-ORCA_BACKGROUND_LAUNCH=1 pnpm tc:node
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/plugins/plugin-worker-output-retention.test.ts src/main/plugins/plugin-worker-output-buffer.test.ts src/main/plugins/plugin-host-process.test.ts src/shared/own-retained-string.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/plugin-worker-output-retention/before.config.mjs src/main/plugins/plugin-worker-output-retention.test.ts src/main/plugins/plugin-worker-output-buffer.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm tc:node
 ```
 
 The fixed source passes 20 tests. The baseline overlay intentionally fails all three new heap regressions: approximately 33.6 MB for unfinished tails and 13.2 MB for each ring case, against 2 MiB and 5 MiB ceilings; its original behavior test passes. Node typecheck passes. All five changed-quality scan configurations pass over all five product/test/artifact code files with `--no-ignore --deny-warnings`, including the ordinary and type-aware lint rules.

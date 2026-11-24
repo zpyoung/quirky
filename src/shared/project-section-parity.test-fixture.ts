@@ -8,20 +8,20 @@ import {
 import type { Repo } from './repo-types'
 import type { RuntimeClientTarget } from './runtime-client-target'
 
-const orcaRemote = {
+const quirkyRemote = {
   canonicalKey: 'github.com/stablyai/orca',
   remoteName: 'origin',
   remoteUrl: 'git@github.com:stablyai/orca.git'
 }
 
-function hostRepo(id: string, path: string, displayName = 'orca'): Repo {
+function hostRepo(id: string, path: string, displayName = 'quirky'): Repo {
   return {
     id,
     path,
     displayName,
     badgeColor: '#737373',
     addedAt: 1,
-    ...(displayName === 'orca' ? { gitRemoteIdentity: orcaRemote } : {})
+    ...(displayName === 'quirky' ? { gitRemoteIdentity: quirkyRemote } : {})
   }
 }
 
@@ -35,11 +35,11 @@ export type ParityHostAnswer = {
 }
 
 const localRepos = [
-  hostRepo('local-stably', '/Users/jinwoo/stably/orca'),
+  hostRepo('local-stably', '/Users/jinwoo/stably/quirky'),
   hostRepo('local-assets', '/Users/jinwoo/design-assets', 'design-assets'),
-  hostRepo('local-workspace', '/Users/jinwoo/orca/workspaces/orca/orca')
+  hostRepo('local-workspace', '/Users/jinwoo/quirky/workspaces/quirky/quirky')
 ]
-const windowsRepo = hostRepo('win-orca', 'C:/Users/jinwo/orca/orca')
+const windowsRepo = hostRepo('win-quirky', 'C:/Users/jinwo/quirky/quirky')
 
 // Jinwoo's shape: several local checkouts of stablyai/orca, plus the project on two servers.
 export const PROJECT_SECTION_PARITY_HOSTS: readonly ParityHostAnswer[] = [
@@ -58,9 +58,9 @@ export const PROJECT_SECTION_PARITY_HOSTS: readonly ParityHostAnswer[] = [
       projects: [
         {
           id: 'github:stablyai/orca',
-          displayName: 'Orca',
+          displayName: 'Quirky',
           badgeColor: '#737373',
-          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' },
+          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' },
           sourceRepoIds: [windowsRepo.id],
           createdAt: 5,
           updatedAt: 5
@@ -73,7 +73,7 @@ export const PROJECT_SECTION_PARITY_HOSTS: readonly ParityHostAnswer[] = [
           hostId: 'local',
           repoId: windowsRepo.id,
           path: windowsRepo.path,
-          displayName: 'orca',
+          displayName: 'quirky',
           setupState: 'ready',
           setupMethod: 'imported-existing-folder',
           createdAt: 5,
@@ -86,8 +86,8 @@ export const PROJECT_SECTION_PARITY_HOSTS: readonly ParityHostAnswer[] = [
     target: { kind: 'environment', environmentId: 'm4air' },
     hostId: 'runtime:m4air',
     repos: [
-      hostRepo('m4-orca', '/Users/m4air/orca/orca'),
-      hostRepo('m4-orca-two', '/Users/m4air/orca-two/orca')
+      hostRepo('m4-quirky', '/Users/m4air/quirky/quirky'),
+      hostRepo('m4-quirky-two', '/Users/m4air/quirky-two/quirky')
     ],
     lists: null
   }
@@ -99,28 +99,28 @@ export const PROJECT_SECTION_PARITY_ROWS: readonly {
   repoId: string
   lastActivityAt: number
 }[] = [
-  { id: 'wt-m4-two', repoId: 'm4-orca-two', lastActivityAt: 90 },
-  { id: 'wt-win', repoId: 'win-orca', lastActivityAt: 70 },
+  { id: 'wt-m4-two', repoId: 'm4-quirky-two', lastActivityAt: 90 },
+  { id: 'wt-win', repoId: 'win-quirky', lastActivityAt: 70 },
   { id: 'wt-workspace', repoId: 'local-workspace', lastActivityAt: 50 },
   { id: 'wt-stably', repoId: 'local-stably', lastActivityAt: 30 },
-  { id: 'wt-m4', repoId: 'm4-orca', lastActivityAt: 10 }
+  { id: 'wt-m4', repoId: 'm4-quirky', lastActivityAt: 10 }
 ]
 
 // Same-host checkouts still need path prefixes; other machines do not.
 const STABLY = {
   key: 'project:github:stablyai/orca::setup:local-stably',
-  label: 'stably/orca'
+  label: 'stably/quirky'
 }
 const WORKSPACE = {
   key: 'project:github:stablyai/orca::setup:local-workspace',
-  label: 'orca/orca'
+  label: 'quirky/quirky'
 }
-// Why 'orca', not the server's 'Orca': the later host's derived project name wins the merge.
-const WINDOWS = { key: 'project:github:stablyai/orca', label: 'orca' }
-const M4 = { key: 'project:github:stablyai/orca::setup:m4-orca', label: 'orca/orca' }
+// Why 'quirky', not the server's 'Quirky': the later host's derived project name wins the merge.
+const WINDOWS = { key: 'project:github:stablyai/orca', label: 'quirky' }
+const M4 = { key: 'project:github:stablyai/orca::setup:m4-quirky', label: 'quirky/quirky' }
 const M4_TWO = {
-  key: 'project:github:stablyai/orca::setup:m4-orca-two',
-  label: 'orca-two/orca'
+  key: 'project:github:stablyai/orca::setup:m4-quirky-two',
+  label: 'quirky-two/quirky'
 }
 const ASSETS = { key: 'project:repo:local-assets', label: 'design-assets' }
 
@@ -134,8 +134,8 @@ export const PROJECT_SECTION_PARITY_SERVED: MobileProjectSectionCatalog = {
   repos: [
     {
       id: 'local-stably',
-      displayName: 'orca',
-      path: '/Users/jinwoo/stably/orca',
+      displayName: 'quirky',
+      path: '/Users/jinwoo/stably/quirky',
       badgeColor: '#737373',
       addedAt: 1,
       executionHostId: 'local'
@@ -150,32 +150,32 @@ export const PROJECT_SECTION_PARITY_SERVED: MobileProjectSectionCatalog = {
     },
     {
       id: 'local-workspace',
-      displayName: 'orca',
-      path: '/Users/jinwoo/orca/workspaces/orca/orca',
+      displayName: 'quirky',
+      path: '/Users/jinwoo/quirky/workspaces/quirky/quirky',
       badgeColor: '#737373',
       addedAt: 1,
       executionHostId: 'local'
     },
     {
-      id: 'win-orca',
-      displayName: 'orca',
-      path: 'C:/Users/jinwo/orca/orca',
+      id: 'win-quirky',
+      displayName: 'quirky',
+      path: 'C:/Users/jinwo/quirky/quirky',
       badgeColor: '#737373',
       addedAt: 1,
       executionHostId: 'runtime:windows2'
     },
     {
-      id: 'm4-orca',
-      displayName: 'orca',
-      path: '/Users/m4air/orca/orca',
+      id: 'm4-quirky',
+      displayName: 'quirky',
+      path: '/Users/m4air/quirky/quirky',
       badgeColor: '#737373',
       addedAt: 1,
       executionHostId: 'runtime:m4air'
     },
     {
-      id: 'm4-orca-two',
-      displayName: 'orca',
-      path: '/Users/m4air/orca-two/orca',
+      id: 'm4-quirky-two',
+      displayName: 'quirky',
+      path: '/Users/m4air/quirky-two/quirky',
       badgeColor: '#737373',
       addedAt: 1,
       executionHostId: 'runtime:m4air'
@@ -183,7 +183,7 @@ export const PROJECT_SECTION_PARITY_SERVED: MobileProjectSectionCatalog = {
   ],
   projects: [
     { id: 'repo:local-assets', displayName: 'design-assets' },
-    { id: 'github:stablyai/orca', displayName: 'orca' }
+    { id: 'github:stablyai/orca', displayName: 'quirky' }
   ],
   setups: [
     {
@@ -191,8 +191,8 @@ export const PROJECT_SECTION_PARITY_SERVED: MobileProjectSectionCatalog = {
       projectId: 'github:stablyai/orca',
       hostId: 'local',
       repoId: 'local-stably',
-      path: '/Users/jinwoo/stably/orca',
-      displayName: 'orca',
+      path: '/Users/jinwoo/stably/quirky',
+      displayName: 'quirky',
       setupMethod: 'legacy-repo'
     },
     {
@@ -209,38 +209,38 @@ export const PROJECT_SECTION_PARITY_SERVED: MobileProjectSectionCatalog = {
       projectId: 'github:stablyai/orca',
       hostId: 'local',
       repoId: 'local-workspace',
-      path: '/Users/jinwoo/orca/workspaces/orca/orca',
-      displayName: 'orca',
+      path: '/Users/jinwoo/quirky/workspaces/quirky/quirky',
+      displayName: 'quirky',
       setupMethod: 'legacy-repo'
     },
     {
       id: 'win-setup',
       projectId: 'github:stablyai/orca',
       hostId: 'runtime:windows2',
-      repoId: 'win-orca',
-      path: 'C:/Users/jinwo/orca/orca',
-      displayName: 'orca',
+      repoId: 'win-quirky',
+      path: 'C:/Users/jinwo/quirky/quirky',
+      displayName: 'quirky',
       setupMethod: 'imported-existing-folder',
       connectionId: null,
       executionHostId: 'runtime:windows2'
     },
     {
-      id: 'm4-orca',
+      id: 'm4-quirky',
       projectId: 'github:stablyai/orca',
       hostId: 'runtime:m4air',
-      repoId: 'm4-orca',
-      path: '/Users/m4air/orca/orca',
-      displayName: 'orca',
+      repoId: 'm4-quirky',
+      path: '/Users/m4air/quirky/quirky',
+      displayName: 'quirky',
       setupMethod: 'legacy-repo',
       executionHostId: 'runtime:m4air'
     },
     {
-      id: 'm4-orca-two',
+      id: 'm4-quirky-two',
       projectId: 'github:stablyai/orca',
       hostId: 'runtime:m4air',
-      repoId: 'm4-orca-two',
-      path: '/Users/m4air/orca-two/orca',
-      displayName: 'orca',
+      repoId: 'm4-quirky-two',
+      path: '/Users/m4air/quirky-two/quirky',
+      displayName: 'quirky',
       setupMethod: 'legacy-repo',
       executionHostId: 'runtime:m4air'
     }

@@ -58,20 +58,20 @@ Active/cancelling records, pages, native promises, abort behavior, join timing, 
 ## Reproduction and source fences
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 ORCA_BROWSER_CACHE_VARIANT=before pnpm exec vitest run --config docs/audits/browser-closed-result-retention/vitest.config.mjs docs/audits/browser-closed-result-retention/scenario.test.mjs
-ORCA_BACKGROUND_LAUNCH=1 ORCA_BROWSER_CACHE_VARIANT=fixed pnpm exec vitest run --config docs/audits/browser-closed-result-retention/vitest.config.mjs docs/audits/browser-closed-result-retention/scenario.test.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_BROWSER_CACHE_VARIANT=before pnpm exec vitest run --config docs/audits/browser-closed-result-retention/vitest.config.mjs docs/audits/browser-closed-result-retention/scenario.test.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_BROWSER_CACHE_VARIANT=fixed pnpm exec vitest run --config docs/audits/browser-closed-result-retention/vitest.config.mjs docs/audits/browser-closed-result-retention/scenario.test.mjs
 ```
 
-For Electron run the installed binary with `ELECTRON_RUN_AS_NODE=1` and `ORCA_BACKGROUND_LAUNCH=1`, passing node_modules/vitest/vitest.mjs and the same arguments. Reports are separate per runtime/variant; set `ORCA_BROWSER_CACHE_OUTPUT` to another file path to preserve captured reports. `sources.cjs` reverses `fix.patch` in memory and checks exact baseline/fixed hashes plus 21 caller/dependency hashes. The config loads those sources at their real production module IDs without changing checkout files. A synthetic CRLF control checks all 24 source/patch reads against canonical LF hashes. Both variants use the same controlled producer and lifecycle ports.
+For Electron run the installed binary with `ELECTRON_RUN_AS_NODE=1` and `QUIRKY_BACKGROUND_LAUNCH=1`, passing node_modules/vitest/vitest.mjs and the same arguments. Reports are separate per runtime/variant; set `QUIRKY_BROWSER_CACHE_OUTPUT` to another file path to preserve captured reports. `sources.cjs` reverses `fix.patch` in memory and checks exact baseline/fixed hashes plus 21 caller/dependency hashes. The config loads those sources at their real production module IDs without changing checkout files. A synthetic CRLF control checks all 24 source/patch reads against canonical LF hashes. Both variants use the same controlled producer and lifecycle ports.
 
 `source-versions.json` records 23 canonical-LF source/caller hashes. All 23 match named main checkpoint 291b4ddd6f1c1af480169885e0fda7f9c78ff053; 21 match v1.4.198. Both fixed source baselines match both named versions. The proof executes current source/dependencies, not a historical application binary.
 
 ## Permanent regression validation
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/browser/browser-client-host-command-retention.test.ts src/main/browser/browser-client-host-command-dispatcher.test.ts src/main/browser/browser-client-page-command-executor.test.ts src/main/browser/paired-runtime-browser-client-host-composition.test.ts src/main/browser/paired-runtime-browser-client-host.test.ts
-ORCA_BACKGROUND_LAUNCH=1 ORCA_BROWSER_CACHE_VARIANT=before pnpm exec vitest run --config docs/audits/browser-closed-result-retention/vitest.config.mjs src/main/browser/browser-client-host-command-retention.test.ts src/main/browser/browser-client-host-command-dispatcher.test.ts
-ORCA_BACKGROUND_LAUNCH=1 pnpm tc:node
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/browser/browser-client-host-command-retention.test.ts src/main/browser/browser-client-host-command-dispatcher.test.ts src/main/browser/browser-client-page-command-executor.test.ts src/main/browser/paired-runtime-browser-client-host-composition.test.ts src/main/browser/paired-runtime-browser-client-host.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_BROWSER_CACHE_VARIANT=before pnpm exec vitest run --config docs/audits/browser-closed-result-retention/vitest.config.mjs src/main/browser/browser-client-host-command-retention.test.ts src/main/browser/browser-client-host-command-dispatcher.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm tc:node
 ```
 
 The baseline regression command intentionally fails the two new lifetime assertions. The source and object counts prove a code mechanism, not incident-specific browser use, native stall duration, aggregate app RSS, or attribution to #19831.

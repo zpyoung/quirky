@@ -1,4 +1,4 @@
-// A Codex chat is Working while Codex still holds a send, never while Orca merely waits for a
+// A Codex chat is Working while Codex still holds a send, never while Quirky merely waits for a
 // delivery row: a turn that completes without taking a send (a hook blocked it) ends Working with
 // no row written, and a client already following the chat reads it from the frames it is sent.
 // Driven through the shipped host, journal and Codex adapter; only the Codex child is fake.
@@ -94,7 +94,7 @@ async function rawSubmission(clientMessageId: string): Promise<AgentJournalSubmi
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-held-sends-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-held-sends-'))
   answers = 0
   events.length = 0
   turns = codexTurnLifecycleFake(

@@ -1,17 +1,17 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 import { expectTerminalAccessibilityText } from './helpers/terminal-accessibility-tree'
 
 test('Accounts prepares each ZCode sign-in command and closes its terminal', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  await orcaPage.evaluate(() => {
+  await waitForSessionReady(quirkyPage)
+  await quirkyPage.evaluate(() => {
     const state = window.__store?.getState()
     state?.openSettingsTarget({ pane: 'accounts', repoId: null, sectionId: 'accounts-zcode' })
     state?.openSettingsPage()
   })
-  const section = orcaPage.locator('#accounts-zcode')
+  const section = quirkyPage.locator('#accounts-zcode')
   await expect(section).toBeVisible({ timeout: 30_000 })
   await section.screenshot({ path: testInfo.outputPath('01-setup-buttons.png') })
   for (const [label, command] of [
@@ -29,7 +29,7 @@ test('Accounts prepares each ZCode sign-in command and closes its terminal', asy
     if (!tabId) {
       throw new Error('Setup terminal did not mount')
     }
-    await expectTerminalAccessibilityText(orcaPage, tabId, command)
+    await expectTerminalAccessibilityText(quirkyPage, tabId, command)
     await expect(section.getByRole('button', { name: label, exact: true })).toBeDisabled()
     await section.screenshot({ path: testInfo.outputPath(`${label}.png`) })
     await close.click()

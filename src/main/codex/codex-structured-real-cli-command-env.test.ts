@@ -1,7 +1,7 @@
 // The installed Codex under a user policy that keeps only core env vars: a user shell command
 // (`thread/shellCommand`) must still see the chat's identity, on a new thread and on a cold resume.
 // The model's exec tool reads the same `shell_environment_policy.set` in Codex's source. Opt-in
-// (ORCA_REAL_CODEX_CLI_TEST=1); no account is used, nothing reaches a model.
+// (QUIRKY_REAL_CODEX_CLI_TEST=1); no account is used, nothing reaches a model.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,9 +12,9 @@ import { openCodexThread } from './codex-structured-thread-open'
 import { codexStructuredPermissionPolicy } from './codex-structured-permission-policy'
 
 // The probe is a POSIX shell command.
-const enabled = process.env.ORCA_REAL_CODEX_CLI_TEST === '1' && process.platform !== 'win32'
+const enabled = process.env.QUIRKY_REAL_CODEX_CLI_TEST === '1' && process.platform !== 'win32'
 const SESSION_ID = 'codex_real_command_env'
-const PROBE = 'printf "probe[%s]" "$ORCA_AGENT_SESSION_ID"'
+const PROBE = 'printf "probe[%s]" "$QUIRKY_AGENT_SESSION_ID"'
 
 async function probeIdentity(
   base: string,
@@ -28,7 +28,7 @@ async function probeIdentity(
       command: resolveCodexCommand(),
       args: ['app-server'],
       cwd,
-      env: { HOME: base, CODEX_HOME: join(base, 'codex-home'), ORCA_AGENT_SESSION_ID: SESSION_ID }
+      env: { HOME: base, CODEX_HOME: join(base, 'codex-home'), QUIRKY_AGENT_SESSION_ID: SESSION_ID }
     },
     {
       onNotification: (method, params) => {
@@ -62,7 +62,7 @@ async function probeIdentity(
 
 describe.skipIf(!enabled)('Codex real app-server command env', () => {
   it('keeps the chat identity in commands under inherit = "core", on start and resume', async () => {
-    const base = mkdtempSync(join(tmpdir(), 'orca-real-codex-env-'))
+    const base = mkdtempSync(join(tmpdir(), 'quirky-real-codex-env-'))
     try {
       mkdirSync(join(base, 'workspace'), { recursive: true })
       mkdirSync(join(base, 'codex-home'), { recursive: true })
@@ -70,7 +70,7 @@ describe.skipIf(!enabled)('Codex real app-server command env', () => {
         join(base, 'codex-home', 'config.toml'),
         '[shell_environment_policy]\ninherit = "core"\n'
       )
-      const commandEnv = { ORCA_AGENT_SESSION_ID: SESSION_ID }
+      const commandEnv = { QUIRKY_AGENT_SESSION_ID: SESSION_ID }
       // The policy really strips it: the app-server holds the id, its command does not.
       expect((await probeIdentity(base, { resumeThreadId: null })).seen).toBe('')
       const started = await probeIdentity(base, { resumeThreadId: null, commandEnv })

@@ -28,7 +28,11 @@ export type NotificationSettings = {
   notifyHiddenWorkspaces: boolean
 }
 
-export type NotificationEventSource = 'agent-task-complete' | 'terminal-bell' | 'pending-ask' | 'test'
+export type NotificationEventSource =
+  | 'agent-task-complete'
+  | 'terminal-bell'
+  | 'pending-ask'
+  | 'test'
 
 export type StructuredNotificationRead = StructuredAttentionRead & {
   paneKey: string

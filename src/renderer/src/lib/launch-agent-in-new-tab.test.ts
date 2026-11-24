@@ -577,7 +577,7 @@ describe('launchAgentInNewTab', () => {
     mockIsWebRuntimeSessionActive.mockReturnValue(true)
     mockCreateWebRuntimeSessionTerminal.mockResolvedValue({
       status: 'failed',
-      message: 'Upgrade the remote Orca host before starting or resuming agent sessions.'
+      message: 'Upgrade the remote Quirky host before starting or resuming agent sessions.'
     })
     store.settings = {
       agentCmdOverrides: {},
@@ -590,7 +590,7 @@ describe('launchAgentInNewTab', () => {
     await launchAgentInNewTab({ requestId: 'request-14', agent: 'claude', worktreeId: 'wt-1' })
       ?.terminalCompletion
     expect(mockToastError).toHaveBeenCalledWith(
-      'Upgrade the remote Orca host before starting or resuming agent sessions.'
+      'Upgrade the remote Quirky host before starting or resuming agent sessions.'
     )
     expect(mockSetActiveTabType).not.toHaveBeenCalled()
   })
@@ -728,7 +728,7 @@ describe('launchAgentInNewTab', () => {
         state: 'working',
         prompt: 'large generated prompt',
         agentType: 'command-code',
-        // Why: seeded from Orca's own prompt delivery, not a provider hook (STA-4293).
+        // Why: seeded from Quirky's own prompt delivery, not a provider hook (STA-4293).
         observation: expect.objectContaining({ origin: 'process', kind: 'transition' })
       },
       undefined,

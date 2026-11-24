@@ -1,10 +1,10 @@
 import { wasPushDismissed } from './push-dismissal-watermarks'
 import * as TaskManager from 'expo-task-manager'
 import * as Notifications from 'expo-notifications'
-import { readOrcaPushPayload } from './push-payload'
+import { readQuirkyPushPayload } from './push-payload'
 import { dismissPresentedPushNotification } from './push-tray-dismissal'
 
-const TASK_NAME = 'orca-push-dismissal'
+const TASK_NAME = 'quirky-push-dismissal'
 
 TaskManager.defineTask<Notifications.NotificationTaskPayload>(
   TASK_NAME,
@@ -20,7 +20,7 @@ TaskManager.defineTask<Notifications.NotificationTaskPayload>(
         return
       }
     }
-    const payload = readOrcaPushPayload(raw)
+    const payload = readQuirkyPushPayload(raw)
     if (
       payload?.notificationId &&
       (payload.kind === 'dismiss' || (await wasPushDismissed(payload)))

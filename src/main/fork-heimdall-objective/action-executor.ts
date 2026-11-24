@@ -13,7 +13,7 @@ import {
 } from '../../shared/fork-heimdall-objective/objective-actions'
 import type { ObjectiveWorld } from '../../shared/fork-heimdall-objective/detail-types'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { ObjectiveForgeAccess } from './objective-forge-access'
 import { executeObjectiveDispatch } from './dispatch-executor'
 import { resolveObjectiveDispatchOutcome } from './dispatch-outcome-resolver'
@@ -33,7 +33,7 @@ type ObjectiveExecutorDependencies = {
   objectiveStore: ObjectiveStore
   snapshotBindings: WeakMap<Snapshot<ObjectiveWorld>, ObjectiveSnapshotBinding>
   forge: ObjectiveForgeAccess
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
 }
 
 type StoreLocalAction = Exclude<

@@ -1,5 +1,5 @@
 {
-  "title": "Editing in Orca",
+  "title": "Editing in Quirky",
   "defaultOpen": true,
   "pages": ["monaco", "markdown", "viewers", "file-explorer"]
 }

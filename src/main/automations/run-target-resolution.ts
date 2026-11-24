@@ -30,7 +30,7 @@ const CAPTURED_HOST_REFUSALS: Record<AutomationCapturedHostIssue, string> = {
   [AUTOMATION_ORPHAN_ISSUES.targetReplaced]:
     'The automation host was removed and re-registered, so this automation must be re-adopted before it can run.',
   [AUTOMATION_ORPHAN_ISSUES.workspaceHostAmbiguous]:
-    'The automation workspace spans more than one host, so Orca cannot tell which one to run it on.'
+    'The automation workspace spans more than one host, so Quirky cannot tell which one to run it on.'
 }
 
 const NO_RUNNABLE_HOST = 'This automation has no host to run on.'
@@ -58,7 +58,7 @@ function resolveAutomationOwnerRefusal(store: Store, automation: Automation): st
 }
 
 const LEGACY_TWIN_REFUSAL =
-  'This automation was saved before Orca tracked which host it runs on, and its project is on more than one host. Open the automation and pick the host it should run on.'
+  'This automation was saved before Quirky tracked which host it runs on, and its project is on more than one host. Open the automation and pick the host it should run on.'
 
 /** A record with no captured run target names its project by repo id alone. */
 function resolveLegacyAutomationRunTarget(
@@ -161,7 +161,7 @@ export function resolveAutomationRunTarget(
     return {
       ok: false,
       error:
-        'Remote-server automation scheduling is not available from this Orca client yet. Run this automation on the remote server or update Orca when durable remote scheduling is available.'
+        'Remote-server automation scheduling is not available from this Quirky client yet. Run this automation on the remote server or update Quirky when durable remote scheduling is available.'
     }
   }
 

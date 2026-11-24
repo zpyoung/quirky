@@ -3,20 +3,20 @@ import { pathToFileURL } from 'node:url'
 export const NODE_NETWORK_E2E_SPEC =
   'tests/e2e/ssh-browser-network-execution-route.docker.unit.test.ts'
 export const NATIVE_IME_E2E_SPEC = 'tests/e2e/terminal-ibus-hangul-native.spec.ts'
-// Needs the packaged orcad slot, which only its own job builds.
-export const ORCAD_SERVE_MODE_SWITCH_E2E_SPEC = 'tests/e2e/orcad-serve-mode-switch.spec.ts'
+// Needs the packaged quirkyd slot, which only its own job builds.
+export const QUIRKYD_SERVE_MODE_SWITCH_E2E_SPEC = 'tests/e2e/quirkyd-serve-mode-switch.spec.ts'
 // Windows-only; its own job runs it on a Windows runner.
 export const WINDOWS_MISSING_APPDATA_E2E_SPEC = 'tests/e2e/windows-missing-appdata-startup.spec.ts'
 // Windows-only; the same Windows job runs it.
 export const WINDOWS_COPY_FILE_E2E_SPEC = 'tests/e2e/file-explorer-copy-file-windows.spec.ts'
-// Needs out/orcad, which only the mode-switch job builds; it runs there beside that spec.
+// Needs out/quirkyd, which only the mode-switch job builds; it runs there beside that spec.
 export const LAYOUT_ORACLE_HEADLESS_E2E_SPEC = 'tests/e2e/workspace-layout-oracle-headless.spec.ts'
-// Managed-SSH specs need the orcad template built by their Docker lane.
-export const MANAGED_SSH_E2E_SPEC_PREFIX = 'tests/e2e/ssh-orcad-'
+// Managed-SSH specs need the quirkyd template built by their Docker lane.
+export const MANAGED_SSH_E2E_SPEC_PREFIX = 'tests/e2e/ssh-quirkyd-'
 export const DEDICATED_E2E_SPECS = [
   NODE_NETWORK_E2E_SPEC,
   NATIVE_IME_E2E_SPEC,
-  ORCAD_SERVE_MODE_SWITCH_E2E_SPEC,
+  QUIRKYD_SERVE_MODE_SWITCH_E2E_SPEC,
   LAYOUT_ORACLE_HEADLESS_E2E_SPEC,
   WINDOWS_MISSING_APPDATA_E2E_SPEC,
   WINDOWS_COPY_FILE_E2E_SPEC
@@ -58,7 +58,7 @@ export function selectManagedSshE2eSpecs(input) {
     specs.some(
       (spec) =>
         spec !== MANAGED_SSH_E2E_SPEC_PREFIX &&
-        !/^tests\/e2e\/ssh-orcad-[\w-]+\.spec\.ts$/.test(spec)
+        !/^tests\/e2e\/ssh-quirkyd-[\w-]+\.spec\.ts$/.test(spec)
     )
   ) {
     throw new Error('Expected at least one managed SSH spec')

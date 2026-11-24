@@ -67,7 +67,7 @@ async function openChat(
   definition: StructuredAgentDefinition = CODEX_STRUCTURED_AGENT
 ): Promise<StructuredAgentSessionHost> {
   const { agent } = definition
-  root = await mkdtemp(join(tmpdir(), `orca-provider-operations-${agent}-`))
+  root = await mkdtemp(join(tmpdir(), `quirky-provider-operations-${agent}-`))
   const directory = root
   const host = await ensureStructuredAgentSessionHost({
     logger: createStructuredAgentSessionLogger(),

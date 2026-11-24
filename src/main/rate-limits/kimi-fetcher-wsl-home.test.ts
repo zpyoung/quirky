@@ -81,7 +81,7 @@ describe('fetchKimiRateLimits with a WSL credentials home', () => {
 
     expect(result.status).toBe('error')
     expect(result.usageMetadata?.failureKind).toBe('delegated-refresh-required')
-    expect(result.error).toContain('on the computer running Orca')
+    expect(result.error).toContain('on the computer running Quirky')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

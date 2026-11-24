@@ -1,5 +1,5 @@
 import type { MessagePriority, MessageType, OrchestrationDb } from '../../../../orchestration/db'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { resolveGroupAddress } from '../../../../orchestration/groups'
 import { isEquivalentPaneKey } from '../../../../orchestration/db/pane-key-match'
@@ -26,7 +26,7 @@ type GroupCandidate = OrchestrationAddressableAgent & { mailbox?: { to: string; 
 
 function listRunGroupCandidates(args: {
   db: OrchestrationDb
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   senderRunId: string
   groupAddress: string
   agents: readonly GroupAgentSnapshot[]
@@ -49,7 +49,7 @@ function listRunGroupCandidates(args: {
         warnings.push({
           code: 'recipient_unreachable',
           recipient: to,
-          message: `${to} runs on a remote Orca server; group fan-out does not relay there. Send --to ${to} instead.`
+          message: `${to} runs on a remote Quirky server; group fan-out does not relay there. Send --to ${to} instead.`
         })
       }
       return []
@@ -91,7 +91,7 @@ function listRunGroupCandidates(args: {
 
 export async function sendGroupMessage(args: {
   params: SendParamsInput
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   db: OrchestrationDb
   from: string
   groupAddress: string

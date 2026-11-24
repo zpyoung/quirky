@@ -25,11 +25,11 @@ import {
   type ClaudeProfileSurfaceOutcome
 } from './claude-profile-report'
 
-export const CLAUDE_PROFILE_MERGE_SUFFIX = '.orca-profile-merge'
+export const CLAUDE_PROFILE_MERGE_SUFFIX = '.quirky-profile-merge'
 const HISTORY = 'history.jsonl'
 const PENDING = `${HISTORY}${CLAUDE_PROFILE_MERGE_SUFFIX}`
-// Windows only: identity of the shared file Orca last hardlinked, so a replaced one is told apart.
-const LINK_RECORD = `${HISTORY}.orca-profile-link`
+// Windows only: identity of the shared file Quirky last hardlinked, so a replaced one is told apart.
+const LINK_RECORD = `${HISTORY}.quirky-profile-link`
 
 export function lstatIfPresent(file: string): Stats | undefined {
   try {
@@ -206,13 +206,13 @@ export function mergeClaudeProfilePromptHistory(
     if (statSync(profile).dev !== statSync(destination).dev) {
       throw crossFilesystem()
     }
-    // Why: the old shared file still held under Orca's link means the default was replaced or
+    // Why: the old shared file still held under Quirky's link means the default was replaced or
     // cleared; draining it would bring back history the user removed.
     replaced = identity !== undefined && identity === readLinkRecord(profile)
   }
   let aside: string | undefined
   if (current) {
-    aside = nextFreePath(join(profile, replaced ? `${HISTORY}.orca-profile-conflict` : PENDING))
+    aside = nextFreePath(join(profile, replaced ? `${HISTORY}.quirky-profile-conflict` : PENDING))
     renameFileWithWindowsRetry(source, aside)
   }
   try {

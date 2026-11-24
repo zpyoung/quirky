@@ -26,8 +26,8 @@ vi.mock('../../ssh/targets/ssh-target-registry', () => ({
   setSshTargetMutations: mocks.setMutations
 }))
 vi.mock('./ssh-session-teardown', () => ({ removeRegisteredSshTarget: mocks.remove }))
-vi.mock('../../managed-server/lifecycle/orcad-managed-tunnel', () => ({
-  closeOrcadManagedTunnel: mocks.closeTunnel
+vi.mock('../../managed-server/lifecycle/quirkyd-managed-tunnel', () => ({
+  closeQuirkydManagedTunnel: mocks.closeTunnel
 }))
 vi.mock('./ssh-ipc-context', () => ({
   getCurrentMainWindow: () => null,
@@ -46,10 +46,10 @@ function handler(channel: string): (_event: unknown, args: unknown) => unknown {
 
 const target: SshTarget = { id: 'ssh-1', label: 'host', host: 'host', port: 22, username: 'dev' }
 
-describe('SSH target CRUD against managed orcad targets', () => {
+describe('SSH target CRUD against managed quirkyd targets', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.state.target = { ...target, orcadFence: { environmentId: 'environment-1' } }
+    mocks.state.target = { ...target, quirkydFence: { environmentId: 'environment-1' } }
     registerSshTargetCrudHandlers()
   })
 
@@ -57,7 +57,7 @@ describe('SSH target CRUD against managed orcad targets', () => {
     mocks.updateTarget.mockReturnValue({ ...mocks.state.target, host: 'elsewhere' })
     handler('ssh:updateTarget')(null, {
       id: 'ssh-1',
-      updates: { host: 'elsewhere', orcadFence: undefined, generation: 9 }
+      updates: { host: 'elsewhere', quirkydFence: undefined, generation: 9 }
     })
     expect(mocks.updateTarget).toHaveBeenCalledWith('ssh-1', { host: 'elsewhere' })
     await vi.waitFor(() => expect(mocks.disconnect).toHaveBeenCalledWith('ssh-1'))
@@ -67,7 +67,7 @@ describe('SSH target CRUD against managed orcad targets', () => {
   it('leaves the relay session of a host an older build changed alone when its connection is edited', async () => {
     mocks.state.target = {
       ...target,
-      orcadFence: { environmentId: 'environment-1', sourceChangedAt: '2026-10-01T00:00:00.000Z' }
+      quirkydFence: { environmentId: 'environment-1', sourceChangedAt: '2026-10-01T00:00:00.000Z' }
     }
     mocks.updateTarget.mockReturnValue({ ...mocks.state.target, port: 2222 })
     handler('ssh:updateTarget')(null, { id: 'ssh-1', updates: { port: 2222 } })
@@ -84,21 +84,21 @@ describe('SSH target CRUD against managed orcad targets', () => {
 
   it('refuses to remove a managed host, pointing at Stop instead', async () => {
     await expect(handler('ssh:removeTarget')(null, { id: 'ssh-1' })).rejects.toThrow(
-      'Settings › Orca on your SSH hosts'
+      'Settings › Quirky on your SSH hosts'
     )
     mocks.state.target = {
       ...target,
-      orcadProvisioning: { requestId: 'request-1', name: 'Managed' }
+      quirkydProvisioning: { requestId: 'request-1', name: 'Managed' }
     }
     await expect(handler('ssh:removeTarget')(null, { id: 'ssh-1' })).rejects.toThrow(
-      'Orca runs on this host'
+      'Quirky runs on this host'
     )
     expect(mocks.remove).not.toHaveBeenCalled()
   })
 
   it('gives paired clients the same rules: a managed host is refused there too', async () => {
     const mutations = mocks.setMutations.mock.calls.at(-1)?.[0]
-    await expect(mutations.remove('ssh-1')).rejects.toThrow('Settings › Orca on your SSH hosts')
+    await expect(mutations.remove('ssh-1')).rejects.toThrow('Settings › Quirky on your SSH hosts')
     mutations.update('ssh-1', { host: 'elsewhere', generation: 9 })
     expect(mocks.updateTarget).toHaveBeenCalledWith('ssh-1', { host: 'elsewhere' })
     expect(mocks.remove).not.toHaveBeenCalled()
@@ -108,12 +108,12 @@ describe('SSH target CRUD against managed orcad targets', () => {
     mocks.state.target = target
     handler('ssh:updateTarget')(null, {
       id: 'ssh-1',
-      updates: { label: 'renamed', orcadProvisioning: { requestId: 'x', name: 'y' } }
+      updates: { label: 'renamed', quirkydProvisioning: { requestId: 'x', name: 'y' } }
     })
     handler('ssh:addTarget')(null, {
-      target: { ...target, orcadProvisioning: { requestId: 'x', name: 'y' } }
+      target: { ...target, quirkydProvisioning: { requestId: 'x', name: 'y' } }
     })
     expect(mocks.updateTarget).toHaveBeenCalledWith('ssh-1', { label: 'renamed' })
-    expect(mocks.addTarget.mock.calls[0]?.[0]).not.toHaveProperty('orcadProvisioning')
+    expect(mocks.addTarget.mock.calls[0]?.[0]).not.toHaveProperty('quirkydProvisioning')
   })
 })

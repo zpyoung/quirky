@@ -7,7 +7,7 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import type { HeldPaneReopenOutcome } from '../newer-daemon-hold-state'
 import { holdForNewerDaemon } from './newer-daemon-hold-pane'
 import { NEWER_DAEMON_HOLD_ERROR } from '../../../../../shared/newer-daemon-hold'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { holdInPlaceResumeUntilSettled } from './in-place-resume-hold'
 
 import {
@@ -267,7 +267,7 @@ function connectDeferredSessionReattach(
       return startFreshInstead()
     })
   // Switch point: main clears the gone terminal's binding before this reattach's fresh start.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     holdInPlaceResumeUntilSettled(() => !session.disposed, coldRestoreStartup, outcome)
   }
   return outcome

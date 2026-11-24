@@ -5,7 +5,7 @@ import { expect, it, vi } from 'vitest'
 import { runBundledRipgrepTextSearch } from './bundled-ripgrep-text-search'
 
 it('runs the bundled binary, bounds results and releases process ownership once', async () => {
-  const rootPath = await mkdtemp(join(tmpdir(), 'orca-text-search-'))
+  const rootPath = await mkdtemp(join(tmpdir(), 'quirky-text-search-'))
   const resultRootPath = join(rootPath, 'lexical-root')
   const release = vi.fn()
   try {

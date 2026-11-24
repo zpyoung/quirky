@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import { reclaimWorktreeSpace } from './reclaim-worktree-space.mjs'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { retainViteCache, VITE_CACHE_USAGE_DIRECTORY } from './vite-cache-activity.mjs'
 
 const roots = []
@@ -13,7 +13,7 @@ afterEach(async () => {
   }
 })
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-storage-maintenance-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-storage-maintenance-'))
   roots.push(root)
   const execute = vi.fn(async () => ({ code: 0, timedOut: false }))
   return { commonDirectory: root, repoRoot: root, execute }
@@ -120,7 +120,7 @@ it('runs the CLI outside the repository and retains historical caches until ackn
   await utimes(join(viteCache, VITE_CACHE_USAGE_DIRECTORY), new Date(0), new Date(0))
   const run = (flags = []) =>
     runProcess({
-      program: process.env.ORCA_TEST_NODE_EXECUTABLE ?? process.execPath,
+      program: process.env.QUIRKY_TEST_NODE_EXECUTABLE ?? process.execPath,
       args: [
         resolve(import.meta.dirname, 'reclaim-worktree-space.mjs'),
         '--repo',
@@ -128,7 +128,7 @@ it('runs the CLI outside the repository and retains historical caches until ackn
         ...flags
       ],
       cwd: tmpdir(),
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 20_000,
       terminationBarrier: true
     })

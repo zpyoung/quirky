@@ -498,7 +498,7 @@ describe('browser-palette-search', () => {
         page: makePage(),
         workspace: makeWorkspace(),
         worktree: cleared,
-        repoName: 'orca',
+        repoName: 'quirky',
         worktreeSortIndex: 0,
         isCurrentPage: false,
         isCurrentWorktree: false
@@ -523,7 +523,7 @@ describe('browser-palette-search', () => {
         page: makePage(),
         workspace: makeWorkspace(),
         worktree: cleared,
-        repoName: 'orca',
+        repoName: 'quirky',
         worktreeSortIndex: 0,
         isCurrentPage: false,
         isCurrentWorktree: false

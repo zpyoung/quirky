@@ -207,7 +207,7 @@ export function openDetectedFilePath(
 
     const canOpenWithSystemDefault = shouldOpenTerminalFileWithSystemDefault(fileContext)
     if (openWithSystemDefault && canOpenWithSystemDefault) {
-      // Why: Shift+Cmd/Ctrl mirrors URL links by escaping Orca and honoring the
+      // Why: Shift+Cmd/Ctrl mirrors URL links by escaping Quirky and honoring the
       // user's OS file associations without adding editor-specific settings.
       const openedWithSystemDefault = await window.api.shell.openFilePath(
         mappedFilePath,
@@ -228,7 +228,7 @@ export function openDetectedFilePath(
       return
     }
 
-    // Why: a granted file is readable only through its grant, so it opens in Orca, never as a download.
+    // Why: a granted file is readable only through its grant, so it opens in Quirky, never as a download.
     if (openWithSystemDefault && !canOpenWithSystemDefault && hostGrantId === null) {
       // Why: the popover names Shift+Cmd/Ctrl "Download & open with default app", and the OS
       // cannot launch a remote path, so the direct gesture must reach the same download.
@@ -236,11 +236,11 @@ export function openDetectedFilePath(
       return
     }
 
-    // Why: local HTML files render in Orca's browser for ordinary Cmd/Ctrl-click,
+    // Why: local HTML files render in Quirky's browser for ordinary Cmd/Ctrl-click,
     // and remain the fallback if Shift+Cmd/Ctrl cannot launch the OS default.
     if (isHtmlFilePath(mappedFilePath) && hostGrantId === null) {
       if (canOpenWithSystemDefault) {
-        // Why: Orca's browser has no group placement in v1.
+        // Why: Quirky's browser has no group placement in v1.
         if (refuseExplicitNonEditorRoute()) {
           return
         }

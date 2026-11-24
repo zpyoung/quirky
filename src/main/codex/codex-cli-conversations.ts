@@ -7,7 +7,7 @@ import {
   type StructuredAgentCliConversations,
   type StructuredAgentSessionHistory
 } from '../native-chat/structured-agent-cli-conversations'
-import { getOrcaManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
+import { getQuirkyManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
 
 const CODEX_TRANSCRIPT_IMPORT = directoryTranscriptImport({
   conversationStore: ({ accountHomePath }) => join(accountHomePath, 'sessions'),
@@ -15,7 +15,7 @@ const CODEX_TRANSCRIPT_IMPORT = directoryTranscriptImport({
     selectedAccountHomePath,
     ...(settings.codexManagedAccounts ?? []).map((account) => account.managedHomePath),
     ...configuredAdditionalCodexHomePaths(),
-    getOrcaManagedCodexHomePath(),
+    getQuirkyManagedCodexHomePath(),
     getSystemCodexHomePath()
   ],
   findTranscript: ({ providerSessionId, store, strictErrors }) =>

@@ -33,7 +33,7 @@ describe('AgentHookServer removed-worktree retirement', () => {
 
   beforeEach(() => {
     _internals.resetCachesForTests()
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-removed-worktree-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-removed-worktree-'))
     mkdirSync(join(userDataPath, 'agent-hooks'), { recursive: true })
     writeFileSync(
       lastStatusPath(),

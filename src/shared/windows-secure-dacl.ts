@@ -12,7 +12,7 @@ export const INHERIT_ONLY_ACE = 0x8
 const GENERIC_ALL = 0x10000000
 
 /**
- * The DACL Orca installs on a secure path: protected, full control to the user, SYSTEM and
+ * The DACL Quirky installs on a secure path: protected, full control to the user, SYSTEM and
  * Administrators only. A directory's rules are inheritable so files created inside it start
  * restricted too.
  */
@@ -23,10 +23,10 @@ export function hardenedDaclSddl(userSid: string, isDirectory: boolean): string 
 
 /**
  * OpenSSH's ACE rule (only the user, SYSTEM and Administrators may be allowed anything, inherited
- * or explicit) plus two of Orca's own: the DACL is protected, so loosening a parent cannot reach
+ * or explicit) plus two of Quirky's own: the DACL is protected, so loosening a parent cannot reach
  * the path, and the user can still use it. Returns why the DACL fails, or null when it passes.
  *
- * Why not "exactly the DACL Orca writes": what older builds wrote is just as private and must not
+ * Why not "exactly the DACL Quirky writes": what older builds wrote is just as private and must not
  * be rewritten.
  */
 export function findSecureDaclViolation(
@@ -55,7 +55,7 @@ export function findSecureDaclViolation(
     return 'DACL is not protected; the parent still propagates into it'
   }
   const inheritsToChildren = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE
-  // An inherit-only rule grants the directory itself nothing, so Orca could not write into it.
+  // An inherit-only rule grants the directory itself nothing, so Quirky could not write into it.
   const usable = dacl.aces.some(
     (ace) =>
       ace.type === ACCESS_ALLOWED_ACE_TYPE &&

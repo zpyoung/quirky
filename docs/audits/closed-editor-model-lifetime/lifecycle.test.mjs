@@ -15,7 +15,7 @@ import { useClosedEditorTabCleanup } from '../../../src/renderer/src/components/
 import { TerminalLegacyEditorSurface } from '../../../src/renderer/src/components/TerminalLegacyEditorSurface'
 
 const fixture = vi.hoisted(() => ({ store: null }))
-const variant = process.env.ORCA_CLOSED_MODEL_VARIANT ?? 'fixed'
+const variant = process.env.QUIRKY_CLOSED_MODEL_VARIANT ?? 'fixed'
 const fixed = variant === 'fixed'
 const bridge = fixed
   ? (await import('../../../src/renderer/src/lib/editor-model-registry')).editorModelRegistry
@@ -41,7 +41,7 @@ vi.mock('../../../src/renderer/src/components/editor/EditorPanel', async () => {
     await import('../../../src/renderer/src/components/editor/useClosedEditorTabCleanup')
   return {
     default:
-      (process.env.ORCA_CLOSED_MODEL_VARIANT ?? 'fixed') === 'before'
+      (process.env.QUIRKY_CLOSED_MODEL_VARIANT ?? 'fixed') === 'before'
         ? function PanelCleanupPort() {
             const files = useStore(fixture.store, (state) => state.openFiles)
             useClosedEditorTabCleanup(files)
@@ -226,8 +226,8 @@ afterAll(() => {
     loaderSha256: sha256(readText(resolve('docs/audits/closed-editor-model-lifetime/sources.cjs')))
   }
   writeFileSync(
-    process.env.ORCA_CLOSED_MODEL_OUTPUT ??
-      `docs/audits/closed-editor-model-lifetime/${process.env.ORCA_CLOSED_MODEL_GRAPH ?? 'worktree'}-${variant}-${process.versions.electron ? 'electron' : 'node'}-results.json`,
-    `${JSON.stringify({ runtime: process.versions, variant, graph: process.env.ORCA_CLOSED_MODEL_GRAPH ?? 'worktree', sourceFence, observations, scope: 'Actual legacy surface, cleanup hook, disposal, Store close action and installed Monaco models. Shell/Panel bodies are controlled ports; files/models are seeded. Eight distinct fixture paths, 256 KiB characters each. No native editor widget, app window, field file sizes, heap bytes or incident allocation rate.' }, null, 2)}\n`
+    process.env.QUIRKY_CLOSED_MODEL_OUTPUT ??
+      `docs/audits/closed-editor-model-lifetime/${process.env.QUIRKY_CLOSED_MODEL_GRAPH ?? 'worktree'}-${variant}-${process.versions.electron ? 'electron' : 'node'}-results.json`,
+    `${JSON.stringify({ runtime: process.versions, variant, graph: process.env.QUIRKY_CLOSED_MODEL_GRAPH ?? 'worktree', sourceFence, observations, scope: 'Actual legacy surface, cleanup hook, disposal, Store close action and installed Monaco models. Shell/Panel bodies are controlled ports; files/models are seeded. Eight distinct fixture paths, 256 KiB characters each. No native editor widget, app window, field file sizes, heap bytes or incident allocation rate.' }, null, 2)}\n`
   )
 })

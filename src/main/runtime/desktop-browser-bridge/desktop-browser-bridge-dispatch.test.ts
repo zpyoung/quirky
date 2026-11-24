@@ -6,7 +6,7 @@ import {
   DESKTOP_BROWSER_BRIDGE_RUNTIME_CAPABILITY,
   DESKTOP_BROWSER_BRIDGE_SETTING_LABEL
 } from '../../../shared/desktop-browser-bridge-protocol'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { defineMethod } from '../rpc/core'
 import { RpcDispatcher } from '../rpc/dispatcher'
 import { DESKTOP_BROWSER_BRIDGE_RPC_METHODS } from '../rpc/methods/desktop-browser-bridge'
@@ -48,16 +48,16 @@ const METHODS = [
   })
 ]
 
-function orcadRuntime(options: { localBrowser?: boolean } = {}) {
+function quirkydRuntime(options: { localBrowser?: boolean } = {}) {
   const cleanups = new Map<string, () => void>()
   const runtime = {
-    getRuntimeId: () => 'orcad-runtime',
+    getRuntimeId: () => 'quirkyd-runtime',
     getStartedAt: () => 1,
     registerSubscriptionCleanup: (id: string, cleanup: () => void) => cleanups.set(id, cleanup),
     routeDesktopBrowserBridgeRpc: (
       method: string,
       params: unknown,
-      context: Parameters<OrcaRuntimeService['routeDesktopBrowserBridgeRpc']>[2]
+      context: Parameters<QuirkyRuntimeService['routeDesktopBrowserBridgeRpc']>[2]
     ) =>
       routeDesktopBrowserBridgeRpc({
         method,
@@ -73,7 +73,7 @@ function orcadRuntime(options: { localBrowser?: boolean } = {}) {
       })
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the dispatcher reads only the members stubbed above.
-  return { runtime: runtime as unknown as OrcaRuntimeService, cleanups }
+  return { runtime: runtime as unknown as QuirkyRuntimeService, cleanups }
 }
 
 const DESKTOP = {
@@ -108,7 +108,7 @@ async function attachDesktop(
 }
 
 function cliCall(dispatcher: RpcDispatcher, method: string, params: Record<string, unknown>) {
-  // No transport options: the host's own `orca` CLI over its runtime socket.
+  // No transport options: the host's own `quirky` CLI over its runtime socket.
   return dispatcher.dispatch({ id: `cli-${method}`, authToken: 'owner', method, params })
 }
 
@@ -119,10 +119,10 @@ afterEach(() => {
   localOpenUrl.mockClear()
 })
 
-describe('desktop browser bridge on orcad', () => {
+describe('desktop browser bridge on quirkyd', () => {
   it('forwards an allowlisted CLI command to the attached desktop and returns its answer', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime()
+    const { runtime } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
     const { events } = await attachDesktop(dispatcher)
     const ready = ReadyEvent.parse(events[0])
@@ -133,7 +133,7 @@ describe('desktop browser bridge on orcad', () => {
     })
     await vi.waitFor(() => expect(events).toHaveLength(2))
     const forwarded = ForwardedEvent.parse(events[1])
-    // orcad resolves its own selector and pins the forwarded call to that workspace id.
+    // quirkyd resolves its own selector and pins the forwarded call to that workspace id.
     expect(forwarded).toMatchObject({
       type: 'request',
       method: 'browser.goto',
@@ -182,7 +182,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it('sends open-url to the attached desktop as the tab create it already runs', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime()
+    const { runtime } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
     const { events } = await attachDesktop(dispatcher)
     const ready = ReadyEvent.parse(events[0])
@@ -226,7 +226,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it('refuses a non-web open-url on the host before it reaches the desktop', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime()
+    const { runtime } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
     const { events } = await attachDesktop(dispatcher)
 
@@ -241,7 +241,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it('names the setting for open-url when no desktop hosts or shares a browser', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime()
+    const { runtime } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
 
     const response = await cliCall(dispatcher, 'browser.openUrl', {
@@ -261,7 +261,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it("leaves open-url to a desktop hosting this runtime's pages while none shares its browser", async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime({ localBrowser: true })
+    const { runtime } = quirkydRuntime({ localBrowser: true })
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
 
     await expect(
@@ -274,7 +274,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it('never forwards a command outside the allowlist', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime()
+    const { runtime } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
     const { events } = await attachDesktop(dispatcher)
 
@@ -290,7 +290,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it('names the setting when no desktop is attached (setting off or an older desktop)', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime()
+    const { runtime } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
 
     const response = await cliCall(dispatcher, 'browser.goto', { url: 'https://example.com' })
@@ -306,7 +306,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it('refuses an attach from a desktop that did not negotiate the capability', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime()
+    const { runtime } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
 
     const { events } = await attachDesktop(dispatcher, { ...DESKTOP, clientCapabilities: [] })
@@ -319,7 +319,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it('refuses an attach from a phone or an unauthenticated socket', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime()
+    const { runtime } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
 
     const { events } = await attachDesktop(dispatcher, {
@@ -333,7 +333,7 @@ describe('desktop browser bridge on orcad', () => {
   })
 
   it('a desktop runtime never serves the bridge', async () => {
-    const { runtime } = orcadRuntime()
+    const { runtime } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
 
     const { events } = await attachDesktop(dispatcher)
@@ -343,7 +343,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it('detaching fails the waiting command and the next one names the setting', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime, cleanups } = orcadRuntime()
+    const { runtime, cleanups } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
     const { events, done } = await attachDesktop(dispatcher)
     const call = cliCall(dispatcher, 'browser.goto', {
@@ -368,7 +368,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it('leaves a host with its own headless browser on it while no desktop is attached', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime({ localBrowser: true })
+    const { runtime } = quirkydRuntime({ localBrowser: true })
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
 
     await expect(
@@ -378,7 +378,7 @@ describe('desktop browser bridge on orcad', () => {
 
   it('does not forward calls from a paired client, only the host CLI', async () => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime({ localBrowser: true })
+    const { runtime } = quirkydRuntime({ localBrowser: true })
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
     const { events } = await attachDesktop(dispatcher)
 
@@ -405,7 +405,7 @@ describe('desktop browser bridge on orcad', () => {
     { name: 'an older desktop never hears', capabilities: [], cancels: false }
   ])('$name that the CLI cancelled a forwarded command', async ({ capabilities, cancels }) => {
     setDesktopBrowserBridgeHostEnabled(true)
-    const { runtime } = orcadRuntime()
+    const { runtime } = quirkydRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: METHODS })
     const { events } = await attachDesktop(dispatcher, {
       ...DESKTOP,

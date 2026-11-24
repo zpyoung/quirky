@@ -32,7 +32,7 @@ function session(overrides: Partial<AiVaultSession> = {}): AiVaultSession {
 function worktree(overrides: Partial<Worktree> & { worktreeId: string; path: string }): Worktree {
   return {
     repoId: 'local-repo',
-    repo: 'orca',
+    repo: 'quirky',
     branch: 'main',
     displayName: overrides.worktreeId,
     liveTerminalCount: 0,

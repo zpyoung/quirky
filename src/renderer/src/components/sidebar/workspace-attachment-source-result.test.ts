@@ -13,7 +13,7 @@ import {
 const repo: Repo = {
   id: 'repo',
   path: '/repo',
-  displayName: 'Orca',
+  displayName: 'Quirky',
   badgeColor: '',
   addedAt: 1,
   connectionId: 'remote'
@@ -46,7 +46,7 @@ const review: WorkspaceAttachment = {
   provider: 'github',
   type: 'pr',
   number: 7,
-  url: 'https://github.com/acme/orca/pull/7',
+  url: 'https://github.com/acme/quirky/pull/7',
   repoId: 'repo'
 }
 
@@ -86,7 +86,7 @@ describe('attachment source conversion', () => {
     expect(item).toMatchObject({
       title: 'Seven',
       number: 7,
-      taskSourceContext: { providerIdentity: { provider: 'github', owner: 'acme', repo: 'orca' } }
+      taskSourceContext: { providerIdentity: { provider: 'github', owner: 'acme', repo: 'quirky' } }
     })
   })
   it('recognizes a rich URL whose older context has no provider identity', () => {
@@ -96,7 +96,7 @@ describe('attachment source conversion', () => {
       taskSourceContext: github
         ? {
             ...github,
-            providerIdentity: { provider: 'github' as const, owner: 'acme', repo: 'orca' }
+            providerIdentity: { provider: 'github' as const, owner: 'acme', repo: 'quirky' }
           }
         : undefined
     }
@@ -115,7 +115,7 @@ describe('attachment source conversion', () => {
     expect(
       isWorkspaceAttachmentLinked([old], {
         ...enriched,
-        url: 'https://github.com/other/orca/pull/7'
+        url: 'https://github.com/other/quirky/pull/7'
       })
     ).toBe(false)
   })
@@ -132,7 +132,7 @@ describe('attachment source conversion', () => {
       const other: WorkspaceAttachment = {
         ...query,
         type: type === 'issue' ? 'mr' : 'issue',
-        url: `https://gitlab.com/acme/orca/-/${type === 'issue' ? 'merge_requests' : 'issues'}/12`
+        url: `https://gitlab.com/acme/quirky/-/${type === 'issue' ? 'merge_requests' : 'issues'}/12`
       }
       expect(matchesWorkspaceAttachmentQuery(query, other)).toBe(false)
       expect(matchesWorkspaceAttachmentQuery(query, { ...query })).toBe(true)
@@ -145,14 +145,14 @@ describe('attachment source conversion', () => {
       const other: WorkspaceAttachment = {
         ...query,
         type: type === 'issue' ? 'pr' : 'issue',
-        url: `https://github.com/acme/orca/${type === 'issue' ? 'pull' : 'issues'}/7`
+        url: `https://github.com/acme/quirky/${type === 'issue' ? 'pull' : 'issues'}/7`
       }
       expect(matchesWorkspaceAttachmentQuery(query, other)).toBe(true)
       expect(
         matchesWorkspaceAttachmentQuery(
           {
             ...query,
-            url: `https://github.com/acme/orca/${type === 'issue' ? 'issues' : 'pull'}/7`
+            url: `https://github.com/acme/quirky/${type === 'issue' ? 'issues' : 'pull'}/7`
           },
           other
         )
@@ -192,7 +192,7 @@ describe('attachment source conversion', () => {
     expect(
       matchesWorkspaceAttachmentQuery(review, {
         ...review,
-        url: 'https://github.com/other/orca/pull/7'
+        url: 'https://github.com/other/quirky/pull/7'
       })
     ).toBe(false)
   })

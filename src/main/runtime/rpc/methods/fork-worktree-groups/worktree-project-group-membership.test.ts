@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../../dispatcher'
 import type { RpcRequest } from '../../core'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { WORKTREE_METHODS } from '../worktree'
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -17,7 +17,7 @@ describe('worktree.set project group membership', () => {
       getRuntimeId: () => 'test-runtime',
       dedupeWorktreeCreate: passthroughDedupe,
       updateManagedWorktreeMeta: vi.fn().mockResolvedValue({ id: 'wt-1' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -41,7 +41,7 @@ describe('worktree.set project group membership', () => {
       getRuntimeId: () => 'test-runtime',
       dedupeWorktreeCreate: passthroughDedupe,
       updateManagedWorktreeMeta: vi.fn().mockResolvedValue({ id: 'wt-1' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -65,7 +65,7 @@ describe('worktree.set project group membership', () => {
       getRuntimeId: () => 'test-runtime',
       dedupeWorktreeCreate: passthroughDedupe,
       updateManagedWorktreeMeta: vi.fn().mockResolvedValue({ id: 'wt-1' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 
     const replies: string[] = []
@@ -88,7 +88,7 @@ describe('worktree.set project group membership', () => {
       getRuntimeId: () => 'test-runtime',
       dedupeWorktreeCreate: passthroughDedupe,
       updateManagedWorktreeMeta: vi.fn().mockResolvedValue({ id: 'wt-1' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 
     const replies: string[] = []

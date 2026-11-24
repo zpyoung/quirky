@@ -1,4 +1,4 @@
-// Pins the provider contract Claude's rewind relies on: Orca's prompt id is the transcript's, a fork
+// Pins the provider contract Claude's rewind relies on: Quirky's prompt id is the transcript's, a fork
 // at its parent forgets the undone turn, and the rewound conversation is left as it was.
 
 import { randomUUID } from 'node:crypto'
@@ -49,7 +49,7 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI rewind', () =>
     async () => {
       const source = randomUUID()
       const { claudeConfigDir, env } = realClaudeLaunchHome()
-      const cwd = await mkdtemp(join(tmpdir(), 'orca-real-rewind-'))
+      const cwd = await mkdtemp(join(tmpdir(), 'quirky-real-rewind-'))
       const results: string[] = []
       // The CLI's replay of a send settles it after `dispatch` answers, with the prompt's own id.
       const promptIds: string[] = []
@@ -102,7 +102,7 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI rewind', () =>
       }
 
       const sourceBefore = await transcript(source, claudeConfigDir)
-      // Orca's prompt id is the transcript's, so the rewound row maps to its cut.
+      // Quirky's prompt id is the transcript's, so the rewound row maps to its cut.
       expect(sourceBefore).toContain(`"uuid":"${promptUuid}"`)
       const throughEntryId = await readClaudePromptParentUuid({
         providerSessionId: source,
@@ -111,7 +111,7 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI rewind', () =>
       })
 
       const fork = await resolveClaudeRewindFork({
-        orcaSessionId: SESSION_ID,
+        quirkySessionId: SESSION_ID,
         rewindOperationId: randomUUID(),
         head: claudeProviderHandle(source, null),
         prompt: { sessionId: source, uuid: promptUuid ?? '' },
@@ -121,7 +121,7 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI rewind', () =>
       if (!fork) {
         throw new Error('rewind fork was not created')
       }
-      // A rollback resumes the persisted head without knowing about Orca's pending-fork field.
+      // A rollback resumes the persisted head without knowing about Quirky's pending-fork field.
       const beforeSend = await transcript(fork.sessionId, claudeConfigDir)
       expect(beforeSend).toContain(throughEntryId)
       expect(beforeSend).not.toContain(promptUuid)

@@ -9,10 +9,10 @@ The fix checks the existing recovery disposal state, current listener ref, persi
 With dependencies already installed:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/browser-registration-reply-retention/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/browser-registration-reply-retention/reproduce.mjs
 ```
 
-This runs the actual renderer session, recovery controller, and persistent guest registry against headless DOM fixtures and deferred IPC replies. The baseline reverses only the included production patch in memory. A temporary observer records map/callback counts after all replies settle. The script uses the shared process launcher, 512 MiB workers, a 60-second deadline, and temporary files removed in `finally`. No Orca window, native guest, or remote host is launched.
+This runs the actual renderer session, recovery controller, and persistent guest registry against headless DOM fixtures and deferred IPC replies. The baseline reverses only the included production patch in memory. A temporary observer records map/callback counts after all replies settle. The script uses the shared process launcher, 512 MiB workers, a 60-second deadline, and temporary files removed in `finally`. No Quirky window, native guest, or remote host is launched.
 
 | After 1,000 explicit guest closes and delayed successful replies | Before | Fixed |
 | ---------------------------------------------------------------- | -----: | ----: |

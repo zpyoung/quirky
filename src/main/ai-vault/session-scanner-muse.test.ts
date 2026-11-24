@@ -20,7 +20,7 @@ afterEach(async () => {
 
 describe('scanAiVaultSessions muse', () => {
   it('indexes Muse envelopes with title, model, tokens, and resume command', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-muse-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-muse-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     const sessionFile = await writeMuseScannerFixture(roots.museSessionsDir)

@@ -43,7 +43,7 @@
       "ordinal": 12,
       "value": {
         "durationMs": 3000,
-        "message": "Open Orca on the host to wake sleeping agents."
+        "message": "Open Quirky on the host to wake sleeping agents."
       }
     },
     "11cf5160d835": {
@@ -579,7 +579,7 @@
       "ordinal": 27,
       "value": {
         "durationMs": 3000,
-        "message": "Open Orca on the host to wake sleeping agents."
+        "message": "Open Quirky on the host to wake sleeping agents."
       }
     },
     "be26ebfb049f": {

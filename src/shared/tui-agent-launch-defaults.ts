@@ -67,7 +67,7 @@ function sanitizeTuiAgentLaunchArgs(agent: TuiAgent, args: string): string {
     return args.trim()
   }
   // Why: a few agents have removed, relocated, or never exposed Claude-style
-  // skip-permission flags on the interactive TUI command Orca launches.
+  // skip-permission flags on the interactive TUI command Quirky launches.
   return unsupportedArgs.reduce((next, arg) => next.replace(argPattern(arg), ' '), args).trim()
 }
 
@@ -134,7 +134,7 @@ export function resolveTuiAgentLaunchArgs(
 /**
  * Whether this agent's *resolved* launch arguments ask for a permission bypass.
  *
- * Resolved, not configured: an untouched Arguments field falls back to the default Orca ships,
+ * Resolved, not configured: an untouched Arguments field falls back to the default Quirky ships,
  * which is the bypass flag, so bypass is the posture a user gets until they choose otherwise.
  * Choosing Manual stores an empty string, which owns the key and so beats that default.
  */
@@ -172,7 +172,7 @@ export function resolveTuiAgentLaunchEnv(
 }
 
 /**
- * The command, args and env a resume relaunches with: only what its original Orca launch recorded.
+ * The command, args and env a resume relaunches with: only what its original Quirky launch recorded.
  * Why not settings defaults: an unrecorded launch (`claude` typed by hand) ran with none, and the
  * defaults carry the permission bypass, so filling the gap would widen the resumed session.
  */

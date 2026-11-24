@@ -140,14 +140,14 @@ export function windowSpawnRequest(c: WindowLaunchCase): Record<string, unknown>
     cwdFallback: 'worktree',
     env: {
       ...request.agentEnv,
-      ORCA_WORKSPACE_ID: worktreeId,
+      QUIRKY_WORKSPACE_ID: worktreeId,
       ...(workspace.kind === 'folder'
-        ? { ORCA_PROJECT_GROUP_ID: 'pg-1', ORCA_WORKSPACE_ROOT: workspace.path }
+        ? { QUIRKY_PROJECT_GROUP_ID: 'pg-1', QUIRKY_WORKSPACE_ROOT: workspace.path }
         : {}),
-      ORCA_PANE_KEY: `${LAUNCH_TAB_ID}:${LAUNCH_LEAF_ID}`,
-      ORCA_TAB_ID: LAUNCH_TAB_ID,
-      ORCA_WORKTREE_ID: worktreeId,
-      ORCA_AGENT_LAUNCH_TOKEN: LAUNCH_TOKEN
+      QUIRKY_PANE_KEY: `${LAUNCH_TAB_ID}:${LAUNCH_LEAF_ID}`,
+      QUIRKY_TAB_ID: LAUNCH_TAB_ID,
+      QUIRKY_WORKTREE_ID: worktreeId,
+      QUIRKY_AGENT_LAUNCH_TOKEN: LAUNCH_TOKEN
     },
     command: request.command,
     launchConfig: {
@@ -180,14 +180,14 @@ export function windowSpawnRequest(c: WindowLaunchCase): Record<string, unknown>
 
 // The pane identity keys the plan names; agent hook and CLI keys vary by host and are not launch facts.
 export const IDENTITY_ENV_KEYS = [
-  'ORCA_WORKSPACE_ID',
-  'ORCA_PROJECT_GROUP_ID',
-  'ORCA_WORKSPACE_ROOT',
-  'ORCA_PANE_KEY',
-  'ORCA_TAB_ID',
-  'ORCA_WORKTREE_ID',
-  'ORCA_AGENT_LAUNCH_TOKEN',
-  'ORCA_TERMINAL_HANDLE'
+  'QUIRKY_WORKSPACE_ID',
+  'QUIRKY_PROJECT_GROUP_ID',
+  'QUIRKY_WORKSPACE_ROOT',
+  'QUIRKY_PANE_KEY',
+  'QUIRKY_TAB_ID',
+  'QUIRKY_WORKTREE_ID',
+  'QUIRKY_AGENT_LAUNCH_TOKEN',
+  'QUIRKY_TERMINAL_HANDLE'
 ] as const
 
 /** What main hands the provider for a window-lane pty:spawn request (rows 2, 5 and 6). */
@@ -197,7 +197,10 @@ export function expectedWindowProvider(
   agentEnv: Record<string, string>
 ): Record<string, unknown> {
   // main adds the terminal handle to the pane's env.
-  const env = { ...(typeof request.env === 'object' ? request.env : {}), ORCA_TERMINAL_HANDLE: '' }
+  const env = {
+    ...(typeof request.env === 'object' ? request.env : {}),
+    QUIRKY_TERMINAL_HANDLE: ''
+  }
   return {
     command: provider.command ?? request.command,
     // main normalizes the cwd to forward slashes (resolveRuntimePath).
@@ -211,6 +214,6 @@ export function expectedWindowProvider(
     ...(request.startupCommandDelivery
       ? { startupCommandDelivery: request.startupCommandDelivery }
       : {}),
-    orcaEnv: IDENTITY_ENV_KEYS.filter((key) => key in env)
+    quirkyEnv: IDENTITY_ENV_KEYS.filter((key) => key in env)
   }
 }

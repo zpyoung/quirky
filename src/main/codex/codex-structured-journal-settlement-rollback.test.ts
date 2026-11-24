@@ -26,7 +26,7 @@ afterEach(async () => {
 })
 
 it('rolls back the entire Codex exit settlement when a later row fails', async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-atomic-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-atomic-'))
   const options = {
     identity: {
       sessionId: SESSION,

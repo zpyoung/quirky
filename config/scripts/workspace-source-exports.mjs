@@ -32,13 +32,13 @@ function sourceTarget(root, manifest, target) {
     !/\.(?:ts|tsx|js|mjs|cjs|json)$/.test(target) ||
     target.endsWith('.d.ts')
   ) {
-    throw new Error(`Invalid orca-source export in ${manifest}`)
+    throw new Error(`Invalid quirky-source export in ${manifest}`)
   }
   const packageDir = realpathSync(join(root, dirname(manifest)))
   const path = realpathSync(resolve(packageDir, target))
   const withinPackage = relative(packageDir, path)
   if (withinPackage.startsWith(`..${sep}`) || isAbsolute(withinPackage)) {
-    throw new Error(`orca-source export escapes ${manifest}`)
+    throw new Error(`quirky-source export escapes ${manifest}`)
   }
   return { path, file: relative(root, path).split(sep).join('/'), manifest }
 }
@@ -71,12 +71,12 @@ export function createWorkspaceSourceResolver(root = process.cwd()) {
       if (
         !conditions ||
         typeof conditions !== 'object' ||
-        !Object.hasOwn(conditions, 'orca-source')
+        !Object.hasOwn(conditions, 'quirky-source')
       ) {
         continue
       }
       const specifier = metadata.name + (key === '.' ? '' : key.slice(1))
-      sources.set(specifier, sourceTarget(root, manifest, conditions['orca-source']))
+      sources.set(specifier, sourceTarget(root, manifest, conditions['quirky-source']))
     }
   }
   return {
@@ -95,10 +95,10 @@ export function createWorkspaceSourceResolver(root = process.cwd()) {
       if (sources.has(specifier)) {
         return sources.get(specifier)
       }
-      if (workspace?.native || (!workspace && !specifier.startsWith('@orca/'))) {
+      if (workspace?.native || (!workspace && !specifier.startsWith('@quirky/'))) {
         return null
       }
-      throw new Error(`No public orca-source export for ${specifier}`)
+      throw new Error(`No public quirky-source export for ${specifier}`)
     }
   }
 }

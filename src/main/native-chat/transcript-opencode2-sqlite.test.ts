@@ -18,7 +18,7 @@ afterEach(() => {
   }
 })
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-native-opencode2-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-native-opencode2-'))
   const path = join(root, 'opencode.db')
   const db = new Database(path)
   fixtures.push({ db, root })

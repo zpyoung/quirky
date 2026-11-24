@@ -5,9 +5,9 @@ import path from 'node:path'
 import { DaemonClient } from '../../src/main/daemon/client'
 import { getDaemonSocketPath, getDaemonTokenPath } from '../../src/main/daemon/daemon-spawner'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import {
   waitForActivePaneHookDescriptor,
@@ -77,7 +77,7 @@ async function backgroundMountTab(page: Page, worktreeId: string, tabId: string)
   await page.evaluate(
     ({ tabId, worktreeId }) => {
       window.dispatchEvent(
-        new CustomEvent('orca-background-mount-terminal-worktree', {
+        new CustomEvent('quirky-background-mount-terminal-worktree', {
           detail: { worktreeId, tabIds: [tabId] }
         })
       )
@@ -373,8 +373,8 @@ for (const daemonSessionGone of [false, true]) {
             activeTabId: state.activeTabIdByWorktree[worktreeId] ?? null
           })
           const transitions: Transition[] = [snapshot(store.getState())]
-          const e2eWindow = window as typeof window & { __orcaRevealTransitions?: Transition[] }
-          e2eWindow.__orcaRevealTransitions = transitions
+          const e2eWindow = window as typeof window & { __quirkyRevealTransitions?: Transition[] }
+          e2eWindow.__quirkyRevealTransitions = transitions
           store.subscribe((state) => {
             const next = snapshot(state)
             if (JSON.stringify(next) !== JSON.stringify(transitions.at(-1))) {
@@ -400,13 +400,13 @@ for (const daemonSessionGone of [false, true]) {
         () =>
           (
             window as typeof window & {
-              __orcaRevealTransitions?: {
+              __quirkyRevealTransitions?: {
                 activeWorktreeId: string | null
                 tabPresent: boolean
                 leafPtyIds: string[]
               }[]
             }
-          ).__orcaRevealTransitions ?? []
+          ).__quirkyRevealTransitions ?? []
       )
       // Pre-fix this read: leaf binding cleared -> tab removed -> worktree deselected -> tab re-added by graph sync.
       expect(

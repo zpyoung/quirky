@@ -15,13 +15,13 @@ import {
 
 import { registerSshBrowseHandler } from './ssh-browse'
 import { registerCredentialHandler } from './ssh-passphrase'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import {
   initializeSshConnectionGenerationSession,
   resetSshConnectionGenerations
 } from '../../ssh/connection/ssh-connection-generation'
 import { resetSshProviderAuthorities } from '../../ssh/ssh-provider-authority'
-import { installManagedOrcadStartStatus } from '../runtime-environments/runtime-environment-managed-tunnel'
+import { installManagedQuirkydStartStatus } from '../runtime-environments/runtime-environment-managed-tunnel'
 import {
   connectInFlight,
   credentialRequestedForTarget,
@@ -52,10 +52,10 @@ import { broadcastPortForwards } from './ssh-renderer-broadcast'
 import { resetSshShutdownDrain } from './ssh-shutdown-drain'
 import { registerSshTargetCrudHandlers } from './ssh-target-crud-handlers'
 import { targetLifecycleInFlight } from './ssh-target-lifecycle-queue'
-import { disposeOrcadManagedTunnels } from '../../managed-server/lifecycle/orcad-managed-tunnel'
-import { retainUnretainedOrcadMigrationSources } from '../../ssh/orcad-migration-source-retention'
-import { reconcileManagedOrcadSshTargets } from '../../ssh/orcad-retained-source'
-import { installOrcadMigrationScrollbackRetention } from '../../ssh/orcad-migration-scrollback-retention-wiring'
+import { disposeQuirkydManagedTunnels } from '../../managed-server/lifecycle/quirkyd-managed-tunnel'
+import { retainUnretainedQuirkydMigrationSources } from '../../ssh/quirkyd-migration-source-retention'
+import { reconcileManagedQuirkydSshTargets } from '../../ssh/quirkyd-retained-source'
+import { installQuirkydMigrationScrollbackRetention } from '../../ssh/quirkyd-migration-scrollback-retention-wiring'
 import { getAppEnvironment } from '../../../shared/app-environment'
 import { registerLegacyRelayBridgeIpc } from '../../ssh/legacy-relay/legacy-relay-bridge-ipc'
 import {
@@ -87,7 +87,7 @@ const SSH_IPC_CHANNELS = [
 export function registerSshHandlers(
   store: Store,
   getMainWindow: () => BrowserWindow | null,
-  runtime?: OrcaRuntimeService
+  runtime?: QuirkyRuntimeService
 ): { connectionManager: SshConnectionManager; sshStore: SshConnectionStore } {
   initializeSshConnectionGenerationSession()
   // Why: macOS re-activation re-calls this with a new BrowserWindow; ipcMain.handle() throws on a duplicate channel, so remove prior handlers first.
@@ -99,10 +99,10 @@ export function registerSshHandlers(
   setCurrentRuntime(runtime)
   setSshTargetRegistryStore(new SshConnectionStore(store))
   setPersistedStore(store)
-  reconcileManagedOrcadSshTargets(getAppEnvironment().getPath('userData'), store)
-  void retainUnretainedOrcadMigrationSources(getAppEnvironment().getPath('userData'), store)
-  installOrcadMigrationScrollbackRetention(getAppEnvironment().getPath('userData'), store)
-  installManagedOrcadStartStatus()
+  reconcileManagedQuirkydSshTargets(getAppEnvironment().getPath('userData'), store)
+  void retainUnretainedQuirkydMigrationSources(getAppEnvironment().getPath('userData'), store)
+  installQuirkydMigrationScrollbackRetention(getAppEnvironment().getPath('userData'), store)
+  installManagedQuirkydStartStatus()
 
   registerCredentialHandler()
 
@@ -135,7 +135,7 @@ export function registerSshHandlers(
   registerSshTargetCrudHandlers()
   registerSshConnectionHandlers()
   registerSshPortForwardHandlers()
-  // COMPAT(legacy-relay-bridge): terminals an older Orca's relay still runs.
+  // COMPAT(legacy-relay-bridge): terminals an older Quirky's relay still runs.
   registerLegacyRelayBridgeIpc({
     store,
     getMainWindow: getCurrentMainWindow,
@@ -179,7 +179,7 @@ export async function resetSshHandlerStateForTests(): Promise<void> {
 
   disposeDesktopBrowserBridge()
   await connectionManager?.disconnectAll()
-  disposeOrcadManagedTunnels()
+  disposeQuirkydManagedTunnels()
   portForwardManager?.dispose()
   setConnectionManager(null)
   setSshConnectionManagerResolver(null)

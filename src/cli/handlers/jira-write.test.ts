@@ -22,7 +22,7 @@ async function clearAssigneeAfter(failure: Error): Promise<unknown> {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler only calls client.call.
       client: { call: clientFailingWrite(failure) } as never,
       cwd: '/tmp',
-      flags: new Map([['key', 'ORCA-1']]),
+      flags: new Map([['key', 'QUIRKY-1']]),
       json: false
     })
   } catch (error) {

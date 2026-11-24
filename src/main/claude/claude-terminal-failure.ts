@@ -17,7 +17,7 @@ import {
 } from '../native-chat/agent-session-timeline/agent-journal-turn-row-revision'
 
 function claudeTerminalFailureIdentity(turnItemId: string): AgentJournalItemIdentity {
-  return { provider: 'orca', clientMessageId: `terminal-failure:claude:${turnItemId}` }
+  return { provider: 'quirky', clientMessageId: `terminal-failure:claude:${turnItemId}` }
 }
 
 export function writeClaudeTerminalFailure(

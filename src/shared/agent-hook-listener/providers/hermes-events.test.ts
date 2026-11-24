@@ -35,7 +35,7 @@ describe('normalizeHermesEvent', () => {
     })
   })
 
-  it('ignores events Orca does not subscribe to', () => {
+  it('ignores events Quirky does not subscribe to', () => {
     expect(normalize('subagent_stop')).toBeNull()
     expect(normalize('post_api_request')).toBeNull()
   })

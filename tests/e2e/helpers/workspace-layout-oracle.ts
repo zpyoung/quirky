@@ -70,7 +70,7 @@ export type OracleTarget = {
 
 export type { ExpectedLayout }
 
-const SETTLE_TIMEOUT_MS = Number(process.env.ORCA_LAYOUT_ORACLE_SETTLE_MS ?? 12_000)
+const SETTLE_TIMEOUT_MS = Number(process.env.QUIRKY_LAYOUT_ORACLE_SETTLE_MS ?? 12_000)
 // Views (the window's drawing, session.tabs.list, terminal.list) catch up after the runtime's last
 // frame with no event of their own, so the step re-reads them on this interval until they agree.
 const VIEW_CONVERGENCE_POLL_MS = 300

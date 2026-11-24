@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 
-export function readRouteSnapshot(route, file = process.env.ORCA_MOBILE_WEB_ROUTE_SNAPSHOT) {
+export function readRouteSnapshot(route, file = process.env.QUIRKY_MOBILE_WEB_ROUTE_SNAPSHOT) {
   if (!file) {
     return undefined
   }

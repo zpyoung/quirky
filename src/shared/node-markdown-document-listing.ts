@@ -1,4 +1,4 @@
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import type { ChildProcessHandle } from '@quirky/process-host/process-spec'
 import type { MarkdownDocument } from './filesystem-entry-types'
 import { RipgrepFilenameDecoder } from './ripgrep-filename-decoder'
 import { isRipgrepMissingCwdExit, ripgrepMissingCwdError } from './ripgrep-process-availability'

@@ -29,7 +29,7 @@ export abstract class UpdaterScheduling extends UpdaterCheckFailure {
       clearTimeout(this.autoUpdateCheckTimer)
     }
     this.autoUpdateCheckTimer = setTimeout(() => {
-      // Why: Orca runs for days, so keep the next background check scheduled in the main process rather than tying it to relaunches or renderer lifetime.
+      // Why: Quirky runs for days, so keep the next background check scheduled in the main process rather than tying it to relaunches or renderer lifetime.
       if (!this.runBackgroundUpdateCheck()) {
         // Why: a deferred check reaches no outcome handler, so re-arm here or one deferral ends automatic checks for the process lifetime.
         this.scheduleAutomaticUpdateCheck(AUTO_UPDATE_CHECK_INTERVAL_MS)

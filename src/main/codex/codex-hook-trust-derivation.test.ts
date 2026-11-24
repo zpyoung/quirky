@@ -13,7 +13,7 @@ vi.mock('./codex-app-server-session', async (importOriginal) => ({
   ...(await importOriginal<typeof AppServerSession>()),
   runCodexAppServerSession: mocks.runCodexAppServerSession
 }))
-vi.mock('@orca/process-host', () => ({ runProcess: mocks.runProcess }))
+vi.mock('@quirky/process-host', () => ({ runProcess: mocks.runProcess }))
 
 import {
   CodexAppServerTimeoutError,
@@ -28,7 +28,7 @@ import {
 } from './codex-hook-trust-derivation'
 import { CODEX_EVENTS, CODEX_EVENT_LABEL } from './codex-hook-definition'
 
-const COMMAND = '/home/u/.orca/agent-hooks/codex-hook.sh'
+const COMMAND = '/home/u/.quirky/agent-hooks/codex-hook.sh'
 const LABELS = CODEX_EVENTS.map((eventName) => CODEX_EVENT_LABEL[eventName])
 const hashesOf = (answer: CodexHookAnswer) => (answer.kind === 'hashes' ? answer.hashes : null)
 
@@ -62,7 +62,7 @@ function listedWithoutApprovals(sourcePath: string, label: string, groupIndex = 
   }
 }
 
-/** Every copy of Orca's scratch entry Codex lists: group 0, after the dummy group, and the project's. */
+/** Every copy of Quirky's scratch entry Codex lists: group 0, after the dummy group, and the project's. */
 function everyCopy(scratch: Scratch, hashFor: (label: string, copy: number) => string) {
   const home = join(scratch.home, 'hooks.json')
   const project = join(scratch.project, '.codex', 'hooks.json')
@@ -103,7 +103,7 @@ afterEach(() => {
 })
 
 describe('deriveCodexHookHashes', () => {
-  it("asks Codex in a throwaway home and trusted project holding Orca's entry, then removes both", async () => {
+  it("asks Codex in a throwaway home and trusted project holding Quirky's entry, then removes both", async () => {
     const scratches = answerHooksList((scratch) => {
       const home = JSON.parse(readFileSync(join(scratch.home, 'hooks.json'), 'utf-8'))
       expect(Object.keys(home.hooks).sort()).toEqual([...CODEX_EVENTS].sort())
@@ -145,7 +145,7 @@ describe('deriveCodexHookHashes', () => {
       kind: 'refused',
       codexVersion: 'codex-cli 0.170.0',
       failure:
-        "Codex 0.170.0 hashes Orca's status hook differently by its file or position, so Orca does not approve it"
+        "Codex 0.170.0 hashes Quirky's status hook differently by its file or position, so Quirky does not approve it"
     })
   })
 
@@ -198,7 +198,7 @@ describe('deriveCodexHookHashes', () => {
     expect(derived).toEqual({
       kind: 'refused',
       codexVersion: 'codex-cli 0.127.0',
-      failure: 'Codex 0.127.0 is too old for Orca status; update Codex'
+      failure: 'Codex 0.127.0 is too old for Quirky status; update Codex'
     })
   })
 
@@ -226,7 +226,7 @@ describe('deriveCodexHookHashes', () => {
     }
   )
 
-  it("refuses a version that loaded the scratch home and did not list Orca's entry", async () => {
+  it("refuses a version that loaded the scratch home and did not list Quirky's entry", async () => {
     answerHooksList((scratch) => [
       { ...listed(join(scratch.home, 'hooks.json'), 'stop', 1), command: 'exit 0' }
     ])
@@ -236,7 +236,7 @@ describe('deriveCodexHookHashes', () => {
     expect(derived).toEqual({
       kind: 'refused',
       codexVersion: 'codex-cli 0.150.1',
-      failure: "Codex 0.150.1 did not recognize Orca's status hook"
+      failure: "Codex 0.150.1 did not recognize Quirky's status hook"
     })
   })
 
@@ -293,7 +293,7 @@ describe('readCodexHookHashes', () => {
     expect(hashes).toEqual({ stop: 'sha256:stop' })
   })
 
-  it("drops hash-less events when Codex hashes Orca's entry in others", () => {
+  it("drops hash-less events when Codex hashes Quirky's entry in others", () => {
     const hashes = readCodexHookHashes(
       {
         ...scratch,
@@ -314,7 +314,7 @@ describe('readCodexHookHashes', () => {
     expect(hashes).toEqual({ stop: 'sha256:stop' })
   })
 
-  it("is null when Codex loaded the scratch home, listing its dummy hook but none of Orca's", () => {
+  it("is null when Codex loaded the scratch home, listing its dummy hook but none of Quirky's", () => {
     const dummy = { ...listed('/s/home/hooks.json', 'stop', 1), command: 'exit 0' }
     expect(readCodexHookHashes({ ...scratch, listings: [dummy] }, COMMAND)).toBeNull()
   })
@@ -326,7 +326,7 @@ describe('readCodexHookHashes', () => {
 
 describe('sweepStaleCodexScratchHomes', () => {
   it('removes scratch homes older than an hour that a quit left, and nothing else', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-sweep-test-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-sweep-test-'))
     vi.stubEnv('TMPDIR', root)
     vi.stubEnv('TEMP', root)
     vi.stubEnv('TMP', root)
@@ -337,9 +337,9 @@ describe('sweepStaleCodexScratchHomes', () => {
       return join(root, name)
     }
     try {
-      const staleTrust = dir('orca-codex-hook-trust-old', hoursAgo(2))
-      const staleVersion = dir('orca-codex-version-old', hoursAgo(2))
-      const live = dir('orca-codex-hook-trust-live', new Date())
+      const staleTrust = dir('quirky-codex-hook-trust-old', hoursAgo(2))
+      const staleVersion = dir('quirky-codex-version-old', hoursAgo(2))
+      const live = dir('quirky-codex-hook-trust-live', new Date())
       const unrelated = dir('someone-else-old', hoursAgo(2))
 
       await sweepStaleCodexScratchHomes()

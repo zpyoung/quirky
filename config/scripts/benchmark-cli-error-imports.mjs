@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { existsSync, realpathSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 

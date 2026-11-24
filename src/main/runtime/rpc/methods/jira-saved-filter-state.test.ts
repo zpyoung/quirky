@@ -3,7 +3,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultUIState } from '../../../../shared/constants'
 import type { PersistedUIState } from '../../../../shared/persisted-ui-state-types'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { CLIENT_UI_METHODS } from './client-ui'
 import { RpcDispatcher } from '../dispatcher'
 
@@ -22,7 +22,7 @@ function setup() {
     getRuntimeId: () => 'host-a',
     getUIState: () => ui,
     updateUIState
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({ runtime, methods: CLIENT_UI_METHODS })
   const dispatch = (method: string, params?: unknown) =>
     dispatcher.dispatch({ id: 'request', method, params, authToken: 'token' })

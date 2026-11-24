@@ -165,9 +165,9 @@ async function dismissPrompt(
       return dismissalNotSaved(ctx, error)
     }
     if (committed) {
-      // The adapter's error is Orca's; the row says only what the user needs to know.
+      // The adapter's error is Quirky's; the row says only what the user needs to know.
       await ctx.journal.appendItem(
-        { provider: 'orca', clientMessageId: `${item.itemId}#delivery` },
+        { provider: 'quirky', clientMessageId: `${item.itemId}#delivery` },
         {
           kind: 'status',
           ...agentSessionFailureWords(agentSessionFailureFact('answerUnconfirmed'), {

@@ -1,6 +1,6 @@
 import type { MessageType } from '../../../orchestration/db'
 import type { RunRow } from '../../../orchestration/types'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 import type { OrchestrationCallerIdentity } from '../../../orchestration/orchestration-caller-identity'
 import { MESSAGE_TYPES } from '../../../orchestration/types'
 import { OrchestrationError } from '../../../orchestration/orchestration-error'
@@ -19,7 +19,7 @@ export function parseMessageTypes(rawTypes: string | undefined): MessageType[] |
 }
 
 export function resolveMessageRun(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   params: {
     /** The sender as Run binding and Dispatch identity see it. */
     sender: OrchestrationCallerIdentity
@@ -81,7 +81,7 @@ export function resolveMessageRun(
 }
 
 export function legacyWorkerDeliveryContract(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   runId: string | undefined,
   recipient: string
 ): 'legacy_direct' | undefined {

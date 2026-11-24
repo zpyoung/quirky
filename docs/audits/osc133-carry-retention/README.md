@@ -16,11 +16,11 @@ shared scanner.
 ## Reproduce
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/osc133-carry-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/osc133-carry-retention/reproduce.cjs
 ```
 
 Run the same script with the installed Electron executable, setting
-`ELECTRON_RUN_AS_NODE=1` and `ORCA_BACKGROUND_LAUNCH=1`, with the same Node flags.
+`ELECTRON_RUN_AS_NODE=1` and `QUIRKY_BACKGROUND_LAUNCH=1`, with the same Node flags.
 No application window, native PTY, or network is created. The runner has a
 60-second deadline and accepts an optional output-report path as its first
 argument; otherwise it writes [Node](./node-results.json) or
@@ -78,7 +78,7 @@ passes all 45. Wider proof/quality validation is recorded in
 ## Owners and ordinary input bounds
 
 Main creates a per-PTY tracker with `onCommandFinished` in
-`orca-runtime-get-unpersisted-tracked-title-for-pty.ts`; scanner enablement still
+`quirky-runtime-get-unpersisted-tracked-title-for-pty.ts`; scanner enablement still
 respects transient-fact consumer/authority state. Ordinary daemon output frames
 delivered to main are sliced to 64 Ki characters in
 `daemon-stream-data-batcher.ts`, and ordinary relay output to 16 Ki characters

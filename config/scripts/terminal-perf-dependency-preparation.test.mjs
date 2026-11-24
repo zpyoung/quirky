@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { parse } from 'yaml'
 import { expect, it } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 
 const workflow = parse(readFileSync('.github/workflows/terminal-perf.yml', 'utf8'))
 const steps = workflow.jobs['terminal-perf'].steps
@@ -20,7 +20,7 @@ const supportedManifest = {
 }
 
 function select(options = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-terminal-preparation-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-terminal-preparation-'))
   const output = join(directory, 'output')
   try {
     writeFileSync(

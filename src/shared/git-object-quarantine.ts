@@ -32,7 +32,7 @@ export type GitObjectQuarantine = {
 // Why inside `objects/` with a `tmp_objdir` prefix: that is where Git puts its own
 // quarantine dirs, it is on the Git host for native, WSL and SSH alike, and
 // `git gc` (2.35+) expires stale `tmp_*` dirs too.
-export const GIT_OBJECT_QUARANTINE_DIR_PREFIX = 'tmp_objdir-orca-merge-tree-'
+export const GIT_OBJECT_QUARANTINE_DIR_PREFIX = 'tmp_objdir-quirky-merge-tree-'
 
 /** Decided by path syntax, not by platform: a Windows main process drives WSL Git. */
 export function pathApiForGitPath(value: string): typeof posix {

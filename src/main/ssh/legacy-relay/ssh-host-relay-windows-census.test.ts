@@ -42,7 +42,7 @@ const conn: SshConnection = Object.create(null)
 const host = getRemoteHostPlatform('win32-x64')
 const HOME = 'C:\\Users\\dev'
 const VERSION = 'relay-0.1.0+aaaaaaaaaaaa'
-const DIR = joinRemotePath(host, HOME, '.orca-remote', VERSION)
+const DIR = joinRemotePath(host, HOME, '.quirky-remote', VERSION)
 const sockOf = (targetId: string): string => relaySocketNameForInstanceId(targetId)
 const pipesOf = (targetId: string): string[] =>
   windowsRelayPipePathsForSocketName(host, DIR, sockOf(targetId))
@@ -121,16 +121,16 @@ describe('the connect-time relay census on a Windows host', () => {
 
   it("is unverifiable for a pipe no directory here accounts for, unless it is another account's", async () => {
     inventory = {
-      pipes: ['orca-relay-0123456789abcdef0123', 'orca-relay-fedcba9876543210fedc'],
+      pipes: ['quirky-relay-0123456789abcdef0123', 'quirky-relay-fedcba9876543210fedc'],
       dirs: { [VERSION]: { credentials: [], markers: {} } }
     }
     access = {
-      '\\\\.\\pipe\\orca-relay-0123456789abcdef0123': 'EACCES',
-      '\\\\.\\pipe\\orca-relay-fedcba9876543210fedc': 'ok'
+      '\\\\.\\pipe\\quirky-relay-0123456789abcdef0123': 'EACCES',
+      '\\\\.\\pipe\\quirky-relay-fedcba9876543210fedc': 'ok'
     }
     await expect(census()).resolves.toEqual({ verdict: 'unverifiable', count: 1 })
 
-    access['\\\\.\\pipe\\orca-relay-fedcba9876543210fedc'] = 'EPERM'
+    access['\\\\.\\pipe\\quirky-relay-fedcba9876543210fedc'] = 'EPERM'
     await expect(census()).resolves.toEqual({ verdict: 'idle', count: 0 })
   })
 

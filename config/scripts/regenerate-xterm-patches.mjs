@@ -233,7 +233,7 @@ function ensureUpstreamCheckout(manifest, workDir) {
 
 function ensureDependencies(upstreamRoot, manifest) {
   const lockfile = path.join(upstreamRoot, 'package-lock.json')
-  const stamp = path.join(upstreamRoot, 'node_modules', '.orca-xterm-install-stamp')
+  const stamp = path.join(upstreamRoot, 'node_modules', '.quirky-xterm-install-stamp')
   const want = `${manifest.upstream.commit}\n${statSync(lockfile).size}\n`
   if (existsSync(stamp) && readFileSync(stamp, 'utf8') === want) {
     assertToolchain(upstreamRoot, manifest)
@@ -439,7 +439,7 @@ function regeneratePackage(packageEntry, manifest, context) {
 export function regenerateXtermPatches({
   mode,
   repoRoot = DEFAULT_REPO_ROOT,
-  workDir = path.join(tmpdir(), 'orca-xterm-patch-build'),
+  workDir = path.join(tmpdir(), 'quirky-xterm-patch-build'),
   log = console.info
 } = {}) {
   const manifest = JSON.parse(readFileSync(path.join(repoRoot, MANIFEST_RELATIVE_PATH), 'utf8'))

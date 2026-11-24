@@ -6,7 +6,7 @@ import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRunti
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import {
-  isOrcaSkillLockSource,
+  isQuirkySkillLockSource,
   skillPlacementParticipatesInGlobalFreshness
 } from '../../../../shared/skill-freshness'
 import { requestSkillFreshnessUpdateDialog } from './skill-freshness-update-dialog'
@@ -69,12 +69,12 @@ export function SkillFreshnessNudge(): null {
     const candidates = inventory.installations.flatMap((installation) =>
       // Why: a project copy the global update never touches must not enter the dismissal
       // fingerprint, or re-checking out that repo re-raises a nudge the user already
-      // dismissed — and spends the bounded dismissal budget on copies Orca cannot update.
+      // dismissed — and spends the bounded dismissal budget on copies Quirky cannot update.
       skillPlacementParticipatesInGlobalFreshness(installation) &&
       installation.status === 'outdated' &&
       eligibleNames.has(installation.name) &&
       // Why: a same-named skill from somewhere else is listed in the dialog, never nudged.
-      isOrcaSkillLockSource(installation.lockSource) &&
+      isQuirkySkillLockSource(installation.lockSource) &&
       installation.physicalIdentity
         ? [
             {
@@ -147,17 +147,17 @@ export function SkillFreshnessNudge(): null {
       names.size === 1
         ? translate(
             'auto.components.skills.SkillFreshnessNudge.titleOne',
-            'An installed Orca skill is out of date'
+            'An installed Quirky skill is out of date'
           )
         : translate(
             'auto.components.skills.SkillFreshnessNudge.titleMany',
-            '{{value0}} installed Orca skills are out of date',
+            '{{value0}} installed Quirky skills are out of date',
             { value0: names.size }
           ),
       {
         description: translate(
           'auto.components.skills.SkillFreshnessNudge.description',
-          'Update {{value0}} so agents follow the current instructions for this version of Orca.',
+          'Update {{value0}} so agents follow the current instructions for this version of Quirky.',
           { value0: outdatedNames }
         ),
         // Why: the nudge lingers until the user acts. Ignoring it (app quit)

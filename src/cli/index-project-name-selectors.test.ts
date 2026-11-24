@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 const {
   callMock,
   runtimeClientConstructorMock,
-  serveOrcaAppMock,
+  serveQuirkyAppMock,
   getDefaultUserDataPathMock,
   addEnvironmentFromPairingCodeMock,
   listEnvironmentsMock,
@@ -11,8 +11,8 @@ const {
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   spawnMock: vi.fn()
@@ -23,7 +23,7 @@ vi.mock('./runtime-client', async () => {
   return createRuntimeClientModuleMock({
     callMock,
     runtimeClientConstructorMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock
   })
 })
@@ -44,29 +44,29 @@ import { main } from './index'
 import { okFixture, queueFixtures } from './test-fixtures'
 import { useWorktreeAwarenessEnvironment } from './index-test-harness'
 
-const ORCA_PROJECT = {
+const QUIRKY_PROJECT = {
   id: 'github:stablyai/orca',
-  displayName: 'Orca',
+  displayName: 'Quirky',
   badgeColor: '#7c3aed',
   sourceRepoIds: ['repo-1'],
   createdAt: 1,
   updatedAt: 1
 }
-const PROJECT_LIST_FIXTURE = okFixture('req_project_list', { projects: [ORCA_PROJECT] })
+const PROJECT_LIST_FIXTURE = okFixture('req_project_list', { projects: [QUIRKY_PROJECT] })
 
-// Why: #30367 — the names `orca project list` and `orca host list` print were rejected by the
+// Why: #30367 — the names `quirky project list` and `quirky host list` print were rejected by the
 // commands that take --project and --host; only the generated ids worked.
-describe('orca cli project and host names', () => {
+describe('quirky cli project and host names', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock,
     addEnvironmentFromPairingCodeMock,
     listEnvironmentsMock,
     spawnMock
   })
 
-  // Why: the issue's own repro — the names `orca project list` and `orca host list` print were
+  // Why: the issue's own repro — the names `quirky project list` and `quirky host list` print were
   // rejected, and only the generated ids worked.
   it('filters project setups by the display name and host name the list commands print', async () => {
     queueFixtures(
@@ -93,8 +93,8 @@ describe('orca cli project and host names', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'ssh:ssh-1789189705224-tq82n1',
             repoId: 'repo-other',
-            path: '/home/young/git/orca',
-            displayName: 'orca',
+            path: '/home/young/git/quirky',
+            displayName: 'quirky',
             setupState: 'ready',
             setupMethod: 'legacy-repo',
             createdAt: 1,
@@ -104,8 +104,8 @@ describe('orca cli project and host names', () => {
       }),
       okFixture('req_project_list', {
         projects: [
-          { ...ORCA_PROJECT, id: 'github:younghwan91/scalp-it', displayName: 'Scalp It' },
-          ORCA_PROJECT
+          { ...QUIRKY_PROJECT, id: 'github:younghwan91/scalp-it', displayName: 'Scalp It' },
+          QUIRKY_PROJECT
         ]
       })
     )
@@ -126,18 +126,18 @@ describe('orca cli project and host names', () => {
       callMock,
       okFixture('req_project_setups', { setups: [] }),
       okFixture('req_project_list', {
-        projects: [ORCA_PROJECT, { ...ORCA_PROJECT, id: 'repo:second-orca' }]
+        projects: [QUIRKY_PROJECT, { ...QUIRKY_PROJECT, id: 'repo:second-quirky' }]
       })
     )
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const priorExitCode = process.exitCode
 
-    await main(['project', 'setups', '--project', 'orca', '--json'], '/tmp/repo')
+    await main(['project', 'setups', '--project', 'quirky', '--json'], '/tmp/repo')
 
     const printed = [...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')
-    expect(printed).toContain('Ambiguous --project orca')
-    expect(printed).toContain('--project repo:second-orca')
+    expect(printed).toContain('Ambiguous --project quirky')
+    expect(printed).toContain('--project repo:second-quirky')
     expect(process.exitCode).toBe(1)
     process.exitCode = priorExitCode
   })
@@ -152,7 +152,7 @@ describe('orca cli project and host names', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['project', 'setup-create', '--project', 'Orca', '--host', 'this machine', '--json'],
+      ['project', 'setup-create', '--project', 'Quirky', '--host', 'this machine', '--json'],
       '/tmp/repo'
     )
 
@@ -197,8 +197,8 @@ describe('orca cli project and host names', () => {
       }),
       okFixture('req_project_list', {
         projects: [
-          { ...ORCA_PROJECT, id: 'repo:alpha', displayName: 'alpha' },
-          { ...ORCA_PROJECT, id: 'repo:beta', displayName: 'repo:alpha' }
+          { ...QUIRKY_PROJECT, id: 'repo:alpha', displayName: 'alpha' },
+          { ...QUIRKY_PROJECT, id: 'repo:beta', displayName: 'repo:alpha' }
         ]
       })
     )

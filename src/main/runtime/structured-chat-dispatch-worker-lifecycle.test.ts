@@ -3,8 +3,8 @@ import './rpc/unused-default-rpc-methods.test-fixture'
 // coordinator-mail rig: its reports, its liveness, a stop, and the chat being closed.
 
 import { describe, expect, it, vi } from 'vitest'
-import { formatOrcaSessionAddress } from '../../shared/orca-session-address'
-import { testOrcaSessionId } from '../../shared/orca-session-address-test-fixture'
+import { formatQuirkySessionAddress } from '../../shared/quirky-session-address'
+import { testQuirkySessionId } from '../../shared/quirky-session-address-test-fixture'
 import { idOf } from './rpc/orchestration-session-caller-test-fixture'
 import { closeStructuredAgentSessionChild } from './structured-agent-session-close'
 import type { FakeConnection } from './structured-chat-coordinator-fake-codex-fixture'
@@ -25,7 +25,7 @@ import {
   startClearedContext
 } from './structured-chat-coordinator-mail-rig.test-fixture'
 
-const WORKER = formatOrcaSessionAddress(testOrcaSessionId(PEER_CHAT))
+const WORKER = formatQuirkySessionAddress(testQuirkySessionId(PEER_CHAT))
 
 /** A Dispatch of the coordinator's task to the peer chat, both chats open. */
 async function dispatchToChat(): Promise<{

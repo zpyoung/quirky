@@ -2,14 +2,14 @@ import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { createInterface, type Interface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
 
-/** Why: stdin is a never-written pipe whose EOF tells the wrapper that Orca died. */
+/** Why: stdin is a never-written pipe whose EOF tells the wrapper that Quirky died. */
 export type LogStreamChild = ChildProcessByStdio<Writable, Readable, Readable>
 
 /**
- * Counts the macOS TCC consent dialogs that name Orca as the responsible
+ * Counts the macOS TCC consent dialogs that name Quirky as the responsible
  * process (#9756). Terminal children — agent CLIs and anything else the user
  * runs — perform the access, but TCC walks the responsibility chain back to
- * Orca and puts Orca's name on the dialog, so users read it as Orca snooping.
+ * Quirky and puts Quirky's name on the dialog, so users read it as Quirky snooping.
  *
  * tccd emits one `AUTHREQ_PROMPTING` line per dialog it actually displays,
  * carrying the service and both identities, so this never has to correlate
@@ -18,15 +18,15 @@ export type LogStreamChild = ChildProcessByStdio<Writable, Readable, Readable>
  */
 
 /** Why: terminals run from the detached helper, which TCC can hold responsible independently. */
-const ORCA_RESPONSIBLE_IDENTIFIERS = new Set([
-  'com.stablyai.orca.dev',
-  'com.stablyai.orca.dev.helper',
-  'com.zpyoung.orca',
-  'com.zpyoung.orca.helper',
-  'com.zpyoung.orca.dev',
-  'com.zpyoung.orca.dev.helper',
-  'com.zpyoung.orca.local',
-  'com.zpyoung.orca.local.helper'
+const QUIRKY_RESPONSIBLE_IDENTIFIERS = new Set([
+  'com.zpyoung.quirky.dev',
+  'com.zpyoung.quirky.dev.helper',
+  'com.zpyoung.quirky',
+  'com.zpyoung.quirky.helper',
+  'com.zpyoung.quirky.dev',
+  'com.zpyoung.quirky.dev.helper',
+  'com.zpyoung.quirky.local',
+  'com.zpyoung.quirky.local.helper'
 ])
 
 /** Why: the prompt classes #9756 is about — other-apps' data plus the protected home folders agents sweep. */
@@ -75,10 +75,10 @@ export function parseTccPromptEvent(line: string): TccPromptEvent | null {
   }
 }
 
-/** True when this dialog is one macOS raised in Orca's name for a watched file-access service. */
-export function isOrcaAttributedPrompt(event: TccPromptEvent): boolean {
+/** True when this dialog is one macOS raised in Quirky's name for a watched file-access service. */
+export function isQuirkyAttributedPrompt(event: TccPromptEvent): boolean {
   return (
-    ORCA_RESPONSIBLE_IDENTIFIERS.has(event.responsibleIdentifier) &&
+    QUIRKY_RESPONSIBLE_IDENTIFIERS.has(event.responsibleIdentifier) &&
     WATCHED_SERVICES.has(event.service)
   )
 }
@@ -92,7 +92,7 @@ export type TccPromptWatchOptions = {
 }
 
 // Why: `log stream` never notices its parent dying (it only writes on a rare
-// match), so a crashed or SIGKILLed Orca orphaned it forever. The wrapper kills
+// match), so a crashed or SIGKILLed Quirky orphaned it forever. The wrapper kills
 // it when our stdin pipe hits EOF, and exits when it exits. fd 3 is needed
 // because async lists in a non-interactive sh get stdin=/dev/null. The trap is
 // armed before the fork; `term` covers a signal that lands before `log_pid` is set.
@@ -121,7 +121,7 @@ function spawnDefaultLogStream(): LogStreamChild {
 }
 
 /**
- * Watches for Orca-attributed TCC dialogs. macOS-only; `start()` is a no-op
+ * Watches for Quirky-attributed TCC dialogs. macOS-only; `start()` is a no-op
  * elsewhere so callers don't need their own platform guard.
  */
 export class MacosTccPromptWatch {
@@ -175,7 +175,7 @@ export class MacosTccPromptWatch {
 
   private handleLine(line: string): void {
     const event = parseTccPromptEvent(line)
-    if (!event || !isOrcaAttributedPrompt(event)) {
+    if (!event || !isQuirkyAttributedPrompt(event)) {
       return
     }
     this.options.onPrompt(event)

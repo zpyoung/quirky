@@ -1,4 +1,4 @@
-import type { OrcaHooks } from '../../../shared/orca-yaml-hook-types'
+import type { QuirkyHooks } from '../../../shared/quirky-yaml-hook-types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { SetupScriptImportCandidate } from '../../../shared/setup-script-imports'
 import { callRuntimeRpc } from './runtime-rpc-client'
@@ -17,7 +17,7 @@ function getHookInspectionTarget(hostId: ExecutionHostId): RuntimeClientTarget {
 export type HookCheckResult = {
   status?: 'ok' | 'error'
   hasHooks: boolean
-  hooks: OrcaHooks | null
+  hooks: QuirkyHooks | null
   mayNeedUpdate: boolean
 }
 

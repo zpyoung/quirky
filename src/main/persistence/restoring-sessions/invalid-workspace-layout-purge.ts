@@ -69,7 +69,7 @@ function dropInvalidWorkspaces(
  */
 export function dropInvalidWorkspaceLayoutsAtLoad(store: PurgeStore, state: PersistedState): void {
   const repoIds = new Set(store.getRepos().map((repo) => repo.id))
-  for (const staged of state.orcadMigrationStagedCatalogs ?? []) {
+  for (const staged of state.quirkydMigrationStagedCatalogs ?? []) {
     for (const repo of staged.manifest.payload.repositories) {
       repoIds.add(repo.id)
     }

@@ -82,7 +82,7 @@ export class ClaudeBackgroundTaskTracker {
     //
     // A new turn is the same evidence `result` is: nothing the previous turn
     // left foreground is still that turn's work. CLEANUP ONLY — a row's
-    // visibility never consults `startsTurn`, which is Orca's own
+    // visibility never consults `startsTurn`, which is Quirky's own
     // dispatch-correlation bookkeeping and false by design for undispatched
     // turns, so a missed one degrades to the old behaviour and can never hide
     // live work.

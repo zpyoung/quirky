@@ -30,7 +30,7 @@ it.each(['maintenance', 'freeze', 'final'] as const)(
     const cleanup = durableFileWrite.removeStaleDurableWriteTempFiles
     vi.spyOn(durableFileWrite, 'removeStaleDurableWriteTempFiles').mockImplementation(
       (file, options) =>
-        basename(file) === 'orca-data.json' ? gate.promise : cleanup(file, options)
+        basename(file) === 'quirky-data.json' ? gate.promise : cleanup(file, options)
     )
     const { store, authority, readState } = await createWorkerMaintenanceFixture()
     store.updateSettings({ theme: 'dark' })
@@ -59,9 +59,9 @@ it.each(['maintenance', 'freeze', 'final'] as const)(
 )
 
 it('leaves legacy source temp files untouched when constructing a frozen importer', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-import-temp-cleanup-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-import-temp-cleanup-'))
   directories.push(directory)
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const source = '{"settings":{"theme":"dark"}}'
   const staleTempFile = `${dataFile}.99999999.0.import.tmp`
   writeFileSync(dataFile, source)

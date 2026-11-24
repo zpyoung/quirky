@@ -32,7 +32,7 @@ git rev-list --count origin/main..HEAD # must be: 0  (nothing unpushed)
 git rev-list --count HEAD..origin/main # must be: 0  (nothing unpulled)
 ```
 
-**Both** counts are required. `origin/main..HEAD` alone is also `0` when local `HEAD` is *behind*
+**Both** counts are required. `origin/main..HEAD` alone is also `0` when local `HEAD` is _behind_
 `origin/main`, which would let the skill commit against stale state and then fail the push as
 non-fast-forward.
 
@@ -79,8 +79,8 @@ finds it.
 
 - **Published** (`isDraft` false, assets present): carry on below.
 - **Run still in progress**: do not cut. Go to Step 7 and watch that run instead.
-- **No run, and no tag**: "changelog pushed, dispatch never ran" (see *Recovering from a partial
-  failure*). Re-dispatch the same version, then go to Step 7.
+- **No run, and no tag**: "changelog pushed, dispatch never ran" (see _Recovering from a partial
+  failure_). Re-dispatch the same version, then go to Step 7.
 - **Run failed**: classify its failure with Step 7's table, then:
   - If the range check below finds something new to release, cut normally. The new cut supersedes
     the draft, and Step 5 carries the draft's entries forward.
@@ -119,6 +119,7 @@ Prepend a new section under `# Changelog`, newest first:
 ## [2.0.0-rc.0] - 2026-12-01
 
 ### Changed
+
 - Release builds are signed, notarized, macOS-only, and auto-update from this repo.
 ```
 
@@ -210,11 +211,11 @@ gh api "repos/zpyoung/quirky/actions/jobs/$JOB_ID/logs" | sed 's/\x1b\[[0-9;]*m/
 Read the first real error, not the last. A failed job skips everything after it, so the jobs that
 show as skipped never ran and say nothing about the cause. Then classify it:
 
-| Cause | Looks like | Action |
-|---|---|---|
-| **Transient** | runner lost or shut down, network timeouts, 5xx from GitHub or Apple, notarytool timing out | `gh run rerun "$RUN_ID" --repo zpyoung/quirky --failed`, then watch again |
+| Cause            | Looks like                                                                                                                                                                                   | Action                                                                                                                                                                                                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Transient**    | runner lost or shut down, network timeouts, 5xx from GitHub or Apple, notarytool timing out                                                                                                  | `gh run rerun "$RUN_ID" --repo zpyoung/quirky --failed`, then watch again                                                                                                                                                                                        |
 | **Account-side** | notarytool `HTTP status code: 403. A required agreement is missing or has expired`, a 401 or rejected Apple ID, an expired signing certificate, a credential secret that is missing or empty | Stop with "needs attention". Name the error and what the owner must do, such as "sign the updated agreement at developer.apple.com/account". Leave the draft as it is. The next run's Step 3 re-runs it, so no recut is needed once the owner fixes the account. |
-| **Repo defect** | the same step fails the same way on a re-run: a workflow or script change that broke the build, a missing workflow input | Fix it on `main` (below), then recut with the next rc number |
+| **Repo defect**  | the same step fails the same way on a re-run: a workflow or script change that broke the build, a missing workflow input                                                                     | Fix it on `main` (below), then recut with the next rc number                                                                                                                                                                                                     |
 
 A re-run replays the run's original commit and workflow file, so it can only clear transient or
 account-side causes. If the rerun fails the same way, treat the cause as a repo defect.
@@ -253,7 +254,7 @@ The changelog commit lands before the dispatch, so the two can disagree. Diagnos
 `CHANGELOG.md`'s newest section against the tags that actually exist.
 
 **Changelog pushed, dispatch never ran** (`gh workflow run` failed, or you declined at the prompt).
-Re-dispatch the *same* `VERSION` by hand. The changelog section is still correct and `$TAG` does not
+Re-dispatch the _same_ `VERSION` by hand. The changelog section is still correct and `$TAG` does not
 exist yet. Do not write a second changelog section.
 
 **Tag created, build failed with an incomplete draft.** Step 3 finds it and Step 7 decides between a

@@ -145,16 +145,16 @@ describe('preflight', () => {
     await expect(detectInstalledAgents()).resolves.toEqual(['claude', 'cursor'])
   })
 
-  it('does not report Claude Agent Teams when only the Orca shim is present', async () => {
+  it('does not report Claude Agent Teams when only the Quirky shim is present', async () => {
     execFileAsyncMock.mockImplementation(async (command, args) => {
       if (command !== 'which') {
         throw new Error(`unexpected command ${String(command)}`)
       }
-      if (String(args[0]) === 'orca') {
+      if (String(args[0]) === 'quirky') {
         return {
           environmentResolved: true,
           code: 0,
-          stdout: '/Applications/Orca.app/Contents/MacOS/orca\n',
+          stdout: '/Applications/Quirky.app/Contents/MacOS/quirky\n',
           stderr: '',
           timedOut: false
         }
@@ -165,7 +165,7 @@ describe('preflight', () => {
     await expect(detectInstalledAgents()).resolves.toEqual([])
   })
 
-  it('reports Claude Agent Teams when both Orca and Claude are present', async () => {
+  it('reports Claude Agent Teams when both Quirky and Claude are present', async () => {
     execFileAsyncMock.mockImplementation(async (command, args) => {
       if (command !== 'which') {
         throw new Error(`unexpected command ${String(command)}`)
@@ -179,11 +179,11 @@ describe('preflight', () => {
           timedOut: false
         }
       }
-      if (String(args[0]) === 'orca') {
+      if (String(args[0]) === 'quirky') {
         return {
           environmentResolved: true,
           code: 0,
-          stdout: '/Applications/Orca.app/Contents/MacOS/orca\n',
+          stdout: '/Applications/Quirky.app/Contents/MacOS/quirky\n',
           stderr: '',
           timedOut: false
         }
@@ -212,11 +212,11 @@ describe('preflight', () => {
           timedOut: false
         }
       }
-      if (String(args[0]) === 'orca') {
+      if (String(args[0]) === 'quirky') {
         return {
           environmentResolved: true,
           code: 0,
-          stdout: '/mock/windows/programs/orca.cmd\n',
+          stdout: '/mock/windows/programs/quirky.cmd\n',
           stderr: '',
           timedOut: false
         }

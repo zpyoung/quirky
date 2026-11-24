@@ -211,7 +211,7 @@ describe("a message sent while a person's Stop ends the turn", () => {
 
     for (let row = 0; row < 3; row += 1) {
       await journal().appendItem(
-        { provider: 'orca', clientMessageId: `streamed-${row}` },
+        { provider: 'quirky', clientMessageId: `streamed-${row}` },
         { kind: 'status', text: `still streaming ${row}` },
         {
           fence: rig.store.getRecord(HOST_TEST_SESSION)?.lease.runtimeFence ?? 1,

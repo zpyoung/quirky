@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   callMock,
   runtimeClientConstructorMock,
-  serveOrcaAppMock,
+  serveQuirkyAppMock,
   getDefaultUserDataPathMock,
   addEnvironmentFromPairingCodeMock,
   listEnvironmentsMock,
@@ -11,8 +11,8 @@ const {
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   spawnMock: vi.fn()
@@ -23,7 +23,7 @@ vi.mock('./runtime-client', async () => {
   return createRuntimeClientModuleMock({
     callMock,
     runtimeClientConstructorMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock
   })
 })
@@ -129,7 +129,7 @@ describe('command aliases dispatch to the canonical handler', () => {
     await main(['worktree', 'rm', '--worktree', 'id:wt-1'], '/tmp/repo')
 
     expect(logSpy).toHaveBeenCalledWith(
-      'removed: true\nOrca is still deleting the checkout in the background.'
+      'removed: true\nQuirky is still deleting the checkout in the background.'
     )
   })
 
@@ -252,8 +252,8 @@ describe('command aliases dispatch to the canonical handler', () => {
   })
 
   it('keeps `agent-context` local when remote environment variables are set', async () => {
-    vi.stubEnv('ORCA_PAIRING_CODE', 'pairing-code')
-    vi.stubEnv('ORCA_ENVIRONMENT', 'stale-environment')
+    vi.stubEnv('QUIRKY_PAIRING_CODE', 'pairing-code')
+    vi.stubEnv('QUIRKY_ENVIRONMENT', 'stale-environment')
     try {
       await main(['agent-context', '--json'], '/tmp/repo')
 
@@ -273,8 +273,8 @@ describe('artifact runtime routing', () => {
   })
 
   it('uses the desktop runtime despite remote-selection environment fallbacks', async () => {
-    vi.stubEnv('ORCA_ENVIRONMENT', 'remote-environment')
-    vi.stubEnv('ORCA_PAIRING_CODE', 'remote-pairing-code')
+    vi.stubEnv('QUIRKY_ENVIRONMENT', 'remote-environment')
+    vi.stubEnv('QUIRKY_PAIRING_CODE', 'remote-pairing-code')
     vi.spyOn(console, 'log').mockImplementation(() => undefined)
     callMock.mockResolvedValue(okFixture('artifact-list', { status: 'ok', value: [] }))
     runtimeClientConstructorMock.mockClear()
@@ -306,7 +306,7 @@ describe('unknown command surfaces a suggestion', () => {
     expect(process.exitCode).toBe(1)
     const stderr = errorSpy.mock.calls.map((call) => String(call[0])).join('\n')
     expect(stderr).toContain('Unknown command: worktree remov')
-    expect(stderr).toContain('orca worktree')
+    expect(stderr).toContain('quirky worktree')
   })
 
   it.each([
@@ -328,7 +328,7 @@ describe('unknown command surfaces a suggestion', () => {
       const output = logSpy.mock.calls.flat().join('\n')
       expect(output).toContain('invalid_argument')
       expect(output).toContain('"runtimeId": null')
-      expect(output).not.toContain(`orca ${forbidden}`)
+      expect(output).not.toContain(`quirky ${forbidden}`)
       expect(output).not.toContain(`"${forbidden}"`)
       expect(runtimeClientConstructorMock).not.toHaveBeenCalled()
       expect(callMock).not.toHaveBeenCalled()
@@ -337,7 +337,7 @@ describe('unknown command surfaces a suggestion', () => {
     }
 
     await main(input.split(' '), '/tmp/repo')
-    expect(errorSpy.mock.calls.flat().join('\n')).not.toContain(`orca ${forbidden}`)
+    expect(errorSpy.mock.calls.flat().join('\n')).not.toContain(`quirky ${forbidden}`)
     expect(runtimeClientConstructorMock).not.toHaveBeenCalled()
     expect(callMock).not.toHaveBeenCalled()
   })
@@ -369,7 +369,7 @@ describe('unknown command surfaces a suggestion', () => {
 
     expect(process.exitCode).toBe(1)
     const stderr = errorSpy.mock.calls.map((call) => String(call[0])).join('\n')
-    expect(stderr).toContain('No Orca workspace matched the worktree selector "repo-1"')
+    expect(stderr).toContain('No Quirky workspace matched the worktree selector "repo-1"')
     expect(stderr).toContain('id:repo-1::<absolute-path>')
     expect(stderr).toContain('Valid selector forms:')
   })
@@ -421,7 +421,7 @@ describe('unknown help command surfaces a suggestion', () => {
     await main(argv, '/tmp/repo')
 
     expect(process.exitCode).toBe(1)
-    expect(logSpy.mock.calls.flat().join('\n')).toContain('Did you mean: orca worktree')
+    expect(logSpy.mock.calls.flat().join('\n')).toContain('Did you mean: quirky worktree')
     logSpy.mockRestore()
     process.exitCode = 0
   })
@@ -444,7 +444,7 @@ describe('nested command group help', () => {
 
         expect(process.exitCode).toBe(0)
         const output = logSpy.mock.calls.flat().join('\n')
-        expect(output).toContain(`orca ${path.join(' ')}`)
+        expect(output).toContain(`quirky ${path.join(' ')}`)
         for (const command of commands) {
           expect(output).toContain(command)
         }
@@ -459,13 +459,13 @@ describe('nested command group help', () => {
   )
 })
 
-describe('orca help', () => {
+describe('quirky help', () => {
   it('prints root help without contacting the runtime', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(['--help'], '/tmp/repo')
 
-    expect(logSpy.mock.calls[0][0]).toContain('Usage: orca <command>')
+    expect(logSpy.mock.calls[0][0]).toContain('Usage: quirky <command>')
     expect(callMock).not.toHaveBeenCalled()
     logSpy.mockRestore()
   })
@@ -483,7 +483,7 @@ describe('orca help', () => {
     await main(['linear', '--help'], '/tmp/repo')
 
     const groupHelp = String(logSpy.mock.calls[0][0])
-    expect(groupHelp).toContain('orca linear')
+    expect(groupHelp).toContain('quirky linear')
     expect(groupHelp).toContain('issue')
     expect(groupHelp).not.toContain('--comments')
 
@@ -491,7 +491,7 @@ describe('orca help', () => {
     await main(['linear', 'issue', '--help'], '/tmp/repo')
 
     const issueHelp = String(logSpy.mock.calls[0][0])
-    expect(issueHelp).toContain('orca linear issue')
+    expect(issueHelp).toContain('quirky linear issue')
     expect(issueHelp).toContain('--comments')
     expect(callMock).not.toHaveBeenCalled()
     logSpy.mockRestore()

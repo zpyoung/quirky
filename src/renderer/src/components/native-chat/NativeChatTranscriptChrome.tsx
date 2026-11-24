@@ -274,7 +274,7 @@ export function NativeChatAgentControls({
   return (
     // Hover-only row chrome: find skips it rather than counting what the mouse happens to show.
     <div data-native-chat-find-skip className={cn('flex items-center gap-1', className)}>
-      {/* A visual line means nothing pasted outside Orca, so the copy leaves it out. */}
+      {/* A visual line means nothing pasted outside Quirky, so the copy leaves it out. */}
       <NativeChatCopyButton text={withoutNativeChatVisualDirectiveLines(markdown)} />
       <button
         type="button"

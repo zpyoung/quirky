@@ -4,13 +4,13 @@ import { buildPdfJsDocumentOptions } from './pdf-js-document-options'
 describe('pdf.js document resource options', () => {
   it('resolves CMaps, standard fonts, and WASM beside the document', () => {
     expect(
-      buildPdfJsDocumentOptions(new Uint8Array([1]), 'https://orca.test/web-index.html')
+      buildPdfJsDocumentOptions(new Uint8Array([1]), 'https://quirky.test/web-index.html')
     ).toEqual({
       data: new Uint8Array([1]),
-      cMapUrl: 'https://orca.test/cmaps/',
+      cMapUrl: 'https://quirky.test/cmaps/',
       cMapPacked: true,
-      standardFontDataUrl: 'https://orca.test/standard_fonts/',
-      wasmUrl: 'https://orca.test/wasm/'
+      standardFontDataUrl: 'https://quirky.test/standard_fonts/',
+      wasmUrl: 'https://quirky.test/wasm/'
     })
   })
 })

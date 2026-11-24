@@ -19,13 +19,13 @@ type Post = {
 const PANE_A = 'tabA:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const PANE_B = 'tabB:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const ENV_KEYS = [
-  'ORCA_PANE_KEY',
-  'ORCA_OPENCODE_AGENT',
-  'ORCA_AGENT_HOOK_ENDPOINT',
-  'ORCA_AGENT_HOOK_PORT',
-  'ORCA_AGENT_HOOK_TOKEN',
-  'ORCA_AGENT_HOOK_OPENCODE_TUI',
-  'ORCA_OPENCODE_PLUGIN_API'
+  'QUIRKY_PANE_KEY',
+  'QUIRKY_OPENCODE_AGENT',
+  'QUIRKY_AGENT_HOOK_ENDPOINT',
+  'QUIRKY_AGENT_HOOK_PORT',
+  'QUIRKY_AGENT_HOOK_TOKEN',
+  'QUIRKY_AGENT_HOOK_OPENCODE_TUI',
+  'QUIRKY_OPENCODE_PLUGIN_API'
 ] as const
 const created = (id: string, parentID?: string): LegacyTuiEvent => ({
   type: 'session.created',
@@ -45,17 +45,17 @@ describe('OpenCode 1 TUI API pane reporting', () => {
   const cleanups: (() => Promise<void>)[] = []
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-legacy-tui-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-legacy-tui-'))
     savedFetch = globalThis.fetch
     savedArgv = process.argv
     savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]))
     process.argv = ['opencode', 'attach', 'http://127.0.0.1:4096']
-    process.env.ORCA_OPENCODE_PLUGIN_API = 'v2'
-    process.env.ORCA_OPENCODE_AGENT = 'opencode'
-    process.env.ORCA_AGENT_HOOK_PORT = '59999'
-    process.env.ORCA_AGENT_HOOK_TOKEN = 'fixture'
-    process.env.ORCA_AGENT_HOOK_OPENCODE_TUI = '1'
-    delete process.env.ORCA_AGENT_HOOK_ENDPOINT
+    process.env.QUIRKY_OPENCODE_PLUGIN_API = 'v2'
+    process.env.QUIRKY_OPENCODE_AGENT = 'opencode'
+    process.env.QUIRKY_AGENT_HOOK_PORT = '59999'
+    process.env.QUIRKY_AGENT_HOOK_TOKEN = 'fixture'
+    process.env.QUIRKY_AGENT_HOOK_OPENCODE_TUI = '1'
+    delete process.env.QUIRKY_AGENT_HOOK_ENDPOINT
     posts = []
     globalThis.fetch = vi.fn(async (_input, init) => {
       posts.push(JSON.parse(String(init?.body)))
@@ -80,8 +80,8 @@ describe('OpenCode 1 TUI API pane reporting', () => {
   })
 
   async function start(paneKey = PANE_A, tui = fakeLegacyTui()) {
-    process.env.ORCA_PANE_KEY = paneKey
-    const name = `orca-status-${Math.random().toString(36).slice(2)}.js`
+    process.env.QUIRKY_PANE_KEY = paneKey
+    const name = `quirky-status-${Math.random().toString(36).slice(2)}.js`
     writeOpenCodeTuiPlugin(dir, name, getOpenCodePluginSource())
     const plugin: unknown = await import(
       pathToFileURL(join(dir, name.replace(/\.js$/, '-tui'), 'tui.js')).href
@@ -116,13 +116,13 @@ describe('OpenCode 1 TUI API pane reporting', () => {
   }
 
   it('registers a separate object TUI entry while retaining the current server entry', async () => {
-    process.env.ORCA_PANE_KEY = PANE_A
+    process.env.QUIRKY_PANE_KEY = PANE_A
     const path = join(dir, 'server.mjs')
     writeFileSync(path, getOpenCodePluginSource())
     const plugin: unknown = await import(pathToFileURL(path).href)
     expect(plugin).toMatchObject({
       default: { server: expect.any(Function), setup: expect.any(Function) },
-      OrcaOpenCodeStatusPlugin: expect.any(Function)
+      QuirkyOpenCodeStatusPlugin: expect.any(Function)
     })
     if (typeof plugin !== 'object' || !plugin || !('default' in plugin)) {
       throw new Error('No server plugin')
@@ -133,9 +133,9 @@ describe('OpenCode 1 TUI API pane reporting', () => {
   })
 
   it('loads the selected v1 factory through the release fallback once and retains the separate TUI', async () => {
-    process.env.ORCA_OPENCODE_PLUGIN_API = getOpenCodeCliCapabilities('1.18.30').pluginApi
+    process.env.QUIRKY_OPENCODE_PLUGIN_API = getOpenCodeCliCapabilities('1.18.30').pluginApi
     process.argv = ['opencode', 'serve']
-    process.env.ORCA_PANE_KEY = PANE_A
+    process.env.QUIRKY_PANE_KEY = PANE_A
     const path = join(dir, 'selected-v1-server.mjs')
     writeFileSync(path, getOpenCodePluginSource())
     const plugin: unknown = await import(pathToFileURL(path).href)
@@ -178,13 +178,17 @@ describe('OpenCode 1 TUI API pane reporting', () => {
 
   it('reproduces the release loader rejection of a combined server and TUI entry', () => {
     expect(() =>
-      readV1Plugin({ default: { server() {}, tui() {} } }, 'orca-opencode-status-tui/tui.js', 'tui')
+      readV1Plugin(
+        { default: { server() {}, tui() {} } },
+        'quirky-opencode-status-tui/tui.js',
+        'tui'
+      )
     ).toThrow('must default export either server() or tui(), not both')
   })
 
   it('keeps legacy reporting after the release catalog probes setup in the same module', async () => {
     process.argv = ['opencode', 'serve']
-    process.env.ORCA_PANE_KEY = PANE_A
+    process.env.QUIRKY_PANE_KEY = PANE_A
     const path = join(dir, 'catalog-probed-server.mjs')
     writeFileSync(path, getOpenCodePluginSource())
     const plugin: unknown = await import(pathToFileURL(path).href)
@@ -314,15 +318,15 @@ describe('OpenCode 1 TUI API pane reporting', () => {
 
   it('keeps newer hosts capability opt-in separate from the process environment', async () => {
     const endpoint = join(dir, 'endpoint.env')
-    process.env.ORCA_AGENT_HOOK_ENDPOINT = endpoint
-    writeFileSync(endpoint, 'ORCA_AGENT_HOOK_PORT=59999\nORCA_AGENT_HOOK_TOKEN=fixture\n')
+    process.env.QUIRKY_AGENT_HOOK_ENDPOINT = endpoint
+    writeFileSync(endpoint, 'QUIRKY_AGENT_HOOK_PORT=59999\nQUIRKY_AGENT_HOOK_TOKEN=fixture\n')
     const tui = await start()
     tui.navigate('ses_a')
     await pump(tui, [created('ses_a'), status('ses_a', 'busy')])
     expect(posts).toEqual([])
     writeFileSync(
       endpoint,
-      'ORCA_AGENT_HOOK_PORT=59999\nORCA_AGENT_HOOK_TOKEN=fixture\nORCA_AGENT_HOOK_OPENCODE_TUI=1\n'
+      'QUIRKY_AGENT_HOOK_PORT=59999\nQUIRKY_AGENT_HOOK_TOKEN=fixture\nQUIRKY_AGENT_HOOK_OPENCODE_TUI=1\n'
     )
     await settle('SessionBusy:ses_a')
   })
@@ -347,7 +351,7 @@ describe('OpenCode 1 TUI API pane reporting', () => {
         process.argv = ['opencode']
       }
       if (kind === 'other-agent') {
-        process.env.ORCA_OPENCODE_AGENT = 'mimo-code'
+        process.env.QUIRKY_OPENCODE_AGENT = 'mimo-code'
       }
       if (kind === 'wrong-version') {
         tui.api.app.version = '2.0.16'

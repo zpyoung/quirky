@@ -23,11 +23,11 @@ afterEach(() => {
 })
 
 function createLocation() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-offline-settings-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-offline-settings-'))
   directories.push(directory)
   return {
-    dataFile: join(directory, 'orca-data.json'),
-    databaseFile: join(directory, 'orca-state.db'),
+    dataFile: join(directory, 'quirky-data.json'),
+    databaseFile: join(directory, 'quirky-state.db'),
     profileId: 'profile-offline'
   }
 }

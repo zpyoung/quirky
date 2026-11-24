@@ -59,7 +59,7 @@ export class AcpStructuredPrompts {
       return Promise.resolve(translated.settled.reply)
     }
     if (translated.presentation && !this.admits()) {
-      // No prompt of Orca's runs, or a Stop or steer is cutting it short: the agent hears its own
+      // No prompt of Quirky's runs, or a Stop or steer is cutting it short: the agent hears its own
       // cancelled reply and no card opens.
       return Promise.resolve(translated.presentation.reply(null))
     }

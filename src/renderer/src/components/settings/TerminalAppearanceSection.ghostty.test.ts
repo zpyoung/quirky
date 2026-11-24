@@ -509,7 +509,7 @@ describe('TerminalAppearanceSection ghostty import wiring', () => {
 
   it('hides the theme import affordance on paired web clients', () => {
     vi.stubGlobal('window', {
-      __ORCA_WEB_CLIENT__: true,
+      __QUIRKY_WEB_CLIENT__: true,
       location: { pathname: '/web-index.html' }
     })
 
@@ -531,7 +531,7 @@ describe('TerminalAppearanceSection ghostty import wiring', () => {
   it.each([false, true])(
     'hides Ghostty search results on web clients with forceVisiblePrimary=%s',
     (forceVisiblePrimary) => {
-      vi.stubGlobal('window', { __ORCA_WEB_CLIENT__: true })
+      vi.stubGlobal('window', { __QUIRKY_WEB_CLIENT__: true })
       mockSettingsSearchQuery = 'ghostty'
 
       const element = TerminalAppearanceSection({

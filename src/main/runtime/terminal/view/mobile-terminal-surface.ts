@@ -1,11 +1,11 @@
 /* eslint-disable unicorn/no-useless-spread */
-import { OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal } from '../launch/mobile-terminal-owned-create'
-import type { OrcaRuntimeWithResolveTerminalSplitSourceAuthority } from '../launch/terminal-split-source-authority'
+import { QuirkyRuntimeWithCreateRuntimeOwnedMobileSessionTerminal } from '../launch/mobile-terminal-owned-create'
+import type { QuirkyRuntimeWithResolveTerminalSplitSourceAuthority } from '../launch/terminal-split-source-authority'
 import type {
   RuntimeMobileSessionCreateTerminalResult,
   RuntimeMobileSessionTerminalClientTab
 } from '../../../../shared/runtime-types'
-import { MOBILE_TERMINAL_SURFACE_TIMEOUT_MS } from '../../orca-runtime-core'
+import { MOBILE_TERMINAL_SURFACE_TIMEOUT_MS } from '../../quirky-runtime-core'
 import { makePaneKey, parsePaneKey } from '../../../../shared/stable-pane-id'
 import { resolveTerminalSessionWorktreeId } from '../../runtime-worktree-path-identity'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
@@ -14,13 +14,13 @@ import type {
   RuntimePtyWorktreeRecord
 } from '../../runtime-terminal-state-records'
 
-export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal {
+export abstract class QuirkyRuntimeWithWaitForMobileTerminalSurface extends QuirkyRuntimeWithCreateRuntimeOwnedMobileSessionTerminal {
   protected abstract resolveTerminalSplitSourceAuthority(
     ...args: Parameters<
-      OrcaRuntimeWithResolveTerminalSplitSourceAuthority['resolveTerminalSplitSourceAuthority']
+      QuirkyRuntimeWithResolveTerminalSplitSourceAuthority['resolveTerminalSplitSourceAuthority']
     >
   ): ReturnType<
-    OrcaRuntimeWithResolveTerminalSplitSourceAuthority['resolveTerminalSplitSourceAuthority']
+    QuirkyRuntimeWithResolveTerminalSplitSourceAuthority['resolveTerminalSplitSourceAuthority']
   >
 
   protected waitForMobileTerminalSurface(

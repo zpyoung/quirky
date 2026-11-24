@@ -23,15 +23,15 @@ export function buildPaneIdentityEnv(
       ? state.folderWorkspaces.find((workspace) => workspace.id === parsed.folderWorkspaceId)
       : null
   return {
-    ORCA_WORKSPACE_ID: worktreeId,
+    QUIRKY_WORKSPACE_ID: worktreeId,
     ...(folderWorkspace
       ? {
-          ORCA_PROJECT_GROUP_ID: folderWorkspace.projectGroupId,
-          ORCA_WORKSPACE_ROOT: folderWorkspace.folderPath
+          QUIRKY_PROJECT_GROUP_ID: folderWorkspace.projectGroupId,
+          QUIRKY_WORKSPACE_ROOT: folderWorkspace.folderPath
         }
       : {}),
-    ORCA_PANE_KEY: makePaneKey(tabId, leafId),
-    ORCA_TAB_ID: tabId,
-    ORCA_WORKTREE_ID: worktreeId
+    QUIRKY_PANE_KEY: makePaneKey(tabId, leafId),
+    QUIRKY_TAB_ID: tabId,
+    QUIRKY_WORKTREE_ID: worktreeId
   }
 }

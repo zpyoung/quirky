@@ -1,7 +1,7 @@
 // Claude alone registers the native Windows hook (#20913); every other agent keeps its form.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
-import type { PipedChildProcess } from '@orca/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
+import type { PipedChildProcess } from '@quirky/process-host/process-spec'
 import { once } from 'node:events'
 import {
   existsSync,
@@ -42,9 +42,9 @@ import {
 } from './hook-settings'
 
 const CURRENT_CLAUDE = { claudeVersion: '2.1.261 (Claude Code)' }
-const EXE = 'orca-agent-hook.exe'
-const SCRIPT_PATH = 'C:\\Users\\alice\\.orca\\agent-hooks\\claude-hook.cmd'
-const EXE_PATH = `C:\\Users\\alice\\.orca\\agent-hooks\\${EXE}`
+const EXE = 'quirky-agent-hook.exe'
+const SCRIPT_PATH = 'C:\\Users\\alice\\.quirky\\agent-hooks\\claude-hook.cmd'
+const EXE_PATH = `C:\\Users\\alice\\.quirky\\agent-hooks\\${EXE}`
 
 function withWin32<T>(run: () => T): T {
   const original = Object.getOwnPropertyDescriptor(process, 'platform')
@@ -65,13 +65,13 @@ describe('getManagedLifecycleHook native executable gate', () => {
     )
     expect(hook).toEqual({
       type: 'command',
-      command: `C:/Users/alice/.orca/agent-hooks/${EXE} claude`,
+      command: `C:/Users/alice/.quirky/agent-hooks/${EXE} claude`,
       timeout: 10
     })
   })
 
   it('owns the `<exe> claude` command, and no other agent does', () => {
-    const command = `C:/Users/alice/.orca/agent-hooks/${EXE} claude`
+    const command = `C:/Users/alice/.quirky/agent-hooks/${EXE} claude`
     expect(createManagedCommandMatcher('claude-hook.cmd')(command)).toBe(true)
     for (const other of ['openclaude-hook.cmd', 'codebuddy-hook.cmd']) {
       expect(createManagedCommandMatcher(other)(command), other).toBe(false)
@@ -83,7 +83,7 @@ describe('getManagedLifecycleHook native executable gate', () => {
   })
 
   it('falls back to the .cmd form without an installed exe or with a path shells cannot carry', () => {
-    for (const exePath of [null, `C:\\Users\\Bob Smith\\.orca\\agent-hooks\\${EXE}`]) {
+    for (const exePath of [null, `C:\\Users\\Bob Smith\\.quirky\\agent-hooks\\${EXE}`]) {
       const hook = withWin32(() =>
         getManagedLifecycleHook(SCRIPT_PATH, CLAUDE_HOOK_SETTINGS, exePath)
       )
@@ -105,13 +105,13 @@ describe.skipIf(process.platform !== 'win32')('ClaudeHookService native hook ins
   })
 
   function useTempHome(): { hooksDir: string; settingsPath: string; bundle: string } {
-    home = mkdtempSync(join(tmpdir(), 'orca-claude-native-hook-'))
+    home = mkdtempSync(join(tmpdir(), 'quirky-claude-native-hook-'))
     vi.stubEnv('HOME', home)
     vi.stubEnv('USERPROFILE', home)
     const bundle = join(home, 'bundled-agent-hook.exe')
     writeFileSync(bundle, 'MZ stand-in for the signed bundle')
     return {
-      hooksDir: join(home, '.orca', 'agent-hooks'),
+      hooksDir: join(home, '.quirky', 'agent-hooks'),
       settingsPath: join(home, '.claude', 'settings.json'),
       bundle
     }
@@ -135,9 +135,9 @@ describe.skipIf(process.platform !== 'win32')('ClaudeHookService native hook ins
       args: ['claude'],
       env: {
         SystemRoot: process.env.SystemRoot,
-        ORCA_AGENT_HOOK_PORT: '1',
-        ORCA_AGENT_HOOK_TOKEN: 'token',
-        ORCA_PANE_KEY: 'tab:leaf'
+        QUIRKY_AGENT_HOOK_PORT: '1',
+        QUIRKY_AGENT_HOOK_TOKEN: 'token',
+        QUIRKY_PANE_KEY: 'tab:leaf'
       },
       stdio: ['pipe', 'pipe', 'pipe']
     })

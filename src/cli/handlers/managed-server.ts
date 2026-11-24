@@ -1,18 +1,18 @@
 /**
- * `orca environment status|update|rollback|recover|stop|forget|cancel-stop`: the Managed servers
+ * `quirky environment status|update|rollback|recover|stop|forget|cancel-stop`: the Managed servers
  * actions over runtime RPC. Each call is gated on the runtime's managedServer.v1 capability, and
  * an older runtime's method_not_found reads the same as a missing capability.
  */
 import type {
-  OrcadManagedCancelStopResult,
-  OrcadManagedDeployResult,
-  OrcadManagedForgetResult,
-  OrcadManagedRecoveryResult,
-  OrcadManagedRollbackResult,
-  OrcadManagedRuntimeStatus,
-  OrcadManagedStopResult
-} from '../../shared/orcad-managed-runtime'
-import { ORCAD_RECOVERY_CHANGED_STATE_CODE } from '../../shared/orcad-managed-runtime'
+  QuirkydManagedCancelStopResult,
+  QuirkydManagedDeployResult,
+  QuirkydManagedForgetResult,
+  QuirkydManagedRecoveryResult,
+  QuirkydManagedRollbackResult,
+  QuirkydManagedRuntimeStatus,
+  QuirkydManagedStopResult
+} from '../../shared/quirkyd-managed-runtime'
+import { QUIRKYD_RECOVERY_CHANGED_STATE_CODE } from '../../shared/quirkyd-managed-runtime'
 import { MANAGED_SERVER_RUNTIME_CAPABILITY } from '../../shared/protocol-version'
 import type { RuntimeStatus } from '../../shared/runtime-types'
 import type { CommandHandler, HandlerContext } from '../dispatch'
@@ -23,7 +23,7 @@ import { formatManagedServerStatus } from './managed-server-format'
 import { reportAfterClosedConnection } from './managed-server-reconnect'
 
 const UNSUPPORTED_MESSAGE =
-  'This Orca runtime cannot manage servers over SSH. Run this on the computer whose Orca desktop app deployed the server, after updating Orca there.'
+  'This Quirky runtime cannot manage servers over SSH. Run this on the computer whose Quirky desktop app deployed the server, after updating Quirky there.'
 
 // Why 20 minutes: the desktop runs the whole action inline, and a Windows runtime promotion (5 min)
 // plus a readiness wait (5 min) on a slow host already outlast the 60 s RPC default.
@@ -58,7 +58,7 @@ async function callManagedServer<TResult>(
     if (!readOnly && error instanceof RuntimeClientError && error.code === 'runtime_timeout') {
       throw new RuntimeClientError(
         'managed_server_in_progress',
-        'Stopped waiting, but the desktop may still be running this action. Check `orca environment status` before retrying.'
+        'Stopped waiting, but the desktop may still be running this action. Check `quirky environment status` before retrying.'
       )
     }
     throw error
@@ -101,7 +101,7 @@ function report<TResult extends Outcome, TSettled extends TResult['outcome']>(
 ): void {
   const result = response.result
   if (!isSettled(result, settled)) {
-    const reason = result.reason ?? `The managed Orca server action was ${result.outcome}.`
+    const reason = result.reason ?? `The managed Quirky server action was ${result.outcome}.`
     const step = nextStep?.(result)
     throw new RuntimeClientError(
       `managed_server_${result.outcome}`,
@@ -121,7 +121,7 @@ function isSettled<TResult extends Outcome, TSettled extends TResult['outcome']>
 
 export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
   'environment status': async (context) => {
-    const response = await callManagedServer<OrcadManagedRuntimeStatus>(
+    const response = await callManagedServer<QuirkydManagedRuntimeStatus>(
       context,
       'managedServer.status',
       selectorOf(context)
@@ -130,7 +130,7 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
   },
   'environment update': async (context) => {
     const params = { ...selectorOf(context), force: context.flags.get('force') === true }
-    const response = await callExpectingRestart<OrcadManagedDeployResult>(
+    const response = await callExpectingRestart<QuirkydManagedDeployResult>(
       context,
       'managedServer.update',
       params
@@ -145,7 +145,7 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
     )
   },
   'environment rollback': async (context) => {
-    const response = await callExpectingRestart<OrcadManagedRollbackResult>(
+    const response = await callExpectingRestart<QuirkydManagedRollbackResult>(
       context,
       'managedServer.rollback',
       selectorOf(context)
@@ -169,7 +169,7 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
         `Restoring ${params.selector}'s prelaunch snapshot discards what the rejected build changed. Re-run with --yes to confirm.`
       )
     }
-    const response = await callManagedServer<OrcadManagedRecoveryResult>(
+    const response = await callManagedServer<QuirkydManagedRecoveryResult>(
       context,
       'managedServer.recover',
       acceptChangedState ? { ...params, acceptChangedState } : params
@@ -183,7 +183,9 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
           ? `Recovered ${result.environment.name} (${result.resolution}); active version ${result.activeVersion ?? 'none'}.`
           : 'Nothing to recover.',
       (result) =>
-        !acceptChangedState && 'code' in result && result.code === ORCAD_RECOVERY_CHANGED_STATE_CODE
+        !acceptChangedState &&
+        'code' in result &&
+        result.code === QUIRKYD_RECOVERY_CHANGED_STATE_CODE
           ? 'To restore it from the CLI, re-run with --accept-changed-state --yes.'
           : null
     )
@@ -196,7 +198,7 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
         `Stopping ${params.selector} ends its terminals and unlinks it from this machine. Re-run with --yes to confirm.`
       )
     }
-    const response = await callManagedServer<OrcadManagedStopResult>(
+    const response = await callManagedServer<QuirkydManagedStopResult>(
       context,
       'managedServer.stop',
       params
@@ -216,7 +218,7 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
         `Forgetting ${params.selector} unlinks it from this machine without stopping it on its host. Re-run with --yes to confirm.`
       )
     }
-    const response = await callManagedServer<OrcadManagedForgetResult>(
+    const response = await callManagedServer<QuirkydManagedForgetResult>(
       context,
       'managedServer.forget',
       params
@@ -226,11 +228,11 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
       context.json,
       ['forgotten'],
       () =>
-        `Unlinked ${params.selector} from this machine. Its host was not contacted, so orcad may still be running there.`
+        `Unlinked ${params.selector} from this machine. Its host was not contacted, so quirkyd may still be running there.`
     )
   },
   'environment cancel-stop': async (context) => {
-    const response = await callManagedServer<OrcadManagedCancelStopResult>(
+    const response = await callManagedServer<QuirkydManagedCancelStopResult>(
       context,
       'managedServer.cancelStop',
       selectorOf(context)
@@ -240,7 +242,7 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
         case 'canceled':
           return `Stop withdrawn; the server keeps serving ${result.activeVersion}.`
         case 'already-stopped':
-          return 'orcad had already exited. Run `orca environment stop --yes` to unlink it.'
+          return 'quirkyd had already exited. Run `quirky environment stop --yes` to unlink it.'
         case 'none':
           return 'No stop is pending.'
       }

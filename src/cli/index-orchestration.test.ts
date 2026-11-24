@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 const {
   callMock,
   runtimeClientConstructorMock,
-  serveOrcaAppMock,
+  serveQuirkyAppMock,
   getDefaultUserDataPathMock,
   addEnvironmentFromPairingCodeMock,
   listEnvironmentsMock,
@@ -11,8 +11,8 @@ const {
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   spawnMock: vi.fn()
@@ -23,7 +23,7 @@ vi.mock('./runtime-client', async () => {
   return createRuntimeClientModuleMock({
     callMock,
     runtimeClientConstructorMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock
   })
 })
@@ -44,10 +44,10 @@ import { main } from './index'
 import { okFixture } from './test-fixtures'
 import { useWorktreeAwarenessEnvironment } from './index-test-harness'
 
-describe('orca cli worktree awareness', () => {
+describe('quirky cli worktree awareness', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock,
     addEnvironmentFromPairingCodeMock,
     listEnvironmentsMock,
@@ -55,7 +55,7 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('formats group orchestration sends in text mode', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_sender'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_sender'
     callMock.mockResolvedValueOnce({
       id: 'req_send',
       ok: true,
@@ -87,12 +87,12 @@ describe('orca cli worktree awareness', () => {
 
   it("refuses an agent session's caller flag naming another caller before any request", async () => {
     // One chokepoint for every verb: the spec says which flag names the caller.
-    process.env.ORCA_AGENT_SESSION_ID = 'f7a1c0de-1111-4222-8333-444455556666'
+    process.env.QUIRKY_AGENT_SESSION_ID = 'f7a1c0de-1111-4222-8333-444455556666'
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     try {
       await main(['orchestration', 'check', '--terminal', 'term_sibling', '--json'], '/tmp/repo')
     } finally {
-      delete process.env.ORCA_AGENT_SESSION_ID
+      delete process.env.QUIRKY_AGENT_SESSION_ID
     }
 
     expect(callMock).not.toHaveBeenCalled()
@@ -147,7 +147,7 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('rejects unknown task-update status with an enum-aware error', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_coord'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_coord'
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const priorExitCode = process.exitCode
@@ -172,7 +172,7 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('passes the caller terminal handle through orchestration task-create', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_creator'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_creator'
     callMock.mockResolvedValueOnce({
       id: 'req_task_create',
       ok: true,
@@ -210,8 +210,8 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('passes dev mode to injected orchestration dispatches', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_sender'
-    process.env.ORCA_USER_DATA_PATH = '/tmp/orca-dev'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_sender'
+    process.env.QUIRKY_USER_DATA_PATH = '/tmp/quirky-dev'
     callMock.mockResolvedValueOnce({
       id: 'req_dispatch',
       ok: true,
@@ -239,9 +239,9 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('passes dev mode from an explicit dev CLI marker with a custom profile path', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_sender'
-    process.env.ORCA_USER_DATA_PATH = '/tmp/federation-acceptance-profile'
-    process.env.ORCA_DEV_CLI_INVOCATION = '1'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_sender'
+    process.env.QUIRKY_USER_DATA_PATH = '/tmp/federation-acceptance-profile'
+    process.env.QUIRKY_DEV_CLI_INVOCATION = '1'
     callMock.mockResolvedValueOnce({
       id: 'req_dispatch',
       ok: true,

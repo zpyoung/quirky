@@ -230,7 +230,7 @@ export function MiniMaxCredentials({
           <p className="text-xs text-muted-foreground">
             {translate(
               'auto.components.settings.usageCredentialHost.cookieNeedsDesktop',
-              '{{host}} has no Orca desktop app to send a session cookie from. Save an API key instead.',
+              '{{host}} has no Quirky desktop app to send a session cookie from. Save an API key instead.',
               { host: host.label ?? '' }
             )}
           </p>

@@ -49,7 +49,7 @@ let store: AgentSessionRecordStore
 let claude: ReturnType<typeof fakeClaude>
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-opening-send-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-opening-send-'))
   resetHostTestOperationIds()
   const log = recordingStructuredAgentSessionLogger()
   claude = fakeClaude({

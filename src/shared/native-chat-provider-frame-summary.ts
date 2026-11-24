@@ -28,7 +28,7 @@ export type ProviderFrameRowText = {
 /**
  * An unrecognised provider event stored with no words of its own: the host's fallback label is
  * its only text. Kept in the journal for readers of the frame (the Codex task list), never drawn.
- * A failure or notice (any tone) and a request Orca already answered stay visible. The host's
+ * A failure or notice (any tone) and a request Quirky already answered stay visible. The host's
  * per-turn row cap reads this same rule, so a row no client draws never fills it.
  */
 export function isWordlessProviderFrame(row: ProviderFrameRowText): boolean {

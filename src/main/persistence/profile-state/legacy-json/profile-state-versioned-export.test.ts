@@ -17,9 +17,9 @@ afterEach(() => {
 })
 
 function fixture() {
-  const root = fs.mkdtempSync(join(tmpdir(), 'orca-versioned-export-'))
+  const root = fs.mkdtempSync(join(tmpdir(), 'quirky-versioned-export-'))
   roots.push(root)
-  const dataFile = join(root, 'orca-data.json')
+  const dataFile = join(root, 'quirky-data.json')
   const target = profileStateJsonExportPath(dataFile, 4)
   const source = '{"settings":{"theme":"dark"}}'
   const write = (revision = 4) =>
@@ -44,15 +44,15 @@ describe('immutable versioned profile exports', () => {
     for (let revision = 1; revision <= 7; revision++) {
       expect(write(revision)).toBe(revision)
     }
-    const reservedDirectory = join(root, 'orca-data.json.sqlite-export.1.json')
+    const reservedDirectory = join(root, 'quirky-data.json.sqlite-export.1.json')
     fs.mkdirSync(reservedDirectory)
-    const unrelated = join(root, 'orca-data.json.sqlite-export.notes.json')
+    const unrelated = join(root, 'quirky-data.json.sqlite-export.notes.json')
     fs.writeFileSync(unrelated, 'keep')
     write(8)
     expect(fs.readdirSync(root).sort()).toEqual([
-      'orca-data.json.sqlite-export.1.json',
-      ...[4, 5, 6, 7, 8].map((revision) => `orca-data.json.sqlite-export.${revision}.json`),
-      'orca-data.json.sqlite-export.notes.json'
+      'quirky-data.json.sqlite-export.1.json',
+      ...[4, 5, 6, 7, 8].map((revision) => `quirky-data.json.sqlite-export.${revision}.json`),
+      'quirky-data.json.sqlite-export.notes.json'
     ])
     expect(fs.lstatSync(reservedDirectory).isDirectory()).toBe(true)
   })
@@ -64,7 +64,7 @@ describe('immutable versioned profile exports', () => {
     }
     const retained = fs.readdirSync(root)
     expect(() =>
-      writeVersionedProfileStateExport(join(root, 'orca-data.json'), () => {
+      writeVersionedProfileStateExport(join(root, 'quirky-data.json'), () => {
         throw new Error('disk full')
       })
     ).toThrow('disk full')

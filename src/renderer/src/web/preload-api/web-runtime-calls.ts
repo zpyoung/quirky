@@ -55,7 +55,7 @@ export function assertEnvironmentPairing(selector: string, expectedRevision?: nu
     expectedRevision !== undefined &&
     (current.pairingRevision ?? current.createdAt) !== expectedRevision
   ) {
-    throw new Error('The paired Orca server changed while the request was in progress.')
+    throw new Error('The paired Quirky server changed while the request was in progress.')
   }
 }
 

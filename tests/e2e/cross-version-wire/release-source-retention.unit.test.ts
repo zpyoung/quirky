@@ -22,7 +22,7 @@ import { copySharedReleaseSource } from './release-source-cache'
 
 const roots: string[] = []
 async function scratch() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-release-source-retention-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-release-source-retention-'))
   roots.push(root)
   return root
 }

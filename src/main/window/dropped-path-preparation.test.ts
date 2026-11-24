@@ -15,7 +15,7 @@ import {
 import { tmpdir } from 'node:os'
 import { AgentSessionAttachmentStore } from '../native-chat/agent-session-attachments/agent-session-attachment-store'
 import { AGENT_SESSION_ATTACHMENT_MAX_BYTES } from '../../shared/agent-session-attachments'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { basename, dirname, join } from 'node:path'
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { DragTempCopyItemResult } from './dragged-temp-file-copy'
@@ -38,7 +38,7 @@ vi.mock('./dragged-temp-file-copy', async (original) => ({
 }))
 const TEMP = join('/', 'var', 'T', 'TemporaryItems', 'NSIRD_one', 'Shot.png')
 const ORDINARY = join('/', 'files', 'notes.txt')
-const COPY = join('/', 'var', 'T', 'orca-drops', 'orca-drop-abc123', 'Shot.png')
+const COPY = join('/', 'var', 'T', 'quirky-drops', 'quirky-drop-abc123', 'Shot.png')
 const env = { platform: 'darwin' as const, sourceTempRoot: '/var/T', copyRoot: '/var/T/drops' }
 
 function queue(lane = createDragTempCopyLane(), copyTimeoutMs = 1000) {
@@ -76,7 +76,7 @@ beforeEach(() => {
 })
 
 async function realDrop() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-30419-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-30419-'))
   onTestFinished(() => rm(root, { recursive: true, force: true }))
   const sourceTempRoot = join(root, 'T')
   const source = join(sourceTempRoot, 'TemporaryItems', 'NSIRD_test', 'shot.png')
@@ -173,7 +173,7 @@ describe('dropped path preparation through the shared copy queue', () => {
     const { source, env, store } = await realDrop()
     await utimes(source, new Date(0), new Date(0))
     if (process.platform === 'darwin') {
-      expect((await xattr(['-w', 'com.orca.test-marker', '1', source])).code).toBe(0)
+      expect((await xattr(['-w', 'com.quirky.test-marker', '1', source])).code).toBe(0)
     }
     const enqueue = localQueue(env, async () => store)
     const staging = (await enqueue({ paths: [source], consumer: 'agent' })).paths[0]
@@ -207,7 +207,7 @@ describe('dropped path preparation through the shared copy queue', () => {
         expect(await readFile(staging, 'utf8')).toBe('image')
       }
       if (process.platform === 'darwin') {
-        expect((await xattr([stored])).stdout).not.toContain('com.orca.test-marker')
+        expect((await xattr([stored])).stdout).not.toContain('com.quirky.test-marker')
       }
     }
   })

@@ -15,7 +15,7 @@ const { join, relative, isAbsolute } = require('node:path')
  * compute the same name -- `native-build-entry.test.mjs` holds them to it.
  */
 
-const ENTRY_PREFIX = 'orca-'
+const ENTRY_PREFIX = 'quirky-'
 
 /** How each shared native package is built and which runtime its binary is tied to. */
 const NATIVE_BUILD_PACKAGES = {
@@ -93,7 +93,7 @@ function isSharedNativePackage(moduleName, projectDir) {
   }
 }
 
-/** The project's own top-level link, the same path every Orca native script already reads. */
+/** The project's own top-level link, the same path every Quirky native script already reads. */
 function resolveNativePackageDir(moduleName, projectDir) {
   const packageDir = join(projectDir, 'node_modules', ...moduleName.split('/'))
   if (!existsSync(join(packageDir, 'package.json'))) {
@@ -116,7 +116,7 @@ function nodePtyBuildArtifactPaths(nodePtyDir, platform = process.platform) {
   )
 }
 
-/** A `loadNativeModule` dir holding Orca's source build rather than an upstream prebuild. */
+/** A `loadNativeModule` dir holding Quirky's source build rather than an upstream prebuild. */
 function isSourceBuildDir(nativeDir) {
   if (typeof nativeDir !== 'string') {
     return false

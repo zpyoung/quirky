@@ -1,4 +1,4 @@
-// Shared shape for xterm addons Orca keeps off the boot chunk: memoize the
+// Shared shape for xterm addons Quirky keeps off the boot chunk: memoize the
 // dynamic import, expose the resolved constructor synchronously to later panes,
 // and drain the panes that opened while the load was in flight.
 type LazyAddonLoadHandlers = {

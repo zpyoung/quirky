@@ -6,7 +6,7 @@ type ImeKeyboardEvent = {
   nativeEvent?: { isComposing?: boolean; keyCode?: number }
 }
 
-/** True when the IME, rather than Orca, owns a keyboard event. Generic so synthetic, native, and
+/** True when the IME, rather than Quirky, owns a keyboard event. Generic so synthetic, native, and
  * gesture events each pass their own richer shape. */
 export function isImeOwnedKeyboardEvent<KeyEvent extends ImeKeyboardEvent>(
   event: KeyEvent

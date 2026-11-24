@@ -24,7 +24,7 @@ import {
 const REVIEW_PROVIDER_VALUES: HostedReviewProvider[] = ['github', 'gitlab', 'unsupported']
 
 /**
- * Tolerant by design: this reads user data written by older (and newer) Orca
+ * Tolerant by design: this reads user data written by older (and newer) Quirky
  * builds, so anything unrecognized falls back to the default rather than
  * throwing away the whole persisted filter state.
  */

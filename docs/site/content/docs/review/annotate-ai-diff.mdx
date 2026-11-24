@@ -4,7 +4,7 @@ title: Annotate AI Diff
 
 import { ImagePlaceholder } from '@/components/docs/prose'
 
-Annotate AI Diff is Orca's inline review loop for agent-generated code. You leave comments on any line of any AI-generated hunk, then send them back to the agent as a single batch for revision — no copying line numbers, no context-switching.
+Annotate AI Diff is Quirky's inline review loop for agent-generated code. You leave comments on any line of any AI-generated hunk, then send them back to the agent as a single batch for revision — no copying line numbers, no context-switching.
 
 <ImagePlaceholder
   src="/docs/annotate-ai-diff.gif"
@@ -18,11 +18,11 @@ Annotate AI Diff is Orca's inline review loop for agent-generated code. You leav
 1. Type your feedback — markdown supported.
 1. Press `Cmd-Enter` to save, `Esc` to cancel.
 
-Comments pin to the exact line; Orca tracks them across edits so they follow the line if the diff shifts.
+Comments pin to the exact line; Quirky tracks them across edits so they follow the line if the diff shifts.
 
 ## Send the batch
 
-When your review is done, click **Send to agent** at the top of the diff. Orca composes a single prompt with all your comments, line-anchored, then opens a **Send notes to** menu for the worktree's available agents. Pick the agent that should revise the change, or start a new agent from the same menu.
+When your review is done, click **Send to agent** at the top of the diff. Quirky composes a single prompt with all your comments, line-anchored, then opens a **Send notes to** menu for the worktree's available agents. Pick the agent that should revise the change, or start a new agent from the same menu.
 
 **Send Review Notes to Agent** is unbound by default so it won't collide with other chords. Assign it under [Settings → Shortcuts](/docs/settings) to open that send menu from the keyboard (works even while the editor is focused).
 

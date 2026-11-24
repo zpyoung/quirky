@@ -356,7 +356,7 @@ describe('buildTitleDerivedAgentRows', () => {
       ['⠋ OpenCode', 'working'],
       ['⠋ use Claude Sonnet', 'working'],
       ['⠋ claude 스타일로 리팩터', 'working'],
-      ['. Compare Opencode Vs Orca', 'working'],
+      ['. Compare Opencode Vs Quirky', 'working'],
       ['OpenCode ready', 'idle']
     ]
 
@@ -495,7 +495,7 @@ describe('hook-less agent rows identified by the foreground process', () => {
   })
 
   it("does not trust a reattach's launch record as a process read", () => {
-    // Reattach seeds the daemon's launch agent, which can outlive the process while Orca is
+    // Reattach seeds the daemon's launch agent, which can outlive the process while Quirky is
     // closed; a background pane is not re-read until it is shown.
     const launchSeed: TitleDerivedPaneForeground = {
       agent: 'codex',

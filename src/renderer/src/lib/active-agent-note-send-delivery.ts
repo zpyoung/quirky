@@ -15,7 +15,7 @@ import {
 } from './active-agent-terminal-send-readiness'
 import { codeForReadinessStatus, runtimeFailureCode } from './active-agent-note-send-diagnostics'
 
-const ORCA_DESKTOP_TERMINAL_CLIENT = { id: 'orca-desktop', type: 'desktop' as const }
+const QUIRKY_DESKTOP_TERMINAL_CLIENT = { id: 'quirky-desktop', type: 'desktop' as const }
 
 export async function sendPromptWithLegacyCombinedSend(
   runtimeTarget: Parameters<typeof callRuntimeRpc>[0],
@@ -26,7 +26,12 @@ export async function sendPromptWithLegacyCombinedSend(
     const { send } = await callRuntimeRpc<{ send: RuntimeTerminalSend }>(
       runtimeTarget,
       'terminal.send',
-      { terminal: terminalHandle, text: prompt, enter: true, client: ORCA_DESKTOP_TERMINAL_CLIENT },
+      {
+        terminal: terminalHandle,
+        text: prompt,
+        enter: true,
+        client: QUIRKY_DESKTOP_TERMINAL_CLIENT
+      },
       { timeoutMs: ACTIVE_AGENT_SEND_RPC_TIMEOUT_MS }
     )
     return send.accepted
@@ -76,7 +81,7 @@ export async function sendPromptWithGuardedPasteAndEnter(
         terminal: terminalHandle,
         text: pastePayload,
         requireAgentStatus: 'sendable',
-        client: ORCA_DESKTOP_TERMINAL_CLIENT
+        client: QUIRKY_DESKTOP_TERMINAL_CLIENT
       },
       { timeoutMs: ACTIVE_AGENT_SEND_RPC_TIMEOUT_MS }
     )
@@ -136,7 +141,7 @@ export async function sendPromptWithGuardedPasteAndEnter(
         terminal: terminalHandle,
         enter: true,
         requireAgentStatus: 'sendable',
-        client: ORCA_DESKTOP_TERMINAL_CLIENT
+        client: QUIRKY_DESKTOP_TERMINAL_CLIENT
       },
       { timeoutMs: ACTIVE_AGENT_SEND_RPC_TIMEOUT_MS }
     )

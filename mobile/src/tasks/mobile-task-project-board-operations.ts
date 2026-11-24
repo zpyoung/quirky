@@ -200,7 +200,7 @@ export const githubProjectCommentDelete = bindDeferredRpcOperation(
 
 /**
  * A repo's owner/repo slug, the second of two policies on this method. The board matches its rows
- * against Orca repos and must distinguish "this repo has no slug" from "the ask failed", so it
+ * against Quirky repos and must distinguish "this repo has no slug" from "the ask failed", so it
  * throws and caches the failure for retry; the Smart picker's paste lookup in
  * mobile-task-source-search-operations.ts caches a refusal as "no slug" and carries on, so there
  * a refusal is a skip. One reader serves both — literally: both operations read through

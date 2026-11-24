@@ -1,0 +1,36 @@
+{
+  "settings": {
+    "appearance": {
+      "language": {
+        "title": "Idioma",
+        "description": "Escolha o idioma usado na interface do Quirky.",
+        "system": "Sistema",
+        "english": "Inglês",
+        "chinese": "Chinês simplificado",
+        "korean": "Coreano",
+        "japanese": "Japonês",
+        "spanish": "Espanhol"
+      }
+    }
+  },
+  "menu": {
+    "checkForUpdates": "Verificar atualizações...",
+    "settings": "Configurações",
+    "file": "Arquivo",
+    "exit": "Sair",
+    "edit": "Editar",
+    "appearance": "Aparência",
+    "view": "Visualizar",
+    "reload": "Recarregar",
+    "window": "Janela",
+    "help": "Ajuda",
+    "paste": "Colar"
+  },
+  "tray": {
+    "openQuirky": "Abrir o Quirky",
+    "quit": "Encerrar",
+    "minimizeNotice": {
+      "body": "O Quirky continua em execução na bandeja do sistema"
+    }
+  }
+}

@@ -2,20 +2,20 @@
 
 Use Pi 0.84.4 or newer. Older Pi does not emit `ui_prompt_start` / `ui_prompt_end`.
 The checked-in extension only opens dialogs; it does not call a model or send synthetic
-Orca hook events.
+Quirky hook events.
 
-1. Launch an isolated Orca development instance with CDP using the Electron skill.
-2. Open one terminal in a git worktree or folder workspace. Start Pi with Orca's
+1. Launch an isolated Quirky development instance with CDP using the Electron skill.
+2. Open one terminal in a git worktree or folder workspace. Start Pi with Quirky's
    generated status extension and this additional extension:
 
    ```sh
-   pi --offline --no-session -e /absolute/path/to/orca/tests/tools/pi-ui-prompt-extension.mjs
+   pi --offline --no-session -e /absolute/path/to/quirky/tests/tools/pi-ui-prompt-extension.mjs
    ```
 
    If launching Pi directly through `node` or disabling extension discovery, explicitly
-   load Orca's generated `orca-agent-status.ts` with another `-e` argument.
+   load Quirky's generated `quirky-agent-status.ts` with another `-e` argument.
 
-3. Leave Pi at its input editor, then run from the Orca repository:
+3. Leave Pi at its input editor, then run from the Quirky repository:
 
    ```sh
    node tests/tools/pi-ui-prompt-cdp-smoke.mjs http://127.0.0.1:9333 /path/to/proof
@@ -28,8 +28,8 @@ then backend `done` plus the visible completion icon. Screenshots are saved for 
 states. Custom-dialog cancellation sends a plain Escape through the real PTY;
 the standard dialogs use browser keyboard events.
 
-For manual verification, run `/orca-modal select`, `/orca-modal confirm`,
-`/orca-modal input`, `/orca-modal editor`, or `/orca-modal custom` inside Pi.
+For manual verification, run `/quirky-modal select`, `/quirky-modal confirm`,
+`/quirky-modal input`, `/quirky-modal editor`, or `/quirky-modal custom` inside Pi.
 
 The separate runtime test covers active-agent close (`working`), idle close (`done`),
 overlap, unrelated tool events, and rejected dialog promises using Pi's actual runner:

@@ -21,7 +21,7 @@ export function codexGoalJournalIdentity(
   occurrence: string
 ): AgentJournalItemIdentity {
   return {
-    provider: 'orca',
+    provider: 'quirky',
     clientMessageId: `${GOAL_IDENTITY_PREFIX}:${thread}:${signature}:${occurrence}`
   }
 }
@@ -29,7 +29,7 @@ export function codexGoalJournalIdentity(
 /** Recognizes only the host-owned rows used to record Codex goal lifecycle state. */
 export function parseCodexGoalJournalItemId(itemId: string): CodexGoalJournalState | null {
   const identity = parseAgentJournalItemKey(itemId)
-  if (identity?.provider !== 'orca') {
+  if (identity?.provider !== 'quirky') {
     return null
   }
   const [prefix, thread, signature, occurrence, ...rest] = identity.clientMessageId.split(':')

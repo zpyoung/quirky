@@ -5,7 +5,10 @@ import { isRootAgentJournalItem } from './agent-session-journal-producer'
 import { readAgentSessionFailureFact } from './agent-session-failure'
 import type { AgentJournalRenderItem, AgentJournalSubmission } from './agent-session-journal-types'
 import type { AgentSessionUsageLimit } from './agent-session-usage-limit'
-import { findInNativeChatTurn, latestNativeChatTurnSinceRequest } from './native-chat-orca-stop-cut'
+import {
+  findInNativeChatTurn,
+  latestNativeChatTurnSinceRequest
+} from './native-chat-quirky-stop-cut'
 
 /** What the agent is sent when the person continues a turn its usage limit ended. */
 export const NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE = 'Continue where you left off.'

@@ -103,7 +103,7 @@ describe('a Grok crash with its exit seen first', () => {
 describe('a Grok crash whose pipes close before its exit is seen', () => {
   it('is unverifiable only until the exit is proven; the provider-exit batch then revises the turn', async () => {
     const rig = await midReply()
-    // The child outlives its stream until Orca's close of it is proven.
+    // The child outlives its stream until Quirky's close of it is proven.
     let exitNow: () => void = () => undefined
     rig.child.proveClose = () =>
       new Promise((resolve) => {

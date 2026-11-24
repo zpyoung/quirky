@@ -367,7 +367,7 @@ describe('CodexRuntimeHomeService', () => {
     const { CodexRuntimeHomeService } = await import('./runtime-home-service')
     new CodexRuntimeHomeService(store as never)
     const runtimeAuthPath = getRuntimeCodexAuthPath()
-    const heldAuthPath = `${runtimeAuthPath}.orca-guarded`
+    const heldAuthPath = `${runtimeAuthPath}.quirky-guarded`
     renameSync(runtimeAuthPath, heldAuthPath)
 
     setRealHomeRoutableForTest(true)

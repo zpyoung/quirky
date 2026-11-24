@@ -7,7 +7,7 @@ vi.mock('electron', () => ({ app: { getPath: () => testState.dir } }))
 const project = { id: '10', key: 'ALP', name: 'Alpha', siteId: 'site-a' }
 describe('persisted repository Jira defaults', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-jira-project-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-jira-project-'))
   })
   afterEach(async () => {
     await closeTestStores()

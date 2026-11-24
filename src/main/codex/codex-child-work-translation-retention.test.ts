@@ -21,7 +21,7 @@ describe('Codex child message preview ownership', () => {
     })
     const translator = createCodexJournalTranslator({
       primaryThreadId: () => 'primary',
-      sessionId: 'orca',
+      sessionId: 'quirky',
       subagentExecutions: executions,
       now: () => 1_500,
       sink: {
@@ -32,7 +32,7 @@ describe('Codex child message preview ownership', () => {
     })
     const event = (method: string, threadId: string, params: unknown) => ({
       type: 'notification' as const,
-      sessionId: 'orca',
+      sessionId: 'quirky',
       method,
       threadId,
       params,

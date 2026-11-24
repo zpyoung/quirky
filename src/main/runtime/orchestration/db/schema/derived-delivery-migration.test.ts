@@ -26,7 +26,7 @@ describe('derived delivery migration', () => {
     return db
   }
   function databasePath() {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-derived-delivery-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-derived-delivery-'))
     directories.push(directory)
     return join(directory, 'orchestration.db')
   }

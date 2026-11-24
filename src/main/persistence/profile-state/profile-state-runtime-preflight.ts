@@ -19,7 +19,7 @@ export type ProfileStateRuntimePreflightResult = {
 export async function preflightProfileStateRuntime(
   options: { workerPath?: string; backupWorkerPath?: string; timeoutMs?: number } = {}
 ): Promise<ProfileStateRuntimePreflightResult> {
-  const directory = await mkdtemp(join(tmpdir(), 'orca-profile-preflight-'))
+  const directory = await mkdtemp(join(tmpdir(), 'quirky-profile-preflight-'))
   const databasePath = join(directory, 'profile.db')
   const targetPath = join(directory, 'backup.db')
   const profileId = randomUUID()

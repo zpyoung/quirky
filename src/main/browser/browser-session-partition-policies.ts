@@ -179,7 +179,7 @@ export async function installBrowserSessionPartitionPolicies(
           () => resolvePermissionNoticeUrl(webContents, details) || null
         )
       ) {
-        // Why: Orca launches the app itself after the user says yes, so Chromium's own launch stays denied.
+        // Why: Quirky launches the app itself after the user says yes, so Chromium's own launch stays denied.
         callback(false)
         return
       }

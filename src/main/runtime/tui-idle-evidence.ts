@@ -164,7 +164,7 @@ function hasQuietOutput(record: TuiIdleEvidenceRecord, quiescenceMs: number): bo
  * - `closed`: the agent has a stronger rest signal, so its silence is boot, not rest.
  *   Resolving on it let `dispatch --inject` write into a TUI that had not yet attached
  *   its reader and silently lose the prompt (#9976).
- * - `after-paint`: Orca knows an agent runs here but it has no other rest signal, so this
+ * - `after-paint`: Quirky knows an agent runs here but it has no other rest signal, so this
  *   lane is its only one. A TUI that has painted nothing yet is still booting.
  * - `open`: nothing is known about the pane, so a missing output clock also counts as quiet
  *   (see isQuietForQuiescence).

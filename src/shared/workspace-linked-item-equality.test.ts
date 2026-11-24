@@ -6,9 +6,9 @@ const item: WorkspaceLinkedItem = {
   provider: 'jira',
   type: 'issue',
   number: 0,
-  title: 'ORCA-123 Link Jira',
-  url: 'https://company.atlassian.net/browse/ORCA-123',
-  jiraIdentifier: 'ORCA-123',
+  title: 'QUIRKY-123 Link Jira',
+  url: 'https://company.atlassian.net/browse/QUIRKY-123',
+  jiraIdentifier: 'QUIRKY-123',
   repoId: 'repo-1'
 }
 
@@ -17,9 +17,9 @@ describe('areWorkspaceLinkedItemsEqual', () => {
     expect(
       areWorkspaceLinkedItemsEqual(item, {
         repoId: 'repo-1',
-        jiraIdentifier: 'ORCA-123',
-        url: 'https://company.atlassian.net/browse/ORCA-123',
-        title: 'ORCA-123 Link Jira',
+        jiraIdentifier: 'QUIRKY-123',
+        url: 'https://company.atlassian.net/browse/QUIRKY-123',
+        title: 'QUIRKY-123 Link Jira',
         number: 0,
         type: 'issue',
         provider: 'jira',
@@ -34,7 +34,9 @@ describe('areWorkspaceLinkedItemsEqual', () => {
   })
 
   it('separates items that differ by identifier, title, url, provider, or repo', () => {
-    expect(areWorkspaceLinkedItemsEqual(item, { ...item, jiraIdentifier: 'ORCA-124' })).toBe(false)
+    expect(areWorkspaceLinkedItemsEqual(item, { ...item, jiraIdentifier: 'QUIRKY-124' })).toBe(
+      false
+    )
     expect(areWorkspaceLinkedItemsEqual(item, { ...item, title: 'Renamed' })).toBe(false)
     expect(areWorkspaceLinkedItemsEqual(item, { ...item, url: 'https://other/browse/X-1' })).toBe(
       false

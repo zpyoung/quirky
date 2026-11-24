@@ -53,7 +53,7 @@ export class CodexJournalCompactions {
     }
     const admission = appendCodexLifecycleItem(
       this.sink,
-      { provider: 'orca', clientMessageId: `codex-compaction:${key}` },
+      { provider: 'quirky', clientMessageId: `codex-compaction:${key}` },
       { kind: 'status', text: 'Context compacted', presentation: 'compaction' },
       this.attributionFor(event.threadId, turnId)
     )

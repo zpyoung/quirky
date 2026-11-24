@@ -1,6 +1,6 @@
 /** The daemon's terminal scopes and process ceiling, applied to every PTY spawn it makes. */
 import { existsSync } from 'node:fs'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { userManagerEnv } from './daemon-cgroup-scope'
 import { resolveTerminalScopes, type TerminalScopeRuntime } from './terminal-scopes'
 import type { PtyProcessCeilingState } from '../../shared/pty-process-ceiling-state'
@@ -59,7 +59,7 @@ export function setTerminalScopesForTest(
   active = scopes ? { scopes, log } : null
 }
 
-/** Orca's own wrappers, by the exact argv[0] it execs them with; a user's `systemd-run` differs. */
+/** Quirky's own wrappers, by the exact argv[0] it execs them with; a user's `systemd-run` differs. */
 export function isTerminalScopeWrapper(processName: string): boolean {
   return (
     active !== null &&
@@ -118,7 +118,7 @@ export function wrapPtySpawnInTerminalScope(
       '--quiet',
       '--collect',
       `--slice=${scopes.slice}`,
-      `--unit=orca_pty_${scopes.launchId}_${scopeCounter}.scope`,
+      `--unit=quirky_pty_${scopes.launchId}_${scopeCounter}.scope`,
       ...scopes.properties.map((property) => `--property=${property}`),
       '--',
       ...(unsets.length + sets.length > 0 ? [scopes.envBinary, ...unsets, ...sets] : []),

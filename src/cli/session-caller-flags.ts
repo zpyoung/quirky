@@ -17,7 +17,7 @@ import {
   injectedSessionAddress,
   readInjectedAgentSessionId
 } from '../shared/agent-session-caller-env'
-import { ORCA_SESSION_ADDRESS_PREFIX } from '../shared/orca-session-address-prefix'
+import { QUIRKY_SESSION_ADDRESS_PREFIX } from '../shared/quirky-session-address-prefix'
 
 export function refuseConflictingSessionCallerFlags(
   spec: CommandSpec | undefined,
@@ -55,7 +55,7 @@ const IDENTITY_FLAGS: readonly IdentityFlag[] = ['from', 'terminal']
 function namesInjectedSession(value: string, sessionId: string, env: NodeJS.ProcessEnv): boolean {
   return (
     value === sessionId ||
-    value === `${ORCA_SESSION_ADDRESS_PREFIX}${sessionId}` ||
+    value === `${QUIRKY_SESSION_ADDRESS_PREFIX}${sessionId}` ||
     value === injectedSessionAddress(env)
   )
 }
@@ -66,7 +66,7 @@ export function sessionAddressForHost(
   sessionId: string,
   env: NodeJS.ProcessEnv = process.env
 ): string | undefined {
-  return value.startsWith(ORCA_SESSION_ADDRESS_PREFIX) &&
+  return value.startsWith(QUIRKY_SESSION_ADDRESS_PREFIX) &&
     !namesInjectedSession(value, sessionId, env)
     ? value
     : undefined

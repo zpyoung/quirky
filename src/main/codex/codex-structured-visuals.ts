@@ -29,11 +29,11 @@ function isSkillRootsUnsupported(error: unknown): boolean {
 }
 
 /**
- * The skill roots Orca hands this app-server. The request replaces the process's whole list, so
- * every root Orca supplies is named here; each chat has its own app-server, and this runs on every
+ * The skill roots Quirky hands this app-server. The request replaces the process's whole list, so
+ * every root Quirky supplies is named here; each chat has its own app-server, and this runs on every
  * acquisition, so a respawned or resumed chat gets the list again.
  */
-function orcaSkillRoots(visuals: NativeChatVisualsLaunch): string[] {
+function quirkySkillRoots(visuals: NativeChatVisualsLaunch): string[] {
   return [visuals.skill.skillsRoot]
 }
 
@@ -45,7 +45,7 @@ async function setSkillRoots(
   try {
     await connection.request(
       SKILL_ROOTS_METHOD,
-      { extraRoots: orcaSkillRoots(visuals) },
+      { extraRoots: quirkySkillRoots(visuals) },
       { timeoutMs: CODEX_VISUALS_SETUP_BUDGET_MS }
     )
   } catch (error) {

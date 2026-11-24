@@ -76,7 +76,7 @@ export const STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS = [
     }
   }),
   defineMethod({
-    // Continue on a reply an Orca stop cut off: the same continuation, bound to the cut turn
+    // Continue on a reply an Quirky stop cut off: the same continuation, bound to the cut turn
     // instead of an offer. Clients gate it on AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY.
     // It names one chat the client shows, as a send does, so no agent audience applies.
     name: 'agentSession.continueInterrupted',
@@ -90,7 +90,7 @@ export const STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS = [
   }),
   defineMethod({
     // Reattach only, no send. Reattaching is nothing now — an agent starts only for work — so this
-    // answers that nothing was resumed. No Orca surface calls it, but it is a PUBLISHED wire
+    // answers that nothing was resumed. No Quirky surface calls it, but it is a PUBLISHED wire
     // method, so dropping it is a wire removal an older client would meet as an unknown method.
     name: 'agentSession.restartResume',
     permission: 'workspace',

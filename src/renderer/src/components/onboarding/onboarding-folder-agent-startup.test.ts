@@ -14,7 +14,7 @@ const buildStartup = (settings: Parameters<typeof buildOnboardingFolderAgentStar
 describe('buildOnboardingFolderAgentStartup', () => {
   it('queues the persisted default agent with onboarding telemetry', () => {
     const startup = buildStartup({
-      ...getDefaultSettings('/tmp/orca-workspaces'),
+      ...getDefaultSettings('/tmp/quirky-workspaces'),
       defaultTuiAgent: 'codex'
     })
 
@@ -38,7 +38,7 @@ describe('buildOnboardingFolderAgentStartup', () => {
 
   it('respects the blank terminal preference', () => {
     const startup = buildStartup({
-      ...getDefaultSettings('/tmp/orca-workspaces'),
+      ...getDefaultSettings('/tmp/quirky-workspaces'),
       defaultTuiAgent: 'blank'
     })
 
@@ -49,7 +49,7 @@ describe('buildOnboardingFolderAgentStartup', () => {
     'keeps Chat UI model preferences out of the terminal folder launch (Chat UI %s)',
     (experimentalNativeChat) => {
       const startup = buildStartup({
-        ...getDefaultSettings('/tmp/orca-workspaces'),
+        ...getDefaultSettings('/tmp/quirky-workspaces'),
         defaultTuiAgent: 'codex',
         experimentalNativeChat,
         nativeChatSessionOptions: {
@@ -68,7 +68,7 @@ describe('buildOnboardingFolderAgentStartup', () => {
 
   it('does not infer an agent from auto mode', () => {
     const startup = buildStartup({
-      ...getDefaultSettings('/tmp/orca-workspaces'),
+      ...getDefaultSettings('/tmp/quirky-workspaces'),
       defaultTuiAgent: null
     })
 
@@ -116,7 +116,7 @@ describe('buildOnboardingFolderAgentStartup', () => {
     expect(
       buildDismissedOnboardingFolderAgentStartup(
         {
-          ...getDefaultSettings('/tmp/orca-workspaces'),
+          ...getDefaultSettings('/tmp/quirky-workspaces'),
           defaultTuiAgent: 'codex',
           agentCmdOverrides: { codex: 'echo onboarding-folder-agent' }
         },

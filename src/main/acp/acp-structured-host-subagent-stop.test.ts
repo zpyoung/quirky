@@ -2,7 +2,7 @@ import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-chi
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import type { PipedChildProcess, PipedProcessSpawner } from '@orca/process-host/process-spec'
+import type { PipedChildProcess, PipedProcessSpawner } from '@quirky/process-host/process-spec'
 import { isSubagentBlock } from '../../shared/native-chat-types'
 import { closeProviderTimelineRigs } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
 import { HOST_TEST_SESSION as SESSION } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'

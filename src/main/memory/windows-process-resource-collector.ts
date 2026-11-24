@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import os from 'node:os'
 import { performance } from 'node:perf_hooks'
 import {

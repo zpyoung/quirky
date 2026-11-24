@@ -172,8 +172,8 @@
     },
     "573943fdb37d": {
       "assets": {
-        "assets/app.js": "orca.boot()",
-        "index.html": "<!doctype html><p>orca</p>"
+        "assets/app.js": "quirky.boot()",
+        "index.html": "<!doctype html><p>quirky</p>"
       },
       "outcome": {
         "assetCount": 2,

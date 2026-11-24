@@ -3,7 +3,7 @@
 // One required dependency rather than a callback per failure: a host built without it does not
 // compile, so no failure path can quietly drop what went wrong. The default writes each entry to
 // the host's local trace file (the desktop's `<userData>/logs/main.trace.ndjson`, collected by the
-// diagnostic bundle; orcad's `<data-root>/logs/orcad.trace.ndjson`) and to the console.
+// diagnostic bundle; quirkyd's `<data-root>/logs/quirkyd.trace.ndjson`) and to the console.
 
 import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import { startSpan } from '../../observability/tracer'

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  canOpenAiVaultSessionLogInOrca,
+  canOpenAiVaultSessionLogInQuirky,
   canUseLocalAiVaultSessionPathActions,
   isSyntheticAiVaultSessionPath,
   revealAiVaultSessionPath
@@ -32,10 +32,10 @@ describe('isSyntheticAiVaultSessionPath', () => {
   })
 })
 
-describe('canOpenAiVaultSessionLogInOrca', () => {
+describe('canOpenAiVaultSessionLogInQuirky', () => {
   it('allows a local, single-file, non-synthetic path', () => {
     expect(
-      canOpenAiVaultSessionLogInOrca({
+      canOpenAiVaultSessionLogInQuirky({
         filePath: '/home/user/.claude/sessions/log.jsonl',
         executionHostId: 'local'
       })
@@ -43,17 +43,17 @@ describe('canOpenAiVaultSessionLogInOrca', () => {
   })
 
   it('withholds blank, remote, and synthetic identities', () => {
-    expect(canOpenAiVaultSessionLogInOrca({ filePath: '   ', executionHostId: 'local' })).toBe(
+    expect(canOpenAiVaultSessionLogInQuirky({ filePath: '   ', executionHostId: 'local' })).toBe(
       false
     )
     expect(
-      canOpenAiVaultSessionLogInOrca({
+      canOpenAiVaultSessionLogInQuirky({
         filePath: '/remote/.claude/log.jsonl',
         executionHostId: 'ssh:dev-box'
       })
     ).toBe(false)
     expect(
-      canOpenAiVaultSessionLogInOrca({
+      canOpenAiVaultSessionLogInQuirky({
         filePath: '/home/user/.opencode/db.sqlite#sess_1',
         executionHostId: 'local'
       })

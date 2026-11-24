@@ -32,7 +32,7 @@ beforeEach(() => {
   connect.mockClear()
   Object.assign(window, {
     api: {
-      runtimeEnvironments: { managedOrcad: { allowMoveLeavingBehind } },
+      runtimeEnvironments: { managedQuirkyd: { allowMoveLeavingBehind } },
       ssh: { connect }
     }
   })

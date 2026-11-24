@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { notifySpawnObserver } from '@orca/process-host/spawn-observer'
+import { notifySpawnObserver } from '@quirky/process-host/spawn-observer'
 
 const PROCESS_TABLE_LOOKUP_TIMEOUT_MS = 250
 const PROCESS_TABLE_QUERY_TIMEOUT_MS = PROCESS_TABLE_LOOKUP_TIMEOUT_MS / 2
@@ -44,7 +44,7 @@ function runPs(pid: number): string {
 let ownRowCache: { pid: number; row: string } | null = null
 
 /**
- * Orca's own row, read once per process. It feeds exactly one guard — the
+ * Quirky's own row, read once per process. It feeds exactly one guard — the
  * "does this process share the PTY" check below — and the only field that guard
  * reads is the controlling tty, which cannot change for a process's lifetime.
  * Re-forking `ps` for it on every SIGWINCH doubled a ~3ms synchronous stall that

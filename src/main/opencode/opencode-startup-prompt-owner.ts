@@ -1,5 +1,5 @@
 import { agentHookServer } from '../agent-hooks/server'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { IPtyProvider, PtySpawnResult } from '../providers/pty-provider-contract'
 import { ptyIncarnationById, ptyOwnership } from '../ipc/pty/provider/ownership-state'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
@@ -11,7 +11,7 @@ import {
 import { OpenCodeStartupPromptClaims } from './opencode-startup-prompt-claims'
 
 type OpenCodePromptRuntime = Pick<
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   | 'terminalRunFacts'
   | 'readOpenCodeStartupPromptOwner'
   | 'isPtyStopRequested'
@@ -72,7 +72,7 @@ export function bindOpenCodeStartupPromptOwner(options: {
   const { env, result, runtime, provider } = options
   const nonce = env?.[OPENCODE_STARTUP_PROMPT_NONCE_ENV]
   const digest = env?.[OPENCODE_STARTUP_PROMPT_SHA256_ENV]
-  const launchToken = env?.ORCA_AGENT_LAUNCH_TOKEN
+  const launchToken = env?.QUIRKY_AGENT_LAUNCH_TOKEN
   const incarnation = result.incarnationId
   if (
     options.connectionId ||

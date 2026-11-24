@@ -40,7 +40,7 @@ async function fixture(
   Object.assign(harness.dependencies.guestBinding, { bindReplacement })
   await harness.executor.handle(createCommand('createPage'), new AbortController().signal)
   harness.dependencies.routeSessions.preparePage.mockResolvedValue({
-    partition: `persist:orca-browser-v1-${'b'.repeat(64)}`,
+    partition: `persist:quirky-browser-v1-${'b'.repeat(64)}`,
     release: vi.fn()
   })
   harness.renderer.mountPage.mockResolvedValue({ webContentsId: 42 })

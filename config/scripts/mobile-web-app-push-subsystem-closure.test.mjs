@@ -34,7 +34,7 @@ import { collectMobileWebAppRoutes } from './mobile-web-app-route-manifest.mjs'
  *
  * `push-registration.ts` is fenced a layer up, and that is what the assertions below read. The
  * page cannot register for push at all: it has no device token and no gateway client, so every
- * path through that module either does nothing or writes `orca:remotePushHostRegistrations`
+ * path through that module either does nothing or writes `quirky:remotePushHostRegistrations`
  * through a page storage adapter that drops the write and says so. `host-removal-lifecycle.web.ts`
  * is what cut it out — removing a host is native-only — and it took the whole of
  * `src/notifications` with it, because that import was the only path into the directory from any

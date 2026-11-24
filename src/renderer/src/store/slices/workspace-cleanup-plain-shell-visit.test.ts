@@ -3,7 +3,7 @@ import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qu
 import { makeTerminalTab } from '@/components/worktree-jump-palette-test-fixtures'
 import { NOW, WORKTREE_ID, makeCandidate, makeState } from './workspace-cleanup-slice-test-harness'
 
-vi.mock('../../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+vi.mock('../../../../shared/sidebar-inputs-switch', () => ({ QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true }))
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

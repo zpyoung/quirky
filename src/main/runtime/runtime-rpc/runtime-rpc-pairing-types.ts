@@ -1,12 +1,12 @@
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import type { RpcAnyMethodDeclaration } from '../rpc/core'
 import type { DeviceRegistry } from '../device-registry'
 import type { E2EEKeypair } from '../e2ee-keypair'
 
-export const DEFAULT_WS_PORT = 6768
+export const DEFAULT_WS_PORT = 6778
 
 // Why: STA-2370 — the WS listener defaults to loopback so a desktop with no paired device is not
-// reachable from the LAN; it widens to all interfaces only on explicit pairing (or `orca serve`).
+// reachable from the LAN; it widens to all interfaces only on explicit pairing (or `quirky serve`).
 export const WS_BIND_HOST_LOOPBACK = '127.0.0.1'
 export const WS_BIND_HOST_ALL_INTERFACES = '0.0.0.0'
 
@@ -16,26 +16,26 @@ export function formatWsEndpoint(host: string, port: number): string {
   return `ws://${host.includes(':') ? `[${host}]` : host}:${port}`
 }
 
-export type OrcaRuntimeRpcServerOptions = {
-  runtime: OrcaRuntimeService
+export type QuirkyRuntimeRpcServerOptions = {
+  runtime: QuirkyRuntimeService
   userDataPath: string
   pid?: number
   platform?: NodeJS.Platform
   enableWebSocket?: boolean
   wsPort?: number
-  // Why: true when the caller pinned a port (`orca serve --port`) so bind order prefers it over a stale STA-1511 fallback (#8535).
+  // Why: true when the caller pinned a port (`quirky serve --port`) so bind order prefers it over a stale STA-1511 fallback (#8535).
   preferPinnedWsPort?: boolean
   // Why: an explicit `--port` must fail startup when taken instead of serving elsewhere (#26603).
   requirePinnedWsPort?: boolean
   // Why: STA-2370 — bind the WS listener to all interfaces at startup instead of loopback-until-paired.
-  // Only `orca serve` (explicit remote opt-in) and E2E set this; the desktop app widens lazily on pairing.
+  // Only `quirky serve` (explicit remote opt-in) and E2E set this; the desktop app widens lazily on pairing.
   exposeNetworkByDefault?: boolean
   /**
    * Pin the WS listener to exactly this address for the process's whole life.
    *
    * Why a pin and not another default: the two paths below both widen on their own —
    * `exposeNetworkByDefault` at startup, and a device that has connected once at every
-   * later startup. An unattended host (orcad) whose operator asked for loopback must
+   * later startup. An unattended host (quirkyd) whose operator asked for loopback must
    * still be on loopback after a client pairs and the service restarts, so the answer
    * has to outrank both, and `ensureNetworkExposure()` has to refuse rather than widen.
    */
@@ -85,9 +85,9 @@ export function pairingUnavailable(
 }
 
 export const DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE =
-  'The pairing registry is unavailable. Verify that the Orca data directory is writable.'
+  'The pairing registry is unavailable. Verify that the Quirky data directory is writable.'
 export const E2EE_KEY_UNAVAILABLE_GUIDANCE =
-  'The E2EE identity is unavailable. Verify that the Orca data directory is writable.'
+  'The E2EE identity is unavailable. Verify that the Quirky data directory is writable.'
 
 // Why: keepalive frames count as socket activity, resetting both idle timers so long-polls outlive the 30s/60s idle caps. See §3.1.
 

@@ -54,7 +54,7 @@ afterEach(() => {
 })
 
 function stateDirectory(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-visuals-migration-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-visuals-migration-'))
   scratch.push(dir)
   return dir
 }

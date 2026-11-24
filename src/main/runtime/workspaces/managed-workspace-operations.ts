@@ -1,6 +1,6 @@
-import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
-import { OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce } from '../session-tabs/structured-session-tab-restoration'
-import { DEFAULT_WORKTREE_LIST_LIMIT } from '../orca-runtime-postlude'
+import type { QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
+import { QuirkyRuntimeWithRestoreStructuredAgentSessionTabsOnce } from '../session-tabs/structured-session-tab-restoration'
+import { DEFAULT_WORKTREE_LIST_LIMIT } from '../quirky-runtime-postlude'
 import type {
   RuntimeWorktreeListResult,
   RuntimeWorktreeTerminalSleepResult
@@ -34,13 +34,13 @@ import { resolveWorktreeHostRouting } from '../worktree-launch-host-repo'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { teardownStops } from '../owned-session-teardown-policy'
 
-export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce {
+export abstract class QuirkyRuntimeWithListManagedWorktrees extends QuirkyRuntimeWithRestoreStructuredAgentSessionTabsOnce {
   protected abstract resolveTerminalWorkspaceLaunchTarget(
     ...args: Parameters<
-      OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveTerminalWorkspaceLaunchTarget']
+      QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveTerminalWorkspaceLaunchTarget']
     >
   ): ReturnType<
-    OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveTerminalWorkspaceLaunchTarget']
+    QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveTerminalWorkspaceLaunchTarget']
   >
 
   listManagedWorktrees(

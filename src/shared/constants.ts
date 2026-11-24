@@ -1,5 +1,5 @@
 import type { GlobalSettings } from './global-settings-types'
-import type { RepoHookSettings } from './orca-yaml-hook-types'
+import type { RepoHookSettings } from './quirky-yaml-hook-types'
 import type { PersistedState } from './persisted-state-types'
 import type { PersistedUIState } from './persisted-ui-state-types'
 import type { AgentActivityDisplayMode } from './ui-chrome-types'
@@ -45,9 +45,9 @@ export function normalizeAgentActivityDisplayMode(value: unknown): AgentActivity
   return value === 'full' || value === 'compact' ? value : DEFAULT_AGENT_ACTIVITY_DISPLAY_MODE
 }
 
-export const ORCA_BROWSER_PARTITION = 'persist:orca-browser'
+export const QUIRKY_BROWSER_PARTITION = 'persist:quirky-browser'
 // Why: inert blank-tab URL shared by main/renderer so the attach policy can allow just this one data URL and reject others.
-export const ORCA_BROWSER_BLANK_URL = 'data:text/html,'
+export const QUIRKY_BROWSER_BLANK_URL = 'data:text/html,'
 
 // Why: Electron's invoke error path preserves only message text, so signal reconnect via this stable token.
 export const SSH_TERMINATE_RECONNECT_REQUIRED = 'SSH_TERMINATE_RECONNECT_REQUIRED'
@@ -101,7 +101,7 @@ export const DEFAULT_REPO_BADGE_COLOR = REPO_COLORS[0]
 export function getDefaultWorkspaceDir(homeDir: string): string {
   const separator = homeDir.includes('\\') ? '\\' : '/'
   const trimmedHomeDir = homeDir.replace(/[\\/]+$/, '')
-  return [trimmedHomeDir, 'orca', 'workspaces'].join(separator)
+  return [trimmedHomeDir, 'quirky', 'workspaces'].join(separator)
 }
 
 export function getDefaultSettings(homedir: string): GlobalSettings {
@@ -246,7 +246,7 @@ export function getDefaultUIState(): PersistedUIState {
     statusBarUsageMode: DEFAULT_STATUS_BAR_USAGE_MODE,
     dismissedUpdateVersion: null,
     lastUpdateCheckAt: null,
-    trustedOrcaHooks: {},
+    trustedQuirkyHooks: {},
     setupScriptPromptDismissedRepoIds: [],
     acknowledgedAgentsByPaneKey: {},
     activityClearedAtByPaneKey: {},

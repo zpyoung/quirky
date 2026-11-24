@@ -14,7 +14,7 @@ import {
   UnsupportedSftpPathError
 } from './system-ssh-sftp-path'
 import { SystemSshCommandExitError, throwIfAborted } from './system-ssh-operation-lifecycle'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 /** The host answered, but not with an sftp subsystem. The caller must fall back, not fail. */
 export class SftpSubsystemUnavailableError extends Error {
@@ -74,8 +74,8 @@ function systemSftpCandidates(sshPath: string | null, platform: NodeJS.Platform)
 
 /** Locate the sftp client paired with the system ssh binary. Returns null when there is none. */
 export function findSystemSftp(): string | null {
-  if (process.env.ORCA_SYSTEM_SFTP_PATH) {
-    return process.env.ORCA_SYSTEM_SFTP_PATH
+  if (process.env.QUIRKY_SYSTEM_SFTP_PATH) {
+    return process.env.QUIRKY_SYSTEM_SFTP_PATH
   }
   const sshPath = findSystemSsh()
   for (const candidate of systemSftpCandidates(sshPath, process.platform)) {

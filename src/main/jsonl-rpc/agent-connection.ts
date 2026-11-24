@@ -1,5 +1,5 @@
-import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
-import { spawnProcess } from '@orca/process-host'
+import type { PipedProcessSpawner } from '@quirky/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
 import { providerDiagnostic, withProviderDiagnostic } from '../../shared/agent-session-failure'
 import {
   spawnManagedProviderProcess,

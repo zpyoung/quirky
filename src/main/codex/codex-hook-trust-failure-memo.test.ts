@@ -13,7 +13,7 @@ vi.mock('./codex-app-server-session', async (importOriginal) => ({
   ...(await importOriginal<typeof AppServerSession>()),
   runCodexAppServerSession: mocks.runCodexAppServerSession
 }))
-vi.mock('@orca/process-host', () => ({ runProcess: mocks.runProcess }))
+vi.mock('@quirky/process-host', () => ({ runProcess: mocks.runProcess }))
 
 import { CodexAppServerRequestError } from './codex-app-server-request-error'
 import { CodexAppServerUnsupportedError } from './codex-app-server-session'
@@ -25,9 +25,9 @@ import {
 import { getCodexHookTrustMemoPath } from './codex-hook-trust-memo'
 
 // Why this file: only an answer Codex gave about its version may be saved for that
-// version; a failed ask saved there would cost every home Orca's entry until Codex updates.
+// version; a failed ask saved there would cost every home Quirky's entry until Codex updates.
 
-const COMMAND = '/home/u/.orca/agent-hooks/codex-hook.sh'
+const COMMAND = '/home/u/.quirky/agent-hooks/codex-hook.sh'
 let userData: string
 let codexPath: string
 
@@ -38,8 +38,8 @@ function startProcess(): void {
 }
 
 /** Stands in for Codex's app-server, listing Stop with `movedHash` for the copy after the dummy group. */
-/** Codex listing the scratch home: its dummy hook and, unless `listsOrca` is false, Orca's copies. */
-function listHashedHooks(movedHash = 'sha256:stop', listsOrca = true): void {
+/** Codex listing the scratch home: its dummy hook and, unless `listsQuirky` is false, Quirky's copies. */
+function listHashedHooks(movedHash = 'sha256:stop', listsQuirky = true): void {
   mocks.runCodexAppServerSession.mockImplementation(
     async (invocation: { env?: Record<string, string> }, body: (rpc: unknown) => unknown) => {
       let project = ''
@@ -57,16 +57,16 @@ function listHashedHooks(movedHash = 'sha256:stop', listsOrca = true): void {
         sourcePath,
         currentHash: hash
       })
-      const orca = [listing(home, 0), listing(home, 2, movedHash), listing(projectHooks, 0)]
-      const hooks = [listing(home, 1, 'sha256:dummy'), ...(listsOrca ? orca : [])]
+      const quirky = [listing(home, 0), listing(home, 2, movedHash), listing(projectHooks, 0)]
+      const hooks = [listing(home, 1, 'sha256:dummy'), ...(listsQuirky ? quirky : [])]
       return { data: [{ cwd: project, hooks }] }
     }
   )
 }
 
 beforeEach(() => {
-  userData = mkdtempSync(join(tmpdir(), 'orca-codex-trust-failure-'))
-  vi.stubEnv('ORCA_USER_DATA_PATH', userData)
+  userData = mkdtempSync(join(tmpdir(), 'quirky-codex-trust-failure-'))
+  vi.stubEnv('QUIRKY_USER_DATA_PATH', userData)
   codexPath = join(userData, 'codex')
   writeFileSync(codexPath, 'codex 0.150.1')
   mocks.runProcess.mockResolvedValue({ code: 0, stdout: 'codex-cli 0.150.1\n', stderr: '' })
@@ -118,7 +118,7 @@ describe("Codex's definitive answer", () => {
           new CodexAppServerUnsupportedError('method not found: hooks/list')
         )
     ],
-    ["it does not list Orca's entry", 1, () => listHashedHooks('sha256:stop', false)],
+    ["it does not list Quirky's entry", 1, () => listHashedHooks('sha256:stop', false)],
     ['it hashes a moved copy differently, twice', 2, () => listHashedHooks('sha256:moved')]
   ])('is refused and saved for the version when %s', async (_, asks, answer) => {
     answer()

@@ -21,7 +21,7 @@ import {
 let directory: string
 
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), 'orca-staging-test-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-staging-test-'))
 })
 
 afterEach(() => {
@@ -81,12 +81,12 @@ describe('stageStartupCommand', () => {
 
   // Why: ksh runs a sourced file's commands in the shell's own process group, so Ctrl-Z is lost.
   it.each([['/bin/ksh'], ['/usr/bin/mksh']])(
-    'runs a long Orca-built line through /bin/sh in %s, and types a short one as is',
+    'runs a long Quirky-built line through /bin/sh in %s, and types a short one as is',
     (shellPath) => {
       const staged = stageStartupCommand({
         command: `claude '${'x'.repeat(600)}'`,
         shellPath,
-        orcaBuiltLine: true,
+        quirkyBuiltLine: true,
         platform: 'darwin',
         directory
       })
@@ -96,7 +96,7 @@ describe('stageStartupCommand', () => {
         stageStartupCommand({
           command,
           shellPath,
-          orcaBuiltLine: true,
+          quirkyBuiltLine: true,
           platform: 'darwin',
           directory
         })
@@ -115,12 +115,12 @@ describe('stageStartupCommand', () => {
 
   // Why: typed raw, tcsh runs a prompt's second line as a command and MAX_CANON cuts a long one.
   it.each([['/usr/bin/nu'], ['/bin/tcsh'], ['/usr/local/bin/pwsh'], [undefined]])(
-    'runs an Orca-built launch line through /bin/sh for a shell that cannot source it (%s)',
+    'runs an Quirky-built launch line through /bin/sh for a shell that cannot source it (%s)',
     (shellPath) => {
       const staged = stageStartupCommand({
         command: `claude 'one\ntwo'`,
         shellPath,
-        orcaBuiltLine: true,
+        quirkyBuiltLine: true,
         platform: 'darwin',
         directory
       })
@@ -131,13 +131,13 @@ describe('stageStartupCommand', () => {
 
   // Measured: tcsh typed `'fix C:'"\\"'dir'` as `fix C:\\dir` and expanded `!!` in `'wow!! great'`.
   it.each([['/bin/tcsh'], ['/usr/bin/nu'], [undefined]])(
-    'stages even a short Orca-built line for a shell that cannot source it (%s)',
+    'stages even a short Quirky-built line for a shell that cannot source it (%s)',
     (shellPath) => {
       const command = `claude 'wow!! great'`
       const staged = stageStartupCommand({
         command,
         shellPath,
-        orcaBuiltLine: true,
+        quirkyBuiltLine: true,
         platform: 'darwin',
         directory
       })
@@ -148,14 +148,14 @@ describe('stageStartupCommand', () => {
 
   // Why: behind `/bin/sh` the agent is not the shell's own job, and a pasted prompt waits on that.
   it.each([['/bin/tcsh'], ['/usr/bin/nu'], [undefined]])(
-    'types a short plain Orca-built line as is for a shell that cannot source it (%s)',
+    'types a short plain Quirky-built line as is for a shell that cannot source it (%s)',
     (shellPath) => {
       const command = `claude '--dangerously-skip-permissions' '--model' 'claude-opus-5-5[1m]'`
       expect(
         stageStartupCommand({
           command,
           shellPath,
-          orcaBuiltLine: true,
+          quirkyBuiltLine: true,
           platform: 'darwin',
           directory
         })
@@ -165,12 +165,12 @@ describe('stageStartupCommand', () => {
   )
 
   it.each([[`claude 'it'\\''s'`], ['claude "x"'], ["claude '$HOME'"], ["claude 'a`b'"]])(
-    'stages a short Orca-built line tcsh would not read literally: %s',
+    'stages a short Quirky-built line tcsh would not read literally: %s',
     (command) => {
       const staged = stageStartupCommand({
         command,
         shellPath: '/bin/tcsh',
-        orcaBuiltLine: true,
+        quirkyBuiltLine: true,
         platform: 'darwin',
         directory
       })
@@ -178,10 +178,10 @@ describe('stageStartupCommand', () => {
     }
   )
 
-  it('types a short Orca-built line in a shell that reads its quoting literally', () => {
+  it('types a short Quirky-built line in a shell that reads its quoting literally', () => {
     const command = `claude 'wow!! great'`
     expect(
-      stageStartupCommand({ command, shellPath: '/bin/zsh', orcaBuiltLine: true, directory })
+      stageStartupCommand({ command, shellPath: '/bin/zsh', quirkyBuiltLine: true, directory })
     ).toEqual({ command, delivery: 'typed' })
   })
 
@@ -241,8 +241,8 @@ describe('discardStagedStartupCommand', () => {
 describe('sweepStaleStagedStartupCommands', () => {
   it('removes only staged scripts older than an hour', () => {
     const now = Date.now()
-    const stale = join(directory, 'orca-launch-aaaa.sh')
-    const fresh = join(directory, 'orca-launch-bbbb.sh')
+    const stale = join(directory, 'quirky-launch-aaaa.sh')
+    const fresh = join(directory, 'quirky-launch-bbbb.sh')
     const unrelated = join(directory, 'something-else.sh')
     for (const path of [stale, fresh, unrelated]) {
       writeFileSync(path, '')
@@ -251,7 +251,7 @@ describe('sweepStaleStagedStartupCommands', () => {
     utimesSync(stale, staleSeconds, staleSeconds)
     utimesSync(unrelated, staleSeconds, staleSeconds)
     sweepStaleStagedStartupCommands({ directory, now })
-    expect(readdirSync(directory).sort()).toEqual(['orca-launch-bbbb.sh', 'something-else.sh'])
+    expect(readdirSync(directory).sort()).toEqual(['quirky-launch-bbbb.sh', 'something-else.sh'])
   })
 })
 
@@ -268,7 +268,7 @@ describe('startupStagingFailureNotice', () => {
       failure: 'EACCES: permission denied\nsecond line'
     })
     expect(notice).toBe(
-      '\r\n[orca] Could not stage the launch command (EACCES: permission denied second line); typed it in full. If the shell shows quote> or waits for more input, press Ctrl-C and launch again.\r\n'
+      '\r\n[quirky] Could not stage the launch command (EACCES: permission denied second line); typed it in full. If the shell shows quote> or waits for more input, press Ctrl-C and launch again.\r\n'
     )
   })
 })

@@ -3,13 +3,13 @@ import type { RuntimeTerminalClose } from '../../../shared/runtime-types'
 import type { RuntimePtyTabCloseAuthority } from '../runtime-terminal-state-records'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import type { WindowLayoutCommand } from '../runtime-layout-apply'
 import { closeMainOwnedPaneByHandle } from './main-handle-close'
 import {
   NO_STOP,
-  OrcaRuntimeWithExplicitCloseTabPtyStops,
+  QuirkyRuntimeWithExplicitCloseTabPtyStops,
   type ExplicitCloseStop
 } from './explicit-terminal-close-pty-stops'
 import {
@@ -17,7 +17,7 @@ import {
   isTerminalTabPinnedInSession
 } from './paired-host-terminal-close'
 
-export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithExplicitCloseTabPtyStops {
+export abstract class QuirkyRuntimeWithStopExplicitlyClosedTabPtys extends QuirkyRuntimeWithExplicitCloseTabPtyStops {
   protected abstract getResolvedWorktreeMap(): Promise<Map<string, ResolvedWorktree>>
   abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
   protected abstract refreshPtyWorktreeRecordsFromController(
@@ -85,7 +85,7 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
 
   async closeTerminal(handle: string): Promise<RuntimeTerminalClose> {
     // Switch point: a pane main owns closes in main's layout, whatever the window lists.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
       const mainClose = await closeMainOwnedPaneByHandle(
         {
           runtime: this,
@@ -252,7 +252,7 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
 
   async closeTerminalTab(handle: string): Promise<RuntimeTerminalClose> {
     // Switch point: a pane main owns closes in main's layout, whatever the window lists.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
       const mainClose = await closeMainOwnedPaneByHandle(
         {
           runtime: this,

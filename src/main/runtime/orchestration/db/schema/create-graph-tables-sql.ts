@@ -145,9 +145,9 @@ CREATE TABLE IF NOT EXISTS dispatch_contexts (
   launch_token_hash   TEXT,
   assignee_handle     TEXT,
   assignee_pane_key   TEXT,
-  -- Bare Orca session id the agent is addressed by, when it has one (today only structured
-  -- sessions); for a /clear'd chat, its lineage root's. Not its orca_session_id:<id> address.
-  assignee_orca_session_id TEXT,
+  -- Bare Quirky session id the agent is addressed by, when it has one (today only structured
+  -- sessions); for a /clear'd chat, its lineage root's. Not its quirky_session_id:<id> address.
+  assignee_quirky_session_id TEXT,
   capability_hash     TEXT,
   process_incarnation TEXT,
   capability_revoked_at TEXT,
@@ -155,17 +155,17 @@ CREATE TABLE IF NOT EXISTS dispatch_contexts (
   retry_of_dispatch_id TEXT,
   creator_dispatch_id TEXT,
   -- Who created this row. A row whose creator is its own assignee is bookkeeping, not delegation,
-  -- so it must not count as a nesting parent. Null on rows written before v37 and for Orca's loop.
+  -- so it must not count as a nesting parent. Null on rows written before v37 and for Quirky's loop.
   creator_handle      TEXT,
   creator_pane_key    TEXT,
-  -- Same form as assignee_orca_session_id: the id the creator is addressed by (a lineage root's).
-  creator_orca_session_id TEXT,
+  -- Same form as assignee_quirky_session_id: the id the creator is addressed by (a lineage root's).
+  creator_quirky_session_id TEXT,
   host_scope          TEXT,
   status              TEXT NOT NULL DEFAULT 'pending'
     CHECK(status IN ('pending', 'dispatched', 'completed', 'failed', 'circuit_broken')),
   failure_count       INTEGER NOT NULL DEFAULT 0,
   last_failure        TEXT,
-  -- Why the process is gone, when Orca could establish it. See TerminalExitCause.
+  -- Why the process is gone, when Quirky could establish it. See TerminalExitCause.
   termination_reason  TEXT,
   -- Nesting depth: a root coordinator's worker is 1, its worker's worker is 2.
   -- Defaults to 1 so an unstamped row fails closed rather than reading as a root.

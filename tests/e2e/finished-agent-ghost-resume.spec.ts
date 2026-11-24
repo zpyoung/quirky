@@ -12,7 +12,7 @@ import {
  * (#9454). Nothing downstream can then tell "finished" from "interrupted": once
  * the pane is gone, worktree activation reads the record as unfinished work and
  * opens a fresh tab running `--resume`. Killing the PTY removes the pane but
- * never the record, so `orca terminal stop`, a crash, or a pty-exit tab close
+ * never the record, so `quirky terminal stop`, a crash, or a pty-exit tab close
  * all leave one queued respawn per finished agent.
  *
  * Run:
@@ -21,7 +21,7 @@ import {
  */
 import { existsSync, readFileSync } from 'node:fs'
 import type { ElectronApplication } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 import {
   execInTerminal,
@@ -32,7 +32,7 @@ import {
   waitForTerminalOutput
 } from './helpers/terminal'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import { createHostRendererTerminalTab } from './helpers/host-created-terminal-retention-oracle'
 
 const PROVIDER_SESSION_ID = 'e2e-finished-agent-session'
@@ -137,7 +137,7 @@ test('does not respawn an agent whose turn already finished', async (// oxlint-d
     // an empty one does not reactivate on relaunch at all.
     const survivingTabId = await createHostRendererTerminalTab(page, worktreeId)
 
-    // The PTY dies and its tab closes with it — `orca terminal stop`, a crash,
+    // The PTY dies and its tab closes with it — `quirky terminal stop`, a crash,
     // or the pty-exit auto close. This reason deliberately keeps the record.
     const tabId = await page.evaluate(
       (wtId) => (window.__store?.getState().tabsByWorktree[wtId] ?? [])[0]?.id ?? null,

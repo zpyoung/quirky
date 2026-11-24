@@ -1,4 +1,4 @@
-import type { SpawnedProcess } from '@orca/process-host/process-spec'
+import type { SpawnedProcess } from '@quirky/process-host/process-spec'
 import {
   terminateDescendantSnapshotWithVerdict,
   type DescendantTreeVerdict
@@ -235,7 +235,7 @@ export function createClaudeChildTreeReaper(
     }
   }
 
-  /** The common pattern: one `taskkill /T /F` addressed through the root Orca still holds. */
+  /** The common pattern: one `taskkill /T /F` addressed through the root Quirky still holds. */
   async function judgeWindowsTree(rootPid: number): Promise<DescendantTreeVerdict> {
     if (exited()) {
       // The root's pid left with it, so its tree can no longer be addressed.
@@ -325,8 +325,8 @@ export function createClaudeChildTreeReaper(
 }
 
 /**
- * Orca's own shutdown ladder on the child it spawned, kept because the SDK's
- * close path returns no proof and Orca never releases a lease on an assumed exit.
+ * Quirky's own shutdown ladder on the child it spawned, kept because the SDK's
+ * close path returns no proof and Quirky never releases a lease on an assumed exit.
  *
  * Resolves true only after the child actually emitted exit and, on POSIX, its
  * snapshotted descendants were observed gone; on Windows, after it left on its

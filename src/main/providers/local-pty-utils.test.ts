@@ -129,19 +129,19 @@ describe('validateWorkingDirectory', () => {
 
   it('rejects a missing native Windows path', async () => {
     existsSyncMock.mockReturnValue(false)
-    const previousVersion = process.env.ORCA_APP_VERSION
-    process.env.ORCA_APP_VERSION = '1.4.178-test'
+    const previousVersion = process.env.QUIRKY_APP_VERSION
+    process.env.QUIRKY_APP_VERSION = '1.4.178-test'
 
     try {
       await expect(validateWorkingDirectory(NATIVE_DIR)).rejects.toThrow(
-        /does not exist.*orca: 1\.4\.178-test/
+        /does not exist.*quirky: 1\.4\.178-test/
       )
       expect(wslUncDirectoryExistsAsyncMock).not.toHaveBeenCalled()
     } finally {
       if (previousVersion === undefined) {
-        delete process.env.ORCA_APP_VERSION
+        delete process.env.QUIRKY_APP_VERSION
       } else {
-        process.env.ORCA_APP_VERSION = previousVersion
+        process.env.QUIRKY_APP_VERSION = previousVersion
       }
     }
   })
@@ -276,12 +276,12 @@ describe('spawnShellWithFallback macOS TCC login wrapping', () => {
 
   it('drops the primary shell’s launch env when an unwrapped fallback takes over', () => {
     // Why: nothing in an unwrapped bash pane consumes the feature channel, so a
-    // leftover ZDOTDIR would point a nested zsh at Orca's wrapper and turn on
-    // features Orca never selected for it.
+    // leftover ZDOTDIR would point a nested zsh at Quirky's wrapper and turn on
+    // features Quirky never selected for it.
     const zshLaunchEnv = {
       ZDOTDIR: '/userdata/shell-ready/zsh',
-      ORCA_ORIG_ZDOTDIR: '/home/jin',
-      ORCA_SHELL_FEATURES: 'history'
+      QUIRKY_ORIG_ZDOTDIR: '/home/jin',
+      QUIRKY_SHELL_FEATURES: 'history'
     }
     const env: Record<string, string> = { HOME: '/home/jin', ...zshLaunchEnv }
     const ptySpawn = vi
@@ -301,16 +301,16 @@ describe('spawnShellWithFallback macOS TCC login wrapping', () => {
       ptySpawn: ptySpawn as never,
       preLaunchEnv: {
         ZDOTDIR: undefined,
-        ORCA_ORIG_ZDOTDIR: undefined,
-        ORCA_SHELL_FEATURES: undefined
+        QUIRKY_ORIG_ZDOTDIR: undefined,
+        QUIRKY_SHELL_FEATURES: undefined
       },
       getShellReadyConfig: (shell) =>
         shell === '/bin/zsh' ? { args: ['-l'], env: zshLaunchEnv } : { args: null, env: {} }
     })
 
-    expect(env.ORCA_SHELL_FEATURES).toBeUndefined()
+    expect(env.QUIRKY_SHELL_FEATURES).toBeUndefined()
     expect(env.ZDOTDIR).toBeUndefined()
-    expect(env.ORCA_ORIG_ZDOTDIR).toBeUndefined()
+    expect(env.QUIRKY_ORIG_ZDOTDIR).toBeUndefined()
     expect(env.HOME).toBe('/home/jin')
   })
 
@@ -323,7 +323,7 @@ describe('spawnShellWithFallback macOS TCC login wrapping', () => {
     [
       '/bin/zsh',
       { ZDOTDIR: '/home/jin/.zsh' },
-      { ZDOTDIR: '/userdata/shell-ready/zsh', ORCA_SHELL_FEATURES: 'history' }
+      { ZDOTDIR: '/userdata/shell-ready/zsh', QUIRKY_SHELL_FEATURES: 'history' }
     ]
   ])('hands back the user’s own env when %s falls back', (shellPath, userEnv, launchEnv) => {
     const preLaunchEnv = Object.fromEntries(
@@ -356,7 +356,7 @@ describe('spawnShellWithFallback macOS TCC login wrapping', () => {
     // Why: the keys to scrub are the ones the LAST attempt wrote. Computed once
     // from the primary, a wrapped first fallback leaks its own ZDOTDIR and
     // feature channel into the shell that finally starts.
-    const bashLaunchEnv = { ORCA_SHELL_FEATURES: 'markers', BASH_ENV: '/userdata/bash/rcfile' }
+    const bashLaunchEnv = { QUIRKY_SHELL_FEATURES: 'markers', BASH_ENV: '/userdata/bash/rcfile' }
     const env: Record<string, string> = { HOME: '/home/jin', ZDOTDIR: '/userdata/shell-ready/zsh' }
     const ptySpawn = vi
       .fn()
@@ -381,7 +381,7 @@ describe('spawnShellWithFallback macOS TCC login wrapping', () => {
         shell === '/bin/bash' ? { args: ['--rcfile', '/rc'], env: bashLaunchEnv } : null
     })
 
-    expect(env.ORCA_SHELL_FEATURES).toBeUndefined()
+    expect(env.QUIRKY_SHELL_FEATURES).toBeUndefined()
     expect(env.BASH_ENV).toBeUndefined()
     expect(env.ZDOTDIR).toBeUndefined()
     expect(env.HOME).toBe('/home/jin')

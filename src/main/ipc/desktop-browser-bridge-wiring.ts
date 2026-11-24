@@ -1,6 +1,6 @@
 /**
  * Production wiring for the desktop browser bridge: which managed SSH hosts may attach, how to
- * reach their orcad over the paired encrypted connection, and how a forwarded command runs here.
+ * reach their quirkyd over the paired encrypted connection, and how a forwarded command runs here.
  */
 import { randomUUID } from 'node:crypto'
 import { webContents, type BrowserWindow } from 'electron'
@@ -13,10 +13,10 @@ import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../shared/electr
 import { subscribeRemoteRuntimeRequest } from '../../shared/remote-runtime-client'
 import { resolveEnvironment } from '../../shared/runtime-environment-store'
 import {
-  getOrcadSshDeployment,
+  getQuirkydSshDeployment,
   getPreferredPairedRuntimeConnection
 } from '../../shared/runtime-environments'
-import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
+import { getManagedQuirkydFenceEnvironmentId } from '../../shared/managed-quirkyd-ssh-owner'
 import { isRemoteCliControlAllowed } from '../../shared/ssh-remote-cli-control'
 import { browserManager } from '../browser/browser-manager'
 import {
@@ -28,10 +28,10 @@ import {
   isHostReachableDocument
 } from '../browser/desktop-browser-bridge/desktop-browser-bridge-executor'
 import { rendererResolveRemoteCliWorkspace } from '../browser/desktop-browser-bridge/desktop-browser-bridge-renderer-scope'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { RpcDispatcher } from '../runtime/rpc/dispatcher'
 import { ALL_RPC_METHODS } from '../runtime/rpc/methods'
-import { ensureOrcadManagedTunnel } from '../managed-server/lifecycle/orcad-managed-tunnel'
+import { ensureQuirkydManagedTunnel } from '../managed-server/lifecycle/quirkyd-managed-tunnel'
 import { getSshTargetRegistryStore } from '../ssh/targets/ssh-target-registry'
 import type { SshConnectionManager } from '../ssh/connection/ssh-connection-manager'
 import { getRuntimeEnvironmentStatus } from './runtime-environments/runtime-environment-status-probe'
@@ -64,7 +64,7 @@ export function listDesktopBrowserBridgeCandidates(
       continue
     }
     // Why first: with the switch on by default, every plain host reaches here; only managed ones qualify.
-    const environmentId = getManagedOrcadFenceEnvironmentId(target)
+    const environmentId = getManagedQuirkydFenceEnvironmentId(target)
     if (!environmentId || isRuntimeEnvironmentManuallyDisconnected(environmentId)) {
       continue
     }
@@ -74,7 +74,7 @@ export function listDesktopBrowserBridgeCandidates(
     }
     try {
       const environment = resolveEnvironment(userDataPath, environmentId)
-      if (getOrcadSshDeployment(environment)?.sshTargetId !== target.id) {
+      if (getQuirkydSshDeployment(environment)?.sshTargetId !== target.id) {
         continue
       }
     } catch {
@@ -87,7 +87,7 @@ export function listDesktopBrowserBridgeCandidates(
 
 export function installDesktopBrowserBridge(options: {
   userDataPath: string
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   getMainWindow: () => BrowserWindow | null
   getConnectionManager: () => Pick<SshConnectionManager, 'getState'> | null
 }): void {
@@ -119,7 +119,7 @@ export function installDesktopBrowserBridge(options: {
       return (status.result.capabilities ?? []).includes(DESKTOP_BROWSER_BRIDGE_RUNTIME_CAPABILITY)
     },
     subscribe: (environmentId) => async (callbacks) => {
-      await ensureOrcadManagedTunnel(userDataPath, environmentId)
+      await ensureQuirkydManagedTunnel(userDataPath, environmentId)
       const connection = getPreferredPairedRuntimeConnection(
         resolveEnvironment(userDataPath, environmentId)
       )

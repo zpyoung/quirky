@@ -1,7 +1,7 @@
 import '../../../unused-default-rpc-methods.test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../../../../shared/protocol-version'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationDb } from '../../../../orchestration/db'
 import type { RpcRequest } from '../../../core'
 import { RpcDispatcher } from '../../../dispatcher'
@@ -9,7 +9,7 @@ import { ORCHESTRATION_METHODS } from '../../orchestration'
 
 describe('orchestration federated message targeting', () => {
   let db: OrchestrationDb | undefined
-  let runtime: OrcaRuntimeService | undefined
+  let runtime: QuirkyRuntimeService | undefined
 
   afterEach(() => {
     runtime?.stopOrchestrationFederationRelay()
@@ -18,7 +18,7 @@ describe('orchestration federated message targeting', () => {
 
   it('rejects explicit send and ask targets without enqueueing a relay', async () => {
     db = new OrchestrationDb(':memory:')
-    runtime = new OrcaRuntimeService()
+    runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     const paneKey = 'tab_worker:leaf_worker'
     const processIncarnation = 'worker_epoch:pty:1'

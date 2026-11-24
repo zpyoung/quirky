@@ -52,7 +52,7 @@ async function openJournal(root: string): Promise<AgentSessionJournal> {
 }
 
 async function session() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-codex-children-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-codex-children-'))
   let journal = await openJournal(root)
   const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
   const activities: (AgentSessionTurnActivity | null)[] = []

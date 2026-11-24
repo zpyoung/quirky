@@ -24,7 +24,7 @@ describe.each([
   ['CommonJS', commonJsFindKeys]
 ])('localization extraction through %s', (_name, extractKeys) => {
   it('keeps keys in calls containing comments or escaped identifiers', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-extraction-syntax-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-extraction-syntax-'))
     try {
       for (const [name, source] of Object.entries(calls)) {
         writeFileSync(join(directory, `${name}.ts`), source)
@@ -55,7 +55,7 @@ describe.each([
   })
 
   it('preserves cross-file namespaces, source locations and fresh plugin transformations', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-extraction-passes-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-extraction-passes-'))
     const file = join(directory, 'a-consumer.ts')
     const config = {
       locales: ['en'],

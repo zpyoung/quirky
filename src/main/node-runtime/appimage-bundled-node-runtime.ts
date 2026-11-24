@@ -1,4 +1,4 @@
-/** The pinned Node inside a Linux AppImage's resources, used where Orca would otherwise download it. */
+/** The pinned Node inside a Linux AppImage's resources, used where Quirky would otherwise download it. */
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { chmod, copyFile, mkdir, rename, rm } from 'node:fs/promises'

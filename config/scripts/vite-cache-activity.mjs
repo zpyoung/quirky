@@ -4,7 +4,7 @@ import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import { lock } from 'proper-lockfile'
 
-export const VITE_CACHE_USAGE_DIRECTORY = '.orca-vite-cache-v1'
+export const VITE_CACHE_USAGE_DIRECTORY = '.quirky-vite-cache-v1'
 // Windows and WSL can share a hostname while using separate PID namespaces.
 export const VITE_CACHE_HOST_ID = createHash('sha256')
   .update(JSON.stringify([process.platform, hostname(), process.env.WSL_DISTRO_NAME ?? '']))

@@ -4,12 +4,12 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { resolveElectronProbeLaunch } from '../../browser/electron-probe-display-launch'
 
-const root = mkdtempSync(join(tmpdir(), 'orca-writer-electron-'))
+const root = mkdtempSync(join(tmpdir(), 'quirky-writer-electron-'))
 const entry = join(root, 'main.cjs')
-const slowWarningMs = Number(process.env.ORCA_PROFILE_STALL_WARNING_MS ?? 2_000)
+const slowWarningMs = Number(process.env.QUIRKY_PROFILE_STALL_WARNING_MS ?? 2_000)
 const processTimeoutMs = slowWarningMs * 6 + 30_000
 
 beforeAll(async () => {
@@ -64,7 +64,7 @@ it(
       platform: process.platform,
       display: process.env.DISPLAY
     })
-    const env: NodeJS.ProcessEnv = { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+    const env: NodeJS.ProcessEnv = { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
     delete env.ELECTRON_RUN_AS_NODE
     const processResult = await runProcess({
       program: launch.executable,

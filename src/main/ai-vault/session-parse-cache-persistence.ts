@@ -130,7 +130,7 @@ function openedDatabase(): SessionParseCacheDatabase | null {
   return database
 }
 
-// A row for a transcript deleted outside Orca is never looked up again, so the
+// A row for a transcript deleted outside Quirky is never looked up again, so the
 // file system, not a timer, decides when it ends.
 async function dropRowsForMissingTranscripts(db: SessionParseCacheDatabase): Promise<void> {
   let dropped = db.deleteSeenBefore(Date.now() - WSL_EXPIRE_AFTER_MS, WSL_PATH_GLOB)

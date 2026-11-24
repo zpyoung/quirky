@@ -1,4 +1,4 @@
-import { WindowsCmdLineBreakError } from '@orca/process-host'
+import { WindowsCmdLineBreakError } from '@quirky/process-host'
 import type { CommitMessagePlan } from '../../shared/commit-message-plan'
 import { supervisedProviderSpawnFailure } from '../provider-process/provider-spawn-failure-report'
 import { stopSupervisedChildProcess } from '../provider-process/supervised-child-process-stop'

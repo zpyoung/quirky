@@ -38,7 +38,7 @@ describe('formatAutomaticWorkResume', () => {
       [
         'Automatic restores were not paused; nothing to resume.',
         '',
-        'This host refused 2 restores from an older Orca client and kept them here:',
+        'This host refused 2 restores from an older Quirky client and kept them here:',
         '- claude in /repo, refused 2026-10-11T12:00:00.000Z (the host was under heavy process load). Resume it with: claude --resume 6f1c',
         '- an agent, refused 2026-10-11T12:00:00.000Z (the host had reached its terminal limit). Its resume command was not recorded.'
       ].join('\n')

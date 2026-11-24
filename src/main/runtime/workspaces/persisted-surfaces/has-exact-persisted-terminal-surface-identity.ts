@@ -1,6 +1,6 @@
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
-import { OrcaRuntimeWithRestoredTerminalPlacement } from './restored-terminal-placement'
+import { QuirkyRuntimeWithRestoredTerminalPlacement } from './restored-terminal-placement'
 import type {
   RuntimeTerminalOrphanAdoptionRequest,
   RuntimeTerminalOrphanAdoptionResult
@@ -22,7 +22,7 @@ import { getLatestPtyTitle } from '../../runtime-worktree-status-projection'
 import type { AutomationService } from '../../../automations/service'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 
-export abstract class OrcaRuntimeWithHasExactPersistedTerminalSurfaceIdentity extends OrcaRuntimeWithRestoredTerminalPlacement {
+export abstract class QuirkyRuntimeWithHasExactPersistedTerminalSurfaceIdentity extends QuirkyRuntimeWithRestoredTerminalPlacement {
   protected abstract getOwnWorkspaceSessionForWorktree(
     worktreeId: string
   ): WorkspaceSessionState | null

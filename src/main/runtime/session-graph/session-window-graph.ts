@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-useless-spread */
-import { OrcaRuntimeWithAttachWindow } from './session-graph-promotion'
+import { QuirkyRuntimeWithAttachWindow } from './session-graph-promotion'
 import type {
   RuntimeRendererSyncWindowGraph,
   RuntimeSyncedTab,
@@ -9,7 +9,7 @@ import type {
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
 import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
 
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 
 type Graph = RuntimeSyncWindowGraph
 
@@ -24,7 +24,7 @@ function assertUniqueRuntimeGraphTabIds(tabs: readonly RuntimeSyncedTab[]): void
   }
 }
 
-export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow {
+export abstract class QuirkyRuntimeWithSyncWindowGraph extends QuirkyRuntimeWithAttachWindow {
   /** Layout-owner builds: main's panes in place of the window's (session-tabs-inventory.ts). */
   protected abstract withMainSurfaces(windowId: number, graph: Graph): Graph
   declare protected terminalGroupGridSizes?: RuntimeSyncWindowGraph['terminalGroupGridSizes']
@@ -92,7 +92,7 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
       this.rendererGeneration = null
     }
     // Switch point: main's own panes stand in for the window's list of a workspace main owns.
-    graph = ORCA_LAYOUT_OWNER_IS_MAIN ? this.withMainSurfaces(windowId, graph) : graph
+    graph = QUIRKY_LAYOUT_OWNER_IS_MAIN ? this.withMainSurfaces(windowId, graph) : graph
 
     if (graph.terminalGroupGridSizes) {
       // Merged, not replaced: a group in a worktree the window is not showing keeps its last size.

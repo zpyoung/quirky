@@ -4,7 +4,7 @@ import {
   subscribeToNativeChatComposerDraft
 } from './native-chat-composer-draft-store'
 
-/** Whether storage refused this scope's draft, which then lasts only until Orca closes. */
+/** Whether storage refused this scope's draft, which then lasts only until Quirky closes. */
 export function useNativeChatComposerDraftUnsaved(scopeKey: string): boolean {
   const subscribe = useCallback(
     (listener: () => void) => subscribeToNativeChatComposerDraft(scopeKey, listener),

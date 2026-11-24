@@ -35,7 +35,7 @@ export function BrowserUseSkillStep({
       )}
       description={translate(
         'auto.components.settings.BrowserUseSkillStep.0871b6998d',
-        "Enables agents to navigate and verify pages in Orca's browser."
+        "Enables agents to navigate and verify pages in Quirky's browser."
       )}
       command={command}
       terminalTitle="Browser Use setup"

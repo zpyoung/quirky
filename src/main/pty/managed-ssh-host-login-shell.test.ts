@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resolveManagedSshHostLoginShell } from './managed-ssh-host-login-shell'
 
 const hostPlatform = process.platform
-const MANAGED = { ORCA_ORCAD_MANAGED_ACTIVATION_ROOT: 'C:\\Users\\u\\.orca-remote' }
+const MANAGED = { QUIRKY_QUIRKYD_MANAGED_ACTIVATION_ROOT: 'C:\\Users\\u\\.quirky-remote' }
 const PWSH = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
 const exists = () => true
 

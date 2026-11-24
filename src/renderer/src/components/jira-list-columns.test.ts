@@ -38,7 +38,7 @@ describe('Jira list columns', () => {
   it('restores per-device choices and handles corrupt or unavailable storage', () => {
     saveJiraListColumnIds(new Set(['key', 'title', 'sprint']))
     expect([...loadJiraListColumnIds()].sort()).toEqual(['key', 'sprint', 'title'])
-    localStorage.setItem('orca.jira.list-columns.v1', '{')
+    localStorage.setItem('quirky.jira.list-columns.v1', '{')
     expect(loadJiraListColumnIds()).toEqual(defaultJiraListColumnIds())
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('full')

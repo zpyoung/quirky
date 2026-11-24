@@ -1,6 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { SESSION_TABS_TAB_DELTA_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { createSessionTabsTabDeltaDecoder } from '../../../../shared/session-tabs-tab-delta'
@@ -101,7 +101,7 @@ async function runStream(
       listener = next
       return () => {}
     })
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
   const messages: string[] = []
   await dispatcher.dispatchStreaming(

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import {
   cleanupMarkdownFixture,
@@ -41,11 +41,11 @@ const ARTICLE = [
 
 for (const large of [false, true]) {
   test(`keeps callout source byte-for-byte across edits, save and reopen (${large ? 'large' : 'article'})`, async ({
-    orcaPage
+    quirkyPage
   }, testInfo) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    const context = await getActiveWorktreeContext(orcaPage)
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    const context = await getActiveWorktreeContext(quirkyPage)
     const source = ARTICLE + (large ? `\n${'Unchanged user_name prose. '.repeat(2_100)}\n` : '')
     const filePath = await createMarkdownFixture(
       context,
@@ -55,8 +55,8 @@ for (const large of [false, true]) {
       source
     )
     try {
-      await openMarkdownFixture(orcaPage, context, filePath)
-      const editor = await waitForRichMarkdownEditor(orcaPage)
+      await openMarkdownFixture(quirkyPage, context, filePath)
+      const editor = await waitForRichMarkdownEditor(quirkyPage)
       await expect(editor).toContainText('[!wissenswert]')
       let expected = source
       for (const prefix of ['First paragraph', 'Second paragraph', 'Third paragraph']) {
@@ -70,21 +70,21 @@ for (const large of [false, true]) {
           selection.removeAllRanges()
           selection.addRange(range)
         })
-        await orcaPage.keyboard.insertText('Edited ')
+        await quirkyPage.keyboard.insertText('Edited ')
         expected = expected.replace(prefix, `Edited ${prefix}`)
-        await orcaPage.keyboard.press('ControlOrMeta+S')
+        await quirkyPage.keyboard.press('ControlOrMeta+S')
         await expect.poll(() => readFileSync(filePath, 'utf8')).toBe(expected)
       }
       await testInfo.attach('saved-source', { body: expected, contentType: 'text/markdown' })
-      await closeActiveEditorTab(orcaPage, filePath)
-      await openMarkdownFixture(orcaPage, context, filePath)
-      const reopened = await waitForRichMarkdownEditor(orcaPage)
+      await closeActiveEditorTab(quirkyPage, filePath)
+      await openMarkdownFixture(quirkyPage, context, filePath)
+      const reopened = await waitForRichMarkdownEditor(quirkyPage)
       await expect(reopened).toContainText('Edited First paragraph')
       await expect(reopened).toContainText('Edited Third paragraph')
       await expect(reopened.locator('blockquote')).toHaveCount(4)
       await expect(reopened).toContainText('[!zeitstrahl]')
       await testInfo.attach('reopened-article', {
-        body: await orcaPage.screenshot({ path: testInfo.outputPath('reopened-article.png') }),
+        body: await quirkyPage.screenshot({ path: testInfo.outputPath('reopened-article.png') }),
         contentType: 'image/png'
       })
       expect(readFileSync(filePath, 'utf8')).toBe(expected)

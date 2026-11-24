@@ -11,7 +11,7 @@ describe('automation history serialization', () => {
   it.each(['import', 'replacement', 'delta'] as const)(
     'preserves JSON ordering, escaping and unknown fields through %s',
     (operation) => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-automation-run-serialization-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-automation-run-serialization-'))
       const { db } = openProfileStateDatabase(join(directory, 'state.db'), 'profile')
       try {
         const fixtureRun = buildProfileStateCutoverFixture().automationRuns[0]

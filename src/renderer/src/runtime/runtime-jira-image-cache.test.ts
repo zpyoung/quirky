@@ -239,9 +239,9 @@ describe('bounded Jira Blob image cache', () => {
       target
     )
     expect(body).toMatch(
-      /^!\[shot\]\(orca-jira-image:\/\/attachment\/[0-9a-f-]+\) and literal data:/
+      /^!\[shot\]\(quirky-jira-image:\/\/attachment\/[0-9a-f-]+\) and literal data:/
     )
-    const url = body.match(/orca-jira-image:\/\/attachment\/[0-9a-f-]+/)?.[0]
+    const url = body.match(/quirky-jira-image:\/\/attachment\/[0-9a-f-]+/)?.[0]
     const reference = jiraImageReference(url)
     if (!reference) {
       throw new Error('Expected migrated image reference')

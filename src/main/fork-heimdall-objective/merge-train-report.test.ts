@@ -91,7 +91,7 @@ describe('queueObjectiveDispatchReport durable digest checkpoint', () => {
         target,
         objectiveStore,
         lease: leaseGuard,
-        reportPath: '.orca/heimdall/objective/reports/node-1.json',
+        reportPath: '.quirky/heimdall/objective/reports/node-1.json',
         report: REPORT,
         reportDigest: 'digest-changed',
         completedAtMs: 2
@@ -103,7 +103,7 @@ describe('queueObjectiveDispatchReport durable digest checkpoint', () => {
         target,
         objectiveStore,
         lease: leaseGuard,
-        reportPath: '.orca/heimdall/objective/reports/node-1.json',
+        reportPath: '.quirky/heimdall/objective/reports/node-1.json',
         report: REPORT,
         reportDigest: 'digest-changed',
         completedAtMs: 2

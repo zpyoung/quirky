@@ -16,22 +16,22 @@ import { resolveAutomationRunTarget, type AutomationRunTargetResult } from './ru
 import type { AutomationRunWriter } from './automation-run-writer'
 import { wslMoveRepoBackoff } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 
-export const NO_DISPATCH_HOST = 'No Orca window was available to launch the automation.'
+export const NO_DISPATCH_HOST = 'No Quirky window was available to launch the automation.'
 
 /** A record the tick could not evaluate at all — its schedule no longer resolves (#16303). */
 export const UNEVALUABLE_SCHEDULE =
-  'Orca could not evaluate this automation and skipped the occurrence.'
+  'Quirky could not evaluate this automation and skipped the occurrence.'
 
 /** A record the authority refuses to execute at all, with no target diagnosis of its own. */
 export const NO_RUNNABLE_HOST = 'This automation has no host to run on.'
 
 /** A move is taking its project; the schedule keeps ticking, so runs resume once it finishes. */
 export const WSL_MOVE_IN_PROGRESS =
-  "This automation's project is moving to its WSL host, so Orca skipped this run. Runs resume when the move finishes."
+  "This automation's project is moving to its WSL host, so Quirky skipped this run. Runs resume when the move finishes."
 
 /** The WSL host owns its project now; this retained local copy never runs again. */
 export const WSL_MOVE_OWNED_BY_HOST =
-  "This automation's project now runs on its WSL host, which runs this automation there. Orca no longer runs this local copy."
+  "This automation's project now runs on its WSL host, which runs this automation there. Quirky no longer runs this local copy."
 
 /** Every reason this occurrence cannot start, decided before a run row exists so
  *  the scheduler can fold repeats instead of writing one row each. */
@@ -183,6 +183,6 @@ export async function recordMissedRun(input: {
     runId: missed.id,
     status: 'skipped_missed',
     workspaceId: input.automation.workspaceId,
-    error: 'This run was past its missed-run grace window when Orca next checked.'
+    error: 'This run was past its missed-run grace window when Quirky next checked.'
   })
 }

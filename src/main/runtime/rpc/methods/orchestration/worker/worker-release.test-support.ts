@@ -2,7 +2,7 @@ import { expect, vi } from 'vitest'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
 import { eraseRpcMethods, type RpcContext } from '../../../core'
 import { OrchestrationDb } from '../../../../orchestration/db'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { TuiAgent } from '../../../../../../shared/tui-agent'
 
 type WorkerStartOptions = { terminal?: string; agent?: TuiAgent }
@@ -40,7 +40,7 @@ export type OrchestrationWorkerReleaseHarness = {
   coordinatorPaneKey: string
   workerPaneKey: string
   readonly db: OrchestrationDb
-  readonly runtime: OrcaRuntimeService
+  readonly runtime: QuirkyRuntimeService
   readonly activeRunId: string
   readonly inspectProcessLiveness: ReturnType<typeof vi.fn>
 }
@@ -48,7 +48,7 @@ export type OrchestrationWorkerReleaseHarness = {
 export function createOrchestrationWorkerReleaseHarness(): OrchestrationWorkerReleaseHarness {
   let db: OrchestrationDb
   let dbOpen = false
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let ctx: RpcContext
   let activeRunId: string
   let inspectProcessLiveness: ReturnType<typeof vi.fn>
@@ -59,7 +59,7 @@ export function createOrchestrationWorkerReleaseHarness(): OrchestrationWorkerRe
   function setup(): void {
     db = new OrchestrationDb(':memory:')
     dbOpen = true
-    runtime = new OrcaRuntimeService()
+    runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     inspectProcessLiveness = vi.fn().mockResolvedValue('live')
     ;(
@@ -106,7 +106,7 @@ export function createOrchestrationWorkerReleaseHarness(): OrchestrationWorkerRe
       status: 'running',
       exitCode: null
     })
-    vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('orca')
+    vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('quirky')
     vi.spyOn(runtime, 'sendTerminalAgentPrompt').mockResolvedValue({
       handle: 'term_worker',
       accepted: true,

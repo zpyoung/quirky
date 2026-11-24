@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { build, testContext, WS } from './workspace-layout-command.test-fixture'
 
 // rollback build (switch-off) — delete with the switch-off code post-flip
-vi.mock('../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+vi.mock('../layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: false }))
 
 describe('a workspace first group with the layout-owner switch off', () => {
   it('is a minted id, whatever group the sender names', () => {

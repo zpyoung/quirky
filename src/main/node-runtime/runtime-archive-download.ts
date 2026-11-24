@@ -1,8 +1,8 @@
 /** Streams and hash-checks a pinned runtime archive, and extracts it with the host's own tools. */
 import { createHash } from 'node:crypto'
 import { open, rm } from 'node:fs/promises'
-import { runProcess } from '@orca/process-host'
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import { runProcess } from '@quirky/process-host'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import { isDefinitiveAbsence } from '../../shared/definitive-filesystem-absence'
 import { getZipExtractorCommand } from '../../shared/zip-extractor-command'
@@ -17,7 +17,7 @@ export const RUNTIME_ARCHIVE_RETRY_DELAYS_MS = [1_000, 3_000, 9_000]
 /**
  * Why the extractor needs a message of its own: `unzip` is absent from a minimal POSIX install,
  * and a bare `spawn unzip ENOENT` names neither the missing tool nor the override. A misconfigured
- * `ORCA_UNZIP_BIN` whose parent is a file reports ENOTDIR instead, which is the same verdict.
+ * `QUIRKY_UNZIP_BIN` whose parent is a file reports ENOTDIR instead, which is the same verdict.
  *
  * The errno is the program path's, not the caller's: `runProcess` leaves cwd unset, so the child
  * inherits the parent's without resolving it. Measured on macOS, Linux and Windows — spawn still
@@ -48,7 +48,7 @@ export async function extractRuntimeArchive(
   } catch (error) {
     if (isDefinitiveAbsence(error)) {
       const override = archivePath.endsWith('.zip')
-        ? ', or set ORCA_UNZIP_BIN to an unzip-compatible extractor.'
+        ? ', or set QUIRKY_UNZIP_BIN to an unzip-compatible extractor.'
         : '.'
       throw new Error(
         `${label} archive extraction could not run ${command.file}: install ${command.label}${override}`,
@@ -60,14 +60,14 @@ export async function extractRuntimeArchive(
 }
 
 /** The served file isn't the pinned release (missing, oversized or a different checksum), so no
- *  retry or network fix helps; only a newer Orca does. */
+ *  retry or network fix helps; only a newer Quirky does. */
 export class ReleaseMismatchError extends Error {}
 
 /** What the person can do about a failed download. Only a proven mismatch blames the release;
  *  every other failure (proxy, DNS, TLS, a dropped connection) is one the network can fix. */
 export function downloadFailureMessage(label: string, error: unknown): string {
   return error instanceof ReleaseMismatchError
-    ? `The ${label} download didn't match the release Orca expects, so nothing was installed. Updating Orca may fix this.`
+    ? `The ${label} download didn't match the release Quirky expects, so nothing was installed. Updating Quirky may fix this.`
     : `Couldn't download ${label}. Check your network connection or proxy, then try again.`
 }
 

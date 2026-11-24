@@ -86,7 +86,7 @@ export function saveMiniMaxSessionCookieCredential(
   // Why: the cookie fetch runs in the desktop's browser session; refuse rather than store a dead key.
   if (getMainHttpClient().partitionSession === undefined) {
     throw new Error(
-      'MiniMax session cookies need the Orca desktop app on this computer. Save an API key instead.'
+      'MiniMax session cookies need the Quirky desktop app on this computer. Save an API key instead.'
     )
   }
   saveMiniMaxSessionCookie(cookie)

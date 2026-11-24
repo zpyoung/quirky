@@ -15,21 +15,21 @@ import { setAppEnvironment } from '../../shared/app-environment'
 import { OpenCodeHookService } from './hook-service'
 import { OPENCODE_OVERLAY_MANIFEST_FILE } from './opencode-overlay-manifest'
 import { OPENCODE_DIR_GC_MIN_AGE_MS, sweepOrphanedOpenCodeDirs } from './overlay-dir-gc'
-import { ORCA_OPENCODE_PLUGIN_FILE, sourceOverlayDirName } from './overlay-dir-names'
+import { QUIRKY_OPENCODE_PLUGIN_FILE, sourceOverlayDirName } from './overlay-dir-names'
 
 let root: string
 let overlays: string
 const now = Date.now()
 
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-overlay-gc-')))
+  root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-overlay-gc-')))
   overlays = join(root, 'opencode-config-overlays')
   mkdirSync(overlays)
   vi.stubEnv('XDG_CONFIG_HOME', join(root, 'xdg'))
   for (const key of [
     'OPENCODE_CONFIG_DIR',
-    'ORCA_OPENCODE_CONFIG_DIR',
-    'ORCA_OPENCODE_SOURCE_CONFIG_DIR'
+    'QUIRKY_OPENCODE_CONFIG_DIR',
+    'QUIRKY_OPENCODE_SOURCE_CONFIG_DIR'
   ]) {
     vi.stubEnv(key, '')
   }
@@ -56,7 +56,7 @@ function age(directory: string): void {
     '',
     OPENCODE_OVERLAY_MANIFEST_FILE,
     'plugins',
-    join('plugins', ORCA_OPENCODE_PLUGIN_FILE)
+    join('plugins', QUIRKY_OPENCODE_PLUGIN_FILE)
   ]) {
     utimesSync(join(directory, suffix), old, old)
   }
@@ -66,7 +66,7 @@ function createOverlay(name: string): { source: string; directory: string } {
   const source = join(root, name)
   const directory = join(overlays, sourceOverlayDirName(source))
   mkdirSync(join(directory, 'plugins'), { recursive: true })
-  writeFileSync(join(directory, 'plugins', ORCA_OPENCODE_PLUGIN_FILE), 'export default {}')
+  writeFileSync(join(directory, 'plugins', QUIRKY_OPENCODE_PLUGIN_FILE), 'export default {}')
   writeFileSync(
     join(directory, OPENCODE_OVERLAY_MANIFEST_FILE),
     JSON.stringify({
@@ -82,7 +82,7 @@ function createOverlay(name: string): { source: string; directory: string } {
 function sweep(extra: Partial<Parameters<typeof sweepOrphanedOpenCodeDirs>[0]> = {}) {
   return sweepOrphanedOpenCodeDirs({
     overlayRoot: overlays,
-    pluginFileName: ORCA_OPENCODE_PLUGIN_FILE,
+    pluginFileName: QUIRKY_OPENCODE_PLUGIN_FILE,
     referencedConfigDirs: new Set(),
     readLivePtyIds: async () => [],
     now,
@@ -144,7 +144,7 @@ it.each(['service.json', 'service-local.json'])(
 it('keeps a young candidate and refreshes reference protection after an asynchronous inventory', async () => {
   const young = createOverlay('young')
   utimesSync(
-    join(young.directory, 'plugins', ORCA_OPENCODE_PLUGIN_FILE),
+    join(young.directory, 'plugins', QUIRKY_OPENCODE_PLUGIN_FILE),
     new Date(now),
     new Date(now)
   )
@@ -222,6 +222,6 @@ it('retains handed-out and inherited source references through clearPty', async 
   age(directory)
   service.clearPty('pane')
   expect((await service.configDirGc.run(async () => [])).keptReferenced).toBe(1)
-  vi.stubEnv('ORCA_OPENCODE_SOURCE_CONFIG_DIR', source)
+  vi.stubEnv('QUIRKY_OPENCODE_SOURCE_CONFIG_DIR', source)
   expect((await new OpenCodeHookService().configDirGc.run(async () => [])).keptReferenced).toBe(1)
 })

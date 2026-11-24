@@ -526,7 +526,7 @@ describe('the resumable set', () => {
       supportsRecord: () => true,
       latestPrompt: () => '',
       movedOn: () => false,
-      savedByNewerOrca: () => false
+      savedByNewerQuirky: () => false
     })
 
     expect(candidates).toHaveLength(1)
@@ -542,28 +542,28 @@ describe('the resumable set', () => {
       supportsRecord: () => true,
       latestPrompt: () => '',
       movedOn: () => false,
-      savedByNewerOrca: () => false
+      savedByNewerQuirky: () => false
     })
 
     expect(set.candidates).toEqual([])
     expect(set.superseded).toEqual([forked])
   })
 
-  // Nothing here can continue a chat a newer Orca saved: it is not offered, and its offer is kept
-  // for the Orca that can act on it.
-  it("neither offers nor spends a newer Orca's chat, and offers it once this build can open it", () => {
+  // Nothing here can continue a chat a newer Quirky saved: it is not offered, and its offer is kept
+  // for the Quirky that can act on it.
+  it("neither offers nor spends a newer Quirky's chat, and offers it once this build can open it", () => {
     const offer = marker()
-    expect(resumableSet({ markers: [offer], savedByNewerOrca: [SESSION] })).toEqual({
+    expect(resumableSet({ markers: [offer], savedByNewerQuirky: [SESSION] })).toEqual({
       candidates: [],
       superseded: []
     })
     expect(resumableSet({ markers: [offer] }).candidates).toHaveLength(1)
   })
 
-  // Being a newer Orca's chat does not keep a forked chat's offer alive: the fork still ends it.
-  it('still withdraws a forked chat a newer Orca saved', () => {
+  // Being a newer Quirky's chat does not keep a forked chat's offer alive: the fork still ends it.
+  it('still withdraws a forked chat a newer Quirky saved', () => {
     const forked = marker({ providerHandleRoot: 'codex:"other-thread"' })
-    expect(resumableSet({ markers: [forked], savedByNewerOrca: [SESSION] }).superseded).toEqual([
+    expect(resumableSet({ markers: [forked], savedByNewerQuirky: [SESSION] }).superseded).toEqual([
       forked
     ])
   })

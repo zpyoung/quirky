@@ -68,7 +68,7 @@ describe('Ports panel for a folder workspace on a managed SSH server', () => {
           runtimeId: null,
           preferredEndpointId: 'ep',
           endpoints: [],
-          orcadDeployment: {
+          quirkydDeployment: {
             sshTargetId: 'box',
             sshTargetGeneration: 1,
             localPort: 7001,

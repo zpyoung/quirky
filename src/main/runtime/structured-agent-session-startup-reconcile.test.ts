@@ -1,4 +1,4 @@
-// A profile whose chat records a newer Orca wrote opens read-only. The startup reconcile adjudicates
+// A profile whose chat records a newer Quirky wrote opens read-only. The startup reconcile adjudicates
 // its leases in memory and writes nothing there; a reconcile whose write fails is bookkeeping too.
 // Either way startup must finish rather than put the whole app into its degraded "Session restore
 // failed" mode.
@@ -16,7 +16,7 @@ import {
   seedTestAgentSessionStoreFromNewerBuild
 } from './agent-session-record-store-test-harness'
 import { closeTestJournalHostDatabases } from '../native-chat/agent-session-journal/journal-host-database-test-support'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import {
   ensureStructuredAgentSessionHost,
   stopStructuredAgentSessionRuntime
@@ -41,7 +41,7 @@ vi.mock('./agent-session-record-rows', async (importOriginal) => {
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-startup-reconcile-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-startup-reconcile-'))
 })
 
 afterEach(async () => {
@@ -52,7 +52,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-/** A profile with one chat whose last owner is gone; `newer` stamps it as a newer Orca's. */
+/** A profile with one chat whose last owner is gone; `newer` stamps it as a newer Quirky's. */
 async function seedChat(options: { newer?: boolean } = {}) {
   const record = agentSessionRecordFixture()
   await seedTestAgentSessionRecordStore(root, { records: [record] })
@@ -64,7 +64,7 @@ async function seedChat(options: { newer?: boolean } = {}) {
 }
 
 function startupRuntime(log = recordingStructuredAgentSessionLogger()) {
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the runtime's own protected members; the test roots the host at `root` and stubs the PTY daemon.
   const internal = runtime as unknown as {
     hasPersistedStructuredAgentSessionStore(): boolean
@@ -87,7 +87,7 @@ function startupRuntime(log = recordingStructuredAgentSessionLogger()) {
   return runtime
 }
 
-it('finishes startup over records a newer Orca wrote, reads them, and writes nothing', async () => {
+it('finishes startup over records a newer Quirky wrote, reads them, and writes nothing', async () => {
   const { path, sessionId } = await seedChat({ newer: true })
   const bytes = await readFile(path)
   const log = recordingStructuredAgentSessionLogger()
@@ -124,9 +124,9 @@ it('finishes startup when the reconcile cannot write, and reports it', async () 
   expect(getStructuredAgentSessionHost()?.sessionAgent(sessionId)).toBe('claude')
 })
 
-// Closing a chat tab drops it from the restore index, which a newer Orca's records refuse: the
+// Closing a chat tab drops it from the restore index, which a newer Quirky's records refuse: the
 // close is reported and goes on, since bookkeeping never keeps a tab open.
-it('closes a chat tab over records a newer Orca wrote, reporting the index it cannot write', async () => {
+it('closes a chat tab over records a newer Quirky wrote, reporting the index it cannot write', async () => {
   const { sessionId } = await seedChat({ newer: true })
   const log = recordingStructuredAgentSessionLogger()
   const runtime = startupRuntime(log)
@@ -149,7 +149,7 @@ it('closes a chat tab over records a newer Orca wrote, reporting the index it ca
       scope: 'tab-visibility-close',
       sessionId,
       error: expect.objectContaining({
-        refusal: expect.objectContaining({ details: { reason: 'journalWrittenByNewerOrca' } })
+        refusal: expect.objectContaining({ details: { reason: 'journalWrittenByNewerQuirky' } })
       })
     }
   })

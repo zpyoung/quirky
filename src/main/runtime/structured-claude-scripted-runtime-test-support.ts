@@ -12,7 +12,7 @@ import type {
   openClaudeStreamJsonConnection
 } from '../claude/claude-stream-json-connection'
 import { runClaudeControl } from '../claude/claude-agent-sdk-control-requests'
-import { claudeSessionIdForOrcaSession } from '../claude/claude-structured-launch-resolution'
+import { claudeSessionIdForQuirkySession } from '../claude/claude-structured-launch-resolution'
 import type { AgentSessionAttachParams } from '../native-chat/agent-session-wire/structured-agent-session-attach'
 import { hostTestAttachParams } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
@@ -22,7 +22,7 @@ import {
 } from './structured-agent-session-runtime'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 
-/** The error a real CLI's exit reaches the adapter as: Orca's message, the stderr as a log detail. */
+/** The error a real CLI's exit reaches the adapter as: Quirky's message, the stderr as a log detail. */
 export function scriptedClaudeExitError(diagnostic: string): Error {
   return withProviderDiagnostic(new Error(diagnostic), providerDiagnostic(diagnostic, 'log'))
 }
@@ -82,7 +82,7 @@ export function createScriptedClaudeRuntime(sessionIds: readonly string[]) {
     const providerSessionId = String(launch.options.sessionId ?? launch.options.resume)
     const sessionId = sessionIds.find(
       (candidate) =>
-        claudeSessionIdForOrcaSession(
+        claudeSessionIdForQuirkySession(
           candidate,
           host?.deps.store.getRecord(candidate)?.providerContextBoundary?.operationId
         ) === providerSessionId
@@ -234,7 +234,7 @@ export function createScriptedClaudeRuntime(sessionIds: readonly string[]) {
     children: (sessionId: string): ScriptedClaudeChild[] =>
       children.filter((entry) => entry.sessionId === sessionId),
     install: async (): Promise<StructuredAgentSessionHost> => {
-      root ??= await mkdtemp(join(tmpdir(), 'orca-scripted-claude-runtime-'))
+      root ??= await mkdtemp(join(tmpdir(), 'quirky-scripted-claude-runtime-'))
       await mkdir(join(root, 'claude-home'), { recursive: true })
       const directory = root
       host = await ensureStructuredAgentSessionHost({
@@ -269,7 +269,7 @@ export function createScriptedClaudeRuntime(sessionIds: readonly string[]) {
         accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: join(root ?? '', 'claude-home') },
         providerHandle: {
           kind: 'claude',
-          sessionId: claudeSessionIdForOrcaSession(sessionId),
+          sessionId: claudeSessionIdForQuirkySession(sessionId),
           leafUuid: null
         },
         ...overrides

@@ -19,7 +19,7 @@ describe('MediaViewer', () => {
       root.render(
         <StrictMode>
           <MediaViewer
-            src="orca-media://file/token"
+            src="quirky-media://file/token"
             mimeType="video/mp4"
             filePath="clip.mp4"
             canOpenLocally
@@ -28,7 +28,7 @@ describe('MediaViewer', () => {
       )
     )
     const video = container.querySelector('video')
-    expect(video?.getAttribute('src')).toBe('orca-media://file/token')
+    expect(video?.getAttribute('src')).toBe('quirky-media://file/token')
     expect(video?.controls).toBe(true)
     expect(video?.autoplay).toBe(false)
     expect(video?.preload).toBe('metadata')
@@ -48,7 +48,7 @@ describe('MediaViewer', () => {
     await act(async () =>
       root.render(
         <MediaViewer
-          src="orca-media://file/token"
+          src="quirky-media://file/token"
           mimeType="video/mp4"
           filePath="remote.mp4"
           canOpenLocally={false}
@@ -73,7 +73,7 @@ describe('MediaViewer', () => {
         <StrictMode>
           <MediaViewer
             key="song"
-            src="orca-media://file/song"
+            src="quirky-media://file/song"
             mimeType="audio/mpeg"
             filePath="song.mp3"
             canOpenLocally
@@ -82,7 +82,7 @@ describe('MediaViewer', () => {
       )
     )
     const audio = container.querySelector('audio')
-    expect(audio?.getAttribute('src')).toBe('orca-media://file/song')
+    expect(audio?.getAttribute('src')).toBe('quirky-media://file/song')
     expect(audio?.controls).toBe(true)
     expect(audio?.autoplay).toBe(false)
     expect(audio?.preload).toBe('metadata')
@@ -94,7 +94,7 @@ describe('MediaViewer', () => {
       root.render(
         <MediaViewer
           key="clip"
-          src="orca-media://file/clip"
+          src="quirky-media://file/clip"
           mimeType="video/mp4"
           filePath="clip.mp4"
           canOpenLocally
@@ -105,7 +105,7 @@ describe('MediaViewer', () => {
     expect(load).toHaveBeenCalledTimes(1)
     expect(audio?.getAttribute('src')).toBeNull()
     expect(container.querySelector('audio')).toBeNull()
-    expect(container.querySelector('video')?.getAttribute('src')).toBe('orca-media://file/clip')
+    expect(container.querySelector('video')?.getAttribute('src')).toBe('quirky-media://file/clip')
     await act(async () => root.unmount())
   })
 })

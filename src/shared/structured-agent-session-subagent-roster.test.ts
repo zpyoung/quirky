@@ -107,7 +107,7 @@ describe('the client roster of subagents', () => {
 
   it('names a subagent from its own row, and forgets it with that row', () => {
     const own: AgentJournalRenderItem = {
-      itemId: 'orca:subagent:a',
+      itemId: 'quirky:subagent:a',
       revision: 1,
       sequence: 4,
       observedAt: 4,
@@ -123,10 +123,10 @@ describe('the client roster of subagents', () => {
     const named = fold([own])
     expect(named.get('a')).toEqual({
       entry: { id: 'a', label: 'review', state: 'working' },
-      rosterItemId: 'orca:subagent:a',
+      rosterItemId: 'quirky:subagent:a',
       rosterPosition: { sequence: 4, index: 0 },
       rosterRevision: 1
     })
-    expect(foldStructuredAgentSubagentRoster(named, [], ['orca:subagent:a']).size).toBe(0)
+    expect(foldStructuredAgentSubagentRoster(named, [], ['quirky:subagent:a']).size).toBe(0)
   })
 })

@@ -1,0 +1,36 @@
+{
+  "name": "Quirky Official Plugins",
+  "owner": "stablyai",
+  "plugins": [
+    {
+      "id": "stablyai.quirky-portuguese",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/stablyai/orca-portuguese.git",
+        "ref": "v1.0.0"
+      },
+      "description": "Brazilian Portuguese translations for common Quirky navigation.",
+      "categories": ["languages", "official"]
+    },
+    {
+      "id": "stablyai.quirky-multipass-recipes",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/stablyai/orca-multipass-recipes.git",
+        "ref": "v1.0.0"
+      },
+      "description": "A reviewed starter lifecycle for disposable Multipass workspaces.",
+      "categories": ["vm-recipes", "official"]
+    },
+    {
+      "id": "stablyai.quirky-navigation-shortcuts",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/stablyai/orca-navigation-shortcuts.git",
+        "ref": "v1.0.0"
+      },
+      "description": "Command aliases and optional shortcuts for frequent Quirky views.",
+      "categories": ["keybindings", "official"]
+    }
+  ]
+}

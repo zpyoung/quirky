@@ -2,8 +2,8 @@ import {
   isDurableMutation,
   isTerminalPromptMutation
 } from '../../../shared/orchestration-rpc-contract'
-import type { OrcaRuntimeService } from '../orca-runtime'
-import type { OrcaSessionId } from '../../../shared/orca-session-address'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
+import type { QuirkySessionId } from '../../../shared/quirky-session-address'
 import { OrchestrationError } from '../orchestration/orchestration-error'
 import type { RpcRequest } from './core'
 import {
@@ -41,15 +41,15 @@ type InFlightMutation = {
 export class OrchestrationMutationExecutor {
   private readonly inFlight = new Map<string, InFlightMutation>()
 
-  constructor(private readonly runtime: OrcaRuntimeService) {}
+  constructor(private readonly runtime: QuirkyRuntimeService) {}
 
   async run(
     request: RpcRequest,
     params: unknown,
     invoke: (mutation?: DurableMutationInvocation) => unknown,
     callerFingerprintOverride?: string,
-    /** The resolved session's Orca session id; it joins the payload so another caller cannot replay it. */
-    callerOrcaSessionId?: OrcaSessionId
+    /** The resolved session's Quirky session id; it joins the payload so another caller cannot replay it. */
+    callerQuirkySessionId?: QuirkySessionId
   ): Promise<unknown> {
     const requestId = request.orchestrationRequestId
     if (!requestId || !isDurableMutation(request.method, params)) {
@@ -57,7 +57,7 @@ export class OrchestrationMutationExecutor {
     }
     const callerFingerprint =
       callerFingerprintOverride ?? this.getLocalAuthenticatedCallerFingerprint()
-    const stableParams = replayStableCallerParams(this.runtime, params, callerOrcaSessionId)
+    const stableParams = replayStableCallerParams(this.runtime, params, callerQuirkySessionId)
     const basePayloadHash = hashCanonical({ method: request.method, params: stableParams })
     const key = `${callerFingerprint}:${requestId}`
     const db = this.runtime.getOrchestrationDb()
@@ -200,7 +200,7 @@ export class OrchestrationMutationExecutor {
             ? {
                 requestId,
                 dispatchId: recovery.dispatchId,
-                recoveryCommand: `orca orchestration worker-show --dispatch ${recovery.dispatchId} --json`
+                recoveryCommand: `quirky orchestration worker-show --dispatch ${recovery.dispatchId} --json`
               }
             : { requestId }
         )
@@ -264,10 +264,10 @@ export class OrchestrationMutationExecutor {
   }
 }
 
-const executorsByRuntime = new WeakMap<OrcaRuntimeService, OrchestrationMutationExecutor>()
+const executorsByRuntime = new WeakMap<QuirkyRuntimeService, OrchestrationMutationExecutor>()
 
 export function getOrchestrationMutationExecutor(
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
 ): OrchestrationMutationExecutor {
   const existing = executorsByRuntime.get(runtime)
   if (existing) {

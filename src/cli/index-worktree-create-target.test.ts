@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 const {
   callMock,
   runtimeClientConstructorMock,
-  serveOrcaAppMock,
+  serveQuirkyAppMock,
   getDefaultUserDataPathMock,
   addEnvironmentFromPairingCodeMock,
   listEnvironmentsMock,
@@ -11,8 +11,8 @@ const {
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   spawnMock: vi.fn()
@@ -23,7 +23,7 @@ vi.mock('./runtime-client', async () => {
   return createRuntimeClientModuleMock({
     callMock,
     runtimeClientConstructorMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock
   })
 })
@@ -55,8 +55,8 @@ function buildSetup(overrides: {
 }) {
   return {
     projectId: 'github:stablyai/orca',
-    path: '/tmp/orca',
-    displayName: 'Orca',
+    path: '/tmp/quirky',
+    displayName: 'Quirky',
     setupState: 'ready',
     setupMethod: 'legacy-repo',
     createdAt: 1,
@@ -65,10 +65,10 @@ function buildSetup(overrides: {
   }
 }
 
-describe('orca cli worktree awareness', () => {
+describe('quirky cli worktree awareness', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock,
     addEnvironmentFromPairingCodeMock,
     listEnvironmentsMock,
@@ -120,8 +120,8 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'local',
             repoId: 'repo-local',
-            path: '/tmp/orca',
-            displayName: 'Orca',
+            path: '/tmp/quirky',
+            displayName: 'Quirky',
             setupState: 'ready',
             setupMethod: 'legacy-repo',
             createdAt: 1,
@@ -132,8 +132,8 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'runtime:gpu',
             repoId: 'repo-gpu',
-            path: '/srv/orca',
-            displayName: 'Orca',
+            path: '/srv/quirky',
+            displayName: 'Quirky',
             setupState: 'ready',
             setupMethod: 'legacy-repo',
             createdAt: 1,
@@ -142,7 +142,7 @@ describe('orca cli worktree awareness', () => {
         ]
       }),
       okFixture('req_create', {
-        worktree: buildWorktree('/srv/orca/feature', 'feature', 'abc', 'repo-gpu'),
+        worktree: buildWorktree('/srv/quirky/feature', 'feature', 'abc', 'repo-gpu'),
         lineage: null,
         warnings: []
       })
@@ -195,8 +195,8 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'runtime:gpu',
             repoId: 'repo-gpu',
-            path: '/srv/orca',
-            displayName: 'Orca',
+            path: '/srv/quirky',
+            displayName: 'Quirky',
             setupState: 'ready',
             setupMethod: 'legacy-repo',
             createdAt: 1,
@@ -205,7 +205,7 @@ describe('orca cli worktree awareness', () => {
         ]
       }),
       okFixture('req_create', {
-        worktree: buildWorktree('/srv/orca/feature', 'feature', 'abc', 'repo-gpu'),
+        worktree: buildWorktree('/srv/quirky/feature', 'feature', 'abc', 'repo-gpu'),
         lineage: null,
         warnings: []
       })
@@ -354,7 +354,7 @@ describe('orca cli worktree awareness', () => {
     )
   })
 
-  // Why: the reported failure. `orca project list` shows the display name, so that is what gets
+  // Why: the reported failure. `quirky project list` shows the display name, so that is what gets
   // typed; matching the provider-scoped projectId alone reported "not set up" for a project that
   // was sitting right there, and blamed the missing --host for it.
   it('resolves --project by display name and infers the only host it is set up on', async () => {
@@ -434,13 +434,13 @@ describe('orca cli worktree awareness', () => {
             id: 'setup-local',
             hostId: 'local',
             repoId: 'repo-local',
-            path: '/tmp/orca'
+            path: '/tmp/quirky'
           }),
           buildSetup({
             id: 'setup-gpu',
             hostId: 'runtime:gpu',
             repoId: 'repo-gpu',
-            path: '/srv/orca'
+            path: '/srv/quirky'
           })
         ]
       })
@@ -470,9 +470,9 @@ describe('orca cli worktree awareness', () => {
     process.exitCode = priorExitCode
   })
 
-  // Why: `orca host list` prints `trader-local`, so that is what gets typed. Only the generated
+  // Why: `quirky host list` prints `trader-local`, so that is what gets typed. Only the generated
   // `ssh:ssh-<timestamp>-<random>` spelling used to be accepted.
-  it('accepts the host alias that `orca host list` prints', async () => {
+  it('accepts the host alias that `quirky host list` prints', async () => {
     queueFixtures(
       callMock,
       okFixture('req_ssh_targets', {
@@ -485,12 +485,12 @@ describe('orca cli worktree awareness', () => {
             id: 'setup-trader',
             hostId: 'ssh:ssh-1783599077486-fyasux',
             repoId: 'repo-trader',
-            path: '/home/trader/orca'
+            path: '/home/trader/quirky'
           })
         ]
       }),
       okFixture('req_create', {
-        worktree: buildWorktree('/home/trader/orca/feature', 'feature', 'abc', 'repo-trader'),
+        worktree: buildWorktree('/home/trader/quirky/feature', 'feature', 'abc', 'repo-trader'),
         lineage: null,
         warnings: []
       })
@@ -551,7 +551,7 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('passes caller terminal handle through worktree.create with cwd fallback', async () => {
-    process.env.ORCA_TERMINAL_HANDLE = 'term_parent'
+    process.env.QUIRKY_TERMINAL_HANDLE = 'term_parent'
     queueFixtures(
       callMock,
       worktreeListFixture([buildWorktree('/tmp/repo', 'main', 'abc', 'repo-1')]),
@@ -591,7 +591,7 @@ describe('orca cli worktree awareness', () => {
   it('marks every worktree.create as CLI-created even from an external shell', async () => {
     // Why: the sidebar badge/filter must catch hand-typed creates too, so the
     // provenance request is sent with no terminal handle rather than omitted.
-    delete process.env.ORCA_TERMINAL_HANDLE
+    delete process.env.QUIRKY_TERMINAL_HANDLE
     queueFixtures(
       callMock,
       okFixture('req_create_external', {

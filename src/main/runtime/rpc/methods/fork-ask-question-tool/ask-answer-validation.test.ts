@@ -56,9 +56,11 @@ describe('validateAskAnswerSubmission (C4)', () => {
   })
 
   it('rejects an unknown question id in answers', () => {
-    const result = validateAskAnswerSubmission(SELECT_SPEC, { nope: { value: 'a', source: 'option' } }, [
-      'flavor'
-    ])
+    const result = validateAskAnswerSubmission(
+      SELECT_SPEC,
+      { nope: { value: 'a', source: 'option' } },
+      ['flavor']
+    )
     expect(result.ok).toBe(false)
   })
 
@@ -71,7 +73,11 @@ describe('validateAskAnswerSubmission (C4)', () => {
   })
 
   it('rejects a question that is neither answered nor skipped', () => {
-    const result = validateAskAnswerSubmission(TWO_QUESTION_SPEC, { q1: { value: 'hi', source: 'input' } }, [])
+    const result = validateAskAnswerSubmission(
+      TWO_QUESTION_SPEC,
+      { q1: { value: 'hi', source: 'input' } },
+      []
+    )
     expect(result.ok).toBe(false)
   })
 
@@ -94,9 +100,11 @@ describe('validateAskAnswerSubmission (C4)', () => {
   })
 
   it('accepts a fully answered-and-skipped split with a field-naming error list when invalid', () => {
-    const result = validateAskAnswerSubmission(TWO_QUESTION_SPEC, { q1: { value: 'hi', source: 'input' } }, [
-      'q2'
-    ])
+    const result = validateAskAnswerSubmission(
+      TWO_QUESTION_SPEC,
+      { q1: { value: 'hi', source: 'input' } },
+      ['q2']
+    )
     expect(result.ok).toBe(true)
   })
 })

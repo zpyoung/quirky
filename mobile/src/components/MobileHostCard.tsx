@@ -47,7 +47,7 @@ export function MobileHostCard(props: {
       : null
   const discoveryHint =
     props.verdict.kind === 'unreachable' && !props.host.relay
-      ? 'Update desktop Orca and sign in to connect from anywhere'
+      ? 'Update desktop Quirky and sign in to connect from anywhere'
       : null
   const credentialHint = credentialMissing
     ? 'Tap to re-pair with your desktop'

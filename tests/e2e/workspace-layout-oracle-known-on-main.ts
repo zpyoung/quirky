@@ -35,7 +35,7 @@ export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
   },
   // After a headless move into an existing group, paired clients still see that group's previous
   // tab selected, not the moved one. A split into a new group selects the moved tab.
-  ...(['orcad', 'electron'] as const).map((kind) => ({
+  ...(['quirkyd', 'electron'] as const).map((kind) => ({
     scenario: `headless-${kind}-move-tab-between-groups`,
     check: 'expected' as const,
     step: 'move',

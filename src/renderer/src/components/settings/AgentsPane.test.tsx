@@ -270,26 +270,26 @@ describe('AgentsPane', () => {
     expect(markup).not.toContain('aria-label="Agent runtime"')
     expect(markup).toContain('Keep computer awake')
     expect(markup).toContain(
-      'Choose On, Agent, or Off. Agent mode stays awake while agents are working. Orca also asks this device to stay awake when the lid is closed, subject to its power policy.'
+      'Choose On, Agent, or Off. Agent mode stays awake while agents are working. Quirky also asks this device to stay awake when the lid is closed, subject to its power policy.'
     )
     expect(markup).toContain('role="radiogroup"')
     expect(markup).toContain('>Agent<')
   })
 
   it('hides desktop-only awake modes in paired web clients', () => {
-    ;(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ = true
+    ;(globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ = true
     try {
       expect(renderPane(getDefaultSettings('/tmp'))).not.toContain('Keep computer awake')
       expect(
         matchesSettingsSearch('awake', getAgentsPaneSearchEntries({ includeAgentAwake: false }))
       ).toBe(false)
     } finally {
-      delete (globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__
+      delete (globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__
     }
   })
 
   it('keeps the host-only folder trust row out of paired web clients and their search', () => {
-    Reflect.set(globalThis, '__ORCA_WEB_CLIENT__', true)
+    Reflect.set(globalThis, '__QUIRKY_WEB_CLIENT__', true)
     try {
       expect(renderPane(getDefaultSettings('/tmp'))).not.toContain(getAgentWorkspaceTrustTitle())
       expect(
@@ -299,18 +299,18 @@ describe('AgentsPane', () => {
         )
       ).toBe(false)
     } finally {
-      Reflect.deleteProperty(globalThis, '__ORCA_WEB_CLIENT__')
+      Reflect.deleteProperty(globalThis, '__QUIRKY_WEB_CLIENT__')
     }
   })
 
   it('keeps the host-only Codex server row out of paired web clients', () => {
-    Reflect.set(globalThis, '__ORCA_WEB_CLIENT__', true)
+    Reflect.set(globalThis, '__QUIRKY_WEB_CLIENT__', true)
     try {
       expect(renderPane(getDefaultSettings('/tmp'))).not.toContain(
         getCodexTerminalServerIsolationTitle()
       )
     } finally {
-      Reflect.deleteProperty(globalThis, '__ORCA_WEB_CLIENT__')
+      Reflect.deleteProperty(globalThis, '__QUIRKY_WEB_CLIENT__')
     }
   })
 
@@ -386,7 +386,7 @@ describe('AgentsPane', () => {
       "Lid-close behavior follows this device's power settings."
     )
     expect(getAgentAwakeLidNote('X11; Linux x86_64')).toBe(
-      'Orca also asks this device to stay awake when the lid is closed, subject to its power policy.'
+      'Quirky also asks this device to stay awake when the lid is closed, subject to its power policy.'
     )
   })
 
@@ -535,7 +535,7 @@ describe('AgentsPane', () => {
         <AgentPermissionsSetting mode="yolo" autoSupported={false} onChange={vi.fn()} />
       </TooltipProvider>
     )
-    expect(markup).toContain('Auto needs a newer Orca on this host.')
+    expect(markup).toContain('Auto needs a newer Quirky on this host.')
     expect(markup).toMatch(/aria-disabled="true"[^>]*>Auto</)
   })
 

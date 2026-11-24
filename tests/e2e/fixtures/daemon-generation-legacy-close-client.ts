@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import process from 'node:process'
 import type { Store } from '../../../src/main/persistence'
-import { OrcaRuntimeService } from '../../../src/main/runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../../src/main/runtime/quirky-runtime'
 import { RpcDispatcher } from '../../../src/main/runtime/rpc/dispatcher'
 import { SESSION_TAB_METHODS } from '../../../src/main/runtime/rpc/methods/session-tabs'
 import { SESSION_TAB_CLOSE_INTENT_RUNTIME_CAPABILITY } from '../../../src/shared/protocol-version'
@@ -153,7 +153,7 @@ async function main(): Promise<void> {
     }
 
     store = createDaemonGenerationProfileStore(config.cwd)
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     const calls: Record<string, unknown>[] = []
     const sessionByTabId = new Map(config.sessions.map((session) => [session.tabId, session]))
     runtime.setPtyController({
@@ -271,7 +271,7 @@ async function main(): Promise<void> {
         )
         await waitFor(`${session.sessionId} post-close reply`, () =>
           (outputBySessionId.get(session.sessionId) ?? '').includes(
-            `ORCA_GENERATION_CANARY_ACK legacy-close-v${session.protocolVersion}-live ${nonce}`
+            `QUIRKY_GENERATION_CANARY_ACK legacy-close-v${session.protocolVersion}-live ${nonce}`
           )
         )
         postClosePing[session.sessionId] = true

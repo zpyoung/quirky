@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 import { collectLeafIdsInOrder } from './terminal-layout-leaf-ids'
 import type { TerminalPaneLayoutController } from './use-terminal-pane-layout-persistence'
@@ -17,7 +17,7 @@ export function hostPaneTitleUpdates(args: {
   const updates = new Map<number, string | null>()
   const ptyIds = Object.values(args.layout.ptyIdsByLeafId ?? {})
   // Switch point: main publishes every layout; otherwise local tabs are the window's own.
-  if (!ORCA_LAYOUT_OWNER_IS_MAIN && !ptyIds.some((ptyId) => isRemoteRuntimePtyId(ptyId))) {
+  if (!QUIRKY_LAYOUT_OWNER_IS_MAIN && !ptyIds.some((ptyId) => isRemoteRuntimePtyId(ptyId))) {
     return updates
   }
   const hostLeafIds = new Set(collectLeafIdsInOrder(args.layout.root))

@@ -1,5 +1,5 @@
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 import type { AppState } from '@/store/types'
 
 type PreviousActive = { worktreeId: string | null; hostId: ExecutionHostId | null }
@@ -20,7 +20,7 @@ export function markVisited(
   nextHostId?: ExecutionHostId | null
 ): void {
   // Switch point: terminals no longer stamp Recent, so leaving a workspace marks it used up to now.
-  if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+  if (!QUIRKY_SIDEBAR_INPUTS_IS_MAIN) {
     state.markWorktreeVisited(workspaceId)
     return
   }

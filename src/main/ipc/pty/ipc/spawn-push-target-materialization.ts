@@ -5,7 +5,7 @@ import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../../sha
 import { isWslMoveWorktreeBlocked } from '../../../persistence/moving-wsl-projects/wsl-move-background-backoff'
 
 // Why (#17828): pty:spawn is the desktop GUI's own terminal path (new tab, split, reattach) --
-// raw git commands can run here before any Orca-driven sync, so a deferred fork-PR remote must
+// raw git commands can run here before any Quirky-driven sync, so a deferred fork-PR remote must
 // exist first. Mirrors the agent/background-terminal hook in
 // runtime-terminal-spawn-push-target-materialization.ts, which this delegates to; fire-and-forget
 // and a no-op once the remote already exists, so it is safe on every spawn including reattaches.

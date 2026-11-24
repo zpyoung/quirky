@@ -1,5 +1,5 @@
 /**
- * Terminals an older Orca's relay still runs, reached through main's legacy relay bridge.
+ * Terminals an older Quirky's relay still runs, reached through main's legacy relay bridge.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15. Desktop-only; web clients leave it undefined.
  */
 import { ipcRenderer, type IpcRendererEvent } from 'electron'

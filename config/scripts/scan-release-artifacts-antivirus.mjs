@@ -85,7 +85,7 @@ async function fetchExistingReport(sha256, apiKey) {
 }
 
 // Why a separate upload URL above 32MB: the direct endpoint rejects larger
-// files, and every Orca installer is far past that.
+// files, and every Quirky installer is far past that.
 async function uploadArtifact(filePath, apiKey) {
   const { size } = await stat(filePath)
   let endpoint = VIRUSTOTAL_FILES_ENDPOINT

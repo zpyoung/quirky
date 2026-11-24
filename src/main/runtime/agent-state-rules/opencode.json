@@ -13,7 +13,7 @@
   "rules": [
     {
       "id": "name_title",
-      "why": "OpenCode owns its session title, so Orca writes no `ready` title over it; its name is its only other rest sign, so it settles once held, with no quiet asked.",
+      "why": "OpenCode owns its session title, so Quirky writes no `ready` title over it; its name is its only other rest sign, so it settles once held, with no quiet asked.",
       "priority": 100,
       "when": { "region": "title", "status": "idle" },
       "answer": { "state": "idle", "strength": "weak", "requiresQuiet": false }

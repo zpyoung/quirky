@@ -20,13 +20,13 @@ export function JiraConnectPrompt({
     <View style={styles.centered}>
       <TaskProviderLogo provider="jira" size={32} color={colors.textSecondary} />
       <Text style={styles.emptyText}>
-        {unavailableReason ? 'Update Orca desktop' : 'Connect Jira on your desktop'}
+        {unavailableReason ? 'Update Quirky desktop' : 'Connect Jira on your desktop'}
       </Text>
       <Text style={styles.centeredHint}>
         {unavailableReason ??
           (credentialError
             ? `Jira is saved but unreadable: ${credentialError}`
-            : 'Add your Jira site in Orca desktop under Settings → Integrations, then check again.')}
+            : 'Add your Jira site in Quirky desktop under Settings → Integrations, then check again.')}
       </Text>
       <Pressable
         style={styles.checkAgainButton}

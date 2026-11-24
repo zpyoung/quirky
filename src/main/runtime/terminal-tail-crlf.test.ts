@@ -3,7 +3,7 @@ import { normalizeTerminalChunk } from './terminal-ansi-normalization'
 import { appendNormalizedToTailBuffer } from './terminal-tail-buffer'
 import type { RetainedTailRedrawCursor } from './terminal-tail-redraw-buffer'
 import { MAX_TAIL_PARTIAL_CHARS } from './terminal-tail-limits'
-import { readPtyTail, runtimeWithLeaf } from './orca-runtime-pty-leaf.test-fixture'
+import { readPtyTail, runtimeWithLeaf } from './quirky-runtime-pty-leaf.test-fixture'
 
 function ingestChunks(chunks: string[]) {
   let lines: string[] = []

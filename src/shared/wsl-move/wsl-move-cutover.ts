@@ -3,12 +3,12 @@
  * profile store, in its own directory, so a build that knows only SSH journals never reads one.
  */
 import { z } from 'zod'
-import { parseOrcadMigrationManifest } from '../orcad-migration/orcad-migration-manifest-validation'
+import { parseQuirkydMigrationManifest } from '../quirkyd-migration/quirkyd-migration-manifest-validation'
 import type {
-  OrcadMigrationLocalWslManifestSource,
-  OrcadMigrationManifest
-} from '../orcad-migration/orcad-migration-manifest'
-import { isOrcadMigrationLocalWslSource } from '../orcad-migration/orcad-migration-source-kind'
+  QuirkydMigrationLocalWslManifestSource,
+  QuirkydMigrationManifest
+} from '../quirkyd-migration/quirkyd-migration-manifest'
+import { isQuirkydMigrationLocalWslSource } from '../quirkyd-migration/quirkyd-migration-source-kind'
 
 export const WSL_MOVE_CUTOVER_VERSION = 1
 
@@ -46,7 +46,7 @@ const WslMoveCutoverSchema = z.object({
 })
 
 export type WslMoveCutover = Omit<z.infer<typeof WslMoveCutoverSchema>, 'manifest'> & {
-  manifest: OrcadMigrationManifest & { source: OrcadMigrationLocalWslManifestSource }
+  manifest: QuirkydMigrationManifest & { source: QuirkydMigrationLocalWslManifestSource }
 }
 
 /** One in-flight move per distro; WSL resolves distro names case-insensitively. */
@@ -57,10 +57,10 @@ export function wslMoveJournalKey(distro: string): string {
 /** Throws on anything that is not exactly a WSL move whose manifest matches its binding. */
 export function parseWslMoveCutover(value: unknown): WslMoveCutover {
   const record = WslMoveCutoverSchema.parse(value)
-  const manifest = parseOrcadMigrationManifest(record.manifest)
+  const manifest = parseQuirkydMigrationManifest(record.manifest)
   const { source } = manifest
   if (
-    !isOrcadMigrationLocalWslSource(source) ||
+    !isQuirkydMigrationLocalWslSource(source) ||
     manifest.migrationId !== record.migrationId ||
     manifest.manifestSha256 !== record.manifestSha256 ||
     manifest.destinationEnvironmentId !== record.destinationEnvironmentId ||

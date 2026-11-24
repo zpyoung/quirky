@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
 import { z } from 'zod'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { createDesktopMobilePairingOffer } from './helpers/paired-electron-client'
@@ -59,17 +59,17 @@ async function runtimeCall(page: Page, method: string, params: unknown): Promise
 test.describe('switch on', () => {
   test.skip(
     !SIDEBAR_INPUTS_BUILD,
-    'the phone reads the feed only in an ORCA_SIDEBAR_INPUTS=main build'
+    'the phone reads the feed only in an QUIRKY_SIDEBAR_INPUTS=main build'
   )
 
   test('the phone lists the desktop sidebar from the feed, through pins, the open workspace and collapse', async ({
-    orcaPage
+    quirkyPage
   }) => {
     test.setTimeout(180_000)
-    await waitForSessionReady(orcaPage)
-    const activeId = await waitForActiveWorktree(orcaPage)
+    await waitForSessionReady(quirkyPage)
+    const activeId = await waitForActiveWorktree(quirkyPage)
     const repoId = activeId.split('::')[0]
-    const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
+    const phone = pairMobileClient(await createDesktopMobilePairingOffer(quirkyPage))
     for (const name of ['feed-a', 'feed-b']) {
       await phone.call('worktree.create', {
         repo: `id:${repoId}`,
@@ -79,25 +79,27 @@ test.describe('switch on', () => {
     }
     const list = await openPhoneFeedList(phone)
     try {
-      const first = await expectPhoneMatchesDesktop(orcaPage, list)
+      const first = await expectPhoneMatchesDesktop(quirkyPage, list)
       expect(first.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(1)
 
       // A pin on the desktop reaches the phone through a notice, with a Pinned section.
-      await runtimeCall(orcaPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: true })
-      const pinned = await expectPhoneMatchesDesktop(orcaPage, list)
+      await runtimeCall(quirkyPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: true })
+      const pinned = await expectPhoneMatchesDesktop(quirkyPage, list)
       expect(pinned.some((line) => line.startsWith('HEADER Pinned'))).toBe(true)
 
       // Pinned rows also in their groups: the open workspace highlights at both.
-      await orcaPage.evaluate(() =>
+      await quirkyPage.evaluate(() =>
         window.__store!.getState().updateSettings({ showPinnedWorktreesInGroups: true })
       )
-      const duplicated = await expectPhoneMatchesDesktop(orcaPage, list)
+      const duplicated = await expectPhoneMatchesDesktop(quirkyPage, list)
       expect(duplicated.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(2)
 
       // The phone collapses one section with ui.setCollapsed; the desktop and the phone both fold it.
       const project = (await list.sections())?.find((section) => section.repo)
       expect(project).toBeDefined()
-      const before = await orcaPage.evaluate(() => [...window.__store!.getState().collapsedGroups])
+      const before = await quirkyPage.evaluate(() => [
+        ...window.__store!.getState().collapsedGroups
+      ])
       const reply = await list.request('ui.setCollapsed', {
         key: project!.key,
         collapsed: true,
@@ -105,9 +107,9 @@ test.describe('switch on', () => {
       })
       expect(reply).toMatchObject({ ok: true })
       await expect
-        .poll(() => orcaPage.evaluate(() => [...window.__store!.getState().collapsedGroups]))
+        .poll(() => quirkyPage.evaluate(() => [...window.__store!.getState().collapsedGroups]))
         .toEqual([...before, project!.key])
-      const folded = await expectPhoneMatchesDesktop(orcaPage, list)
+      const folded = await expectPhoneMatchesDesktop(quirkyPage, list)
       const foldedSection = (await list.sections())?.find((section) => section.key === project!.key)
       expect(foldedSection?.data).toEqual([])
       expect(foldedSection?.count).toBeGreaterThan(0)
@@ -121,13 +123,13 @@ test.describe('switch on', () => {
           opId: { writer: 'e2e-phone', seq: 2 }
         })
       ).toMatchObject({ ok: true })
-      await expectPhoneMatchesDesktop(orcaPage, list)
+      await expectPhoneMatchesDesktop(quirkyPage, list)
       const unfolded = (await list.sections())?.find((section) => section.key === project!.key)
       expect(unfolded?.data.length).toBeGreaterThan(0)
 
       // Unpinned on the desktop: the Pinned section goes and one highlight is left.
-      await runtimeCall(orcaPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: false })
-      const unpinned = await expectPhoneMatchesDesktop(orcaPage, list)
+      await runtimeCall(quirkyPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: false })
+      const unpinned = await expectPhoneMatchesDesktop(quirkyPage, list)
       expect(unpinned.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(1)
     } finally {
       list.close()
@@ -136,13 +138,13 @@ test.describe('switch on', () => {
   })
 
   test('a project group move reaches the phone while an earlier read is held, with no refresh', async ({
-    orcaPage
+    quirkyPage
   }) => {
     test.setTimeout(180_000)
-    await waitForSessionReady(orcaPage)
-    const activeId = await waitForActiveWorktree(orcaPage)
+    await waitForSessionReady(quirkyPage)
+    const activeId = await waitForActiveWorktree(quirkyPage)
     const repoId = activeId.split('::')[0]
-    const [first, second] = await orcaPage.evaluate(async () => {
+    const [first, second] = await quirkyPage.evaluate(async () => {
       const state = window.__store!.getState()
       return Promise.all(
         ['e2e-first', 'e2e-second'].map(
@@ -152,7 +154,7 @@ test.describe('switch on', () => {
     })
     expect(first && second).toBeTruthy()
     const move = (groupId: string) =>
-      orcaPage.evaluate(
+      quirkyPage.evaluate(
         async ({ repoId, groupId }) => {
           const state = window.__store!.getState()
           const repo = state.repos.find((candidate) => candidate.id === repoId)
@@ -161,7 +163,7 @@ test.describe('switch on', () => {
         { repoId, groupId }
       )
     expect(await move(first!)).toBe(true)
-    const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
+    const phone = pairMobileClient(await createDesktopMobilePairingOffer(quirkyPage))
     const list = await openPhoneFeedList(phone)
     const phoneGroupOf = () => {
       const feed = list.feed()
@@ -170,17 +172,17 @@ test.describe('switch on', () => {
         : undefined
     }
     try {
-      await expectPhoneMatchesDesktop(orcaPage, list)
+      await expectPhoneMatchesDesktop(quirkyPage, list)
       expect(phoneGroupOf()).toBe(first)
 
       // A change the phone reads; the host answers that read before the move lands.
       const hold = list.holdFeedReads()
-      await runtimeCall(orcaPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: true })
+      await runtimeCall(quirkyPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: true })
       await expect.poll(hold.held, { timeout: 30_000 }).toBeGreaterThan(0)
       expect(await move(second!)).toBe(true)
       hold.release()
 
-      await expectPhoneMatchesDesktop(orcaPage, list)
+      await expectPhoneMatchesDesktop(quirkyPage, list)
       expect(phoneGroupOf()).toBe(second)
     } finally {
       list.close()
@@ -189,11 +191,11 @@ test.describe('switch on', () => {
   })
 
   test('an old open page keeps its own reads on a host that serves the feed', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    const phone = pairMobileClient(await createDesktopMobilePairingOffer(quirkyPage))
     try {
       // What a page built before the feed reads, unchanged on this host.
       for (const method of ['worktree.ps', 'mobileRelay.projectSections', 'ui.get', 'repo.list']) {

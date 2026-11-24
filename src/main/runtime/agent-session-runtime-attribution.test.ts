@@ -1,4 +1,4 @@
-// Whether a chat's agent died with the Orca runtime that held it, and how that runtime ended. Only
+// Whether a chat's agent died with the Quirky runtime that held it, and how that runtime ended. Only
 // an owner tagged with an earlier runtime of this build can be attributed; anything unknown keeps
 // the death unattributed, so the chat keeps its generic words.
 
@@ -35,7 +35,7 @@ const OWNER = {
 let directory: string
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-runtime-attribution-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-runtime-attribution-'))
 })
 
 afterEach(async () => {
@@ -71,7 +71,7 @@ async function restartEvidence() {
   return store.getRecord(SESSION)?.lease.deathEvidence ?? null
 }
 
-describe("an agent that died with Orca's previous runtime", () => {
+describe("an agent that died with Quirky's previous runtime", () => {
   it('died in a crash when that runtime started and never ended', async () => {
     await seedHeldBy('runtime-a')
     recorded('runtime-a')

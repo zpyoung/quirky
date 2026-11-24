@@ -41,7 +41,7 @@ export function resolveTerminalDropWorktreePath(
 
 export function joinRuntimeTerminalDropDir(worktreePath: string): string {
   if (isTerminalDropWindowsPathLike(worktreePath)) {
-    return `${worktreePath.replace(/[\\/]+$/, '').replace(/\//g, '\\')}\\.orca\\drops`
+    return `${worktreePath.replace(/[\\/]+$/, '').replace(/\//g, '\\')}\\.quirky\\drops`
   }
-  return `${worktreePath.replace(/[\\/]+$/, '')}/.orca/drops`
+  return `${worktreePath.replace(/[\\/]+$/, '')}/.quirky/drops`
 }

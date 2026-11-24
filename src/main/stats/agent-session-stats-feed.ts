@@ -13,7 +13,7 @@ export type AgentStatusSource = {
 /**
  * Counts agent sessions from hook status transitions, the same truth the sidebar and dashboard
  * read — never from OSC terminal titles, which miss hook-only agents and count any spinner TUI
- * as an agent (#10201). Both the desktop and orcad feed their collector through here (#31112).
+ * as an agent (#10201). Both the desktop and quirkyd feed their collector through here (#31112).
  */
 export function feedAgentSessionStats(
   stats: AgentSessionSink,

@@ -92,7 +92,7 @@ describe('assertNoCarriageReturnsInSource', () => {
   })
 
   it('rejects a CRLF source file, because CRLF changes every asset hash and the buildId', async () => {
-    const scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-eol-'))
+    const scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-eol-'))
     try {
       await writeFile(join(scratch, 'route.tsx'), 'const a = 1\r\nconst b = 2\r\n', 'utf8')
       await expect(assertNoCarriageReturnsInSource(scratch)).rejects.toThrow(

@@ -1,4 +1,4 @@
-export const JIRA_IMAGE_SCHEME = 'orca-jira-image'
+export const JIRA_IMAGE_SCHEME = 'quirky-jira-image'
 export const JIRA_IMAGE_CAPABILITY = 'jira.attachment-images.v1' as const
 export const JIRA_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 export const JIRA_IMAGE_MAX_REFERENCES = 24
@@ -11,7 +11,7 @@ export function jiraImageReference(url: string | undefined): string | null {
     return null
   }
   const match =
-    /^orca-jira-image:\/\/attachment\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
+    /^quirky-jira-image:\/\/attachment\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
       url
     )
   return match?.[1] ?? null

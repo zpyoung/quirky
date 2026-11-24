@@ -11,7 +11,7 @@ import {
   recordPtySurface,
   SURFACE_CLAIM_WITHOUT_STANDING
 } from '../../pty-recorded-surface-topology'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { WindowLayoutCommand } from '../../runtime-layout-apply'
 import {
   placeUnshownLiveTerminals,
@@ -23,7 +23,7 @@ import {
   deriveShutdownReconnectFacts,
   type ShutdownReconnectFacts
 } from '../../terminal/recovery/shutdown-reconnect-facts'
-import { OrcaRuntimeWithAutomationOperations } from './automation-operations'
+import { QuirkyRuntimeWithAutomationOperations } from './automation-operations'
 import {
   panesBoundToAnotherWorkspace,
   panesBoundToGoneLocalTerminals
@@ -34,7 +34,7 @@ import { getExplicitWorktreeIdSelector } from '../../runtime-worktree-selection'
 /** The longest a workspace's first surface waits for main's placement pass. */
 export const FIRST_SURFACE_PLACEMENT_WAIT_MS = 500
 
-export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRuntimeWithAutomationOperations {
+export abstract class QuirkyRuntimeWithRestoredTerminalPlacement extends QuirkyRuntimeWithAutomationOperations {
   abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
   /** Shows a restored pane whose terminal is gone as sleeping, unless it already has a status. */
   protected abstract notePaneSleeping(paneKey: string): void
@@ -90,7 +90,7 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
    */
   async placeUnshownLiveTerminalsOf(worktreeSelector: string): Promise<void> {
     const worktreeId = getExplicitWorktreeIdSelector(worktreeSelector)
-    if (!ORCA_LAYOUT_OWNER_IS_MAIN || !worktreeId) {
+    if (!QUIRKY_LAYOUT_OWNER_IS_MAIN || !worktreeId) {
       return
     }
     try {
@@ -109,7 +109,7 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
    */
   protected livePlacementSettledFor(command: WindowLayoutCommand): Promise<unknown> | null {
     const pass = this.placementPass
-    if (!ORCA_LAYOUT_OWNER_IS_MAIN || !('initial' in command) || !command.initial || !pass) {
+    if (!QUIRKY_LAYOUT_OWNER_IS_MAIN || !('initial' in command) || !command.initial || !pass) {
       return null
     }
     // A sweep's pass places only its own workspace's terminals: another workspace waits for none.

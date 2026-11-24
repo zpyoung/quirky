@@ -1,6 +1,6 @@
 import '../../unused-default-rpc-methods.test-fixture'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { RpcDispatcher } from '../../dispatcher'
 import { TERMINAL_METHODS } from '../terminal'
 import {
@@ -11,7 +11,7 @@ import {
 
 function dispatcher(): RpcDispatcher {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the method reads nothing from the runtime; the dispatcher needs only its id.
-  const runtime = { getRuntimeId: () => 'runtime-1' } as unknown as OrcaRuntimeService
+  const runtime = { getRuntimeId: () => 'runtime-1' } as unknown as QuirkyRuntimeService
   return new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 }
 

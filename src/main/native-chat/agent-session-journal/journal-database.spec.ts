@@ -58,7 +58,7 @@ export function registerJournalDatabaseTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-journal-db-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-journal-db-'))
     dbPath = journalDatabasePath(root)
   })
 
@@ -127,7 +127,7 @@ export function registerJournalDatabaseTests(): void {
       expect(() => openJournalDatabase(failing)).toThrow()
       await expect(stat(`${failing}-wal`)).rejects.toThrow()
       await expect(rm(root, { recursive: true, force: true })).resolves.toBeUndefined()
-      root = await mkdtemp(join(tmpdir(), 'orca-journal-db-'))
+      root = await mkdtemp(join(tmpdir(), 'quirky-journal-db-'))
     })
   })
 

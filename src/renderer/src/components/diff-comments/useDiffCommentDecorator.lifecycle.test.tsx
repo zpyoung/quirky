@@ -41,7 +41,7 @@ vi.mock('react-dom/client', async (importOriginal) => {
   return {
     ...actual,
     createRoot: (container: Element, options?: Parameters<typeof actual.createRoot>[1]) => {
-      const isZoneRoot = container.classList?.contains('orca-diff-comment-inline') ?? false
+      const isZoneRoot = container.classList?.contains('quirky-diff-comment-inline') ?? false
       if (isZoneRoot) {
         rootCounts.created += 1
       }
@@ -102,7 +102,7 @@ function lifecycleTotals(fake: FakeDiffCommentEditor): Record<string, number> {
 }
 
 function isAddButtonVisible(domNode: HTMLElement): boolean {
-  const button = domNode.querySelector<HTMLElement>('.orca-diff-comment-add-btn')
+  const button = domNode.querySelector<HTMLElement>('.quirky-diff-comment-add-btn')
   return button != null && button.style.display !== 'none'
 }
 
@@ -336,12 +336,12 @@ describe('useDiffCommentDecorator model lifecycle', () => {
         }),
       { initialProps: { monacoModelIdentity: 'modified-v1' } }
     )
-    const firstButton = editorDomNode.querySelector('.orca-diff-comment-add-btn')
+    const firstButton = editorDomNode.querySelector('.quirky-diff-comment-add-btn')
     expect(firstButton).not.toBeNull()
 
     hook.rerender({ monacoModelIdentity: 'modified-v2' })
 
-    const replacementButton = editorDomNode.querySelector('.orca-diff-comment-add-btn')
+    const replacementButton = editorDomNode.querySelector('.quirky-diff-comment-add-btn')
     expect(replacementButton).not.toBeNull()
     expect(replacementButton).not.toBe(firstButton)
     expect(disposeMouseMove).toHaveBeenCalledOnce()

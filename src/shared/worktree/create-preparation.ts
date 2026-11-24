@@ -1,5 +1,5 @@
-export const WORKTREE_CREATE_PREPARATION_DIRECTORY = '.orca-preparing'
-export const WORKTREE_CREATE_PREPARATION_LOCK_PREFIX = 'orca-create-preparation:v1:'
+export const WORKTREE_CREATE_PREPARATION_DIRECTORY = '.quirky-preparing'
+export const WORKTREE_CREATE_PREPARATION_LOCK_PREFIX = 'quirky-create-preparation:v1:'
 const WORKTREE_CREATE_PREPARATION_ID_PATTERN =
   /^(\d+)-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 

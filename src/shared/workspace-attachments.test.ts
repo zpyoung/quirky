@@ -378,9 +378,9 @@ describe('workspaceAttachmentReferenceLabel', () => {
         provider: 'jira',
         type: 'issue',
         number: 0,
-        jiraIdentifier: 'ORCA-4'
+        jiraIdentifier: 'QUIRKY-4'
       })
-    ).toBe('ORCA-4')
+    ).toBe('QUIRKY-4')
     expect(
       workspaceAttachmentReferenceLabel({ provider: 'linear', type: 'issue', number: 9 })
     ).toBe('#9')

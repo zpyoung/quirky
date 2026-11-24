@@ -17,7 +17,7 @@ import type * as FileSystem from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import * as processes from '@orca/process-host'
+import * as processes from '@quirky/process-host'
 import { copyProfileStateRecoveryFile } from './profile-state-recovery-copy'
 
 const cloneLink = vi.hoisted(() => ({ unsupported: false }))
@@ -44,7 +44,7 @@ afterEach(() => {
 })
 
 function fixture(large = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-recovery-copy-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-recovery-copy-'))
   directories.push(directory)
   const source = join(directory, '- source with spaces')
   const target = join(directory, 'target')
@@ -59,7 +59,7 @@ function fixture(large = true) {
 }
 
 function expectNoTemporary(directory: string): void {
-  expect(readdirSync(directory).some((name) => name.startsWith('.orca-recovery-clone-'))).toBe(
+  expect(readdirSync(directory).some((name) => name.startsWith('.quirky-recovery-clone-'))).toBe(
     false
   )
 }

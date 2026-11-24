@@ -25,10 +25,10 @@ const UI_ONLY_SELECTORS = [
   '[class*="rich-markdown-search"]',
   // Why: preview annotation controls (add-note button, composer, note stack)
   // render inside `.markdown-body`. The source also carries
-  // `data-orca-export-hide`, so the generic rule below covers renames; this
+  // `data-quirky-export-hide`, so the generic rule below covers renames; this
   // explicit entry covers an attr-strip regression.
   '.markdown-annotation-controls',
-  '[data-orca-export-hide]'
+  '[data-quirky-export-hide]'
 ]
 
 function basenameWithoutExt(filePath: string): string {

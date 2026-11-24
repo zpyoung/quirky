@@ -2,7 +2,7 @@
 // ora, installers, any TUI animates them — so a title carrying nothing else must not
 // authorize a guarded send, which auto-submits with Enter into whatever owns the pane.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { assertTerminalAgentSendable } from './rpc/terminal-agent-send-guard'
 import { detectAgentStatusFromTitle } from '../../shared/agent-detection'
 
@@ -34,11 +34,11 @@ async function createRuntimeWithTitle(
   launchAgent?: 'claude',
   verifiedLaunch = true
 ): Promise<{
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   handle: string
   getForegroundProcess: ReturnType<typeof vi.fn>
 }> {
-  const runtime = new OrcaRuntimeService(null)
+  const runtime = new QuirkyRuntimeService(null)
   const internals = runtime as unknown as {
     resolveTerminalWorkspaceLaunchScope: (selector: string) => Promise<unknown>
   }
@@ -132,7 +132,7 @@ async function readAgentEvidenceAtDeadline<T>(
   }
 }
 
-async function guardedSendResult(runtime: OrcaRuntimeService, handle: string): Promise<string> {
+async function guardedSendResult(runtime: QuirkyRuntimeService, handle: string): Promise<string> {
   try {
     await assertTerminalAgentSendable({ runtime, handle, assertWritable: () => {} })
     return AUTHORIZED

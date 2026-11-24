@@ -17,7 +17,7 @@ From the repository root with dependencies installed and a Node version providin
 `node:sqlite`:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --max-old-space-size=128 docs/audits/session-search-write-fences/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --max-old-space-size=128 docs/audits/session-search-write-fences/reproduce.mjs
 ```
 
 The script bundles the actual writer twice, using the production SQLite schema and
@@ -38,7 +38,7 @@ intermediate flush ownership, failed/incomplete reads, throwing error reporters,
 new-generation protection, idempotent discard, and close:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/ai-vault-search/session-search-write-lifetime.test.ts src/main/ai-vault-search/session-search-file-write.test.ts src/main/ai-vault-search/session-search-index-writer.test.ts src/main/ai-vault-search/session-search-index-consumer.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/ai-vault-search/session-search-write-lifetime.test.ts src/main/ai-vault-search/session-search-file-write.test.ts src/main/ai-vault-search/session-search-index-writer.test.ts src/main/ai-vault-search/session-search-index-consumer.test.ts
 ```
 
 Existing retry bookkeeping can recreate a failed `files` metadata row when a

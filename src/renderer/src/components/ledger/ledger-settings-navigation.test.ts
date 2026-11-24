@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Repo } from '../../../../shared/repo-types'
 import { getLedgerSettingsNavigation } from './ledger-settings-navigation'
 
-const repos = [{ id: 'repo-a', displayName: 'orca' } as Repo]
+const repos = [{ id: 'repo-a', displayName: 'quirky' } as Repo]
 const projectId = 'repo:repo-a'
 
 describe('ledger settings navigation', () => {

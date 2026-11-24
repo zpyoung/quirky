@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Locator, Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { waitForActivePaneHookDescriptor, waitForActiveTerminalManager } from './helpers/terminal'
 
@@ -88,7 +88,7 @@ async function openChat(page: Page, turns: readonly string[]): Promise<void> {
   const descriptor = await waitForActivePaneHookDescriptor(page)
   const [tabId] = descriptor.paneKey.split(':')
   const sessionId = `e2e-long-prompt-${randomUUID()}`
-  const scratchDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-native-chat-long-prompt-'))
+  const scratchDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-native-chat-long-prompt-'))
   const transcriptPath = path.join(scratchDir, `${sessionId}.jsonl`)
   // Distinct, increasing times: the transcript orders its rows by them.
   const startedAt = Date.now() - turns.length * 1_000
@@ -126,16 +126,16 @@ async function scrollTo(target: Locator): Promise<void> {
 }
 
 test.describe('Native chat long user message', () => {
-  test('folds a long prompt and opens it on request', async ({ orcaPage }) => {
+  test('folds a long prompt and opens it on request', async ({ quirkyPage }) => {
     const reply = Array.from(
       { length: 12 },
       (_unused, line) => `Answer paragraph ${line + 1}.`
     ).join('\n\n')
     // Enough after the long prompt that refolding it cannot be rescued by the scroll clamp.
     const middle = Array.from({ length: 6 }, () => ['Another short prompt.', reply]).flat()
-    await openChat(orcaPage, ['A short prompt.', reply, longPrompt('Early'), reply, ...middle])
-    const transcriptWindow = orcaPage.locator('[data-native-chat-window]')
-    const scroller = orcaPage.locator('[data-native-chat-scroll]')
+    await openChat(quirkyPage, ['A short prompt.', reply, longPrompt('Early'), reply, ...middle])
+    const transcriptWindow = quirkyPage.locator('[data-native-chat-window]')
+    const scroller = quirkyPage.locator('[data-native-chat-scroll]')
     const promptRow = (name: string) => {
       const row = transcriptWindow
         .locator('[data-index]')
@@ -153,7 +153,7 @@ test.describe('Native chat long user message', () => {
     const early = promptRow('Early')
     await scroller.hover()
     await expect(async () => {
-      await orcaPage.mouse.wheel(0, -4_000)
+      await quirkyPage.mouse.wheel(0, -4_000)
       await expect(early.line(1)).toBeAttached({ timeout: 500 })
     }).toPass()
     await scrollTo(early.line(1))
@@ -181,11 +181,11 @@ test.describe('Native chat long user message', () => {
   })
 
   test('leaves a prompt alone when its long text already fits the preview', async ({
-    orcaPage
+    quirkyPage
   }) => {
     // Nine source lines, so the text rule picks it, yet it renders shorter than the clip.
-    await openChat(orcaPage, [['One.', 'Two.', 'Three.', 'Four.', 'Five.'].join('\n\n'), 'Done.'])
-    const transcriptWindow = orcaPage.locator('[data-native-chat-window]')
+    await openChat(quirkyPage, [['One.', 'Two.', 'Three.', 'Four.', 'Five.'].join('\n\n'), 'Done.'])
+    const transcriptWindow = quirkyPage.locator('[data-native-chat-window]')
     await expect(transcriptWindow.getByText('Five.')).toBeVisible()
     await expect(transcriptWindow.getByRole('button', { name: 'Show full message' })).toHaveCount(0)
     await expect(transcriptWindow.locator('[data-native-chat-user-message-folded]')).toHaveCount(0)

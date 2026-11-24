@@ -12,7 +12,7 @@ describe('DaemonAutomaticWorkGuard growth breaker', () => {
   let now: number
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-growth-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-growth-'))
     rows = [{ pid: 100, ppid: 1 }]
     now = 0
   })
@@ -97,7 +97,7 @@ describe('DaemonAutomaticWorkGuard growth breaker', () => {
 
 describe('DaemonAutomaticWorkGuard stop request', () => {
   it('records an outside stop on the marker before teardown, so a cut-short exit is no crash', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-stop-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-stop-'))
     try {
       const markerPath = join(dir, 'daemon-v1.automatic-work-run.json')
       const options = {

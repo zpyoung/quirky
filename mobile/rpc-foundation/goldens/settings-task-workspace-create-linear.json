@@ -35,7 +35,7 @@
             "name": "orc-1",
             "repo": "id:repo-1",
             "setupDecision": "inherit",
-            "startupDraft": "https://linear.app/orca/issue/ORC-1"
+            "startupDraft": "https://linear.app/quirky/issue/ORC-1"
           }
         },
         {
@@ -167,7 +167,7 @@
     "e0423a9e6995": {
       "name": "worktree.create#1",
       "ordinal": 7,
-      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"worktree.create\",\"params\":{\"repo\":\"id:repo-1\",\"name\":\"orc-1\",\"displayName\":\"ORC-1 Recorded issue\",\"displayNameKind\":\"generated\",\"linkedLinearIssue\":\"ORC-1\",\"setupDecision\":\"inherit\",\"activate\":true,\"startupDraft\":\"https://linear.app/orca/issue/ORC-1\",\"createdWithAgent\":\"claude\"}}"
+      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"worktree.create\",\"params\":{\"repo\":\"id:repo-1\",\"name\":\"orc-1\",\"displayName\":\"ORC-1 Recorded issue\",\"displayNameKind\":\"generated\",\"linkedLinearIssue\":\"ORC-1\",\"setupDecision\":\"inherit\",\"activate\":true,\"startupDraft\":\"https://linear.app/quirky/issue/ORC-1\",\"createdWithAgent\":\"claude\"}}"
     },
     "e0a8ee1f3c00": {
       "name": "creatingKey",
