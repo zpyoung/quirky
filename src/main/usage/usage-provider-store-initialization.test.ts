@@ -1,10 +1,8 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import type * as FsPromises from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { UsageProviderStoreLifecycle } from './usage-provider-store-lifecycle'
-import { UsageCacheSnapshotWriter } from '../usage-cache-snapshot-writer'
 import type { UsageScanWorktreeRef } from './usage-provider-contract'
 import {
   usageSourceCachePath,
@@ -12,32 +10,6 @@ import {
   type UsageCacheSplitResult,
   type UsageSourceCacheRef
 } from './usage-source-cache-file'
-
-const { identityWriteGate } = vi.hoisted(() => ({
-  identityWriteGate: {
-    prefix: '',
-    pending: Promise.resolve(),
-    entered: vi.fn()
-  }
-}))
-
-vi.mock('node:fs/promises', async () => {
-  const actual = await vi.importActual<typeof FsPromises>('node:fs/promises')
-  return {
-    ...actual,
-    open: async (...args: Parameters<typeof actual.open>) => {
-      if (
-        args[1] === 'w' &&
-        identityWriteGate.prefix &&
-        String(args[0]).startsWith(identityWriteGate.prefix)
-      ) {
-        identityWriteGate.entered()
-        await identityWriteGate.pending
-      }
-      return actual.open(...args)
-    }
-  }
-})
 
 type TestState = {
   schemaVersion: number
@@ -161,9 +133,6 @@ beforeEach(() => {
   cacheFile = join(directory, 'usage.json')
   stores = []
   releasePending = []
-  identityWriteGate.prefix = ''
-  identityWriteGate.pending = Promise.resolve()
-  identityWriteGate.entered.mockClear()
 })
 
 afterEach(async () => {
@@ -343,39 +312,4 @@ it('extends whenLoaded through an asynchronous provider report parser', async ()
     sessions: cached.sessions,
     scanState: { enabled: true }
   })
-})
-
-it('drains the pending analytics writer after an inline preference write rejects', async () => {
-  const cached = historicalState()
-  writeLargeLegacyCache(cached)
-  vi.spyOn(console, 'warn').mockImplementation(() => {})
-  const store = createStore({
-    splitCacheFile: async () => {
-      throw new Error('usage worker unavailable')
-    }
-  })
-  await store.whenLoaded()
-  rmSync(cacheFile)
-  await expect(store.setEnabled(true)).rejects.toMatchObject({ code: 'ENOENT' })
-  const identityFile = join(directory, 'usage-analytics-session-ids.json')
-  const pending = Promise.withResolvers<void>()
-  releasePending.push(() => pending.resolve(undefined))
-  identityWriteGate.prefix = identityFile
-  identityWriteGate.pending = pending.promise
-  const identity = store.getAnalyticsSessionIds(['session-with-pending-identity'])
-  await vi.waitFor(() => expect(identityWriteGate.entered).toHaveBeenCalledTimes(1))
-  const writerFlush = vi.spyOn(UsageCacheSnapshotWriter.prototype, 'flush')
-  const flushed = vi.fn()
-  const flushing = store.flush().then(flushed)
-  await nextTurn()
-  expect(writerFlush).toHaveBeenCalled()
-  expect(flushed).not.toHaveBeenCalled()
-  pending.resolve(undefined)
-  await expect(flushing).resolves.toBeUndefined()
-  const [id] = await identity
-  expect(JSON.parse(readFileSync(identityFile, 'utf8'))).toMatchObject({
-    entries: [['session-with-pending-identity', id]]
-  })
-  expect(writerFlush).toHaveBeenCalledTimes(2)
-  expect(store.getSnapshot().processedSources).toEqual([])
 })

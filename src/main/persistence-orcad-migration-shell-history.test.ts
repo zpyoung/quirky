@@ -33,8 +33,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-
 let desktopHistory: string
 
 // A lone WSL bash history follows the host pane's shell; these cases pin it to bash.

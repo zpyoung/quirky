@@ -61,7 +61,7 @@ async function fixture() {
   const unreleasedMarkdown =
     '---\nname: orca-cli\ndescription: Main between releases.\n---\n\n# Unreleased\n'
   await Promise.all([
-    writeSkillLock(homeDir, { source: 'stablyai/orca', skillFolderHash: 'b'.repeat(40) }),
+    writeSkillLock(homeDir, { source: 'zpyoung/quirky', skillFolderHash: 'b'.repeat(40) }),
     writeFile(
       join(resourceRoot, 'skills', 'current-manifest.json'),
       `${JSON.stringify({ schemaVersion: 3, skills: [bundleEntry(currentMarkdown)] }, null, 2)}\n`
@@ -120,7 +120,7 @@ describe('read-only skill freshness inventory', () => {
     const inventory = await test.scan()
 
     expect(inventory.installations.map((entry) => entry.status)).toEqual(['outdated'])
-    expect(inventory.installations[0]?.lockSource).toBe('stablyai/orca')
+    expect(inventory.installations[0]?.lockSource).toBe('zpyoung/quirky')
     expect(inventory.eligibleUpdateNames).toEqual(['orca-cli'])
     expect(getSkillFreshnessDisplayStatus(inventory, 'orca-cli')).toBe('update-available')
   })
@@ -161,7 +161,7 @@ describe('read-only skill freshness inventory', () => {
       const test = await fixture()
       await test.writeSkill(join(test.homeDir, '.agents', 'skills'), test.unreleasedMarkdown)
       await writeSkillLock(test.homeDir, {
-        source: 'stablyai/orca',
+        source: 'zpyoung/quirky',
         skillFolderHash: '7ad2f1fd'.repeat(8)
       })
 

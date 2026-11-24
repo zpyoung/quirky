@@ -20,7 +20,6 @@ vi.mock('../../store', () => ({
 vi.mock('../agent-hook-completion-notifications', () => ({
   observeAgentHookCompletionForNotification: mocks.observe
 }))
-vi.mock('@/lib/telemetry', () => ({ track: vi.fn() }))
 
 import { createAgentStatusEventApplicator } from './agent-status-event-applicator'
 

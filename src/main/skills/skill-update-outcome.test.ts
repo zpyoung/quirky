@@ -24,7 +24,7 @@ function placement(
     topology,
     status,
     currentPackageDigest: 'current',
-    lockSource: 'stablyai/orca',
+    lockSource: 'zpyoung/quirky',
     errorCategory: null
   }
 }

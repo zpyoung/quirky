@@ -18,9 +18,6 @@ import { EditorPanelHeaderPath } from './EditorPanelHeaderPath'
 import { useDiffNavigation } from './diff-navigation-context'
 import { useShortcutKeyDetails } from '@/hooks/useShortcutLabel'
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
-import type { ArtifactWriteRequest } from '../../../../shared/artifacts'
-import { ArtifactPublishButton } from '@/components/artifacts/fork-artifact-passwords/ArtifactPublishButton'
-import { editorArtifactSourceKey } from './editor-artifact-upload'
 
 type EditorPanelHeaderProps = {
   activeFile: OpenFile
@@ -53,7 +50,6 @@ type EditorPanelHeaderProps = {
   onToggleMarkdownTableOfContents: () => void
   onToggleMarkdownFrontmatter: () => void
   onExportMarkdownToPdf: () => void
-  createArtifactRequest?: () => Promise<ArtifactWriteRequest>
 }
 
 export function EditorPanelHeader({
@@ -86,8 +82,7 @@ export function EditorPanelHeader({
   onEditorToggleChange,
   onToggleMarkdownTableOfContents,
   onToggleMarkdownFrontmatter,
-  onExportMarkdownToPdf,
-  createArtifactRequest
+  onExportMarkdownToPdf
 }: EditorPanelHeaderProps): React.JSX.Element {
   const { comments: diffComments } = useVisibleWorktreeDiffComments(activeFile.worktreeId)
   const activeGroupId = useAppStore((s) => s.activeGroupIdByWorktree[activeFile.worktreeId])
@@ -313,13 +308,6 @@ export function EditorPanelHeader({
           </Tooltip>
         </TooltipProvider>
       )}
-      {!isDiffSurface && createArtifactRequest ? (
-        <ArtifactPublishButton
-          sourceKey={editorArtifactSourceKey(activeFile)}
-          className="size-6 [&_svg]:size-3.5!"
-          createRequest={createArtifactRequest}
-        />
-      ) : null}
       <EditorPanelActionsMenu
         fileLocationActions={
           activeFile.mode === 'edit' ||

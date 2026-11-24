@@ -54,12 +54,6 @@ vi.mock('../../../../shared/remote-runtime-pty-id', async (importOriginal) => ({
   ...(await importOriginal<typeof RemoteRuntimePtyIdModule>()),
   isRemoteRuntimePtyId: () => false
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({
-  emitNativeChatMessageSent: vi.fn(),
-  emitNativeChatPickerItemAccepted: vi.fn(),
-  emitNativeChatPickerOpened: vi.fn(),
-  emitNativeChatSendClassified: vi.fn()
-}))
 vi.mock('../right-sidebar/ai-vault-panel-workspace', () => ({
   selectAiVaultPanelWorkspace: () => ({ worktree: { id: 'wt-1' }, repo: null })
 }))

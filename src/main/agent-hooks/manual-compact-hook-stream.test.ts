@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { RelayAgentHookServer } from '../../wsl-guest/agent-hook-server'
 import { seedLegacyAgentStatusForTests } from '../../shared/agent-hook-listener/listener-state'
@@ -11,9 +11,6 @@ import type { AgentHookRelayEnvelope } from '../../shared/agent-hook-relay'
 import type { AgentSubagentSnapshot } from '../../shared/agent-status-types'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { AgentHookServer } from './server'
-
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
 
 const PANE_KEY = makePaneKey('manual-compact', '11111111-1111-4111-8111-111111111111')
 const COMPACT_PROMPT_ID = '22222222-2222-4222-8222-222222222222'

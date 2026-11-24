@@ -32,11 +32,6 @@ vi.mock('../use-native-chat-skills', () => ({
     return { status: 'ready', skills: SKILLS, error: null, retry: () => {} }
   }
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({
-  emitNativeChatPickerItemAccepted: vi.fn(),
-  emitNativeChatPickerOpened: vi.fn(),
-  emitNativeChatSendClassified: vi.fn()
-}))
 
 import { useNativeChatPickerState } from '../use-native-chat-picker-state'
 

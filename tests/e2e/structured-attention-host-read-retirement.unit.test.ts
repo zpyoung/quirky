@@ -13,11 +13,6 @@ import {
 } from '../../src/main/runtime/runtime-mobile-notification-controller'
 import { createStructuredAttentionMobileDelivery } from '../../src/main/runtime/structured-agent-session-mobile-attention'
 import {
-  createHarness,
-  flush,
-  registration
-} from '../../src/main/runtime/push/push-dispatcher.test-fixture'
-import {
   call,
   installStructuredHostStub,
   clearStructuredHostStub,
@@ -215,7 +210,7 @@ it('keeps missing-origin and other-journal deliveries outside a bounded read', (
   expect(h.events.filter((event) => event.type === 'dismiss')).toHaveLength(1)
 })
 
-it('a restart sends the original delivery fence in the existing native gateway fields', async () => {
+it('a restart retires the original delivery through its fence', async () => {
   const h = attentionPath(directory)
   const cursor = h.add('A')
   const original = h.events.find((event) => event.type === 'notification')
@@ -224,16 +219,11 @@ it('a restart sends the original delivery fence in the existing native gateway f
   }
   await h.controller.closeDismissals()
   const restarted = storeController(directory)
-  const gateway = createHarness({
-    devices: [{ deviceId: 'phone', pushRegistration: registration() }]
-  })
   const retirement: MobileNotificationEvent[] = []
   restarted.onDispatched((event) => {
     retirement.push(event)
-    gateway.dispatcher.enqueue(event)
   })
   restarted.retireStructuredAttention({ sessionId: SESSION, observedCursor: cursor })
-  await flush()
   expect(retirement).toEqual([
     expect.objectContaining({
       notificationEpoch: restarted.getEpoch(),
@@ -246,13 +236,6 @@ it('a restart sends the original delivery fence in the existing native gateway f
     })
   ])
   expect(restarted.getEpoch()).not.toBe(original.notificationEpoch)
-  expect(gateway.sends).toHaveLength(1)
-  expect(gateway.sends[0]?.notification).toMatchObject({
-    kind: 'dismiss',
-    notificationId: original.notificationId,
-    notificationEpoch: original.notificationEpoch,
-    notificationSeq: original.notificationSeq
-  })
 })
 
 it('skips a host that supports only the old session-wide acknowledgement', async () => {

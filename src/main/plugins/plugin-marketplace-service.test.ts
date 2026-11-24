@@ -6,15 +6,9 @@ import type {
   PluginMarketplace,
   PluginMarketplaceGitSource
 } from '../../shared/plugins/plugin-marketplace'
-import { OFFICIAL_MARKETPLACE_GIT_SOURCE } from '../../shared/plugins/plugin-marketplace'
 import type { PluginMarketplaceFetchResult } from './plugin-marketplace-fetch'
 import { PluginMarketplaceService } from './plugin-marketplace-service'
-import {
-  marketplaceSourceId,
-  PLUGIN_MARKETPLACE_SOURCE_LIMIT,
-  PluginMarketplaceStore,
-  type PluginMarketplaceRegisteredSource
-} from './plugin-marketplace-store'
+import type { PluginMarketplaceRegisteredSource } from './plugin-marketplace-store'
 
 const roots: string[] = []
 
@@ -210,116 +204,6 @@ describe('PluginMarketplaceService', () => {
     await expect(service.findPlugin(added.id, 'community.recipes')).resolves.toEqual(
       expect.objectContaining({ pluginKey: 'community.recipes' })
     )
-  })
-
-  it('seeds the official marketplace once and keeps it configured across restarts', async () => {
-    const root = await tempRoot()
-    const officialMarketplace = marketplace(
-      'Orca Plugins',
-      'stablyai.orca-notes',
-      'https://github.com/stablyai/orca-notes.git'
-    )
-    officialMarketplace.owner = 'stablyai'
-    const fetcher = vi.fn(async () => fetched(officialMarketplace))
-    const first = new PluginMarketplaceService({ pluginsDataDir: root, fetcher })
-
-    await expect(first.seedOfficialSource()).resolves.toMatchObject({
-      official: true,
-      marketplace: { name: 'Orca Plugins' }
-    })
-    await expect(first.seedOfficialSource()).resolves.toMatchObject({ official: true })
-    expect(fetcher).toHaveBeenCalledTimes(1)
-
-    const restarted = new PluginMarketplaceService({ pluginsDataDir: root, fetcher })
-    await expect(restarted.seedOfficialSource()).resolves.toMatchObject({ official: true })
-    expect(fetcher).toHaveBeenCalledTimes(1)
-    await expect(restarted.listSources()).resolves.toHaveLength(1)
-  })
-
-  it('persists an offline official source for a later refresh and does not remove it', async () => {
-    const service = new PluginMarketplaceService({
-      pluginsDataDir: await tempRoot(),
-      fetcher: async () => {
-        throw new Error('offline')
-      }
-    })
-
-    const seeded = await service.seedOfficialSource()
-
-    expect(seeded).toMatchObject({ official: true, stale: true, marketplace: null })
-    await expect(service.removeSource(seeded.id)).rejects.toThrow('cannot be removed')
-    await expect(service.listSources()).resolves.toEqual([seeded])
-  })
-
-  it('keeps reads usable and allows retry after official seeding rejects', async () => {
-    const registered: PluginMarketplaceRegisteredSource = {
-      id: marketplaceSourceId(OFFICIAL_MARKETPLACE_GIT_SOURCE),
-      source: OFFICIAL_MARKETPLACE_GIT_SOURCE,
-      addedAt: 1
-    }
-    const officialMarketplace = marketplace(
-      'Orca Plugins',
-      'stablyai.orca-notes',
-      'https://github.com/stablyai/orca-notes.git'
-    )
-    officialMarketplace.owner = 'stablyai'
-    const listSources = vi
-      .fn<() => Promise<readonly PluginMarketplaceRegisteredSource[]>>()
-      .mockRejectedValueOnce(new Error('source store temporarily unavailable'))
-      .mockResolvedValue([registered])
-    const store = {
-      listSources,
-      readSnapshot: vi.fn().mockResolvedValue(null),
-      writeSnapshot: vi.fn(async ({ source: snapshotSource, ...snapshot }) => ({
-        schemaVersion: 1 as const,
-        sourceId: snapshotSource.id,
-        source: snapshotSource.source,
-        fetchedAt: 2,
-        ...snapshot
-      }))
-    } as unknown as PluginMarketplaceStore
-    const service = new PluginMarketplaceService({
-      pluginsDataDir: await tempRoot(),
-      store,
-      fetcher: async () => fetched(officialMarketplace)
-    })
-
-    await expect(service.seedOfficialSource()).rejects.toThrow('temporarily unavailable')
-    await expect(service.listSources()).resolves.toEqual([
-      expect.objectContaining({ id: registered.id, official: true })
-    ])
-    await expect(service.seedOfficialSource()).resolves.toMatchObject({
-      marketplace: { name: 'Orca Plugins' },
-      official: true
-    })
-  })
-
-  it('recovers the managed source after a full existing store frees a slot', async () => {
-    const root = await tempRoot()
-    const store = new PluginMarketplaceStore(root)
-    const registrations = await Promise.all(
-      Array.from({ length: PLUGIN_MARKETPLACE_SOURCE_LIMIT }, (_, index) =>
-        store.addSource(source(`https://example.com/community-${index}.git`), index + 1)
-      )
-    )
-    const officialMarketplace = marketplace(
-      'Orca Plugins',
-      'stablyai.orca-notes',
-      'https://github.com/stablyai/orca-notes.git'
-    )
-    officialMarketplace.owner = 'stablyai'
-    const service = new PluginMarketplaceService({
-      pluginsDataDir: root,
-      store,
-      fetcher: async () => fetched(officialMarketplace)
-    })
-
-    await expect(service.seedOfficialSource()).rejects.toThrow('source limit')
-    await expect(service.removeSource(registrations[0]!.id)).resolves.toBe(true)
-
-    const sources = await service.listSources()
-    expect(sources).toHaveLength(PLUGIN_MARKETPLACE_SOURCE_LIMIT)
-    expect(sources).toContainEqual(expect.objectContaining({ official: true }))
   })
 
   it('removes source metadata and browse listings together', async () => {

@@ -10,7 +10,6 @@ import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-ov
 import type { GitHubWorkItem } from '../../../../shared/github/work-item-types'
 import type { TaskSourceContext } from '../../../../shared/task-source-context'
 import type { WorkspaceStatus } from '../../../../shared/worktree/types'
-import type { WorkspaceSource as WorkspaceCreateTelemetrySource } from '../../../../shared/workspace-source'
 import type { LinkedWorkItemSummary } from '@/lib/new-workspace'
 import type { ComposerDecisions } from './composer-decisions'
 import type { WorkspaceCreationTargetHint } from '@/lib/project-host-workspace-target'
@@ -32,7 +31,6 @@ export type ComposerStateInput = {
   isSubmissionCancelled?: () => boolean
   repoIdOverride?: string
   onRepoIdOverrideChange?: (value: string) => void
-  telemetrySource?: WorkspaceCreateTelemetrySource
   enableIssueAutomation?: boolean
 }
 
@@ -55,7 +53,6 @@ export function useComposerTargetStore(options: ComposerStateInput, decisions: C
     isSubmissionCancelled = NEVER_CANCEL_COMPOSER_SUBMIT,
     repoIdOverride,
     onRepoIdOverrideChange,
-    telemetrySource,
     enableIssueAutomation = true,
     initialProjectGroupId
   } = options
@@ -172,7 +169,6 @@ export function useComposerTargetStore(options: ComposerStateInput, decisions: C
     isSubmissionCancelled,
     repoIdOverride,
     onRepoIdOverrideChange,
-    telemetrySource,
     enableIssueAutomation,
     initialProjectGroupId,
     decisions,

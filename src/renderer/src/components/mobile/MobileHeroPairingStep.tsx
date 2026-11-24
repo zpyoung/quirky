@@ -205,8 +205,6 @@ export function MobileHeroPairingStep({
           value={connectionMode}
           onChange={onConnectionModeChange}
           compact
-          relayMintFailed={relayMintFailure != null}
-          relayMintRetrying={relayMintFailure != null && pairLoading}
         />
         <MobileRelayBetaNotice className="mt-1.5" />
       </div>

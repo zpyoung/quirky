@@ -29,7 +29,6 @@ import { prepareCodexSessionResumeForLaunch } from './codex-session-resume-launc
 import { startWindowsDesktopBeforeShellPathReady } from './windows-desktop-shell-path-startup'
 import { repairKnownPoisonedInstallDirBeforeWindow } from './windows-install-dir-acl-recovery'
 import { installServeQuitHandling } from './serve-quit-handling'
-import { installCloudSessionShutdownFlush } from './cloud-session-shutdown-flush'
 import { registerHeadlessServeSshHandlers } from './headless-serve-ssh-registration'
 import { settleServeDesktopActivation } from './serve-desktop-activation'
 import {
@@ -40,7 +39,6 @@ import { registerCliForHeadlessServe } from './serve-cli-registration'
 import { startAppImageCopyPreExtraction } from '../cli/appimage-copy-pre-extraction'
 import { scheduleAllPendingHistoryTreeRemovals } from '../terminal-history-deletion'
 import { triggerStartupNotificationRegistration } from '../ipc/startup-notification-registration'
-import { startDesktopPushService } from './main-process-push-startup'
 import { mainProcessState as state } from './main-process-state'
 import { logStartupMilestone } from './startup-diagnostics'
 import { setupHeadlessServeAutoUpdater } from '../window/main-window-updater'
@@ -181,7 +179,6 @@ async function launchServeMode(
   scheduleAgentLaunchRecordWarmup(null)
   // Why: a phone paired to a headless host still registers and unregisters its token;
   // it simply never receives a push, because nothing dispatches notifications here.
-  startDesktopPushService(runtimeRpc)
   settleDesktopActivation()
   installServeQuitHandling()
   await registerCliForHeadlessServe()
@@ -244,7 +241,6 @@ async function launchDesktopMode(
   await state.initialProxyApplicationReady
   // Why after the proxy await: the push gateway client is an app-owned fetcher, so it must not
   // issue its first request ahead of the persisted proxy.
-  startDesktopPushService(runtimeRpc)
   // Why: macOS notification permission dialog must fire after the window is shown, else it's hidden behind the maximized window.
   win.once('show', () => {
     // Why: store can be null if init failed earlier; bail rather than throw inside an Electron event listener.
@@ -272,7 +268,6 @@ export async function initializeMainProcessRuntimeLaunch(
     return
   }
   state.serveOptions = serveOptions
-  installCloudSessionShutdownFlush()
   const runtimeRpc = installRuntimeRpc(runtime, serveOptions)
   const shellPathReady = shellPathHydration.whenReady()
   // Why published: the renderer's git-environment barrier must fence on the same

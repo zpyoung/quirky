@@ -38,9 +38,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn().mockReturnValue({}) }))
-
 async function createStore() {
   if (!hasCreatedStoreInCase) {
     hasCreatedStoreInCase = true

@@ -1,7 +1,4 @@
 import { useCallback } from 'react'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
-import { toVisibleTabType } from '../../../../shared/tab-types'
-import { track } from '@/lib/telemetry'
 import { useAppStore } from '../../store'
 import { captureWorkspaceEmptiedReaction } from './workspace-emptied-reaction'
 import { isEditorTabContentType } from '@/store/slices/editor/tabs/editor-tab-content-type'
@@ -99,17 +96,6 @@ export function useTabGroupCloseScopeCommands({
       )
       if (!group?.tabOrder.includes(itemId)) {
         return
-      }
-      const item = (state.unifiedTabsByWorktree[worktreeId] ?? []).find(
-        (candidate) => candidate.groupId === groupId && candidate.id === itemId
-      )
-      if (item) {
-        track('tabs_directional_close_requested', {
-          direction,
-          tab_type: toVisibleTabType(item.contentType),
-          surface: worktreeId === FLOATING_TERMINAL_WORKTREE_ID ? 'floating' : 'workspace',
-          eligible_tab_count: selectTabIds(direction, itemId).length
-        })
       }
       confirmBulkClose(direction, () => selectTabIds(direction, itemId), closeMany)
     },

@@ -35,10 +35,7 @@ export class PluginBundledBootstrapCoordinator {
     const result = await (this.options.bootstrap ?? bootstrapBundledPlugins)({
       root: this.options.root,
       userDataPath: this.options.userDataPath,
-      hostVersion: this.options.hostVersion,
-      ...(this.options.blockedPluginReason
-        ? { blockedPluginReason: this.options.blockedPluginReason }
-        : {})
+      hostVersion: this.options.hostVersion
     })
     if (result.installed.length > 0) {
       await this.options.refreshPlugins()

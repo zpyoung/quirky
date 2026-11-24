@@ -20,8 +20,6 @@ vi.mock('electron', () => ({
     }
   }
 }))
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 vi.mock('./repos-changed-notification', () => ({ notifyReposChanged: vi.fn() }))
 
 const linkedItems: WorkspaceAttachment[] = [

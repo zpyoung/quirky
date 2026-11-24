@@ -1,7 +1,3 @@
-import {
-  appendDiagnosticBundleLines,
-  type CrashReportDiagnosticBundle
-} from './crash-reporting-diagnostic-bundle'
 import { appendMinidumpSignatureLines } from './crash-report-signature-lines'
 import { formatCrashReportExitCode } from './crash-report-exit-code'
 import { appendBoundaryAttributionLines } from './crash-report-attribution-lines'
@@ -13,8 +9,6 @@ export {
   sanitizeCrashReportDetails,
   sanitizeCrashReportString
 } from './crash-report-redaction'
-
-export type { CrashReportDiagnosticBundle } from './crash-reporting-diagnostic-bundle'
 
 export type CrashReportStatus = 'pending' | 'sent' | 'dismissed'
 export type CrashReportSource = 'renderer' | 'child'
@@ -100,46 +94,18 @@ export type ReactErrorBoundaryReportResult =
   | { ok: true; report: CrashReportRecord | null; deduped: boolean }
   | { ok: false; error: string }
 
-export type CrashReportSubmitArgs = {
-  reportId?: string
-  notes?: string
-  includeDiagnosticLogs?: boolean
-  submitAnonymously?: boolean
-  githubLogin: string | null
-  githubEmail: string | null
-}
-
-export type CrashReportSubmitResult =
-  | { ok: true; report: CrashReportRecord | null; diagnosticBundle?: CrashReportDiagnosticBundle }
-  | {
-      ok: false
-      status: number | null
-      error: string
-      report?: CrashReportRecord | null
-      diagnosticBundle?: CrashReportDiagnosticBundle
-    }
-
-export type CrashReportCopySubmissionFailure = {
-  error: string
-  diagnosticContext?:
-    | { status: 'uploaded'; ticketId: string }
-    | { status: 'not_uploaded'; reason: string }
-}
-
 export type CrashReportCopyDiagnosticsArgs = {
   reportId?: string
   notes?: string
-  submissionFailure?: CrashReportCopySubmissionFailure
 }
 
-// User notes need a prose budget, separate from 240-character telemetry values.
+// User notes need a prose budget.
 export const MAX_USER_NOTES_LENGTH = 8_000
 // Bound redaction work while allowing redacted input to contract into the output budget.
 const MAX_USER_NOTES_SANITIZE_LENGTH = MAX_USER_NOTES_LENGTH * 2
 const USER_NOTES_TRUNCATION_SUFFIX = '...'
 const MAX_FORMATTED_REPORT_LENGTH = 64_000
-const FORMATTED_REPORT_TRUNCATION_SUFFIX =
-  '\n\n[Crash report truncated to fit feedback endpoint limits.]'
+const FORMATTED_REPORT_TRUNCATION_SUFFIX = '\n\n[Crash report truncated.]'
 export function isCrashReportReason(reason: string): boolean {
   return [
     'abnormal-exit',
@@ -190,11 +156,7 @@ function appendUserNotesLines(lines: string[], notes: string | undefined): void 
   )
 }
 
-export function formatCrashReportText(
-  report: CrashReportRecord,
-  notes?: string,
-  diagnosticBundle?: CrashReportDiagnosticBundle
-): string {
+export function formatCrashReportText(report: CrashReportRecord, notes?: string): string {
   const lines = [
     '[Crash Report]',
     '',
@@ -214,7 +176,6 @@ export function formatCrashReportText(
   appendUserNotesLines(lines, notes)
   appendMinidumpSignatureLines(lines, report.details)
   appendBoundaryAttributionLines(lines, report.details)
-  appendDiagnosticBundleLines(lines, diagnosticBundle, sanitizeCrashReportString)
 
   const details = Object.entries(report.details)
   if (details.length > 0) {
@@ -241,8 +202,7 @@ export function formatCrashReportText(
 
 export function formatUncapturedCrashReportText(
   context: UncapturedCrashReportContext,
-  notes?: string,
-  diagnosticBundle?: CrashReportDiagnosticBundle
+  notes?: string
 ): string {
   const lines = [
     '[Crash Report]',
@@ -262,7 +222,6 @@ export function formatUncapturedCrashReportText(
 
   appendUserNotesLines(lines, notes)
   lines.push('', 'Details:', '- captured_crash_report: false', '- report_source: help_menu')
-  appendDiagnosticBundleLines(lines, diagnosticBundle, sanitizeCrashReportString)
 
   return truncateFormattedCrashReport(lines.join('\n'))
 }
@@ -271,7 +230,6 @@ function truncateFormattedCrashReport(text: string): string {
   if (text.length <= MAX_FORMATTED_REPORT_LENGTH) {
     return text
   }
-  // The report cap leaves Slack-specific attachment handling to the feedback service.
   const budget = MAX_FORMATTED_REPORT_LENGTH - FORMATTED_REPORT_TRUNCATION_SUFFIX.length
   return `${text.slice(0, Math.max(0, budget)).trimEnd()}${FORMATTED_REPORT_TRUNCATION_SUFFIX}`
 }

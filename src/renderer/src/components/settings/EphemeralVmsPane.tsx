@@ -111,8 +111,7 @@ export function EphemeralVmsPane(): React.JSX.Element {
   const openWorkspaceComposerForRecipe = (repoId: string, recipeId: string): void => {
     openModal('new-workspace-composer', {
       initialRepoId: repoId,
-      initialEphemeralVmRecipeId: recipeId,
-      telemetrySource: 'settings'
+      initialEphemeralVmRecipeId: recipeId
     })
   }
 

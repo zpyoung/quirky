@@ -2,7 +2,6 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
-import { codexOpenCodeTokenSessions } from '../usage/agent-token-usage'
 import { createUsageWorktreeResolver } from '../usage/usage-worktree-resolver'
 import { getDefaultState, normalizePersistedState } from './persisted-state-normalization'
 import { writeOpenCodeUsageDatabase } from './opencode-usage-sqlite-fixture'
@@ -83,17 +82,6 @@ it.each(['v1', 'v2-only'] as const)(
       })
       expect(state.sessions[0]?.modelBreakdown[0]?.cacheWriteInputTokens).toBe(1024)
       expect(state.sessions[0]?.locationModelBreakdown[0]?.cacheWriteInputTokens).toBe(1024)
-      for (const sessions of [state.sessions, state.processedDatabases[0]?.sessions ?? []]) {
-        expect(codexOpenCodeTokenSessions(sessions)).toEqual([
-          {
-            providerSessionId: 'cache-session',
-            input_tokens: 638,
-            output_tokens: 100,
-            cached_input_tokens: 642944,
-            cache_write_input_tokens: 1024
-          }
-        ])
-      }
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }

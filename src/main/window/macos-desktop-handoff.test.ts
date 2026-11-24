@@ -1,6 +1,5 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { skillShareIdFromArguments } from '../../shared/skill-share-link'
 
 const { spawnProcessMock } = vi.hoisted(() => ({ spawnProcessMock: vi.fn() }))
 
@@ -161,22 +160,15 @@ describe('createDesktopHandoff', () => {
 })
 
 describe('desktopHandoffArguments', () => {
-  it('turns the buffered share id into a link the desktop app reads from argv', () => {
+  it('drains the buffered document paths into launch arguments', () => {
     const args = desktopHandoffArguments({
-      skillShareDeepLinks: { consume: () => 'abc_123' },
       osOpenedDocuments: { consume: () => ['/Users/me/notes.md'] }
     })
 
-    expect(args).toEqual(['orca://skills/share/abc_123', '/Users/me/notes.md'])
-    expect(skillShareIdFromArguments(args)).toBe('abc_123')
+    expect(args).toEqual(['/Users/me/notes.md'])
   })
 
   it('is empty for a plain app open', () => {
-    expect(
-      desktopHandoffArguments({
-        skillShareDeepLinks: { consume: () => null },
-        osOpenedDocuments: { consume: () => [] }
-      })
-    ).toEqual([])
+    expect(desktopHandoffArguments({ osOpenedDocuments: { consume: () => [] } })).toEqual([])
   })
 })

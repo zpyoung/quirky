@@ -9,5 +9,7 @@ it.each(['ftp://localhost', 'file://localhost', 'ws://localhost', 'http://exampl
 it('allows HTTP only for explicitly enabled loopback development', () => {
   expect(cleanCloudServiceOrigin('http://localhost:8080', true)).toBe('http://localhost:8080')
   expect(cleanCloudServiceOrigin('http://localhost:8080', false)).toBeNull()
-  expect(cleanCloudServiceOrigin('https://push.onorca.dev', false)).toBe('https://push.onorca.dev')
+  expect(cleanCloudServiceOrigin('https://push.example.test', false)).toBe(
+    'https://push.example.test'
+  )
 })

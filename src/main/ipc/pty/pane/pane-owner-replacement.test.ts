@@ -4,10 +4,6 @@ import { TEST_LEAF_1, TEST_LEAF_2 } from '../../../persistence-session-fixtures'
 import { swapReplacedPaneBinding } from './pane-owner-replacement'
 import type { ReplacedPaneOwner } from './replaced-pane-owner'
 
-vi.mock('../../../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../../../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: () => ({ nth_repo_added: 2 })
-}))
 vi.mock('../../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []

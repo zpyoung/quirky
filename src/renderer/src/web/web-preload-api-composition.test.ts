@@ -20,7 +20,6 @@ describe('web preload API composition', () => {
     expect(Object.keys(globals.window.api)).toEqual([
       'ledger',
       'app',
-      'starNag',
       'platform',
       'workspacePorts',
       'orcaProfiles',
@@ -30,7 +29,6 @@ describe('web preload API composition', () => {
       'keybindings',
       'ui',
       'crashReports',
-      'diagnostics',
       'session',
       'onboarding',
       'cache',
@@ -77,11 +75,7 @@ describe('web preload API composition', () => {
       'pwsh',
       'gitBash',
       'agentStatus',
-      'mobile',
-      'telemetryTrack',
-      'telemetrySetOptIn',
-      'telemetryGetConsentState',
-      'telemetryAcknowledgeBanner'
+      'mobile'
     ])
     expect('onFileDrop' in globals.window.api.ui).toBe(false)
     expect(Object.keys(globals.window.api.projects)).toEqual([])

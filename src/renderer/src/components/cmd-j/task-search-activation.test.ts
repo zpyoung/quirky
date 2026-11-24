@@ -110,8 +110,7 @@ it('opens the existing composer with the exact task source and Jira identifier',
         jiraIdentifier: jiraTaskIssue.key,
         url: jiraTaskIssue.url
       }),
-      taskSourceContext: jiraTaskSource,
-      telemetrySource: 'command_palette'
+      taskSourceContext: jiraTaskSource
     })
   )
 })

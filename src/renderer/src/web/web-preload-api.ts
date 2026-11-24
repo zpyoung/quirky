@@ -51,8 +51,6 @@ import {
 } from './preload-api/web-runtime-session'
 import { createWebSettingsApi } from './preload-api/web-settings-api'
 import { createShellApi } from './preload-api/web-shell-api'
-import { createWebStarNagApi } from './preload-api/web-star-nag-api'
-import { createWebTelemetryApi } from './preload-api/web-telemetry-api'
 import { createPtyApi, createSshApi } from './preload-api/web-terminal-api'
 import { createWebUiApi } from './preload-api/web-ui-api'
 import { createUpdaterApi } from './preload-api/web-updater-api'
@@ -77,7 +75,6 @@ function createWebPreloadApi(): Partial<PreloadApi> {
       call: (environment, method, params) => callEnvironmentEnvelope(environment.id, method, params)
     }),
     ...createWebAppApi(),
-    ...createWebStarNagApi(),
     ...createWebPlatformApi(),
     ...createWebWorkspacePortsApi(),
     ...createWebOrcaProfilesApi(),
@@ -156,7 +153,6 @@ function createWebPreloadApi(): Partial<PreloadApi> {
       isAvailable: () => callRuntimeResult<boolean>('host.gitBash.isAvailable').catch(() => false)
     },
     ...createWebAgentStatusApi(),
-    ...createWebMobileApi(),
-    ...createWebTelemetryApi()
+    ...createWebMobileApi()
   }
 }

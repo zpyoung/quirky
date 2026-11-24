@@ -38,12 +38,6 @@ vi.mock('../wsl', async (importOriginal) =>
 vi.mock('node:fs/promises', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).fsPromisesModuleMock(await importOriginal())
 )
-vi.mock('../telemetry/client', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.telemetryClientModuleMock())
-)
-vi.mock('../telemetry/classify-error', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.classifyErrorModuleMock())
-)
 vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )

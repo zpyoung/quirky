@@ -1,6 +1,5 @@
 import { OrcaRuntimeWithSplitTerminal } from './terminal-split'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
-import type { TerminalPaneSplitSource } from '../../../../shared/feature-education-telemetry'
 import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
 import { makePaneKey, parsePaneKey } from '../../../../shared/stable-pane-id'
 import { recordPtySurface, spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
@@ -20,7 +19,6 @@ export type TerminalSplitOptions = {
   // Why: same split as createTerminal — adopt the pane without revealing its
   // workspace, for splits the user never asked to see.
   surfaceOwner?: false
-  telemetrySource?: TerminalPaneSplitSource
 }
 
 export abstract class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitTerminal {
@@ -132,8 +130,7 @@ export abstract class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeW
         tabId: parentTabId,
         leafId,
         splitFromLeafId: parsedPaneKey.leafId,
-        splitDirection: direction,
-        splitTelemetrySource: opts.telemetrySource
+        splitDirection: direction
       })
     }
 

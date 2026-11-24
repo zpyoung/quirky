@@ -311,7 +311,7 @@ describe('runBackgroundWorktreeCreation', () => {
     const createCall = store.createWorktree.mock.calls[0] as unknown[]
     expect(createCall[0]).toBe('repo-runtime')
     expect(createCall[2]).toBe('abc123')
-    expect(createCall[24]).toBe('refs/remotes/origin/main')
+    expect(createCall[23]).toBe('refs/remotes/origin/main')
   })
 
   it('appends stderr provisioning events for the active VM recipe create', async () => {
@@ -442,7 +442,7 @@ describe('staged background worktree creation', () => {
     expect(createCall?.[0]).toBe('repo-1')
     expect(createCall?.[1]).toBe('feature')
     expect(createCall?.[3]).toBe('run')
-    expect(createCall?.[18]).toBe('creation-1')
+    expect(createCall?.[17]).toBe('creation-1')
     expect(store.setActivePendingWorktreeCreation).toHaveBeenCalledWith('creation-1')
     expect(store.setActiveView).toHaveBeenCalledWith('terminal')
     expect(store.setSidebarOpen).toHaveBeenCalledWith(true)
@@ -477,13 +477,13 @@ describe('staged background worktree creation', () => {
     expect(continueBackgroundWorktreeCreation('creation-1', request)).toBe(true)
     await vi.waitFor(() => expect(store.createWorktree).toHaveBeenCalledTimes(1))
     const stagedCreateCall = store.createWorktree.mock.calls[0] as unknown[] | undefined
-    expect(stagedCreateCall?.[25]).toEqual(expectedOptions)
+    expect(stagedCreateCall?.[24]).toEqual(expectedOptions)
 
     store.createWorktree.mockClear()
     retryBackgroundWorktreeCreation('creation-1')
     await vi.waitFor(() => expect(store.createWorktree).toHaveBeenCalledTimes(1))
     const retryCreateCall = store.createWorktree.mock.calls[0] as unknown[] | undefined
-    expect(retryCreateCall?.[25]).toEqual(expectedOptions)
+    expect(retryCreateCall?.[24]).toEqual(expectedOptions)
   })
 
   it('can continue without revealing a staged create after background preflight', async () => {
@@ -742,7 +742,7 @@ describe('staged background worktree creation', () => {
       expect.objectContaining({ tabId: 'agent-tab' })
     )
     const createCall = store.createWorktree.mock.calls[0] as unknown[] | undefined
-    expect(createCall?.[25]).toEqual({
+    expect(createCall?.[24]).toEqual({
       startupDraft: 'https://github.com/o/r/issues/12'
     })
   })
@@ -771,7 +771,7 @@ describe('staged background worktree creation', () => {
 
     await vi.waitFor(() => expect(store.createWorktree).toHaveBeenCalled())
     const createCall = store.createWorktree.mock.calls[0] as unknown[] | undefined
-    expect(createCall?.[16]).toEqual({
+    expect(createCall?.[15]).toEqual({
       command: `${agent} --prefill x`,
       launchAgent: agent,
       viewMode

@@ -21,7 +21,6 @@ import {
 } from './agent-launch-typed-line-shell'
 import { resolveTerminalStartupCwd } from '../../shared/terminal-startup-cwd'
 import { resolveAgentStartupPlanInputs } from '../../shared/agent-startup-plan-inputs'
-import { agentStartedTelemetry } from '../agent-launch/agent-started-telemetry'
 import { terminalShellOverrideRefusal } from './terminal-shell-override-host-support'
 import {
   resolveLocalProjectRuntimeForWorktreeId,
@@ -36,6 +35,7 @@ import { resolveQoderTerminalCommand } from './qoder-terminal-command-resolution
 import { resolveStartupShell } from '../../shared/tui-agent-startup-shell'
 import { resolveWslSessionContext } from '../daemon/wsl-session-context'
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
+import { hostAgentLaunchMetadata } from '../agent-launch/agent-launch-metadata'
 
 /** No launch command could be built for a requested `startupAgent`. */
 export class AgentLaunchUnbuildableError extends Error {}
@@ -241,7 +241,7 @@ async function buildRuntimeAgentTerminalStartupOptions(
     launchAgent: agent,
     startupCommandDelivery: startupPlan.startupCommandDelivery,
     // A bare command the user typed stays out of launch accounting, as before.
-    ...(opts.startupAgent ? { telemetry: agentStartedTelemetry(agent, opts.launchSource) } : {})
+    ...(opts.startupAgent ? { telemetry: hostAgentLaunchMetadata(agent, opts.launchSource) } : {})
   }
 }
 

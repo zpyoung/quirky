@@ -11,22 +11,11 @@ import { AgentHookServer, _internals } from './server'
 import { buildBody, PANE } from './server.test-fixtures'
 import { hookAt, loadCapture, type CapturedHook } from './claude-cancel-capture.test-fixture'
 
-const { getCohortAtEmitMock, trackMock } = vi.hoisted(() => ({
-  getCohortAtEmitMock: vi.fn(),
-  trackMock: vi.fn()
-}))
-
-vi.mock('../telemetry/client', () => ({ track: trackMock }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: getCohortAtEmitMock }))
-
 const temporaryPaths: string[] = []
 const running: { stop: () => void }[] = []
 
 beforeEach(() => {
   _internals.resetCachesForTests()
-  trackMock.mockReset()
-  getCohortAtEmitMock.mockReset()
-  getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
 })
 
 afterEach(() => {

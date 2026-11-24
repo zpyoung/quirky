@@ -20,8 +20,6 @@ vi.mock('electron', () => ({
     isEncryptionAvailable: () => false
   }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 const pr = (number: number): WorkspaceAttachment => ({ provider: 'github', type: 'pr', number })
 
 describe('workspace attachment persistence', () => {

@@ -89,12 +89,6 @@ vi.mock('./claude-model-switch-confirmation', () => ({
   createClaudeModelSwitchConfirmationObserver: (...args: unknown[]) =>
     mocks.createClaudeModelSwitchConfirmationObserver(...args)
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({
-  emitNativeChatMessageSent: vi.fn(),
-  emitNativeChatPickerItemAccepted: vi.fn(),
-  emitNativeChatPickerOpened: vi.fn(),
-  emitNativeChatSendClassified: vi.fn()
-}))
 vi.mock('./fork-agent-composer/use-agent-composer-draft', () => ({
   useAgentComposerDraft: (scopeKey: string) => {
     mocks.draftScopeKeys.push(scopeKey)

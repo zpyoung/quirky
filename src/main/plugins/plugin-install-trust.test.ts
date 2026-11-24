@@ -93,23 +93,4 @@ describe('plugin install trust', () => {
       bundleId: 'stablyai.orca-skills'
     })
   })
-
-  it('blocks a killed plugin even when the caller bypasses marketplace UI', async () => {
-    const sourcePath = await tempRoot('orca-killed-plugin-')
-    const pluginsDir = await tempRoot('orca-plugin-installs-')
-    await writePlugin(sourcePath, 'community', 'unsafe')
-
-    await expect(
-      installPluginFromLocalPath({
-        pluginsDir,
-        sourcePath,
-        hostVersion: '1.4.0',
-        blockedPluginReason: (pluginKey) =>
-          pluginKey === 'community.unsafe' ? 'Security incident' : null
-      })
-    ).resolves.toEqual({
-      ok: false,
-      error: "plugin is blocked by Orca's safety list: Security incident"
-    })
-  })
 })

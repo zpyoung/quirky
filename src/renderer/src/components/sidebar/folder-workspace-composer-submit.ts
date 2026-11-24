@@ -2,13 +2,12 @@ import { ensureAgentStartupInTerminal, type LinkedWorkItemSummary } from '@/lib/
 import { seedNativeChatLaunchDraftForAgentTab } from '@/lib/agent-launch-prompt-delivery'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { buildAgentStartupPlan } from '@/lib/tui-agent-startup'
-import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { activateAndRevealFolderWorkspace } from '@/lib/worktree-activation'
 import { shouldApplyWorkspaceSourceAutoName } from '../../../../shared/new-workspace/workspace-source'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../../../shared/project-group-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { LaunchSource } from '../../../../shared/telemetry-events'
+import type { LaunchSource } from '../../../../shared/agent-kind'
 import type { TaskSourceContext } from '../../../../shared/task-source-context'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import {
@@ -26,6 +25,7 @@ import {
   getFolderWorkspaceAgentLaunchFact,
   resolveFolderWorkspaceLaunchDraft
 } from './folder-workspace-agent-startup'
+import { tuiAgentToAgentKind } from '../../../../shared/agent-kind'
 
 export {
   buildFolderWorkspaceLinkedStartupPlan,

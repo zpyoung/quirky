@@ -20,8 +20,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()

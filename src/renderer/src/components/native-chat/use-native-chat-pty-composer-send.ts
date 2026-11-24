@@ -2,7 +2,6 @@ import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { NativeChatLaunchDraft } from '@/lib/native-chat-launch-prompt'
 import { useAppStore } from '../../store'
-import { emitNativeChatMessageSent } from '@/lib/native-chat-telemetry'
 import {
   sendNativeChatMessage,
   sendNativeChatTypedCommand,
@@ -11,7 +10,6 @@ import {
 import type { NativeChatSendHandle } from './native-chat-runtime-send'
 import { sendNativeChatMessageWithImageAttachments } from './native-chat-runtime-image-send'
 import { resolveNativeChatLaunchDraftSend } from './native-chat-launch-draft-send'
-import { nativeChatComposerTargetIsRemote } from './native-chat-composer-target'
 import type { NativeChatResolvedTarget } from './native-chat-composer-target'
 import { isSlashCommandDraft } from '../../../../shared/native-chat-slash-commands'
 import type { NativeChatPickerState } from './use-native-chat-picker-state'
@@ -123,10 +121,6 @@ export function useNativeChatPtyComposerSend(args: {
         args.trackPendingSend(pendingHandle, pendingId)
       }
     }
-    emitNativeChatMessageSent({
-      agent: args.agent,
-      runtime: nativeChatComposerTargetIsRemote(target.ptyId) ? 'remote' : 'local'
-    })
     args.onSubmitted?.()
     args.setDraft('')
     args.setCaret(0)

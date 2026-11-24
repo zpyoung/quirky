@@ -1,5 +1,4 @@
 import { app, clipboard, dialog, type BrowserWindow } from 'electron'
-import { parseSkillShareId } from '../shared/skill-share-link'
 import { createMacAppActivationHandler } from './window/macos-app-activation'
 import { isBackgroundLaunch, isOrcadSidecarLaunch } from './window/foreground-activation-policy'
 import { createDesktopHandoff, desktopHandoffArguments } from './window/macos-desktop-handoff'
@@ -44,9 +43,6 @@ const requestDesktopHandoff = createDesktopHandoff({
 })
 
 function requestDesktopActivation(argv: readonly string[] = []): void {
-  state.skillShareDeepLinks.capture(argv, (shareId) => {
-    state.mainWindow?.webContents.send('ui:openSkillShare', shareId)
-  })
   state.osOpenedDocuments.capture(argv, publishOsOpenedDocuments)
   // Why: a duplicate `orca serve` must not drag a headless server into opening a desktop window (#11935).
   if (!shouldActivateDesktopForSecondInstance(argv)) {
@@ -106,13 +102,6 @@ const preflightReady = runMainProcessPreflight({
 // Why: when another process holds the lock we've already exited; skip file-writing side effects so this transient process never touches userData.
 if (preflightReady) {
   void leaseAppImageGenerationForCurrentProcess()
-  app.on('open-url', (event, url) => {
-    if (!parseSkillShareId(url)) {
-      return
-    }
-    event.preventDefault()
-    requestDesktopActivation([url])
-  })
   // Why: macOS delivers "Open With" as open-file, often before `ready`, and only to a handler
   // that claims the event. Unsupported paths stay unclaimed.
   app.on('open-file', (event, filePath) => {
@@ -126,7 +115,6 @@ if (preflightReady) {
       requestDesktopActivation()
     }
   })
-  state.skillShareDeepLinks.capture(process.argv)
   // Why no publish: nothing is listening this early, so the first renderer pulls these on mount.
   state.osOpenedDocuments.capture(process.argv)
   registerMainProcessIpcHandlers()

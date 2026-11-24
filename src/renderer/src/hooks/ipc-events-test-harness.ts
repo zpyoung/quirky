@@ -164,7 +164,6 @@ export async function loadIpcEventsHarness(
         ui: createApiNamespaceStub({
           getZoomLevel: () => 0,
           consumePendingOpenSettings: () => Promise.resolve(false),
-          consumePendingSkillShare: () => Promise.resolve(null),
           set: vi.fn(),
           replyTabCreate: vi.fn(),
           replyTabClose: vi.fn(),
@@ -232,8 +231,7 @@ export async function loadIpcEventsHarness(
         },
         updater: {
           getStatus: () => Promise.resolve({ state: 'idle' }),
-          onStatus: () => () => {},
-          onClearDismissal: () => () => {}
+          onStatus: () => () => {}
         },
         browser: createApiNamespaceStub({
           onNavigationUpdate: (

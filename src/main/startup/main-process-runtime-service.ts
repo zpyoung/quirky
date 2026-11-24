@@ -40,14 +40,11 @@ import {
 } from './codex-launch-preparation'
 import { resolveHostAgentBaseEnvironment } from '../runtime/structured-agent-shell-environment'
 import type { RuntimeDesktopWindowStatus } from '../../shared/runtime-types'
-import { ArtifactCloudService } from '../artifacts/fork-artifact-passwords/artifact-password-cloud-service'
-import { SkillCloudService } from '../skills/skill-cloud-service'
-import { isArtifactSharingEnabled } from '../../shared/artifact-sharing-gate'
 import {
   AgentStatusObservedPaneIdentities,
   recordObservedAgentStatusPaneIdentity
 } from '../runtime/agent-status-observed-pane-identity'
-import { startAgentStateRulesLiveUpdates } from '../runtime/agent-state-rules/agent-state-rules-live-update'
+import { startAgentStateRulesOverride } from '../runtime/agent-state-rules/agent-state-rules-override'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 
@@ -136,8 +133,7 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
     orchestrationEnvironmentTransport,
     // Why the same function the settings IPC handler calls: a paired client's write and a
     // local one must reconcile the scanner child through one path, or they can disagree.
-    applySessionSearchSettings: applySessionSearchSettingsChange,
-    skillTransactionRecovery: state.skillTransactionRecovery
+    applySessionSearchSettings: applySessionSearchSettingsChange
   })
   // Both desktop and headless serve own a host-local search service.
   const sessionSearch = installChildSessionSearchService({
@@ -150,7 +146,7 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
   })
   app.once('will-quit', () => sessionSearch?.dispose())
   // Why here: this runs for the desktop and headless `orca serve`, and each evaluates its own panes.
-  startAgentStateRulesLiveUpdates(store, (rules) =>
+  startAgentStateRulesOverride(store, (rules) =>
     recordDurableCrashBreadcrumb('agent_state_rules_active', rules)
   )
   state.runtime = runtime
@@ -193,12 +189,6 @@ export function configureRuntimeServices(runtime: OrcaRuntimeService): void {
   if (!store || !claudeAccounts || !codexAccounts || !rateLimits) {
     throw new Error('Account services must be initialized before runtime wiring')
   }
-  runtime.setArtifactService(
-    new ArtifactCloudService(app.getPath('userData'), () =>
-      isArtifactSharingEnabled(state.store?.getSettings())
-    )
-  )
-  runtime.setSkillCloudService(new SkillCloudService(app.getPath('userData')))
   runtime.setAccountServices({ claudeAccounts, codexAccounts, rateLimits })
   installWslOrcadAccountShim(store)
   runtime.setCommitMessageAgentEnvironmentResolvers({

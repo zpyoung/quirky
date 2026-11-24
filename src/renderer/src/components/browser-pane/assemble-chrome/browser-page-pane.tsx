@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
-import { getConnectionIdFromState } from '@/lib/connection-context'
 import { useAppStore } from '@/store'
 import { useShortcutLabel } from '@/hooks/useShortcutLabel'
 import { ORCA_BROWSER_BLANK_URL } from '../../../../../shared/constants'
@@ -15,7 +14,6 @@ import {
   setBrowserPageViewportPresetSize
 } from '../host-guest/browser-page-viewport'
 import { isBrowserPagePanePaintable } from '../host-guest/browser-page-paintability'
-import { getShareableBrowserArtifactFile } from '../describe-page/browser-artifact-upload'
 import { useGrabMode } from '../annotate/useGrabMode'
 import { getBrowserPageZoomIndicatorState } from '../host-guest/browser-page-zoom'
 import { getOpenableExternalUrl, toDisplayUrl } from '../describe-page/browser-page-url-display'
@@ -140,7 +138,6 @@ export function BrowserPagePane({
     version: 0
   })
 
-  const workspaceConnectionId = useAppStore((state) => getConnectionIdFromState(state, worktreeId))
   const certificateFailure = useAppStore(
     (s) => s.browserCertificateFailuresByPageId[browserTab.id] ?? null
   )
@@ -297,8 +294,6 @@ export function BrowserPagePane({
   const liveBrowserUrl = getLiveBrowserUrl(browserTab.id) ?? browserTab.url
   const externalUrl = getOpenableExternalUrl(liveBrowserUrl)
   const currentBrowserUrl = toDisplayUrl(liveBrowserUrl)
-  const shareableArtifactFile =
-    workspaceConnectionId === null ? getShareableBrowserArtifactFile(currentBrowserUrl) : null
   const failedNavigationUrl = browserTab.loadError?.validatedUrl ?? currentBrowserUrl
   const failureExternalUrl = normalizeExternalBrowserUrl(failedNavigationUrl)
   const showFailureOverlay = Boolean(browserTab.loadError) && !isBlankTab
@@ -368,7 +363,6 @@ export function BrowserPagePane({
         markupStart={markup.start}
         markupCancel={markup.cancel}
         grabElementShortcut={grabElementShortcut}
-        shareableArtifactFile={shareableArtifactFile}
         currentBrowserUrl={currentBrowserUrl}
         externalUrl={externalUrl}
         isBlankTab={isBlankTab}

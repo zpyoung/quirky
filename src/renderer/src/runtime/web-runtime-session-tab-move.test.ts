@@ -59,10 +59,6 @@ vi.mock('./web-session-tabs-sync/tracking-mappings', () => ({
   resolveHostSessionGroupIdForWebSessionTab: mocks.resolveHostSessionGroupIdForWebSessionTab
 }))
 
-vi.mock('@/lib/feature-education-telemetry', () => ({
-  trackTerminalPaneSplit: mocks.trackTerminalPaneSplit
-}))
-
 vi.mock('@/lib/agent-launch-prompt-delivery', () => ({
   deliverLaunchPromptToAgentTab: mocks.deliverLaunchPromptToAgentTab,
   seedNativeChatLaunchDraftForAgentTab: mocks.seedNativeChatLaunchDraftForAgentTab

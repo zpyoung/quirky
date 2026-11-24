@@ -45,10 +45,6 @@ vi.mock('@/lib/onboarding-project-checklist', () => ({
   markOnboardingProjectAdded: mocks.markOnboardingProjectAdded
 }))
 
-vi.mock('@/lib/telemetry', () => ({
-  track: mocks.track
-}))
-
 function makeRepo(overrides: Partial<Repo> = {}): Repo {
   return {
     id: 'server-folder',

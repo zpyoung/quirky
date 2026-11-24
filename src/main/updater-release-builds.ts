@@ -1,7 +1,6 @@
 import { net } from 'electron'
 import {
-  findInstallerAssetName,
-  getReleaseRepoForChannel,
+  MAIN_RELEASE_REPO,
   getVersionChannel,
   hasInstallableArtifactForPlatform,
   normalizeTagToVersion,
@@ -146,10 +145,8 @@ function parseReleaseEntry(
   if (!hasInstallableArtifactForPlatform(platform, assetNames)) {
     return null
   }
-  const installerAsset = findInstallerAssetName(platform, assetNames)
   // Why null when it merely repeats the tag: GitHub titles an untitled release
-  // with its tag name, and hourlies predating the naming change were created that
-  // way too. Neither says anything the version beside it does not.
+  // with its tag name, which says nothing the version beside it does not.
   const name = typeof entry.name === 'string' ? entry.name.trim() : ''
   return {
     tag,
@@ -160,20 +157,17 @@ function parseReleaseEntry(
     releaseUrl:
       typeof entry.html_url === 'string'
         ? entry.html_url
-        : `https://github.com/${repo}/releases/tag/${encodeURIComponent(tag)}`,
-    installerUrl: installerAsset
-      ? `${getReleaseDownloadUrlForRepo(repo, tag)}/${encodeURIComponent(installerAsset)}`
-      : null
+        : `https://github.com/${repo}/releases/tag/${encodeURIComponent(tag)}`
   }
 }
 
 /**
- * Lists published releases for a channel so the dev picker can offer an exact
+ * Lists published releases for a channel so the picker can offer an exact
  * build — including older ones — to jump to.
  *
  * Why the REST API rather than the atom feed the routine update path uses: the
- * feed caps at the 10 newest entries, which cannot express "jump back to
- * yesterday's hourly". This runs only on explicit dev interaction, so it never
+ * feed caps at the 10 newest entries, which cannot express "jump back to an
+ * older release". This runs only on explicit user interaction, so it never
  * touches background checks; it sends the local gh token when there is one so
  * the request spends the user's own quota, not the per-IP bucket every
  * unauthenticated caller on the network shares.
@@ -182,7 +176,7 @@ export async function listReleaseBuilds(
   channel: ReleaseChannel,
   platform: NodeJS.Platform = process.platform
 ): Promise<ReleaseBuild[]> {
-  const repo = getReleaseRepoForChannel(channel)
+  const repo = MAIN_RELEASE_REPO
   // Why: while the gh breaker has the token's core bucket marked spent, an
   // authenticated request is a guaranteed 403 — go straight to the per-IP bucket.
   const credential = await resolveReleaseApiToken()
@@ -229,11 +223,10 @@ export type ResolvedTargetBuild = {
 }
 
 /** Resolves a tag the user picked into a pinned generic feed URL. */
-export function resolveTargetBuild(channel: ReleaseChannel, tag: string): ResolvedTargetBuild {
+export function resolveTargetBuild(tag: string): ResolvedTargetBuild {
   const version = normalizeTagToVersion(tag)
   if (!isValidVersion(version)) {
     throw new Error(`"${tag}" is not a valid release tag.`)
   }
-  const repo = getReleaseRepoForChannel(channel)
-  return { tag, version, feedUrl: getReleaseDownloadUrlForRepo(repo, tag) }
+  return { tag, version, feedUrl: getReleaseDownloadUrlForRepo(MAIN_RELEASE_REPO, tag) }
 }

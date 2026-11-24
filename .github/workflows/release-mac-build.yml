@@ -154,10 +154,9 @@ jobs:
       - name: Verify macOS entitlements
         run: pnpm verify:macos-entitlements
 
-      # Why: telemetry's transport gate (`src/main/telemetry/client.ts:IS_OFFICIAL_BUILD`)
-      # requires the build identity to be the literal string `stable` or `rc`,
-      # substituted by electron-vite's `define` block at build time.
-      - name: Classify release tag for telemetry build identity
+      # Why: the official build identity is the literal string `stable` or `rc`,
+      # and release-javascript-artifact.mjs checks it against the version.
+      - name: Classify release tag for build identity
         id: tag-classify
         shell: bash
         env:
@@ -165,7 +164,7 @@ jobs:
         run: |
           set -euo pipefail
           # Why the optional trailing identifier: suffixed side-branch RCs
-          # (vX.Y.Z-rc.N.perf) are rc-channel prerelease builds — same telemetry
+          # (vX.Y.Z-rc.N.perf) are rc-channel prerelease builds — same
           # identity as plain RCs.
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+(\.[0-9A-Za-z]+)?$ ]]; then
             identity=rc
@@ -201,9 +200,6 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
           ORCA_BUILD_IDENTITY: ${{ steps.tag-classify.outputs.identity }}
           ORCA_RELEASE_JAVASCRIPT_SOURCE_SHA: ${{ inputs.javascript_source_sha }}
-          ORCA_DIAGNOSTICS_TOKEN_URL: https://www.onorca.dev/diagnostics/token
-          # fork has no PostHog secret; pack and restore need the same non-empty key, inert while TELEMETRY_ENABLED is false
-          ORCA_POSTHOG_WRITE_KEY: ${{ secrets.ORCA_POSTHOG_WRITE_KEY || 'fork-telemetry-disabled' }}
 
       # Design D2: the parent release-cut run merged it from every node-server lane at this tag.
       - name: Download the orcad deployment template from the release run
@@ -272,12 +268,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
         run: node config/scripts/assert-github-release-is-draft.mjs "${{ inputs.tag }}"
-
-      # Why post-publish for macOS: electron-builder packs and uploads in a
-      # single `--publish always` invocation, so there is no cheap insertion
-      # point between pack and upload without splitting those steps.
-      - name: Verify telemetry constants present in app.asar
-        run: node config/scripts/verify-telemetry-constants.mjs
 
       - name: Upload qualification artifacts
         if: inputs.qualification_only

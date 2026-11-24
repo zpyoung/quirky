@@ -121,15 +121,6 @@ vi.mock('@electron-toolkit/utils', () => ({
 
 vi.mock('./ipc/pty/kill-all', () => ({ killAllPty: killAllPtyMock }))
 
-vi.mock('./updater-changelog', () => ({
-  fetchChangelog: vi.fn().mockResolvedValue(null)
-}))
-
-vi.mock('./updater-nudge', () => ({
-  fetchNudge: vi.fn().mockResolvedValue(null),
-  shouldApplyNudge: vi.fn().mockReturnValue(false)
-}))
-
 vi.mock('./updater/shipit-leftover-recovery', () => ({
   prepareThisProcessShipItStaging: prepareShipItStagingMock
 }))

@@ -22,7 +22,6 @@ vi.mock('@/runtime/runtime-rpc-client', () => ({
 vi.mock('@/lib/local-preflight-context', () => ({
   getLocalProjectExecutionRuntimeContext: () => undefined
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatSkillDiscovery: vi.fn() }))
 
 import {
   resetNativeChatSkillDiscoveryCacheForTests,

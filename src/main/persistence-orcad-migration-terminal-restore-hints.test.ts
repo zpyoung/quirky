@@ -31,8 +31,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-
 const FOLDER_LEAF_ID = '22222222-2222-4222-8222-222222222222'
 const PANE = `tab-dormant:${DORMANT_LEAF_ID}`
 const OTHER_PANE = `tab-folder:${FOLDER_LEAF_ID}`

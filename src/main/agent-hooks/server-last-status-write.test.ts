@@ -1,3 +1,7 @@
+beforeEach(() => {
+  _internals.resetCachesForTests()
+})
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -5,26 +9,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { AgentHookServer, _internals } from './server'
 import { buildBody, postHookEvent, recentTs, PANE, RUNNING_SHELL } from './server.test-fixtures'
-
-const { getCohortAtEmitMock, trackMock } = vi.hoisted(() => ({
-  getCohortAtEmitMock: vi.fn(),
-  trackMock: vi.fn()
-}))
-
-vi.mock('../telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
-}))
-
-beforeEach(() => {
-  _internals.resetCachesForTests()
-  trackMock.mockReset()
-  getCohortAtEmitMock.mockReset()
-  getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
-})
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -262,7 +246,6 @@ describe('Last-status persistence', () => {
         })
       )
       expect(statusChangeListener).toHaveBeenCalledWith([])
-      expect(trackMock).not.toHaveBeenCalledWith('agent_prompt_sent', expect.anything())
 
       firstServer.flushStatusPersistSync()
       const file = JSON.parse(readFileSync(lastStatusPath(), 'utf8'))

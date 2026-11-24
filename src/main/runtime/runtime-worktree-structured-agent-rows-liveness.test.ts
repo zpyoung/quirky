@@ -4,7 +4,7 @@ import { collectRuntimeWorktreeAgentSources } from './runtime-worktree-agent-sou
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { StructuredAgentSessionStatusFeed } from '../native-chat/agent-session-wire/structured-agent-session-status-feed'
 import { createTrackedJournalOpener } from '../native-chat/agent-session-journal/journal-host-database-test-support'
 import type { AgentSessionStatusSummary } from '../../shared/agent-session-wire'
@@ -13,11 +13,6 @@ import { AgentHookServer, _internals } from '../agent-hooks/server'
 import { attachRuntimeWorktreeAgentRows } from './runtime-worktree-agent-rows'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { codexProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
-
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
 
 /**
  * The whole chain `worktree ps` walks: journal -> status feed -> agent-status store -> agent rows

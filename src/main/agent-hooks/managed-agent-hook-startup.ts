@@ -1,4 +1,3 @@
-import { recordManagedHookInstallFailure } from './install-telemetry'
 import {
   installManagedAgentHooks,
   resolveStartupManagedHookAction,
@@ -21,7 +20,6 @@ export function reconcileStartupManagedAgentHooks(host: {
   }
   void installManagedAgentHooks(host.getSettings(), {
     shouldHydrateShellPath: host.shouldHydrateShellPath,
-    onInstallError: recordManagedHookInstallFailure,
     shouldContinue: (agent) =>
       shouldContinueManagedHookStartup(host.isQuitting(), host.getSettings(), agent)
   }).catch((error: unknown) =>

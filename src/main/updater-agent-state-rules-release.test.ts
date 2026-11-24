@@ -113,7 +113,7 @@ describe('agent state rules releases and the app updater', () => {
   it('cannot be pinned as a build or read as any app channel', () => {
     for (const tag of RULES_TAGS) {
       expect(getVersionChannel(tag)).toBeNull()
-      expect(() => resolveTargetBuild('stable', tag)).toThrow('not a valid release tag')
+      expect(() => resolveTargetBuild(tag)).toThrow('not a valid release tag')
     }
   })
 })

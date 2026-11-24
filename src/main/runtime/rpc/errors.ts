@@ -14,17 +14,7 @@ import { computerUseErrorRecoveryData } from '../../../shared/computer-use-error
 import { COMPUTER_ERROR_CODES } from '../../../shared/runtime-types'
 import { LINEAR_ERROR_CODES } from '../../../shared/linear/agent-access'
 import { AGENT_SESSION_RPC_ERROR_CODES } from '../../../shared/agent-session-host-authority'
-import { ARTIFACT_SHARING_DISABLED_CODE } from '../../../shared/artifact-sharing-gate'
 import { LedgerError } from '../../../shared/ledger'
-import { AGENT_SKILL_SHARING_DISABLED_CODE } from '../../../shared/agent-skill-sharing-gate'
-import {
-  AGENT_SKILL_NOT_SHAREABLE_CODE,
-  AGENT_SKILL_SELECTOR_AMBIGUOUS_CODE,
-  AGENT_SKILL_SELECTOR_NOT_FOUND_CODE,
-  AGENT_SKILL_SHARING_BUSY_CODE,
-  AGENT_SKILL_BUNDLE_NAME_TAKEN_CODE,
-  AGENT_SKILL_SHARING_UNSUPPORTED_ENVIRONMENT_CODE
-} from '../../../shared/agent-skill-sharing-contract'
 import {
   SKILL_INSTALL_RPC_ERROR_CODE,
   classifySkillInstallFailureCode
@@ -175,14 +165,6 @@ const STRUCTURED_RUNTIME_PASSTHROUGH_CODES: ReadonlySet<string> = new Set([
   NESTED_WORKER_DEPTH_EXCEEDED_CODE,
   PROJECT_RUNTIME_REPAIR_REQUIRED_CODE,
   GIT_DIFF_TOO_LARGE_CODE,
-  ARTIFACT_SHARING_DISABLED_CODE,
-  AGENT_SKILL_SHARING_DISABLED_CODE,
-  AGENT_SKILL_NOT_SHAREABLE_CODE,
-  AGENT_SKILL_SELECTOR_AMBIGUOUS_CODE,
-  AGENT_SKILL_SELECTOR_NOT_FOUND_CODE,
-  AGENT_SKILL_SHARING_BUSY_CODE,
-  AGENT_SKILL_BUNDLE_NAME_TAKEN_CODE,
-  AGENT_SKILL_SHARING_UNSUPPORTED_ENVIRONMENT_CODE,
   SKILL_INSTALL_RPC_ERROR_CODE,
   // Why: an owner conflict is a distinct client decision (reload the host, re-adopt,
   // stop offering the action) — flattened to runtime_error it can only be guessed at.

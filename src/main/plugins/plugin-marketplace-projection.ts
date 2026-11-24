@@ -29,5 +29,4 @@ export type PluginMarketplaceListing = {
   categories: string[]
   official: boolean
   bundled: boolean
-  blockedByKillList?: { reason: string; advisoryUrl?: string }
 }

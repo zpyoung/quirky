@@ -20,7 +20,6 @@ vi.mock('@/lib/worker-terminal-takeover-report', () => ({
   reportStructuredSessionUserInput,
   reportWorkerTerminalUserInput: vi.fn()
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatMessageSent: vi.fn() }))
 vi.mock('./native-chat-structured-composer-dispatch', () => ({
   dispatchNativeChatStructuredComposerText: dispatchStructuredComposerText
 }))

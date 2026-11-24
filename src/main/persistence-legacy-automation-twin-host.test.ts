@@ -13,8 +13,6 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 const localRow: Repo = {
   id: 'twin',

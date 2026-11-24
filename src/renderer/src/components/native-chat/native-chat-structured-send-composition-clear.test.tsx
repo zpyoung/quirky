@@ -59,12 +59,6 @@ vi.mock('../../../../shared/native-chat-agent-profiles', async (importOriginal) 
   ...(await importOriginal<typeof nativeChatAgentProfiles>()),
   getVerifiedNativeChatCommands: () => []
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({
-  emitNativeChatMessageSent: vi.fn(),
-  emitNativeChatPickerItemAccepted: vi.fn(),
-  emitNativeChatPickerOpened: vi.fn(),
-  emitNativeChatSendClassified: vi.fn()
-}))
 vi.mock('./use-native-chat-skills', () => ({
   useNativeChatSkills: () => ({ status: 'ready', skills: [], error: null, retry: () => {} })
 }))

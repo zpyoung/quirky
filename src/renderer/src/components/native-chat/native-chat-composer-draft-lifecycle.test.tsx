@@ -19,7 +19,6 @@ vi.mock('../../../../shared/remote-runtime-pty-id', async (importOriginal) => ({
   ...(await importOriginal<typeof RemoteRuntimePtyIdModule>()),
   isRemoteRuntimePtyId: () => false
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatMessageSent: vi.fn() }))
 vi.mock('@/lib/worker-terminal-takeover-report', () => ({
   reportStructuredSessionUserInput: vi.fn()
 }))

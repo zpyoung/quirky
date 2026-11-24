@@ -35,8 +35,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-
 let desktopHistory: string
 
 function zshHostStore(): ReturnType<typeof createStore> {

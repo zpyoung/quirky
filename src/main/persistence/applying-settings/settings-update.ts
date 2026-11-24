@@ -74,13 +74,6 @@ export function updateSettings(
   if ('showMenuBarIcon' in updates) {
     sanitizedUpdates.showMenuBarIcon = updates.showMenuBarIcon === true
   }
-  // Why: the artifact publish capability must be an exact boolean on disk; no truthy value grants it.
-  if ('artifactSharingEnabled' in updates) {
-    sanitizedUpdates.artifactSharingEnabled = updates.artifactSharingEnabled === true
-  }
-  if ('agentSkillSharingEnabled' in updates) {
-    sanitizedUpdates.agentSkillSharingEnabled = updates.agentSkillSharingEnabled === true
-  }
   if ('nestedWorkerMaxDepth' in updates) {
     sanitizedUpdates.nestedWorkerMaxDepth = resolveNestedWorkerMaxDepth({
       nestedWorkerMaxDepth: updates.nestedWorkerMaxDepth
@@ -247,11 +240,6 @@ export function updateSettings(
   if (historyWithPreviousLayout) {
     sanitizedUpdates.workspaceDirHistory = historyWithPreviousLayout
   }
-  // Why deep-merge telemetry: a partial update (e.g. flipping only `optedIn`) must not clobber siblings like `installId`.
-  const mergedTelemetry =
-    sanitizedUpdates.telemetry !== undefined
-      ? { ...operations.state.settings.telemetry, ...sanitizedUpdates.telemetry }
-      : operations.state.settings.telemetry
   if ('sourceControlAi' in sanitizedUpdates) {
     sanitizedUpdates.sourceControlAi = retireLegacyInstructionsForClearedTextActionRecipes(
       sanitizedUpdates.sourceControlAi,
@@ -280,7 +268,6 @@ export function updateSettings(
       ...operations.state.settings.notifications,
       ...sanitizedUpdates.notifications
     }),
-    ...(mergedTelemetry !== undefined ? { telemetry: mergedTelemetry } : {}),
     ...mergeForkSessionHandoffSettings(operations.state.settings, sanitizedUpdates)
   }
   if ('opencodeSessionCookie' in updates && !updates.opencodeSessionCookie) {

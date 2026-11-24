@@ -10,7 +10,7 @@ vi.mock('@/lib/connection-owner-resolution', async (importOriginal) => ({
 
 import { useAppStore } from '@/store'
 import { editorTabFileAccess } from '@/lib/local-file-access'
-import { getShareableBrowserArtifactFile } from '../describe-page/browser-artifact-upload'
+import { getLocalBrowserHtmlFile } from '../describe-page/browser-file-url'
 import {
   canOpenBrowserFileInWorkspaceEditor,
   openBrowserFileSource
@@ -21,7 +21,7 @@ const PATH = '/Users/me/orca/chat-scratch/0123456789abcdef0123456789abcdef/usage
 it("opens a local chat visual's page as an editable source tab, read and saved in place", () => {
   const openFile = vi.fn()
   useAppStore.setState({ openFile })
-  expect(getShareableBrowserArtifactFile(`file://${encodeURI(PATH)}`)?.filePath).toBe(PATH)
+  expect(getLocalBrowserHtmlFile(`file://${encodeURI(PATH)}`)?.filePath).toBe(PATH)
   expect(canOpenBrowserFileInWorkspaceEditor(useAppStore.getState(), 'wt-1')).toBe(true)
 
   openBrowserFileSource('wt-1', PATH)

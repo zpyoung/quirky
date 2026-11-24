@@ -19,7 +19,7 @@ import type {
 } from '../../shared/pty-renderer-delivery-health'
 import type { TerminalViewAttributes } from '../../shared/terminal-view-attributes'
 import type { PtyMainDeliveryDiagnostics } from '../../shared/pty-delivery-diagnostics'
-import type { AgentKind, LaunchSource, RequestKind } from '../../shared/telemetry-events'
+import type { AgentKind, LaunchSource, RequestKind } from '../../shared/agent-kind'
 import type { PreloadApi } from '../api-types'
 import type { TerminalPanePlacement } from '../../shared/terminal-pane-placement'
 import type { AgentPaneLaunchRequest } from '../../shared/agent-pane-launch-request'

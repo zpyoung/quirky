@@ -68,7 +68,6 @@ export type RuntimeConstructionDependencies = {
   buildAgentHookPtyEnv?: () => Record<string, string>
   getDesktopWindowStatus?: () => RuntimeDesktopWindowStatus
   agentSessionClaimSigner?: AgentSessionClaimSigner
-  skillTransactionRecovery?: Promise<unknown>
   applySessionSearchSettings?: SessionSearchSettingsApply
   orchestrationEnvironmentTransport?: OrchestrationEnvironmentTransport
 }

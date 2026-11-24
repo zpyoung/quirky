@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
   relaunchFailedStructuredAgentSessionWithMessage: vi.fn(
     (): Promise<{ delivered: boolean }> | null => null
   ),
-  track: vi.fn(),
   toastMessage: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn()
@@ -50,10 +49,6 @@ vi.mock('@/lib/structured-agent-session-launch-message', () => ({
     mocks.relaunchFailedStructuredAgentSessionWithMessage
 }))
 
-vi.mock('@/lib/telemetry', () => ({
-  track: mocks.track
-}))
-
 vi.mock('sonner', () => ({
   toast: {
     message: mocks.toastMessage,
@@ -76,7 +71,6 @@ beforeEach(() => {
     outcome: Promise.resolve('recorded')
   })
   mocks.relaunchFailedStructuredAgentSessionWithMessage.mockClear()
-  mocks.track.mockReset()
   mocks.toastMessage.mockReset()
   mocks.toastSuccess.mockReset()
   mocks.toastError.mockReset()
@@ -315,7 +309,7 @@ describe('createUISlice agent send target mode', () => {
     expect(store.getState().pendingRevealWorktree).toBeNull()
   })
 
-  it('sends to the live leaf PTY, runs delivery callback, tracks followup, and closes', async () => {
+  it('sends to the live leaf PTY, runs delivery callback, and closes', async () => {
     const store = createAgentSendStore()
     const onPromptDelivered = vi.fn()
     const onPromptHandedOff = vi.fn()
@@ -343,11 +337,6 @@ describe('createUISlice agent send target mode', () => {
       noteTarget: { tabId, leafId: readyLeafId }
     })
     expect(onPromptDelivered).toHaveBeenCalledTimes(1)
-    expect(mocks.track).toHaveBeenCalledWith('agent_prompt_sent', {
-      agent_kind: 'codex',
-      launch_source: 'notes_send',
-      request_kind: 'followup'
-    })
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Sent to Codex')
     expect(store.getState().agentSendPopoverTargetMode).toBeNull()
   })
@@ -484,7 +473,6 @@ describe('createUISlice agent send target mode', () => {
     await expect(store.getState().sendPromptToSidebarAgentTarget(readyPaneKey)).resolves.toBe(false)
 
     expect(onPromptDelivered).not.toHaveBeenCalled()
-    expect(mocks.track).not.toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith("Couldn't send to Codex", {
       description: 'selected:not-ready'
     })
@@ -542,11 +530,6 @@ describe('createUISlice agent send target mode', () => {
 
     await expect(send).resolves.toBe(true)
     expect(onPromptDelivered).toHaveBeenCalledTimes(1)
-    expect(mocks.track).toHaveBeenCalledWith('agent_prompt_sent', {
-      agent_kind: 'codex',
-      launch_source: 'notes_send',
-      request_kind: 'followup'
-    })
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Sent to Codex')
     expect(store.getState().agentSendPopoverTargetMode).toBeNull()
   })
@@ -589,7 +572,6 @@ describe('createUISlice agent send target mode', () => {
       status: 'open'
     })
     expect(onPromptDelivered).toHaveBeenCalledTimes(1)
-    expect(mocks.track).toHaveBeenCalledTimes(1)
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Sent to Codex')
     expect(mocks.toastError).not.toHaveBeenCalled()
   })
@@ -632,7 +614,6 @@ describe('createUISlice agent send target mode', () => {
       status: 'open'
     })
     expect(onPromptDelivered).not.toHaveBeenCalled()
-    expect(mocks.track).not.toHaveBeenCalled()
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
     expect(mocks.toastError).not.toHaveBeenCalled()
   })

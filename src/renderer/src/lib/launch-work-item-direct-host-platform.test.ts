@@ -40,7 +40,6 @@ vi.mock('@/lib/agent-launch-prompt-delivery', () => ({
   deliverLaunchPromptToAgentTab: vi.fn(),
   seedNativeChatLaunchDraftForAgentTab: vi.fn()
 }))
-vi.mock('@/lib/telemetry', () => ({ track: vi.fn(), tuiAgentToAgentKind: (a: string) => a }))
 vi.mock('@/lib/new-workspace', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   get CLIENT_PLATFORM() {

@@ -71,10 +71,6 @@ vi.mock('./web-session-terminal-orphan-recovery', () => ({
   recoverWebSessionTerminalOrphansBeforeApply: mocks.recoverWebSessionTerminalOrphansBeforeApply
 }))
 
-vi.mock('@/lib/feature-education-telemetry', () => ({
-  trackTerminalPaneSplit: mocks.trackTerminalPaneSplit
-}))
-
 vi.mock('@/lib/worktree-runtime-owner', () => ({
   runtimeEnvironmentIdWithLegacyFallbackUnlessTwin:
     mocks.runtimeEnvironmentIdWithLegacyFallbackUnlessTwin

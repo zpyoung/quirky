@@ -2,7 +2,6 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo } from
 import { useAppStore } from '../../store'
 import { sendNativeChatTypedCommand } from './native-chat-runtime-send'
 import { isSlashCommandDraft } from '../../../../shared/native-chat-slash-commands'
-import { emitNativeChatMessageSent } from '@/lib/native-chat-telemetry'
 import {
   useAgentComposerCoreState,
   useAgentComposerCompose,
@@ -11,7 +10,6 @@ import {
 import { resolveNativeChatLaunchDraftSend } from './native-chat-launch-draft-send'
 import { useNativeChatLaunchDraftAdoption } from './use-native-chat-launch-draft-adoption'
 import { AgentComposerField } from './fork-agent-composer/AgentComposerField'
-import { nativeChatComposerTargetIsRemote } from './native-chat-composer-target'
 import { useNativeChatComposerAttachments } from './use-native-chat-composer-attachments'
 import { appendNativeChatAttachmentCache } from './native-chat-draft-cache'
 import type { AgentComposerImageAttachment } from './fork-agent-composer/AgentComposerField'
@@ -383,12 +381,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
           agent,
           readScreen: () => readTerminalScreen?.() ?? null
         }).sendOptions,
-      onAfterSend: ({ ptyId }) => {
-        // Why: U10 telemetry — record adoption + local-vs-remote runtime split.
-        emitNativeChatMessageSent({
-          agent,
-          runtime: nativeChatComposerTargetIsRemote(ptyId) ? 'remote' : 'local'
-        })
+      onAfterSend: () => {
         onSubmitted?.()
         // The send cleared the TUI input line before its body, so retire the seed.
         useAppStore.getState().clearNativeChatLaunchDraft(terminalTabId)

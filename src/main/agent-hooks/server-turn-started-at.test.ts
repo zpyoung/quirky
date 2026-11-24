@@ -5,17 +5,8 @@ import { join } from 'node:path'
 import { AgentHookServer, _internals } from './server'
 import { buildBody, postHookEvent, PANE } from './server.test-fixtures'
 
-const { getCohortAtEmitMock, trackMock } = vi.hoisted(() => ({
-  getCohortAtEmitMock: vi.fn(),
-  trackMock: vi.fn()
-}))
-
-vi.mock('../telemetry/client', () => ({ track: trackMock }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: getCohortAtEmitMock }))
-
 beforeEach(() => {
   _internals.resetCachesForTests()
-  getCohortAtEmitMock.mockReturnValue({})
 })
 
 afterEach(() => {

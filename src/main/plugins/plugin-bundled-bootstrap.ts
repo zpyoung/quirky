@@ -102,7 +102,6 @@ export async function bootstrapBundledPlugins(options: {
   root: string
   userDataPath: string
   hostVersion: string
-  blockedPluginReason?: (pluginKey: string) => string | null
 }): Promise<PluginBundledBootstrapResult> {
   const index = await readBundledPluginIndex(options.root)
   const pluginsDir = getUserPluginsDir(options.userDataPath)
@@ -136,8 +135,7 @@ export async function bootstrapBundledPlugins(options: {
         pluginsDir,
         sourcePath,
         hostVersion: options.hostVersion,
-        expectedPluginKey: entry.pluginKey,
-        blockedPluginReason: options.blockedPluginReason
+        expectedPluginKey: entry.pluginKey
       })
       if (!installed.ok) {
         throw new Error(installed.error)

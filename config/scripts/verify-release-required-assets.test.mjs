@@ -101,7 +101,7 @@ path: Orca-1.4.27-arm64-mac.zip`
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(
-      verifyRequiredReleaseAssets({ repo: 'zpyoung/orca', tag, token: 'token' })
+      verifyRequiredReleaseAssets({ repo: 'zpyoung/quirky', tag, token: 'token' })
     ).rejects.toThrow('Missing: Orca-1.4.27-arm64-mac.zip')
     expect(latestMacAsset).toBeTruthy()
   })

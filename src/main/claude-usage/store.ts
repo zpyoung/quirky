@@ -1,4 +1,3 @@
-import { claudeTokenSessions } from '../usage/agent-token-usage'
 import { app } from 'electron'
 import { join } from 'node:path'
 import type {
@@ -85,10 +84,6 @@ export class ClaudeUsageStore extends UsageProviderStoreLifecycle<
 > {
   constructor(store: Pick<Store, 'getRepos' | 'getAllWorktreeMeta'>) {
     super(store, {
-      tokenUsage: {
-        provider: 'claude',
-        selectSessions: (state) => claudeTokenSessions(state.sessions)
-      },
       logTag: '[claude-usage]',
       resolveCacheFile: getClaudeUsageFile,
       createDefaultState: getDefaultState,

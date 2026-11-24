@@ -85,7 +85,7 @@ describe('SkillUpdateRow', () => {
   it('keeps the update badge for Orca’s own skill', async () => {
     await render(
       <SkillUpdateRow
-        group={group({ name: 'orca-cli', orcaOwned: true, lockSource: 'stablyai/orca' })}
+        group={group({ name: 'orca-cli', orcaOwned: true, lockSource: 'zpyoung/quirky' })}
         state="available"
       />
     )

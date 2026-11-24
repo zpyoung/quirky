@@ -5,27 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer, _internals } from './server'
 import { buildBody, GOOD_PANE, postHookEvent, PANE } from './server.test-fixtures'
 
-const { getCohortAtEmitMock, trackMock } = vi.hoisted(() => ({
-  getCohortAtEmitMock: vi.fn(),
-  trackMock: vi.fn()
-}))
-
-vi.mock('../telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
-}))
-
 const REMINTED = '$$MFRGGZDFMY:L$$'
 const FOREIGN = '$$ONXW2ZJAON:L$$'
 
 beforeEach(() => {
   _internals.resetCachesForTests()
-  trackMock.mockReset()
-  getCohortAtEmitMock.mockReset()
-  getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
 })
 
 afterEach(() => {

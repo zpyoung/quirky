@@ -53,8 +53,6 @@ type UpdaterModuleFactories = {
     isExternallyManagedLinuxInstall: Mock<() => boolean>
   }
   updaterLifecycleDiagnostics: () => { recordUpdaterLifecycle: UpdaterSpy }
-  updaterChangelog: () => { fetchChangelog: UpdaterSpy }
-  updaterNudge: () => { fetchNudge: UpdaterSpy; shouldApplyNudge: UpdaterSpy }
   updateInstallExitWatchdog: () => {
     armUpdateInstallExitWatchdog: UpdaterSpy
     disarmUpdateInstallExitWatchdog: UpdaterSpy
@@ -79,9 +77,6 @@ export type UpdaterMocks = {
   getLinuxRootPackageTypeMock: Mock<() => 'deb' | 'rpm' | null>
   isExternallyManagedLinuxInstallMock: Mock<() => boolean>
   recordUpdaterLifecycleMock: UpdaterSpy
-  fetchChangelogMock: UpdaterSpy
-  fetchNudgeMock: UpdaterSpy
-  shouldApplyNudgeMock: UpdaterSpy
   armExitWatchdogMock: UpdaterSpy
   disarmExitWatchdogMock: UpdaterSpy
   fetchNewerReleaseTagsMock: UpdaterSpy
@@ -215,9 +210,6 @@ export function createUpdaterMocks(): UpdaterMocks {
   })
   const isExternallyManagedLinuxInstallMock = vi.fn<() => boolean>(() => false)
   const recordUpdaterLifecycleMock = vi.fn()
-  const fetchChangelogMock = vi.fn()
-  const fetchNudgeMock = vi.fn()
-  const shouldApplyNudgeMock = vi.fn()
   const armExitWatchdogMock = vi.fn()
   const disarmExitWatchdogMock = vi.fn()
   const fetchNewerReleaseTagsMock = vi.fn()
@@ -246,8 +238,6 @@ export function createUpdaterMocks(): UpdaterMocks {
       isExternallyManagedLinuxInstall: isExternallyManagedLinuxInstallMock
     }),
     updaterLifecycleDiagnostics: () => ({ recordUpdaterLifecycle: recordUpdaterLifecycleMock }),
-    updaterChangelog: () => ({ fetchChangelog: fetchChangelogMock }),
-    updaterNudge: () => ({ fetchNudge: fetchNudgeMock, shouldApplyNudge: shouldApplyNudgeMock }),
     updateInstallExitWatchdog: () => ({
       armUpdateInstallExitWatchdog: armExitWatchdogMock,
       disarmUpdateInstallExitWatchdog: disarmExitWatchdogMock
@@ -260,7 +250,7 @@ export function createUpdaterMocks(): UpdaterMocks {
           : result
       },
       getReleaseDownloadUrl: (tag: string) =>
-        `https://github.com/stablyai/orca/releases/download/${tag}`
+        `https://github.com/zpyoung/quirky/releases/download/${tag}`
     }),
     localBuildSwitch: () => ({ chooseLocalBuild: chooseLocalBuildMock }),
     localBuildFeedServer: () => ({ startLocalBuildFeed: startLocalBuildFeedMock })
@@ -293,9 +283,6 @@ export function createUpdaterMocks(): UpdaterMocks {
     })
     isExternallyManagedLinuxInstallMock.mockReset().mockReturnValue(false)
     recordUpdaterLifecycleMock.mockReset()
-    fetchNudgeMock.mockReset().mockResolvedValue(null)
-    shouldApplyNudgeMock.mockReset().mockReturnValue(false)
-    fetchChangelogMock.mockReset().mockResolvedValue(null)
     fetchNewerReleaseTagsMock.mockReset().mockResolvedValue([])
     chooseLocalBuildMock.mockReset()
     closeLocalBuildFeedMock.mockReset()
@@ -326,9 +313,6 @@ export function createUpdaterMocks(): UpdaterMocks {
     getLinuxRootPackageTypeMock,
     isExternallyManagedLinuxInstallMock,
     recordUpdaterLifecycleMock,
-    fetchChangelogMock,
-    fetchNudgeMock,
-    shouldApplyNudgeMock,
     armExitWatchdogMock,
     disarmExitWatchdogMock,
     fetchNewerReleaseTagsMock,

@@ -1,5 +1,5 @@
-// Where each call site's tab lands, whether it takes the selection, and what telemetry the launch
-// is stamped with. Placement never rides a launch wire — it is applied locally — so it has to be
+// Where each call site's tab lands, whether it takes the selection, and what launch metadata the
+// launch is stamped with. Placement never rides a launch wire — it is applied locally — so it has to be
 // observed on the tab the funnel creates.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,6 +16,7 @@ import {
   queuedStartupPayload,
   resetLaunchFunnelStore
 } from './agent-launch-funnel-test-harness'
+import { tuiAgentToAgentKind } from '../../../shared/agent-kind'
 import { newTabPromptLaunchesThroughHost } from './launch-agent-new-tab-host-route'
 
 const store = createLaunchFunnelStore()
@@ -35,10 +36,6 @@ vi.mock('@/lib/worktree-runtime-owner', () => ({
 }))
 vi.mock('@/components/tab-bar/reconcile-order', () => ({
   reconcileTabOrder: (_stored: unknown, terminalIds: string[]) => terminalIds
-}))
-vi.mock('@/lib/telemetry', () => ({
-  track: vi.fn(),
-  tuiAgentToAgentKind: (agent: string) => `kind:${agent}`
 }))
 vi.mock('@/components/native-chat/native-chat-session-option-cache', () => ({
   seedNativeChatAppliedSessionOptions: vi.fn()
@@ -70,7 +67,7 @@ async function launch(profile: AgentLaunchCallerProfile) {
   return launchAgentInNewTab({ requestId: 'request-1', ...profile.args })
 }
 
-describe('agent launch caller placement and telemetry', () => {
+describe('agent launch caller placement and metadata', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetLaunchFunnelStore(store)
@@ -150,11 +147,11 @@ describe('agent launch caller placement and telemetry', () => {
     }
   )
 
-  it.each(cases)('stamps the launch %s started with its telemetry source', async (_id, profile) => {
+  it.each(cases)('stamps the launch %s started with its launch source', async (_id, profile) => {
     await launch(profile)
 
     if (launchesThroughHost(profile)) {
-      // The host stamps `agent_started` from the request; the window queues no command of its own.
+      // The host stamps the launch from the request; the window queues no command of its own.
       expect(queuedStartupPayload(store)).toBeUndefined()
       expect(hostLaunchRequest(store)).toMatchObject({
         agent: profile.args.agent,
@@ -163,7 +160,7 @@ describe('agent launch caller placement and telemetry', () => {
       return
     }
     expect(queuedStartupPayload(store)?.telemetry).toEqual({
-      agent_kind: `kind:${profile.args.agent}`,
+      agent_kind: tuiAgentToAgentKind(profile.args.agent),
       // git-history-explain-commit names no source, so it reports as a tab-bar quick launch.
       launch_source: profile.args.launchSource ?? 'tab_bar_quick_launch',
       request_kind: 'new'

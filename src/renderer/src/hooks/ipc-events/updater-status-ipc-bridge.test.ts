@@ -23,7 +23,6 @@ describe('registerUpdaterStatusIpcBridge', () => {
     let resolveSnapshot: ((status: { state: string }) => void) | undefined
     let statusListener: ((status: { state: string }) => void) | undefined
     const statusCleanup = vi.fn()
-    const dismissalCleanup = vi.fn()
     vi.stubGlobal('window', {
       api: {
         updater: {
@@ -37,8 +36,7 @@ describe('registerUpdaterStatusIpcBridge', () => {
             order.push('listener')
             statusListener = listener
             return statusCleanup
-          },
-          onClearDismissal: () => dismissalCleanup
+          }
         }
       }
     })
@@ -57,6 +55,5 @@ describe('registerUpdaterStatusIpcBridge', () => {
 
     unsubs.forEach((unsubscribe) => unsubscribe())
     expect(statusCleanup).toHaveBeenCalledOnce()
-    expect(dismissalCleanup).toHaveBeenCalledOnce()
   })
 })

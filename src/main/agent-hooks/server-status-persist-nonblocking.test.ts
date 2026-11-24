@@ -11,10 +11,6 @@ import { AtomicSnapshotWriter } from '../persistence/atomic-snapshot-writer'
 type FsModule = typeof fs
 type FsPromisesModule = typeof fsPromises
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<FsModule>()
   return { ...actual, renameSync: vi.fn(actual.renameSync) }

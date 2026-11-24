@@ -6,11 +6,9 @@ import {
 } from './codex-app-server-client'
 import {
   classifyCodexTrustGrantError,
-  emitCodexTrustGrantTelemetry,
   type CodexTrustGrantErrorClass,
-  type CodexTrustGrantFallbackReason,
-  type CodexTrustGrantVerifyClass
-} from './codex-trust-grant-telemetry'
+  type CodexTrustGrantFallbackReason
+} from './codex-trust-grant-classification'
 import {
   codexAppServerCapabilityCache,
   getCodexAppServerHostKey,
@@ -78,8 +76,7 @@ let runSession: GrantSessionRunner = runCodexHookTrustGrantSession
 function fallback(
   plan: CodexManagedTrustGrantPlan,
   reason: CodexTrustGrantFallbackReason,
-  detail?: unknown,
-  verifyClass?: CodexTrustGrantVerifyClass
+  detail?: unknown
 ): CodexManagedTrustGrantOutcome {
   diagnostics.fellBack += 1
   diagnostics.lastFallbackReason = reason
@@ -91,14 +88,6 @@ function fallback(
     `[codex-trust-grant] falling back to self-computed trust (reason=${reason}, host=${plan.host.kind})`,
     detail ?? ''
   )
-  emitCodexTrustGrantTelemetry({
-    outcome: reason === 'verify-failed' ? 'verify_failed' : 'fallback',
-    hostKind: plan.host.kind,
-    lane: 'managed',
-    reason,
-    ...(errorClass !== undefined ? { errorClass } : {}),
-    ...(verifyClass !== undefined ? { verifyClass } : {})
-  })
   return { lane: 'fallback', reason, ...(errorClass !== undefined ? { errorClass } : {}) }
 }
 
@@ -117,15 +106,12 @@ function completeGrant(
   result: CodexHookTrustGrantSessionResult
 ): CodexManagedTrustGrantOutcome {
   const { plan, expected, hostKey } = attempt
-  const rejectGrant = (
-    detail: unknown,
-    verifyClass: CodexTrustGrantVerifyClass
-  ): CodexManagedTrustGrantOutcome => {
+  const rejectGrant = (detail: unknown): CodexManagedTrustGrantOutcome => {
     startCodexTrustGrantCooldown(hostKey)
-    return fallback(plan, 'verify-failed', detail, verifyClass)
+    return fallback(plan, 'verify-failed', detail)
   }
   if (result.outcome === 'verify-failed') {
-    return rejectGrant(result.reason, result.reasonClass)
+    return rejectGrant(result.reason)
   }
 
   const byNormalizedKey = new Map(expected.map((item) => [item.normalizedKey, item]))
@@ -135,10 +121,10 @@ function completeGrant(
   for (const granted of result.entries) {
     const match = byNormalizedKey.get(granted.normalizedKey)
     if (!match) {
-      return rejectGrant(`unexpected granted key ${granted.key}`, 'unexpected-key')
+      return rejectGrant(`unexpected granted key ${granted.key}`)
     }
     if (seenNormalizedKeys.has(granted.normalizedKey)) {
-      return rejectGrant(`duplicate granted key ${granted.key}`, 'duplicate-key')
+      return rejectGrant(`duplicate granted key ${granted.key}`)
     }
     seenNormalizedKeys.add(granted.normalizedKey)
     grantedEntries.push({ ...match.entry, trustedHash: granted.trustedHash })
@@ -148,7 +134,7 @@ function completeGrant(
     }
   }
   if (seenNormalizedKeys.size !== expected.length) {
-    return rejectGrant('granted entry set did not cover expected entries', 'coverage')
+    return rejectGrant('granted entry set did not cover expected entries')
   }
   clearCodexTrustGrantCooldown(hostKey)
   try {
@@ -165,11 +151,6 @@ function completeGrant(
     `[codex-trust-grant] granted ${grantedEntries.length} managed hook entries via codex app-server ` +
       `(host=${plan.host.kind}, wrote=${result.wroteTrust}, ${Date.now() - attempt.startedAtMs}ms)`
   )
-  emitCodexTrustGrantTelemetry({
-    outcome: 'granted',
-    hostKind: plan.host.kind,
-    lane: 'managed'
-  })
   return { lane: 'rpc', entries: grantedEntries }
 }
 

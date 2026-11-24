@@ -1,5 +1,4 @@
 import { toast } from 'sonner'
-import { track, tuiAgentToAgentKind } from '@/lib/telemetry'
 import {
   buildAgentDraftLaunchPlan,
   buildAgentStartupPlan,
@@ -11,7 +10,7 @@ import {
   agentLaunchOverridesToSessionOptionValues,
   type AgentLaunchOptionSelection
 } from '../../../shared/fork-automation-launch-settings/agent-launch-overrides'
-import type { LaunchSource } from '../../../shared/telemetry-events'
+import type { LaunchSource } from '../../../shared/agent-kind'
 import type { StartupCommandDelivery } from '../../../shared/codex-startup-delivery'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AgentStartupShell } from '../../../shared/tui-agent-startup-shell'
@@ -20,6 +19,7 @@ import {
   resolveTuiAgentLaunchEnv
 } from '../../../shared/tui-agent-launch-defaults'
 import { translate } from '@/i18n/i18n'
+import { tuiAgentToAgentKind } from '../../../shared/agent-kind'
 
 export function buildDirectWorkItemAgentStartupPlan(args: {
   agent: TuiAgent | null
@@ -155,7 +155,7 @@ export function buildDirectWorkItemStartupOpts(
 }
 
 /** Timeout notice for the post-launch paste; the workspace itself is ready. */
-export function notifyDirectWorkItemAgentStartTimeout(agent: TuiAgent, submit: boolean): void {
+export function notifyDirectWorkItemAgentStartTimeout(_agent: TuiAgent, submit: boolean): void {
   toast.message(
     translate(
       'auto.lib.launch.work.item.direct.agent.ceeeb509b5',
@@ -165,5 +165,4 @@ export function notifyDirectWorkItemAgentStartTimeout(agent: TuiAgent, submit: b
   )
   // Why: process-startup timeout has no v1 enum slot; the `unknown` slice
   // on the dashboard is the trigger to add one.
-  track('agent_error', { error_class: 'unknown', agent_kind: tuiAgentToAgentKind(agent) })
 }

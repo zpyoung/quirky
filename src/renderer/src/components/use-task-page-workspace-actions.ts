@@ -36,8 +36,7 @@ export function useTaskPageWorkspaceActions(model: TaskPageSearchActionsModel) {
         taskSourceContext: getTaskPageRepoSourceContext(getWorkItemRepo(repos, item), 'github'),
         prefilledName: getGitHubWorkItemWorkspaceSeed(item),
         initialRepoId: item.repoId,
-        enableIssueAutomation: item.type === 'issue',
-        telemetrySource: 'sidebar'
+        enableIssueAutomation: item.type === 'issue'
       })
     },
     [openModal, repos]
@@ -105,8 +104,7 @@ export function useTaskPageWorkspaceActions(model: TaskPageSearchActionsModel) {
           item.projectRef
         ),
         prefilledName: getGitLabWorkItemWorkspaceSeed(item),
-        initialRepoId: item.repoId,
-        telemetrySource: 'sidebar'
+        initialRepoId: item.repoId
       })
     },
     [openModal, repos]

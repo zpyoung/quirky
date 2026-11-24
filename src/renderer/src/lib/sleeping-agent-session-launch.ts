@@ -1,7 +1,6 @@
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
-import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
 import {
   resolveSshHostReportedPlatform,
@@ -14,6 +13,7 @@ import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-co
 import { resolveResumeLaunchRecipe } from '../../../shared/tui-agent-launch-defaults'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import { translate } from '@/i18n/i18n'
+import { tuiAgentToAgentKind } from '../../../shared/agent-kind'
 
 export type ResumeSleepingAgentSessionsOptions = {
   suppressNavigation?: boolean

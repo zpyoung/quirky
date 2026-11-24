@@ -47,8 +47,7 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
         tabId,
         leafId,
         splitFromLeafId,
-        splitDirection,
-        splitTelemetrySource
+        splitDirection
       }) => {
         try {
           const store = useAppStore.getState()
@@ -217,7 +216,6 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
                     direction: splitDirection ?? 'horizontal',
                     sourceLeafId: splitFromLeafId,
                     sourcePtyId,
-                    telemetrySource: splitTelemetrySource,
                     newLeafId: leafId,
                     ptyId
                   }

@@ -43,11 +43,6 @@ vi.mock('./native-chat-pty-send-queue', () => ({
 vi.mock('../../store', () => ({
   useAppStore: { getState: () => ({ clearNativeChatLaunchDraft: vi.fn() }) }
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({
-  emitNativeChatMessageSent: vi.fn(),
-  emitNativeChatPickerItemAccepted: vi.fn(),
-  emitNativeChatSendClassified: vi.fn()
-}))
 vi.mock('@/lib/worker-terminal-takeover-report', () => ({
   reportStructuredSessionUserInput: vi.fn()
 }))

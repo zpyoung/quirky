@@ -9,11 +9,6 @@ vi.mock('@/i18n/i18n', () => ({
 vi.mock('@/runtime/runtime-terminal-inspection', () => ({
   isRemoteRuntimePtyId: () => false
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({
-  emitNativeChatMessageSent: vi.fn(),
-  emitNativeChatPickerItemAccepted: vi.fn(),
-  emitNativeChatSendClassified: vi.fn()
-}))
 
 const sendNativeChatMessage = vi.fn()
 const sendNativeChatTypedCommand = vi.fn()

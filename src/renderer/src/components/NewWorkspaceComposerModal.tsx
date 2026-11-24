@@ -21,7 +21,6 @@ import { shouldAllowComposerEnterSubmitTarget } from '@/lib/new-workspace-enter-
 import { isScreenSubmitShortcut } from '@/lib/screen-submit-shortcut'
 import type { GitHubWorkItem } from '../../../shared/github/work-item-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
-import type { WorkspaceSource as WorkspaceCreateTelemetrySource } from '../../../shared/workspace-source'
 import type { WorkspaceStatus } from '../../../shared/worktree/types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { translate } from '@/i18n/i18n'
@@ -48,11 +47,6 @@ type ComposerModalData = {
   initialBaseBranch?: string
   initialWorkspaceStatus?: WorkspaceStatus
   enableIssueAutomation?: boolean
-  /** Telemetry surface that opened the composer. Set by each
-   *  `openModal('new-workspace-composer', ...)` site so
-   *  `workspace_created.source` carries the right value. Falls back to
-   *  `unknown` when omitted. */
-  telemetrySource?: WorkspaceCreateTelemetrySource
   contextualTourSource?: string
   setupGuideTourRequestId?: string
 }
@@ -152,7 +146,6 @@ function QuickTabBody({
     persistDraft: false,
     onCreated: onClose,
     isSubmissionCancelled,
-    ...(modalData.telemetrySource ? { telemetrySource: modalData.telemetrySource } : {}),
     enableIssueAutomation: modalData.enableIssueAutomation === true
   })
   // Why: the composer's built-in `onOpenAgentSettings` handler navigates to

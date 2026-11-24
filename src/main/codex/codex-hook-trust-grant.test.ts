@@ -16,7 +16,6 @@ import {
 } from './codex-hook-trust-grant'
 import { removeSelfComputedTrustBeforeGrant } from './codex-managed-trust-grant-plan'
 import { CODEX_TRUST_GRANT_TRANSIENT_RETRY_INTERVAL_MS } from './codex-trust-grant-cooldown'
-import { setCodexTrustGrantTelemetry } from './codex-trust-grant-telemetry'
 import { readCodexTrustGrantLedgerHome } from './codex-trust-grant-ledger'
 import {
   computeTrustKey,
@@ -58,7 +57,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   _internals.setGrantSessionRunner(null)
-  setCodexTrustGrantTelemetry(() => {})
   codexAppServerCapabilityCache.clear()
   if (previousUserDataPath === undefined) {
     delete process.env.ORCA_USER_DATA_PATH
@@ -350,11 +348,8 @@ describe('grantManagedCodexHookTrust', () => {
     expect(readCodexTrustGrantLedgerHome(runtimeHomeDir)).toBeNull()
   })
 
-  it('keeps grant and fallback outcomes stable when telemetry throws', async () => {
+  it('grants over rpc, then falls back once the rpc lane is disabled', async () => {
     const entries = [managedEntry('session_start')]
-    setCodexTrustGrantTelemetry(() => {
-      throw new Error('telemetry unavailable')
-    })
     _internals.setGrantSessionRunner(async () => grantedSessionResult(entries))
 
     expect(await grantManagedCodexHookTrust(buildPlan(entries))).toMatchObject({ lane: 'rpc' })
@@ -489,86 +484,5 @@ describe('grantManagedCodexHookTrust', () => {
     expect(request.invocation.args.slice(0, 2)).toEqual(['-d', 'Ubuntu'])
     expect(request.invocation.args.join(' ')).toContain('app-server')
     expect(request.hooksListCwd).toBe('/home/alice/.codex-runtime')
-  })
-})
-
-describe('trust-grant telemetry detail', () => {
-  type CapturedEvent = Record<string, unknown>
-
-  function captureTelemetry(): CapturedEvent[] {
-    const events: CapturedEvent[] = []
-    setCodexTrustGrantTelemetry((event) => {
-      events.push(event)
-    })
-    return events
-  }
-
-  it('reports granted events on the managed lane', async () => {
-    const events = captureTelemetry()
-    const entries = [managedEntry('session_start')]
-    _internals.setGrantSessionRunner(async () => grantedSessionResult(entries))
-
-    expect(await grantManagedCodexHookTrust(buildPlan(entries))).toMatchObject({ lane: 'rpc' })
-    expect(events).toEqual([{ outcome: 'granted', hostKind: 'wsl', lane: 'managed' }])
-  })
-
-  it('classifies error fallbacks on the wire', async () => {
-    const events = captureTelemetry()
-    const entries = [managedEntry('session_start')]
-    _internals.setGrantSessionRunner(async () => {
-      throw new Error('spawn codex ENOENT')
-    })
-
-    expect(await grantManagedCodexHookTrust(buildPlan(entries))).toMatchObject({
-      lane: 'fallback',
-      reason: 'error'
-    })
-    expect(events).toEqual([
-      {
-        outcome: 'fallback',
-        hostKind: 'wsl',
-        lane: 'managed',
-        reason: 'error',
-        errorClass: 'binary-missing'
-      }
-    ])
-  })
-
-  it('carries the session verify class through the fallback event', async () => {
-    const events = captureTelemetry()
-    const entries = [managedEntry('session_start')]
-    _internals.setGrantSessionRunner(async () => ({
-      outcome: 'verify-failed' as const,
-      reason: 'post-grant verify left 1 entries untrusted',
-      reasonClass: 'post-grant-untrusted' as const
-    }))
-
-    await grantManagedCodexHookTrust(buildPlan(entries))
-    expect(events).toEqual([
-      {
-        outcome: 'verify_failed',
-        hostKind: 'wsl',
-        lane: 'managed',
-        reason: 'verify-failed',
-        verifyClass: 'post-grant-untrusted'
-      }
-    ])
-  })
-
-  it('classifies module-detected verify failures', async () => {
-    const events = captureTelemetry()
-    const entries = [managedEntry('session_start'), managedEntry('stop')]
-    _internals.setGrantSessionRunner(async () => grantedSessionResult([entries[0]!, entries[0]!]))
-
-    await grantManagedCodexHookTrust(buildPlan(entries))
-    expect(events).toEqual([
-      {
-        outcome: 'verify_failed',
-        hostKind: 'wsl',
-        lane: 'managed',
-        reason: 'verify-failed',
-        verifyClass: 'duplicate-key'
-      }
-    ])
   })
 })

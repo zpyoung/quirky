@@ -1,6 +1,5 @@
 import { useAppStore } from '@/store'
 import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
-import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { createWebRuntimeSessionTerminal } from '@/runtime/web-runtime-terminal-creation'
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
@@ -11,6 +10,7 @@ import type {
 } from '../../../shared/agent-session-resume'
 import type { TabSplitDirection } from '@/store/slices/tabs'
 import type { WebRuntimeTerminalCreateOutcome } from '@/runtime/web-runtime-session-types'
+import { tuiAgentToAgentKind } from '../../../shared/agent-kind'
 
 export type LaunchAiVaultSessionInNewTabResult =
   | { tabId: string }

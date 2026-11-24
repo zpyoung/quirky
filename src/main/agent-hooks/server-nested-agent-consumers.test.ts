@@ -3,11 +3,6 @@ import { AgentHookServer } from './server'
 import { buildBody, PANE, postHookEvent } from './server.test-fixtures'
 import { buildRuntimeMobileAgentStatus } from '../runtime/runtime-mobile-agent-status-builder'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
-
 afterEach(() => vi.restoreAllMocks())
 
 describe('nested hooks retain the session used by mobile', () => {

@@ -1,16 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadUpdaterModule, warmUpdaterModule } from './updater-test-module-loader'
 
-const {
-  appMock,
-  autoUpdaterMock,
-  isMock,
-  powerMonitorOnMock,
-  fetchNudgeMock,
-  shouldApplyNudgeMock,
-  moduleFactories,
-  resetUpdaterMocks
-} = await vi.hoisted(async () => (await import('./updater-test-harness')).createUpdaterMocks())
+const { appMock, autoUpdaterMock, isMock, powerMonitorOnMock, moduleFactories, resetUpdaterMocks } =
+  await vi.hoisted(async () => (await import('./updater-test-harness')).createUpdaterMocks())
 
 vi.mock('electron', () => moduleFactories.electron())
 vi.mock('electron-updater', () => moduleFactories.electronUpdater())
@@ -19,8 +11,6 @@ vi.mock('@electron-toolkit/utils', () => moduleFactories.electronToolkitUtils())
 vi.mock('./ipc/pty/kill-all', () => moduleFactories.ptyKillAll())
 vi.mock('./linux-update-package-type', () => moduleFactories.linuxUpdatePackageType())
 vi.mock('./updater-lifecycle-diagnostics', () => moduleFactories.updaterLifecycleDiagnostics())
-vi.mock('./updater-changelog', () => moduleFactories.updaterChangelog())
-vi.mock('./updater-nudge', () => moduleFactories.updaterNudge())
 vi.mock('./update-install-exit-watchdog', () => moduleFactories.updateInstallExitWatchdog())
 vi.mock('./updater-prerelease-feed', () => moduleFactories.updaterPrereleaseFeed())
 vi.mock('./local-builds/local-build-switch', () => moduleFactories.localBuildSwitch())
@@ -64,26 +54,6 @@ describe('updater', () => {
       expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)
     })
     expect(setLastUpdateCheckAt).not.toHaveBeenCalled()
-  })
-
-  it('starts nudge polling only after updater initialization is complete', async () => {
-    const mainWindow = { webContents: { send: vi.fn() } }
-    fetchNudgeMock.mockResolvedValue({ id: 'campaign-1', minVersion: '1.0.0' })
-    shouldApplyNudgeMock.mockReturnValue(true)
-
-    const { setupAutoUpdater } = await loadUpdaterModule()
-
-    setupAutoUpdater(mainWindow as never)
-
-    expect(autoUpdaterMock.setFeedURL).toHaveBeenCalledTimes(1)
-    expect(autoUpdaterMock.on).toHaveBeenCalled()
-    expect(fetchNudgeMock).toHaveBeenCalledTimes(1)
-    expect(autoUpdaterMock.setFeedURL.mock.invocationCallOrder[0]).toBeLessThan(
-      fetchNudgeMock.mock.invocationCallOrder[0]
-    )
-    expect(autoUpdaterMock.on.mock.invocationCallOrder[0]).toBeLessThan(
-      fetchNudgeMock.mock.invocationCallOrder[0]
-    )
   })
 
   it('waits until the remaining interval before the next background check', async () => {
@@ -247,7 +217,7 @@ describe('updater', () => {
     expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)
 
     await vi.advanceTimersByTimeAsync(60 * 60 * 1000)
-    // Why: the boundary tick sweeps the updater's other timers (30-minute nudge poll, 45-second
+    // Why: the boundary tick sweeps the updater's other timers (45-second
     // stall guard) too, so pin the reschedule itself — nothing before 24h, a check once it elapses —
     // rather than an exact process-wide call total.
     await vi.waitFor(() => {

@@ -94,12 +94,6 @@ vi.mock('./ssh/config/ssh-config-parser', () => ({
   sshConfigHostsToTargets: vi.fn()
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-
-vi.mock('./telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn().mockReturnValue({ nth_repo_added: 2 })
-}))
-
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: {

@@ -34,7 +34,6 @@ export const clearAgentHookPaneStateMock: Mock = vi.fn()
 export const registerPaneKeyAliasMock: Mock = vi.fn()
 export const piBuildPtyEnvMock: Mock = vi.fn()
 export const piClearPtyMock: Mock = vi.fn()
-export const trackMock: Mock = vi.fn()
 export const classifyErrorMock: Mock = vi.fn()
 export const registerPtyMock: Mock = vi.fn()
 export const unregisterPtyMock: Mock = vi.fn()
@@ -165,10 +164,6 @@ export const fsPromisesModuleMock = (original: typeof FsPromises) => ({
 export const wslModuleMock = (original: typeof Wsl) => ({
   ...original,
   wslUncDirectoryExistsAsync: (...args: unknown[]) => wslUncDirectoryExistsAsyncMock(...args)
-})
-
-export const telemetryClientModuleMock = () => ({
-  track: trackMock
 })
 
 export const classifyErrorModuleMock = () => ({

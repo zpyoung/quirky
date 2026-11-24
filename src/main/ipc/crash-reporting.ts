@@ -1,8 +1,9 @@
-import { clipboard, ipcMain } from 'electron'
+import os from 'node:os'
+import { app, clipboard, ipcMain } from 'electron'
 import {
   type CrashReportCopyDiagnosticsArgs,
-  type CrashReportSubmitArgs,
-  formatCrashReportText
+  formatCrashReportText,
+  formatUncapturedCrashReportText
 } from '../../shared/crash-reporting'
 import type { CrashReportStore } from '../crash-reporting/crash-report-store'
 import { rendererCrashBreadcrumbOrigin } from '../../shared/crash-breadcrumb-origin'
@@ -10,7 +11,6 @@ import {
   assertClipboardTextWriteWithinLimit,
   isClipboardTextWriteTooLargeError
 } from '../../shared/clipboard-text'
-import { formatCrashReportCopyText } from '../crash-reporting/crash-report-copy-text'
 import {
   recentRendererErrorReportKeys,
   recordRendererErrorReport
@@ -23,28 +23,26 @@ import {
 import {
   getLatestPendingReport,
   getLatestSendableReport,
-  getRequestedCrashReport,
-  inFlightSubmissions,
-  submittedReportIds
+  getRequestedCrashReport
 } from './crash-reporting-sendable-reports'
-import { buildUncapturedCrashReportText, submitCrashReport } from './crash-reporting-submission'
+
+function buildUncapturedCrashReportText(notes: string | undefined): string {
+  return formatUncapturedCrashReportText(
+    {
+      createdAt: new Date().toISOString(),
+      appVersion: app.getVersion(),
+      platform: os.platform(),
+      osRelease: os.release(),
+      arch: os.arch(),
+      electronVersion: process.versions.electron ?? 'unknown',
+      chromeVersion: process.versions.chrome ?? 'unknown'
+    },
+    notes
+  )
+}
 
 export function _resetRendererErrorReportDedupeForTests(): void {
   recentRendererErrorReportKeys.clear()
-  submittedReportIds.clear()
-  inFlightSubmissions.clear()
-}
-
-export function _getCrashReportingStateSizesForTests(): {
-  submittedReportIds: number
-  inFlightSubmissions: number
-  recentRendererErrorReportKeys: number
-} {
-  return {
-    submittedReportIds: submittedReportIds.size,
-    inFlightSubmissions: inFlightSubmissions.size,
-    recentRendererErrorReportKeys: recentRendererErrorReportKeys.size
-  }
 }
 
 export function registerCrashReportingHandlers(store: CrashReportStore): void {
@@ -55,16 +53,9 @@ export function registerCrashReportingHandlers(store: CrashReportStore): void {
   ipcMain.handle('crashReports:getLatestReport', () => getLatestSendableReport(store))
 
   ipcMain.removeHandler('crashReports:dismiss')
-  ipcMain.handle('crashReports:dismiss', async (_event, args: { reportId: string }) => {
-    if (inFlightSubmissions.has(args.reportId)) {
-      return store.getById(args.reportId)
-    }
-    if (submittedReportIds.has(args.reportId)) {
-      const report = await store.getById(args.reportId)
-      return report ? { ...report, status: 'sent' as const } : null
-    }
-    return store.dismiss(args.reportId)
-  })
+  ipcMain.handle('crashReports:dismiss', (_event, args: { reportId: string }) =>
+    store.dismiss(args.reportId)
+  )
 
   ipcMain.removeAllListeners('crashReports:recordBreadcrumb')
   ipcMain.on(
@@ -89,11 +80,7 @@ export function registerCrashReportingHandlers(store: CrashReportStore): void {
         ? formatCrashReportText(report, args?.notes)
         : buildUncapturedCrashReportText(args?.notes)
       try {
-        clipboard.writeText(
-          assertClipboardTextWriteWithinLimit(
-            formatCrashReportCopyText(baseText, args?.submissionFailure)
-          )
-        )
+        clipboard.writeText(assertClipboardTextWriteWithinLimit(baseText))
       } catch (error) {
         if (isClipboardTextWriteTooLargeError(error)) {
           return { ok: false as const, error: 'Crash diagnostics are too large to copy safely.' }
@@ -113,9 +100,4 @@ export function registerCrashReportingHandlers(store: CrashReportStore): void {
       return { ok: false, error: 'Failed to record renderer error report.' }
     }
   })
-
-  ipcMain.removeHandler('crashReports:submit')
-  ipcMain.handle('crashReports:submit', async (_event, args: CrashReportSubmitArgs) =>
-    submitCrashReport(store, args)
-  )
 }

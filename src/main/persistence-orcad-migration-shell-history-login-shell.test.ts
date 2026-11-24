@@ -47,8 +47,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-
 let desktopHistory: string
 
 // The WSL bridge's lone `bash_history`, written by whatever the distro's login shell is.

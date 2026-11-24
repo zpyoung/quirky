@@ -1,4 +1,4 @@
-import { AlertTriangle, BadgeCheck, Check, Loader2 } from 'lucide-react'
+import { BadgeCheck, Check, Loader2 } from 'lucide-react'
 import type {
   PluginHostListEntry,
   PluginMarketplaceHostListing
@@ -22,7 +22,6 @@ export function PluginMarketplaceListingRow({
   busy,
   onPreview
 }: PluginMarketplaceListingRowProps): React.JSX.Element {
-  const blocked = listing.blockedByKillList
   const canCheckUpdate = installed?.source?.kind === 'marketplace'
   const name = pluginDisplayNameFromKey(listing.pluginKey)
   return (
@@ -50,7 +49,7 @@ export function PluginMarketplaceListingRow({
             {listing.marketplaceOwner}
           </p>
         </div>
-        {installed && !blocked ? (
+        {installed ? (
           <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
             <Check className="size-3.5" aria-hidden="true" />
             {translate(
@@ -69,19 +68,6 @@ export function PluginMarketplaceListingRow({
           )}
       </p>
 
-      {blocked ? (
-        <p className="plugin-security-chrome mt-2 flex items-start gap-1.5 text-xs leading-5 text-destructive">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-          <span>
-            {translate(
-              'auto.components.settings.PluginMarketplaceListingRow.blocked',
-              "Blocked by Orca's safety list: {{value0}}",
-              { value0: blocked.reason }
-            )}
-          </span>
-        </p>
-      ) : null}
-
       <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pt-3">
         <div className="flex min-w-0 flex-wrap gap-1">
           {listing.categories.slice(0, 3).map((category) => (
@@ -90,14 +76,7 @@ export function PluginMarketplaceListingRow({
             </Badge>
           ))}
         </div>
-        {blocked ? (
-          <Button variant="outline" size="sm" className="w-28" disabled>
-            {translate(
-              'auto.components.settings.PluginMarketplaceListingRow.blockedAction',
-              'Blocked'
-            )}
-          </Button>
-        ) : canCheckUpdate ? (
+        {canCheckUpdate ? (
           <Button
             variant="outline"
             size="sm"

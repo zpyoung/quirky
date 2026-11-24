@@ -64,7 +64,6 @@ export type PluginHostListEntry = {
     }[]
   }[]
   restarts: number
-  blockedByKillList?: { reason: string; advisoryUrl?: string }
   source?: {
     kind: 'local-path' | 'git' | 'marketplace' | 'bundled'
     reference: string
@@ -121,7 +120,6 @@ export type PluginMarketplaceHostListing = {
   categories: string[]
   official: boolean
   bundled: boolean
-  blockedByKillList?: { reason: string; advisoryUrl?: string }
 }
 
 export type PluginMarketplaceHostInstallPreview = {
@@ -137,7 +135,6 @@ export type PluginMarketplaceHostInstallPreview = {
   manifest: PluginManifest
   official: boolean
   bundled: boolean
-  blockedByKillList?: { reason: string; advisoryUrl?: string }
 }
 
 export type PluginsApi = {

@@ -190,7 +190,6 @@ export async function prepareAutomationDispatchWorkspace(args: {
           automation.baseBranch ?? undefined,
           automation.setupDecision ?? 'skip',
           undefined,
-          'unknown',
           run.title,
           undefined,
           undefined,

@@ -34,16 +34,6 @@ import {
   classifyOrcadHostUnavailable,
   ORCAD_TUNNEL_UNAVAILABLE_REASON
 } from '../orcad/orcad-host-unavailable'
-import {
-  decidedEvent,
-  reportHostServerConversion,
-  reportHostServerDeploy,
-  reportHostServerEvent,
-  reportHostServerSetupError,
-  startHostServerDecisionTrace,
-  type HostServerDecisionTrace,
-  type HostServerReport
-} from './ssh-host-server-connect-events'
 
 export type HostServerPhase = 'deploying' | 'converting' | 'connecting' | 'updating' | 'starting'
 
@@ -116,35 +106,17 @@ export type HostServerOnConnectDeps = {
   isFencedBeforeStaging: (target: SshTarget) => boolean
   /** Unregisters that unreachable server and releases its fence, so the relay serves again. */
   releaseUnreachableSetup: (target: SshTarget) => Promise<void>
-  /** Receives each decision, conversion and deploy failure as raw codes for telemetry. */
-  report: HostServerReport
 } & ManagedServerUpdateDeps
 
 export async function resolveHostServerOnConnect(
   target: SshTarget,
   deps: HostServerOnConnectDeps
 ): Promise<HostServerOnConnectResult> {
-  const trace = startHostServerDecisionTrace()
-  let result: HostServerOnConnectResult | null = null
-  try {
-    result = await decide(target, deps, trace)
-    return result
-  } finally {
-    reportHostServerEvent(deps.report, target, decidedEvent(result, trace))
-  }
-}
-
-async function decide(
-  target: SshTarget,
-  deps: HostServerOnConnectDeps,
-  trace: HostServerDecisionTrace
-): Promise<HostServerOnConnectResult> {
   if (target.orcadFence?.sourceChangedAt) {
     return { route: 'unserved', reason: 'source_changed' }
   }
   const existing = deps.managedEnvironmentId(target)
   if (existing) {
-    trace.path = 'existing'
     deps.progress(target, 'connecting')
     try {
       await deps.ensureTunnel(existing)
@@ -166,7 +138,7 @@ async function decide(
     }
     if (deps.hasUnfinishedConversion(target)) {
       // Why before routing: until the commit lands the server is empty, so finish it or back out.
-      return await convertHost(target, deps, trace, { checkTerminals: false })
+      return await convertHost(target, deps, { checkTerminals: false })
     }
     const serving = await deps.ensureServing(existing)
     const unserved = unservedManagedResult(existing, serving)
@@ -181,13 +153,10 @@ async function decide(
     const update = await checkManagedServerUpdate(target, existing, deps, () =>
       deps.progress(target, 'updating')
     )
-    trace.update = update.reason
-    trace.recorded = update.recorded
     return managedResultAfterUpdate(existing, serving, update)
   }
   const recorded = deps.recordedUnavailable(target)
   if (recorded) {
-    trace.recorded = true
     return { route: 'unserved', reason: 'orcad_unavailable', detail: recorded }
   }
   if (!deps.hasTemplate()) {
@@ -195,22 +164,19 @@ async function decide(
   }
   if (deps.isEmptyHost(target)) {
     try {
-      trace.path = 'deploy'
       deps.progress(target, 'deploying')
       const deployed = await deps.deploy(target)
-      reportHostServerDeploy(deps.report, target, trace, deployed)
-      return await afterDeploy(target, deps, trace, deployed)
+      return await afterDeploy(target, deps, deployed)
     } catch (error) {
-      return setupFailed(target, deps, trace, error, true)
+      return setupFailed(target, deps, error, true)
     }
   }
-  return convertHost(target, deps, trace, { checkTerminals: true })
+  return convertHost(target, deps, { checkTerminals: true })
 }
 
 async function convertHost(
   target: SshTarget,
   deps: HostServerOnConnectDeps,
-  trace: HostServerDecisionTrace,
   options: { checkTerminals: boolean }
 ): Promise<HostServerOnConnectResult> {
   let terminals: HostServerTerminalVerdict | null = null
@@ -225,19 +191,12 @@ async function convertHost(
         ...(terminals.elsewhere ? { terminalsElsewhere: true } : {})
       }
     }
-    trace.path = 'convert'
-    trace.conversionStartedAt = Date.now()
-    reportHostServerEvent(deps.report, target, { kind: 'conversion', phase: 'started' })
     deps.progress(target, 'converting')
     const converted = await deps.convert(target, terminals)
-    if (converted.outcome === 'refused') {
-      trace.refusal = converted.code
-    }
-    reportHostServerConversion(deps.report, target, trace, converted)
     return await afterConversion(target, deps, converted)
   } catch (error) {
     // COMPAT(legacy-relay-bridge): the terminals run on in their old tabs until they exit.
-    const failed = await setupFailed(target, deps, trace, error, false)
+    const failed = await setupFailed(target, deps, error, false)
     return keptForBridgedTerminals(failed, terminals, error)
   }
 }
@@ -245,12 +204,10 @@ async function convertHost(
 function setupFailed(
   target: SshTarget,
   deps: HostServerOnConnectDeps,
-  trace: HostServerDecisionTrace,
   error: unknown,
   empty: boolean
 ): Promise<HostServerOnConnectResult> {
   console.warn('[ssh] Managed Orca server setup failed; using the relay this session:', error)
-  reportHostServerSetupError(deps.report, target, trace, error)
   const unavailable = classifyOrcadHostUnavailable(error)
   const conflict = empty ? null : orcadMigrationConflictGuidance(error)
   if (conflict) {
@@ -262,7 +219,6 @@ function setupFailed(
 async function afterDeploy(
   target: SshTarget,
   deps: HostServerOnConnectDeps,
-  trace: HostServerDecisionTrace,
   result: OrcadManagedDeployResult
 ): Promise<HostServerOnConnectResult> {
   if (result.outcome === 'deferred') {
@@ -276,8 +232,6 @@ async function afterDeploy(
   const update = await checkManagedServerUpdate(target, environmentId, deps, () =>
     deps.progress(target, 'updating')
   )
-  trace.update = update.reason
-  trace.recorded = update.recorded
   return managedResultAfterUpdate(environmentId, { state: 'serving' }, update)
 }
 

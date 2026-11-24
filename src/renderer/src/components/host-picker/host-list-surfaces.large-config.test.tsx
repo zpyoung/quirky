@@ -7,7 +7,6 @@ import { HOST_LIST_ROW_LIMIT } from './bounded-host-list'
 import { HostCombobox } from './HostCombobox'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { SshTargetSelect } from '../settings/SshTargetSelect'
-import { SkillInstallMachineSelect } from '../skills/SkillInstallMachineSelect'
 import { RemoteStep } from '../sidebar/AddRepoRemoteStep'
 import { AddRepoHostSelector } from '../sidebar/AddRepoHostSelector'
 import { buildRunTargetRows } from '../new-workspace/run-target-options'
@@ -90,24 +89,6 @@ describe('host lists with a 13,692-host ssh config', () => {
     fireEvent.change(search, { target: { value: lastName } })
     fireEvent.click(screen.getByRole('option', { name: lastName }))
     expect(onChange).toHaveBeenCalledWith(`ssh-${HOST_COUNT - 1}`)
-  })
-
-  it('skill install machine picker', async () => {
-    render(
-      <SkillInstallMachineSelect
-        value="local"
-        onChange={vi.fn()}
-        localLabel="This computer"
-        sshLabel="SSH"
-        disconnectedLabel="disconnected"
-        environments={[]}
-        sshTargets={names.map((name, i) => ({ id: `ssh-${i}`, label: name, connected: false }))}
-      />
-    )
-    expect(nodeCount()).toBeLessThan(50)
-    fireEvent.click(screen.getByRole('combobox'))
-    await screen.findByRole('combobox', { name: 'Search hosts…' })
-    expect(nodeCount()).toBeLessThan(NODE_BUDGET)
   })
 
   it('Add Project remote step lists a server’s SSH hosts bounded, with the selection kept', () => {

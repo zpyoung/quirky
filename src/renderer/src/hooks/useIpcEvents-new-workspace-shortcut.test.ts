@@ -26,7 +26,6 @@ describe('buildNewWorkspaceShortcutModalData', () => {
       }
     } as never)
 
-    expect(data.telemetrySource).toBe('shortcut')
     expect(data.prefilledName).toBe('eng-123-fix-linear-context-handoff')
     expect(data.linkedWorkItem).toMatchObject({
       type: 'issue',
@@ -57,7 +56,7 @@ describe('buildNewWorkspaceShortcutModalData', () => {
       }
     } as never)
 
-    expect(data).toEqual({ telemetrySource: 'shortcut' })
+    expect(data).toEqual({})
   })
 })
 
@@ -72,9 +71,7 @@ describe('openNewWorkspaceFromShortcut', () => {
       openModal
     } as never)
 
-    expect(openModal).toHaveBeenCalledWith('new-workspace-composer', {
-      telemetrySource: 'shortcut'
-    })
+    expect(openModal).toHaveBeenCalledWith('new-workspace-composer', {})
   })
 
   it('does not reopen the composer when it is already active', () => {

@@ -20,10 +20,6 @@ vi.mock('sonner', () => ({
   }
 }))
 
-vi.mock('@/lib/telemetry', () => ({
-  track: vi.fn()
-}))
-
 function makeScan(
   path: string,
   overrides: Partial<NestedRepoScanResult> = {}

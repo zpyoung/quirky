@@ -28,9 +28,6 @@ import {
 import { requireManagedOrcadInfrastructure } from '../../managed-server/lifecycle/orcad-managed-runtime-context'
 import { censusHostRelayTerminalsFor } from '../../ssh/legacy-relay/ssh-host-relay-census-for-target'
 import { setSshHostServerStatus } from '../../ssh/ssh-host-server-status'
-import { trackSshHostServerEvent } from '../../ssh/ssh-host-server-telemetry'
-import { knownSshHostPlatform } from '../../ssh/ssh-host-platform-memo'
-import { knownOrcadTunnelTransport } from '../../ssh/orcad-tunnel-transport-memo'
 import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry'
 import { releaseUnreachableOrcadSetup } from '../../ssh/orcad-unreachable-setup-release'
 import { getCurrentMainWindow } from './ssh-ipc-context'
@@ -150,13 +147,6 @@ export function hostServerOnConnectDeps(userDataPath: string): HostServerOnConne
       findOrcadMigrationSourceCutoverForTarget(userDataPath, target.id)?.phase === 'source-fenced',
     releaseUnreachableSetup: (target) =>
       releaseUnreachableOrcadSetup({ userDataPath, claims, targetId: target.id }),
-    // Read at report time: a deploy or conversion learns the platform while the decision runs.
-    report: (target, event) =>
-      trackSshHostServerEvent(
-        event,
-        knownSshHostPlatform(target.id),
-        knownOrcadTunnelTransport(target.id)
-      ),
     progress: (target, phase) => {
       // A cancelled connect's decision keeps running; its progress must not revive the status.
       if (!connectInFlight.has(target.id)) {

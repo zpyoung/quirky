@@ -11,8 +11,6 @@ import {
 import { MOVED_TO_BACKGROUND, RESUMED_BY_MESSAGE } from './claude-captured-task-frames.test-fixture'
 import { hostWithParent, producer, T0 } from './claude-child-work-producer-harness.test-fixture'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
 afterEach(() => vi.restoreAllMocks())
 
 function until(frames: CapturedFrame[], at: number): [CapturedFrame[], CapturedFrame[]] {

@@ -25,20 +25,20 @@ describe('skills.sh lock sources', () => {
       JSON.stringify({
         version: 3,
         skills: {
-          orchestration: { skillFolderHash: 'a'.repeat(64), source: 'stablyai/orca' },
+          orchestration: { skillFolderHash: 'a'.repeat(64), source: 'zpyoung/quirky' },
           'computer-use': { source: 'acme/agent-skills' },
           copied: {},
           emptySource: { source: '' },
-          constructor: { source: 'stablyai/orca' }
+          constructor: { source: 'zpyoung/quirky' }
         }
       })
     )
 
     await expect(readSkillLockSources({ homeDir, stateHome: null })).resolves.toEqual(
       new Map([
-        ['orchestration', 'stablyai/orca'],
+        ['orchestration', 'zpyoung/quirky'],
         ['computer-use', 'acme/agent-skills'],
-        ['constructor', 'stablyai/orca']
+        ['constructor', 'zpyoung/quirky']
       ])
     )
   })
@@ -49,11 +49,11 @@ describe('skills.sh lock sources', () => {
     await mkdir(join(stateHome, 'skills'), { recursive: true })
     await writeFile(
       join(stateHome, 'skills', '.skill-lock.json'),
-      JSON.stringify({ version: 3, skills: { 'orca-cli': { source: 'stablyai/orca' } } })
+      JSON.stringify({ version: 3, skills: { 'orca-cli': { source: 'zpyoung/quirky' } } })
     )
 
     await expect(readSkillLockSources({ homeDir: root, stateHome })).resolves.toEqual(
-      new Map([['orca-cli', 'stablyai/orca']])
+      new Map([['orca-cli', 'zpyoung/quirky']])
     )
   })
 

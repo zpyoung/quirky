@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { validate } from '../telemetry/validator'
 
 const {
-  trackMock,
   getPathMock,
   opendirMock,
   readMacosBundleIdMock,
@@ -11,7 +9,6 @@ const {
   getMismatchMock,
   refreshProbeMock
 } = vi.hoisted(() => ({
-  trackMock: vi.fn(),
   getPathMock: vi.fn(() => '/Applications/Orca.app/Contents/MacOS/Orca'),
   opendirMock: vi.fn(),
   readMacosBundleIdMock: vi.fn<() => Promise<string | null>>(async () => 'com.stablyai.orca'),
@@ -27,7 +24,6 @@ const {
 
 vi.mock('electron', () => ({ app: { getPath: getPathMock } }))
 vi.mock('node:fs/promises', () => ({ opendir: opendirMock }))
-vi.mock('../telemetry/client', () => ({ track: trackMock }))
 vi.mock('../macos-tcc-reset', () => ({
   readMacosBundleId: readMacosBundleIdMock,
   resetMacosTccPermission: resetMacosTccPermissionMock
@@ -55,7 +51,6 @@ function fakeDir(): { read: ReturnType<typeof vi.fn>; close: ReturnType<typeof v
 
 beforeEach(() => {
   setPlatform('darwin')
-  trackMock.mockReset()
   getPathMock.mockReset().mockReturnValue('/Applications/Orca.app/Contents/MacOS/Orca')
   opendirMock.mockReset().mockResolvedValue(fakeDir())
   readMacosBundleIdMock.mockReset().mockResolvedValue('com.stablyai.orca')
@@ -182,10 +177,6 @@ describe('resetFolderAccessForDaemon runs the remedy', () => {
       })
       expect(refreshProbeMock).not.toHaveBeenCalled()
       // Nothing probed the folder after the reset, so the outcome is not a verdict.
-      expect(trackMock).toHaveBeenCalledWith('daemon_folder_access_notice', {
-        action: 'reset_outcome_unknown',
-        cwd_class: 'documents'
-      })
     } finally {
       vi.useRealTimers()
     }
@@ -228,41 +219,13 @@ describe('resetFolderAccessForDaemon runs the remedy', () => {
 // Nobody has verified this remedy on an affected machine, so the re-probe's verdict is the
 // feature's only evidence. It must leave main as a valid event every time.
 describe('resetFolderAccessForDaemon reports the outcome', () => {
-  it.each([
-    ['allowed', 'reset_outcome_allowed'],
-    ['denied', 'reset_outcome_still_denied'],
-    ['unknown', 'reset_outcome_unknown']
-  ])('emits %s as %s', async (freshDaemonAccess, action) => {
-    getMismatchMock.mockReturnValue({
-      daemonScope: 'aaaa111122223333',
-      cwdClass: 'documents',
-      freshDaemonAccess
-    })
-
-    await resetFolderAccessForDaemon(DAEMON)
-
-    expect(trackMock).toHaveBeenCalledWith('daemon_folder_access_notice', {
-      action,
-      cwd_class: 'documents'
-    })
-    expect(validate('daemon_folder_access_notice', trackMock.mock.calls[0][1]).ok).toBe(true)
-  })
-
   it('treats a retired entry as an unknown outcome', async () => {
     getMismatchMock.mockReturnValue(null)
 
     expect(await resetFolderAccessForDaemon(DAEMON)).toEqual({ outcome: 'probed', mismatch: null })
-    expect(trackMock).toHaveBeenCalledWith('daemon_folder_access_notice', {
-      action: 'reset_outcome_unknown',
-      cwd_class: 'documents'
-    })
   })
 
   it('completes the reset even when telemetry throws', async () => {
-    trackMock.mockImplementation(() => {
-      throw new Error('no transport')
-    })
-
     expect(await resetFolderAccessForDaemon(DAEMON)).toEqual({ outcome: 'probed', mismatch: null })
   })
 })

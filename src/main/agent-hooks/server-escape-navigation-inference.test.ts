@@ -4,19 +4,6 @@ import type { EnrichedAgentHookEventPayload } from './server/server-types'
 import { AgentHookServer, _internals } from './server'
 import { buildBody, PANE, postHookEvent } from './server.test-fixtures'
 
-const { getCohortAtEmitMock, trackMock } = vi.hoisted(() => ({
-  getCohortAtEmitMock: vi.fn(),
-  trackMock: vi.fn()
-}))
-
-vi.mock('../telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
-}))
-
 type HookRow = {
   source: string
   hookEventName: string
@@ -71,9 +58,6 @@ function collectPublishedStates(server: AgentHookServer): EnrichedAgentHookEvent
 
 beforeEach(() => {
   _internals.resetCachesForTests()
-  trackMock.mockReset()
-  getCohortAtEmitMock.mockReset()
-  getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
   vi.useFakeTimers()
   vi.setSystemTime(1_000)
 })

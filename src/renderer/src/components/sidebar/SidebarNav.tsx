@@ -1,5 +1,5 @@
 import React from 'react'
-import { BookOpen, CalendarClock, EyeOff, Files, Search, Smartphone } from 'lucide-react'
+import { BookOpen, CalendarClock, EyeOff, Search, Smartphone } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
@@ -29,12 +29,6 @@ export function shouldShowAutomationsButton(
   return settings?.showAutomationsButton !== false
 }
 
-export function shouldShowArtifactsButton(
-  settings: Partial<Pick<GlobalSettings, 'showArtifactsButton'>> | null | undefined
-): boolean {
-  return settings?.showArtifactsButton === true
-}
-
 export function shouldShowSkillsButton(
   settings: Partial<Pick<GlobalSettings, 'showSkillsButton'>> | null | undefined
 ): boolean {
@@ -56,7 +50,6 @@ const SidebarNav = React.memo(function SidebarNav() {
   const worktreePaletteShortcutCombos = useShortcutKeyComboDetails('worktree.palette')
   const openAutomationsPage = useAppStore((s) => s.openAutomationsPage)
   const openMobilePage = useAppStore((s) => s.openMobilePage)
-  const openArtifactsPage = useAppStore((s) => s.openArtifactsPage)
   const openSkillsPage = useAppStore((s) => s.openSkillsPage)
   const openLedgerPage = useAppStore((s) => s.openLedgerPage)
   const openModal = useAppStore((s) => s.openModal)
@@ -65,11 +58,9 @@ const SidebarNav = React.memo(function SidebarNav() {
   const showAgentDashboardButton = useAppStore((s) => shouldShowAgentDashboardButton(s.settings))
   const showAutomationsButton = useAppStore((s) => shouldShowAutomationsButton(s.settings))
   const showMobileButton = useAppStore((s) => shouldShowMobileButton(s.settings))
-  const showArtifactsButton = useAppStore((s) => shouldShowArtifactsButton(s.settings))
   const showSkillsButton = useAppStore((s) => shouldShowSkillsButton(s.settings))
   const automationsActive = activeView === 'automations'
   const mobileActive = activeView === 'mobile'
-  const artifactsActive = activeView === 'artifacts'
   const skillsActive = activeView === 'skills'
   const ledgerActive = activeView === 'ledger'
   const mobileOnboardingBadge = useMobileSidebarOnboardingBadge(showMobileButton)
@@ -78,9 +69,6 @@ const SidebarNav = React.memo(function SidebarNav() {
   }, [updateSettings])
   const hideMobileButton = React.useCallback(() => {
     void updateSettings({ showMobileButton: false })
-  }, [updateSettings])
-  const hideArtifactsButton = React.useCallback(() => {
-    void updateSettings({ showArtifactsButton: false })
   }, [updateSettings])
   const hideSkillsButton = React.useCallback(() => {
     void updateSettings({ showSkillsButton: false })
@@ -141,35 +129,6 @@ const SidebarNav = React.memo(function SidebarNav() {
           {translate('auto.components.sidebar.SidebarNav.ledger', 'Ledger')}
         </span>
       </button>
-      {showArtifactsButton ? (
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <button
-              type="button"
-              onClick={openArtifactsPage}
-              aria-current={artifactsActive ? 'page' : undefined}
-              className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium tracking-tight transition-colors',
-                artifactsActive
-                  ? 'bg-worktree-sidebar-accent text-worktree-sidebar-accent-foreground'
-                  : 'text-worktree-sidebar-foreground/60 hover:bg-worktree-sidebar-foreground/8'
-              )}
-            >
-              <Files
-                className={cn(
-                  'size-4 shrink-0',
-                  !artifactsActive && 'text-worktree-sidebar-foreground/30'
-                )}
-                strokeWidth={artifactsActive ? 2.25 : 1.75}
-              />
-              <span className="flex-1">
-                {translate('auto.components.sidebar.SidebarNav.artifacts', 'Artifacts')}
-              </span>
-            </button>
-          </ContextMenuTrigger>
-          <HideSidebarMenu onHide={hideArtifactsButton} />
-        </ContextMenu>
-      ) : null}
       {showSkillsButton ? (
         <ContextMenu>
           <ContextMenuTrigger asChild>

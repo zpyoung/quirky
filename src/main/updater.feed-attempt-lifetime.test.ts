@@ -11,8 +11,6 @@ vi.mock('@electron-toolkit/utils', () => moduleFactories.electronToolkitUtils())
 vi.mock('./ipc/pty/kill-all', () => moduleFactories.ptyKillAll())
 vi.mock('./linux-update-package-type', () => moduleFactories.linuxUpdatePackageType())
 vi.mock('./updater-lifecycle-diagnostics', () => moduleFactories.updaterLifecycleDiagnostics())
-vi.mock('./updater-changelog', () => moduleFactories.updaterChangelog())
-vi.mock('./updater-nudge', () => moduleFactories.updaterNudge())
 vi.mock('./update-install-exit-watchdog', () => moduleFactories.updateInstallExitWatchdog())
 vi.mock('./updater-prerelease-feed', () => moduleFactories.updaterPrereleaseFeed())
 vi.mock('./local-builds/local-build-switch', () => moduleFactories.localBuildSwitch())
@@ -90,7 +88,7 @@ describe('updater feed preflight ownership', () => {
       expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)
       expect(autoUpdaterMock.setFeedURL).toHaveBeenLastCalledWith({
         provider: 'generic',
-        url: 'https://github.com/stablyai/orca/releases/download/v3.0.0'
+        url: 'https://github.com/zpyoung/quirky/releases/download/v3.0.0'
       })
       autoUpdaterMock.setFeedURL.mockClear()
 
@@ -105,11 +103,11 @@ describe('updater feed preflight ownership', () => {
   it.each([
     {
       result: { tags: ['v3.0.0'], state: 'ready' },
-      url: 'https://github.com/stablyai/orca/releases/download/v3.0.0'
+      url: 'https://github.com/zpyoung/quirky/releases/download/v3.0.0'
     },
     {
       result: { tags: [], state: 'no-newer' },
-      url: 'https://github.com/zpyoung/orca/releases/latest/download'
+      url: 'https://github.com/zpyoung/quirky/releases/latest/download'
     }
   ])('keeps the active $result.state feed choice', async ({ result, url }) => {
     fetchNewerReleaseTagsMock.mockResolvedValueOnce(result)

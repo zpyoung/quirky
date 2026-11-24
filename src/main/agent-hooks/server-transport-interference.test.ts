@@ -4,7 +4,6 @@
 import { connect } from 'node:net'
 import { IncomingMessage, ServerResponse } from 'node:http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { HookTransportInterferenceReport } from '../../shared/agent-hook-transport-interference'
 import { AgentHookServer } from './server'
 import { OPENCODE_STARTUP_PROMPT_CLAIM_PATH } from '../../shared/opencode-startup-prompt'
 import { HOOK_REQUEST_SLOWLORIS_MS } from '../../shared/agent-hook-listener/listener-limits'
@@ -103,44 +102,45 @@ describe('AgentHookServer transport interference', () => {
     server: AgentHookServer
     port: number
     token: string
-    reports: HookTransportInterferenceReport[]
   }> {
     const server = new AgentHookServer()
     servers.push(server)
-    const reports: HookTransportInterferenceReport[] = []
-    server.setTransportInterferenceListener((report) => {
-      reports.push(report)
-    })
     await server.start()
     const env = server.buildPtyEnv()
     return {
       server,
       port: Number(env.ORCA_AGENT_HOOK_PORT),
-      token: env.ORCA_AGENT_HOOK_TOKEN,
-      reports
+      token: env.ORCA_AGENT_HOOK_TOKEN
     }
   }
 
+  function interferenceWarnings(): string[] {
+    return warn.mock.calls
+      .map((call) => call.join(' '))
+      .filter((line) => line.includes('cut off mid-body'))
+  }
+
   it('reports once after repeated truncated POSTs and names the route', async () => {
-    const { port, token, reports } = await startServer()
+    const { port, token } = await startServer()
 
     await postTruncatedHook(port, token)
     await postTruncatedHook(port, token)
-    expect(reports).toEqual([])
+    expect(interferenceWarnings()).toEqual([])
 
     await postTruncatedHook(port, token, { pathname: '/hook/codex' })
-    expect(reports).toEqual([
-      { count: 3, source: 'codex', bytesRead: expect.any(Number), contentLength: 100_000 }
-    ])
+    expect(interferenceWarnings()).toHaveLength(1)
+    expect(interferenceWarnings()[0]).toContain('3 agent-status POSTs')
+    expect(interferenceWarnings()[0]).toContain('/hook/codex')
+    expect(interferenceWarnings()[0]).toContain('/100000 bytes')
     expect(warn.mock.calls.flat().join(' ')).toContain('security software')
 
     // Why: warn-once — a blocked fleet must not turn every hook event into a log line.
     await postTruncatedHook(port, token)
-    expect(reports).toHaveLength(1)
+    expect(interferenceWarnings()).toHaveLength(1)
   }, 20_000)
 
   it('classifies an interrupted startup claim as retryable without consuming it', async () => {
-    const { server, port, token, reports } = await startServer()
+    const { server, port, token } = await startServer()
     const claim = vi.fn(() => true)
     server.setStartupPromptClaimListener(claim, () => {})
     const writeHead = vi.spyOn(ServerResponse.prototype, 'writeHead')
@@ -153,14 +153,14 @@ describe('AgentHookServer transport interference', () => {
       // The reset peer cannot receive this response; observe the real handler's classification.
       expect(writeHead.mock.calls).toEqual([[503]])
       expect(claim).not.toHaveBeenCalled()
-      expect(reports).toEqual([])
+      expect(interferenceWarnings()).toEqual([])
     } finally {
       writeHead.mockRestore()
     }
   })
 
   it('keeps a startup claim stopped by its own slowloris cap as a denial', async () => {
-    const { server, port, token, reports } = await startServer()
+    const { server, port, token } = await startServer()
     const claim = vi.fn(() => true)
     server.setStartupPromptClaimListener(claim, () => {})
     const writeHead = vi.spyOn(ServerResponse.prototype, 'writeHead')
@@ -168,45 +168,45 @@ describe('AgentHookServer transport interference', () => {
       await postStalledHook(port, token, OPENCODE_STARTUP_PROMPT_CLAIM_PATH)
       expect(writeHead.mock.calls).toEqual([[200, { 'content-type': 'application/json' }]])
       expect(claim).not.toHaveBeenCalled()
-      expect(reports).toEqual([])
+      expect(interferenceWarnings()).toEqual([])
     } finally {
       writeHead.mockRestore()
     }
   }, 30_000)
 
   it('never reports for POSTs that deliver their whole body', async () => {
-    const { port, token, reports } = await startServer()
+    const { port, token } = await startServer()
 
     for (let i = 0; i < 5; i++) {
       await postCompleteHook(port, token)
     }
 
-    expect(reports).toEqual([])
+    expect(interferenceWarnings()).toEqual([])
   }, 20_000)
 
   it('excludes requests the slowloris cap destroyed, so the count stays honest', async () => {
-    const { port, token, reports } = await startServer()
+    const { port, token } = await startServer()
 
     await postTruncatedHook(port, token)
     await postTruncatedHook(port, token)
     // Why: Orca destroys this one itself at HOOK_REQUEST_SLOWLORIS_MS; counting it would make
     // every stalled agent look like an IDS block.
     await postStalledHook(port, token)
-    expect(reports).toEqual([])
+    expect(interferenceWarnings()).toEqual([])
 
     await postTruncatedHook(port, token)
-    expect(reports).toHaveLength(1)
-    expect(reports[0].count).toBe(3)
+    expect(interferenceWarnings()).toHaveLength(1)
+    expect(interferenceWarnings()[0]).toContain('3 agent-status POSTs')
   }, 30_000)
 
   it('never reports for unauthenticated probes', async () => {
-    const { port, reports } = await startServer()
+    const { port } = await startServer()
 
     // Why: a port scanner is not interference; only a request that cleared the token check can be.
     await postTruncatedHook(port, 'wrong-token')
     await postTruncatedHook(port, 'wrong-token')
     await postTruncatedHook(port, 'wrong-token')
 
-    expect(reports).toEqual([])
+    expect(interferenceWarnings()).toEqual([])
   }, 20_000)
 })

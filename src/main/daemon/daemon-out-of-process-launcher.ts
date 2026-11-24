@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { childProcessHasExited } from '@orca/process-host/process-tree-termination'
-import type { DaemonReplaceReason } from '../../shared/daemon-lifecycle-telemetry'
 import { DaemonClient } from './client'
 import {
   DaemonEndpointOwnershipError,
@@ -36,19 +35,9 @@ import { inspectDaemonHostImage } from './daemon-host-image'
 import { noteSeveredDaemon } from './daemon-host-image-state'
 import { readDaemonPidRecord } from './daemon-endpoint-incarnation'
 
-// Why: the adapter decides a runtime resolver replacement, but the launcher completes it — and by
-// then the daemon has usually self-retired (dropping its last authenticated client is enough), so
-// there is nothing left to kill and the launcher's own confirmed-kill gate would report nothing.
-// The adapter hands the reason across so the launch it triggers reports what actually drove it.
-let attributedReplaceReason: DaemonReplaceReason | null = null
-
 // The fork fallback's readiness wait plus the lease and adapter connects must still fit the gate.
 const MAC_STABLE_LAUNCH_HANDOFF_MS =
   LOCAL_PTY_STARTUP_FAIL_OPEN_TIMEOUT_MS - DAEMON_CHILD_STARTUP_TIMEOUT_MS - 5_000
-
-export function attributeNextDaemonReplacement(reason: DaemonReplaceReason): void {
-  attributedReplaceReason = reason
-}
 
 // Why every adoption path calls this: a daemon whose AppImage files are gone answers RPCs for
 // hours, so whichever branch decided to keep it, fresh terminals must not land on it.
@@ -99,11 +88,6 @@ export function createOutOfProcessLauncher(
     const recoveryDeadlineMs = launchStartedAtMs + DAEMON_RECOVERY_BUDGET_MS
     const pidPath = suppliedPidPath ?? getDaemonPidPath(runtimeDir)
     const launchNonce = suppliedLaunchNonce ?? randomUUID()
-    // One-shot: whichever launch consumes it owns the attribution, so a later unrelated launch can't
-    // reuse it. The write in the respawn closure reaches here without an intervening await, which is
-    // what makes a bare module-scoped slot safe — keep it that way or a concurrent launch can steal it.
-    const attributedReason = attributedReplaceReason
-    attributedReplaceReason = null
     // Why first: adoption, the preflight probes and health checks all talk to this endpoint, and a
     // relocated one is only safe to talk to once its directories are proven private and ours.
     ensureDaemonSocketDir(socketPath)
@@ -157,7 +141,6 @@ export function createOutOfProcessLauncher(
           extractedGeneration?.identityPath ??
           (appImage ? appImageDaemonIdentityPath(appImage) : entryPath),
         recoveryDeadlineMs,
-        attributedReason,
         releaseAdoptionClient,
         preserveDaemon,
         launchNonce

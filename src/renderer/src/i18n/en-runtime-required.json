@@ -212,9 +212,7 @@
       },
       "artifacts": {
         "ArtifactsPage": {
-          "openArtifact": "Open artifact",
-          "signInCopy": "Sign in to view and manage artifacts shared through your account.",
-          "signInHeading": "Sign in to Orca"
+          "openArtifact": "Open artifact"
         },
         "artifact-publish-flow": {
           "5cb4f5ec36": "Copy link"
@@ -355,7 +353,8 @@
             "56a3dfa283": "Failed to send crash report.",
             "835037edc9": "· Orca",
             "b175e90213": "No crash report is available.",
-            "b2e36f53a1": "Failed to send crash report. Diagnostic ticket {{value0}} was uploaded but not linked."
+            "b2e36f53a1": "Failed to send crash report. Diagnostic ticket {{value0}} was uploaded but not linked.",
+            "ead6fc0510": "No automatic crash report was captured. You can still send details and include recent diagnostic logs when available."
           }
         }
       },
@@ -1242,7 +1241,6 @@
         },
         "GeneralSupportSection": {
           "1e29570462": "starring",
-          "511782265b": "Support the project with a GitHub star via the gh CLI.",
           "5c49f02662": "hidden",
           "73b327e793": "Try Again",
           "9d181300e3": "starred",
@@ -1432,6 +1430,7 @@
         "ReleaseChannelSection": {
           "adhocWarning": "Adhoc builds come from a branch that has not landed, and the Windows ones are unsigned. Whoever cut one may abandon it — keep a stable build handy.",
           "dailyWarning": "Daily builds ship straight from main with no test gate, and the Windows ones are unsigned. Keep a stable build handy.",
+          "description": "Switch update channels or jump to any published build, including older ones. Downgrades are allowed and unvetted builds can be broken.",
           "hourlyWarning": "Hourly builds ship straight from main with no test gate, and the Windows ones are unsigned. Keep a stable build handy."
         },
         "RemoteServerUpdateDialog": {
@@ -1951,8 +1950,7 @@
           "terminalQuickCommands": "Commands are saved on this client, then scoped globally or to a project setup so they run from the selected terminal context."
         },
         "shareSkills": {
-          "refreshLinks": "Refresh",
-          "showButton": "Show Skills button"
+          "refreshLinks": "Refresh"
         },
         "ssh": {
           "search": {
@@ -2341,11 +2339,8 @@
           "1c9e7f420a": "Installed bundle skills",
           "2ae587d39c": "Retry incomplete coverage",
           "34c2ef9e71": "Install {{count}} skills",
-          "3677ae58e7": "Update, roll back, or safely remove versions installed by Orca.",
-          "44d118a8f7": "Manage installed skills",
           "470d8d2476": "Confirm remove",
           "561e49ccd1": "Install selected version",
-          "64c71cf7b9": "No Orca-managed skill installs were found on this machine.",
           "74b70892ea": "Local files were modified",
           "86ed219b55": "Choose a version",
           "9c04bd0120": "Installed version",
@@ -2442,8 +2437,6 @@
           "agentsNoneChosen": "No extra agents",
           "agentsSummary": "Also: {{value0}}",
           "bundleDestinationSummary": "{{value0}} new · {{value1}} already installed · {{value2}} need a decision",
-          "deselectAll": "Deselect optional",
-          "reviewSupportingFiles": "Includes supporting files",
           "trustNote": "Skills are instructions and code from their author. Install what you trust."
         },
         "managedInstall": {

@@ -4,8 +4,7 @@ import { createDaemonActiveProviderFixtures } from './pty-ipc-daemon-provider-fi
 import { registerPtyHandlers } from './pty/register-handlers'
 import { detectAgentCommandsOnHost } from '../preflight/agent-detection'
 import { buildAgentStartupPlan, buildAgentResumeStartupPlan } from '../../shared/tui-agent-startup'
-import { agentStartedTelemetry } from '../agent-launch/agent-started-telemetry'
-import { trackMock } from './pty-ipc-mock-registry'
+import { hostAgentLaunchMetadata } from '../agent-launch/agent-launch-metadata'
 
 vi.mock('../preflight/agent-detection', () => ({
   detectAgentCommandsOnHost: vi.fn(async () => new Set(['qoder']))
@@ -31,12 +30,6 @@ vi.mock('../pi/titlebar-extension-service', () =>
 vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshModuleMock()))
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
-)
-vi.mock('../telemetry/client', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.telemetryClientModuleMock())
-)
-vi.mock('../telemetry/classify-error', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.classifyErrorModuleMock())
 )
 vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
@@ -87,23 +80,14 @@ describe('independent renderer Qoder provider spawn boundary', () => {
         command: plan.launchCommand,
         launchAgent: 'qoder',
         launchConfig: plan.launchConfig,
-        ...(mode === 'start' ? { telemetry: agentStartedTelemetry('qoder', 'orchestration') } : {})
+        ...(mode === 'start'
+          ? { telemetry: hostAgentLaunchMetadata('qoder', 'orchestration') }
+          : {})
       })
       expect(physicalSpawn.mock.calls.at(-1)?.[0].command).toBe(
         plan.launchCommand.replace(/^qodercli/, 'qoder')
       )
       expect(detectAgentCommandsOnHost).toHaveBeenCalled()
-      const events = trackMock.mock.calls.filter(([event]) => event === 'agent_started')
-      if (mode === 'start') {
-        expect(events).toEqual([
-          [
-            'agent_started',
-            { agent_kind: 'qoder', launch_source: 'orchestration', request_kind: 'new' }
-          ]
-        ])
-      } else {
-        expect(events).toEqual([])
-      }
     }
   )
   it.each([
@@ -120,6 +104,5 @@ describe('independent renderer Qoder provider spawn boundary', () => {
       launchAgent: 'qoder'
     })
     expect(physicalSpawn.mock.calls.at(-1)?.[0].command).toBe(command)
-    expect(trackMock).not.toHaveBeenCalledWith('agent_started', expect.anything())
   })
 })

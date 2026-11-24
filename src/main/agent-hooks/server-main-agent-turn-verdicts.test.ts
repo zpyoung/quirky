@@ -1,27 +1,16 @@
+beforeEach(() => {
+  _internals.resetCachesForTests()
+  // Only the wall clock is faked, so the hook server's real sockets keep working.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(1_000_000)
+})
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { AgentHookServer, _internals } from './server'
 import { buildBody, postHookEvent, PANE } from './server.test-fixtures'
-
-const { getCohortAtEmitMock, trackMock } = vi.hoisted(() => ({
-  getCohortAtEmitMock: vi.fn(),
-  trackMock: vi.fn()
-}))
-
-vi.mock('../telemetry/client', () => ({ track: trackMock }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: getCohortAtEmitMock }))
-
-beforeEach(() => {
-  _internals.resetCachesForTests()
-  trackMock.mockReset()
-  getCohortAtEmitMock.mockReset()
-  getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
-  // Only the wall clock is faked, so the hook server's real sockets keep working.
-  vi.useFakeTimers({ toFake: ['Date'] })
-  vi.setSystemTime(1_000_000)
-})
 
 afterEach(() => {
   vi.useRealTimers()

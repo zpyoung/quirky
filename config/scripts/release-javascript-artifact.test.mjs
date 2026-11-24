@@ -16,9 +16,7 @@ const configuration = {
   sourceSha: 'a'.repeat(40),
   version: '1.2.3-rc.4',
   packageManager: 'pnpm@12.14.0',
-  identity: 'rc',
-  diagnosticsTokenUrl: 'https://example.test/diagnostics',
-  telemetryKeySha256: 'b'.repeat(64)
+  identity: 'rc'
 }
 
 afterEach(() => {
@@ -81,11 +79,7 @@ function configurationFixture(version = '1.2.3') {
     const result = runProcessSync({ program: 'git', args, cwd: root, timeoutMs: 10_000 })
     expect(result.code, result.stderr).toBe(0)
   }
-  const env = {
-    ORCA_BUILD_IDENTITY: 'stable',
-    ORCA_DIAGNOSTICS_TOKEN_URL: 'https://example.test/diagnostics',
-    ORCA_POSTHOG_WRITE_KEY: 'release-key'
-  }
+  const env = { ORCA_BUILD_IDENTITY: 'stable' }
   return { root, env }
 }
 
@@ -97,7 +91,6 @@ describe('release JavaScript configuration', () => {
     const { root, env } = configurationFixture(version)
     const result = releaseJavascriptConfiguration(root, { ...env, ORCA_BUILD_IDENTITY: identity })
     expect(result.identity).toBe(identity)
-    expect(result.telemetryKeySha256).toMatch(/^[a-f0-9]{64}$/)
     expect(result.sourceSha).toMatch(/^[a-f0-9]{40}$/)
   })
 
@@ -106,21 +99,15 @@ describe('release JavaScript configuration', () => {
     const devEnv = {
       ...env,
       ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'dev',
-      ORCA_BUILD_IDENTITY: '',
-      ORCA_POSTHOG_WRITE_KEY: ''
+      ORCA_BUILD_IDENTITY: ''
     }
     expect(releaseJavascriptConfiguration(root, devEnv)).toMatchObject({
       identity: 'dev',
-      version: '0.0.0-adhoc.test',
-      telemetryKeySha256: null,
-      diagnosticsTokenUrl: env.ORCA_DIAGNOSTICS_TOKEN_URL
+      version: '0.0.0-adhoc.test'
     })
     expect(() =>
       releaseJavascriptConfiguration(root, { ...devEnv, ORCA_BUILD_IDENTITY: 'stable' })
     ).toThrow('must not set an official build identity')
-    expect(() =>
-      releaseJavascriptConfiguration(root, { ...devEnv, ORCA_POSTHOG_WRITE_KEY: 'release-key' })
-    ).toThrow('must not set a release telemetry key')
     expect(() =>
       releaseJavascriptConfiguration(root, {
         ...devEnv,
@@ -129,14 +116,11 @@ describe('release JavaScript configuration', () => {
     ).toThrow('Invalid desktop release tag')
   })
 
-  it('does not downgrade an official build when its identity or telemetry key is missing', () => {
+  it('does not downgrade an official build when its identity is missing', () => {
     const { root, env } = configurationFixture()
     expect(() => releaseJavascriptConfiguration(root, { ...env, ORCA_BUILD_IDENTITY: '' })).toThrow(
       'Release build identity differs from version'
     )
-    expect(() =>
-      releaseJavascriptConfiguration(root, { ...env, ORCA_POSTHOG_WRITE_KEY: '' })
-    ).toThrow('Missing release telemetry key')
     expect(() =>
       releaseJavascriptConfiguration(root, { ...env, ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'rc' })
     ).toThrow('Invalid JavaScript build identity')
@@ -148,13 +132,12 @@ describe('release JavaScript configuration', () => {
     ).toThrow('Invalid JavaScript build identity')
   })
 
-  it('checks the source checkout and diagnostics endpoint in development mode', () => {
+  it('checks the source checkout in development mode', () => {
     const { root, env } = configurationFixture()
     const devEnv = {
       ...env,
       ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: 'dev',
-      ORCA_BUILD_IDENTITY: '',
-      ORCA_POSTHOG_WRITE_KEY: ''
+      ORCA_BUILD_IDENTITY: ''
     }
     expect(() =>
       releaseJavascriptConfiguration(root, {
@@ -162,16 +145,13 @@ describe('release JavaScript configuration', () => {
         ORCA_RELEASE_JAVASCRIPT_SOURCE_SHA: 'b'.repeat(40)
       })
     ).toThrow('Release checkout differs from bundle source')
-    expect(() =>
-      releaseJavascriptConfiguration(root, { ...devEnv, ORCA_DIAGNOSTICS_TOKEN_URL: '' })
-    ).toThrow('Missing release diagnostics URL')
   })
 })
 
 describe('release JavaScript transfer', () => {
   it('restores development bundles and rejects them for an official build', () => {
     const options = fixture()
-    const devConfiguration = { ...configuration, identity: 'dev', telemetryKeySha256: null }
+    const devConfiguration = { ...configuration, identity: 'dev' }
     packReleaseJavascript({ ...options, configuration: devConfiguration })
     expect(() => restoreReleaseJavascript(options)).toThrow(
       'JavaScript build configuration differs'
@@ -190,26 +170,22 @@ describe('release JavaScript transfer', () => {
     expect(javascriptInventory(join(options.root, 'out'))).toEqual(before)
   })
 
-  it.each([
-    'sourceSha',
-    'version',
-    'packageManager',
-    'identity',
-    'diagnosticsTokenUrl',
-    'telemetryKeySha256'
-  ])('rejects a different %s before replacing the current build', (field) => {
-    const options = fixture()
-    packReleaseJavascript(options)
-    expect(() =>
-      restoreReleaseJavascript({
-        ...options,
-        configuration: { ...configuration, [field]: 'different' }
-      })
-    ).toThrow('JavaScript build configuration differs')
-    expect(readFileSync(join(options.root, 'out', 'main', 'index.js'), 'utf8')).toBe(
-      'main/index.js'
-    )
-  })
+  it.each(['sourceSha', 'version', 'packageManager', 'identity'])(
+    'rejects a different %s before replacing the current build',
+    (field) => {
+      const options = fixture()
+      packReleaseJavascript(options)
+      expect(() =>
+        restoreReleaseJavascript({
+          ...options,
+          configuration: { ...configuration, [field]: 'different' }
+        })
+      ).toThrow('JavaScript build configuration differs')
+      expect(readFileSync(join(options.root, 'out', 'main', 'index.js'), 'utf8')).toBe(
+        'main/index.js'
+      )
+    }
+  )
 
   it('rejects a damaged archive before replacing the current build', () => {
     const options = fixture()

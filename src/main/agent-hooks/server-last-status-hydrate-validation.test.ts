@@ -1,3 +1,7 @@
+beforeEach(() => {
+  _internals.resetCachesForTests()
+})
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   existsSync,
@@ -24,26 +28,6 @@ import {
   LEAF_2,
   LEAF_5
 } from './server.test-fixtures'
-
-const { getCohortAtEmitMock, trackMock } = vi.hoisted(() => ({
-  getCohortAtEmitMock: vi.fn(),
-  trackMock: vi.fn()
-}))
-
-vi.mock('../telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
-}))
-
-beforeEach(() => {
-  _internals.resetCachesForTests()
-  trackMock.mockReset()
-  getCohortAtEmitMock.mockReset()
-  getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
-})
 
 afterEach(() => {
   vi.restoreAllMocks()

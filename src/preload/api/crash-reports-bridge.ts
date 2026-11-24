@@ -2,8 +2,6 @@ import { ipcRenderer } from 'electron'
 import type {
   CrashReportBreadcrumbData,
   CrashReportCopyDiagnosticsArgs,
-  CrashReportSubmitArgs,
-  CrashReportSubmitResult,
   ReactErrorBoundaryReportArgs,
   ReactErrorBoundaryReportResult
 } from '../../shared/crash-reporting'
@@ -23,8 +21,6 @@ export const crashReportsApi = {
     ipcRenderer.invoke('crashReports:recordRendererError', args),
   recordBreadcrumb: (args: { name: string; data?: CrashReportBreadcrumbData }): void =>
     ipcRenderer.send('crashReports:recordBreadcrumb', args),
-  submit: (args: CrashReportSubmitArgs): Promise<CrashReportSubmitResult> =>
-    ipcRenderer.invoke('crashReports:submit', args),
   copyLatestDiagnostics: (args?: CrashReportCopyDiagnosticsArgs) =>
     ipcRenderer.invoke('crashReports:copyLatestDiagnostics', args),
   readHeapStatistics: (): RendererHeapStatistics | null => readRendererHeapStatistics(),

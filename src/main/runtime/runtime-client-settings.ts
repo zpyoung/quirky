@@ -1,6 +1,4 @@
 import { getAppEnvironment } from '../../shared/app-environment'
-import { isArtifactSharingEnabled } from '../../shared/artifact-sharing-gate'
-import { isAgentSkillSharingEnabled } from '../../shared/agent-skill-sharing-gate'
 import { applyPRBotAuthorOverride } from '../../shared/pr-bot-author-overrides'
 import { TASK_PROVIDERS } from '../../shared/task-providers'
 import {
@@ -16,7 +14,6 @@ import { applyNativeChatSessionOptionSettingsMutation } from '../../shared/nativ
 import type { NativeChatSessionOptionSettingsMutation } from '../../shared/native-chat-session-options'
 import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
 import type { TerminalQuickCommand } from '../../shared/terminal-quick-command-types'
-import { recordManagedHookInstallFailure } from '../agent-hooks/install-telemetry'
 import { applyAgentStatusHooksEnabled } from '../agent-hooks/managed-agent-hook-controls'
 import { isAgentStatusHooksEnabledForAgent } from '../../shared/agent-status-hooks-setting'
 import type { RuntimeStore } from './runtime-store-contract'
@@ -82,9 +79,7 @@ export class RuntimeClientSettingsController {
       minimaxEndpoint: settings.minimaxEndpoint ?? 'overseas',
       zcodePlanSite: settings.zcodePlanSite ?? 'zai',
       prBotAuthorOverrides: settings.prBotAuthorOverrides ?? [],
-      artifactSharingEnabled: isArtifactSharingEnabled(settings),
       worktreeVisibilityDefaults: settings.worktreeVisibilityDefaults ?? { external: 'hide' },
-      agentSkillSharingEnabled: isAgentSkillSharingEnabled(settings),
       machineName: settings.machineName ?? '',
       // Why projected: a web client's Settings → Chat edits this host's new-chat default.
       ...(settings.nativeChatPermissionMode
@@ -246,7 +241,6 @@ export class RuntimeClientSettingsController {
       }
       await applyAgentStatusHooksEnabled(settings.agentStatusHooksEnabled !== false, settings, {
         shouldHydrateShellPath: getAppEnvironment().isPackaged(),
-        onInstallError: recordManagedHookInstallFailure,
         shouldContinue: (agent) => {
           const current = this.store?.getSettings()
           return current !== undefined && isAgentStatusHooksEnabledForAgent(current, agent)

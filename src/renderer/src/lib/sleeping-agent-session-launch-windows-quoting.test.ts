@@ -58,10 +58,6 @@ const store = {
 vi.mock('@/store', () => ({ useAppStore: { getState: () => store } }))
 vi.mock('@/lib/new-workspace', () => ({ CLIENT_PLATFORM: 'win32' }))
 vi.mock('sonner', () => ({ toast: { message: vi.fn(), error: vi.fn() } }))
-vi.mock('@/lib/telemetry', () => ({
-  track: vi.fn(),
-  tuiAgentToAgentKind: (agent: string) => agent
-}))
 vi.mock('@/components/tab-bar/reconcile-order', () => ({
   reconcileTabOrder: vi.fn((_stored, termIds: string[]) => [...termIds])
 }))

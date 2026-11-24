@@ -1,10 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, open, readdir, readFile, rm } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
-import type { ManagedSkillInstall, SkillPlacementResult } from '../../shared/skill-install-contract'
+import { mkdir, open, readFile, rm } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
+import type { SkillPlacementResult } from '../../shared/skill-install-contract'
 import { renameSkillPathWithWindowsRetry } from './skill-filesystem-retry'
 import type { SkillInstalledFileMode } from './skill-install-filesystem'
-import { nativeSkillInstallFilesystem } from './skill-install-filesystem'
 
 export type SkillInstallReceiptV1 = {
   schemaVersion: 1
@@ -83,52 +82,6 @@ function isReceipt(value: unknown): value is SkillInstallReceiptV1 {
         ))) &&
     (receipt.wslDistro === undefined || typeof receipt.wslDistro === 'string')
   )
-}
-
-export async function listManagedSkillInstalls(
-  stateDirectory: string,
-  options?: {
-    observeReceipt?: (receipt: SkillInstallReceiptV1) => Promise<{ observedDigest: string } | null>
-  }
-): Promise<Omit<ManagedSkillInstall, 'destination'>[]> {
-  const receiptsDirectory = join(stateDirectory, 'receipts')
-  const entries = (await readdir(receiptsDirectory, { withFileTypes: true }).catch(() => []))
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
-    .slice(0, 2048)
-  const installs = await Promise.all(
-    entries.map(async (entry): Promise<Omit<ManagedSkillInstall, 'destination'> | null> => {
-      const parsed = await readFile(join(receiptsDirectory, entry.name), 'utf8')
-        .then((value): unknown => JSON.parse(value))
-        .catch(() => null)
-      if (!isReceipt(parsed)) {
-        return null
-      }
-      const observed = options?.observeReceipt
-        ? await options.observeReceipt(parsed).catch(() => null)
-        : await nativeSkillInstallFilesystem
-            .observeSkill(parsed.canonicalPath, parsed.fileModes)
-            .catch(() => null)
-      return {
-        name: basename(parsed.canonicalPath),
-        packageId: parsed.packageId,
-        versionId: parsed.versionId,
-        packageDigest: parsed.packageDigest,
-        ...(parsed.bundleDigest ? { bundleDigest: parsed.bundleDigest } : {}),
-        scope: parsed.scope,
-        destinationIdentity: parsed.destinationIdentity,
-        installedAt: parsed.installedAt,
-        ...(parsed.providers ? { providers: parsed.providers } : {}),
-        state: observed
-          ? observed.observedDigest === parsed.packageDigest
-            ? 'unchanged'
-            : 'modified'
-          : 'missing'
-      }
-    })
-  )
-  return installs
-    .filter((install): install is Omit<ManagedSkillInstall, 'destination'> => install !== null)
-    .sort((left, right) => right.installedAt.localeCompare(left.installedAt))
 }
 
 export async function readSkillInstallReceipt(

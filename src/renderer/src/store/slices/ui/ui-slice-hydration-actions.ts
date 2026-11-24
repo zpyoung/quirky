@@ -51,7 +51,6 @@ import {
 } from '../persisted-ui-write-baseline'
 import {
   hydrateTrustedOrcaHooks,
-  hydrateUnexpectedSignoutDismissal,
   normalizeHydratedVisibleWorkspaceHostIds,
   preserveStringArrayIdentity,
   sanitizeHydratedActiveView,
@@ -200,7 +199,6 @@ export function createUiHydrationActions(set: UISliceSet, _get: UISliceGet): Par
             return DEFAULT_PET_ID
           })(),
           dismissedUpdateVersion: ui.dismissedUpdateVersion ?? null,
-          ...hydrateUnexpectedSignoutDismissal(s, ui.dismissedUnexpectedSignoutVersion),
           // Why: a persisted value from a build that knew a different channel set
           // would otherwise survive as-is; activeChannel only falls back on null,
           // so an unknown string reaches listBuilds and the segmented control.

@@ -100,8 +100,7 @@ export function openCmdJTask(result: CmdJTaskSearchResult, createWorkspace = fal
         linkedWorkItem,
         prefilledName,
         initialRepoId: result.initialRepoId,
-        taskSourceContext: result.sourceContext,
-        telemetrySource: 'command_palette'
+        taskSourceContext: result.sourceContext
       })
     )
     return

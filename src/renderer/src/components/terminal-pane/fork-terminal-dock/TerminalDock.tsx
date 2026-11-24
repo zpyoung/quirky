@@ -3,7 +3,6 @@ import type { AgentType } from '../../../../../shared/agent-status-types'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
-import { emitTerminalDockSendOutcome } from '@/lib/fork-terminal-dock/terminal-dock-telemetry'
 import { TerminalDockComposer } from './TerminalDockComposer'
 import type { AgentComposerHandle } from '../../native-chat/fork-agent-composer/agent-composer-types'
 import { resolveComposerSendTier } from '../../native-chat/fork-agent-composer/composer-send-tier'
@@ -208,7 +207,7 @@ export const TerminalDock = forwardRef<AgentComposerHandle, TerminalDockProps>(
                   sendTier={sendTier}
                   readTerminalScreen={props.readTerminalScreen}
                   answerInputRef={questionAnswerInputRef}
-                  onSendOutcome={(outcome) => emitTerminalDockSendOutcome({ outcome, agent })}
+                  onSendOutcome={(_outcome) => {}}
                 />
               </NativeChatPaneFileDropSurface>
             </div>

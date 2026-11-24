@@ -3,7 +3,6 @@ import { agentHookServer } from '../../../agent-hooks/server'
 import { registerPty } from '../../../memory/pty-registry'
 import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
 import { clearMigrationUnsupportedPtysForPaneKey } from '../../../agent-hooks/migration-unsupported-pty-state'
-import { recordPtySpawnTelemetry } from '../pane/spawn-telemetry'
 import {
   shouldSkipCodexHomeEnvForWindowsShell,
   codexReattachedHomeRouteField
@@ -192,10 +191,6 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
         ? spawnedPid
         : null
   })
-  // Why: telemetry-plan.md§Agent launch semantics — fire agent_started only after spawn resolved; safeParse each field so a spoofed IPC payload can't poison the event (missing required field skips it).
-  if (args.telemetry && !ctx.stablePaneOwner) {
-    recordPtySpawnTelemetry(args.telemetry)
-  }
   const response = {
     ...ctx.result,
     // Why both or neither: a pane can only adopt proven kitty flags together

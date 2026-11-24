@@ -5,7 +5,6 @@ import {
   resetMacInstallState
 } from './updater-mac-install'
 import { compareVersions } from './updater-fallback'
-import { fetchChangelog } from './updater-changelog'
 import type { UpdaterHandlerContext } from './updater-handler-context'
 import { recordUpdaterLifecycle } from './updater-lifecycle-diagnostics'
 import {
@@ -127,16 +126,9 @@ export function registerAutoUpdaterHandlers({
     // momentarily resolves an older tag must not destroy a still-valid recovery path.
     linuxPackageRecovery.clearTrackedLinuxPackageArtifactForOtherVersion(info.version)
 
-    // Why: fetch the changelog in main to avoid renderer-side CORS on onorca.dev.
     markUpdateAvailableEventPending(attemptId)
     void (async () => {
       try {
-        const changelog =
-          isLocalBuildCheck() || isPinnedBuildCheck()
-            ? null
-            : await fetchChangelog(info.version, app.getVersion()).catch(() => null)
-
-        // Why: async fetch may take seconds; bail if a newer event superseded this attempt to avoid a stale 'available' broadcast.
         if (!isActiveUpdateCheckAttempt(attemptId)) {
           return
         }
@@ -166,7 +158,7 @@ export function registerAutoUpdaterHandlers({
           getRetainedLinuxPackageManualInstallStatus() ?? {
             state: 'available',
             version: info.version,
-            changelog,
+            changelog: null,
             // Why: the offer is real, but this host can never apply it — say so before a download is offered.
             ...(isExternallyManagedLinuxInstall() ? { externallyManaged: true } : {})
           }

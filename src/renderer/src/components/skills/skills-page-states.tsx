@@ -1,4 +1,4 @@
-import { BookOpen, Download, RefreshCw } from 'lucide-react'
+import { BookOpen, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
@@ -48,13 +48,7 @@ export function SkillsNoMatchesState({
   )
 }
 
-export function SkillsEmptyState({
-  onRefresh,
-  onInstallFromLink
-}: {
-  onRefresh: () => void
-  onInstallFromLink: () => void
-}): React.JSX.Element {
+export function SkillsEmptyState({ onRefresh }: { onRefresh: () => void }): React.JSX.Element {
   return (
     <div className="flex flex-col items-center gap-3 px-2 py-12 text-center">
       <BookOpen className="size-7 text-muted-foreground" />
@@ -64,21 +58,15 @@ export function SkillsEmptyState({
         </h2>
         <p className="max-w-sm text-xs leading-5 text-muted-foreground">
           {translate(
-            'auto.components.skills.SkillsPage.emptyCopy',
-            'The scanned skill folders are empty. Install a shared bundle, or refresh after adding a skill.'
+            'auto.components.skills.SkillsPage.emptyCopyLocal',
+            'The scanned skill folders are empty. Refresh after adding a skill.'
           )}
         </p>
       </div>
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={onInstallFromLink}>
-          <Download className="size-4" />
-          {translate('auto.components.skills.SkillsPage.aee7b99cc6', 'Install from link')}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onRefresh}>
-          <RefreshCw className="size-4" />
-          {translate('auto.components.skills.SkillsPage.cb142070b4', 'Refresh')}
-        </Button>
-      </div>
+      <Button variant="ghost" size="sm" onClick={onRefresh}>
+        <RefreshCw className="size-4" />
+        {translate('auto.components.skills.SkillsPage.cb142070b4', 'Refresh')}
+      </Button>
     </div>
   )
 }
@@ -114,18 +102,5 @@ export function SkillsScanErrorBand({
         </Button>
       </div>
     </div>
-  )
-}
-
-/** One page-level sentence instead of the same reason repeated on every row. */
-export function SkillsRemoteShareNotice({ hostLabel }: { hostLabel: string }): React.JSX.Element {
-  return (
-    <p className="border-b border-border/50 px-2 py-2 text-xs text-muted-foreground">
-      {translate(
-        'auto.components.skills.SkillsPage.remoteShareNotice',
-        'These skills live on {{host}}. Open Skills on that machine to share them.',
-        { host: hostLabel }
-      )}
-    </p>
   )
 }

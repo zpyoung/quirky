@@ -1,11 +1,5 @@
 import { readFileSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { AgentTokenUsageReporter } from './agent-token-usage-reporter'
-import type { AgentTokenSession } from './agent-token-usage'
-import type { AgentTokenUsage } from '../../shared/telemetry-agent-token-usage-schema'
-import { isTelemetryEnabled } from '../telemetry/client'
-import { join, parse } from 'node:path'
-import { AnalyticsSessionIdStore, type AnalyticsSessionId } from './analytics-session-id-store'
 import type { Store } from '../persistence'
 import { UsageCacheSnapshotWriter } from '../usage-cache-snapshot-writer'
 import { loadKnownUsageWorktreesByRepo } from '../usage-worktree-metadata'
@@ -56,10 +50,6 @@ type UsageProviderStoreLifecycleConfig<
   providerId?: 'claude'
   sourceKey: SourceKey
   dataPresenceKey: DataPresenceKey
-  tokenUsage?: {
-    provider: AgentTokenUsage['provider']
-    selectSessions: (state: State) => AgentTokenSession[]
-  }
   scan: (
     worktrees: UsageScanWorktreeRef[],
     sourceCache: UsageSourceCacheRef
@@ -81,8 +71,6 @@ export abstract class UsageProviderStoreLifecycle<
   private readonly loaded: Promise<void>
   private readonly schemaVersion: number
   private scanPromise: Promise<void> | null = null
-  private tokenReporter: AgentTokenUsageReporter | null = null
-  private analyticsSessionIds: AnalyticsSessionIdStore | null = null
   private readonly writer: UsageCacheSnapshotWriter
   private readonly inlineCache = new UsageInlineCachePreservation()
 
@@ -111,23 +99,11 @@ export abstract class UsageProviderStoreLifecycle<
     } as PublicUsageProviderScanState<DataPresenceKey>
   }
 
-  /** Local identity only; callers must use the usage store on the execution host. */
-  getAnalyticsSessionIds(providerSessionIds: readonly string[]): Promise<AnalyticsSessionId[]> {
-    if (!this.analyticsSessionIds) {
-      const { dir, name } = parse(this.config.resolveCacheFile())
-      this.analyticsSessionIds = new AnalyticsSessionIdStore(
-        join(dir, `${name}-analytics-session-ids.json`)
-      )
-    }
-    return this.analyticsSessionIds.getOrCreate(providerSessionIds)
-  }
-
   /** Await queued cache writes so quit does not drop the final snapshot. */
   async flush(): Promise<void> {
     await this.loaded
     await this.inlineCache.settle()
-    await this.tokenReporter?.flush()
-    await Promise.all([this.writer.flush(), this.analyticsSessionIds?.flush()])
+    await this.writer.flush()
   }
 
   async setEnabled(enabled: boolean): Promise<PublicUsageProviderScanState<DataPresenceKey>> {
@@ -290,7 +266,6 @@ export abstract class UsageProviderStoreLifecycle<
         this.state.scanState.lastScanError = null
         // Persistence failures do not turn a successful source scan into a scan failure.
         await this.writeToDisk().catch(() => {})
-        await this.reportTokenUsage()
       } catch (error) {
         this.state.scanState.lastScanError = error instanceof Error ? error.message : String(error)
         await this.writeToDisk().catch(() => {})
@@ -300,29 +275,6 @@ export abstract class UsageProviderStoreLifecycle<
     })()
 
     await this.scanPromise
-  }
-
-  private async reportTokenUsage(): Promise<void> {
-    const config = this.config.tokenUsage
-    if (!config || !isTelemetryEnabled() || !this.state.scanState.enabled) {
-      return
-    }
-    try {
-      if (!this.tokenReporter) {
-        const { dir, name } = parse(this.config.resolveCacheFile())
-        this.tokenReporter = new AgentTokenUsageReporter(
-          join(dir, `${name}-token-usage.json`),
-          config.provider,
-          (ids) => this.getAnalyticsSessionIds(ids)
-        )
-      }
-      await this.tokenReporter.report(config.selectSessions(this.state))
-    } catch {
-      // Reporting failures must not invalidate a successful local usage scan.
-      console.warn(
-        '[agent-token-usage] Could not report token usage; will retry after the next scan'
-      )
-    }
   }
 
   private async getCurrentWorktreeFingerprint(): Promise<string> {

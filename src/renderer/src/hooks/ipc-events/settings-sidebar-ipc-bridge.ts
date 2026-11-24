@@ -23,13 +23,6 @@ export function registerSettingsAndSidebarIpcBridge(unsubs: (() => void)[]): voi
     })
   )
 
-  const unsubscribeOpenSkillShare = window.api.ui.onOpenSkillShare?.((shareId) => {
-    useAppStore.getState().openSkillShare(shareId)
-  })
-  if (unsubscribeOpenSkillShare) {
-    unsubs.push(unsubscribeOpenSkillShare)
-  }
-
   // Why: a tray "Settings…" click can fire before this attaches; consume any queued intent (?. guards stale preload).
   void window.api.ui
     .consumePendingOpenSettings?.()
@@ -40,20 +33,9 @@ export function registerSettingsAndSidebarIpcBridge(unsubs: (() => void)[]): voi
     })
     .catch(() => {})
 
-  const pendingSkillShare = window.api.ui.consumePendingSkillShare?.()
-  if (pendingSkillShare && typeof pendingSkillShare.then === 'function') {
-    void pendingSkillShare
-      .then((shareId) => {
-        if (shareId) {
-          useAppStore.getState().openSkillShare(shareId)
-        }
-      })
-      .catch(() => {})
-  }
-
   unsubs.push(
     window.api.ui.onOpenSetupGuide?.(() => {
-      useAppStore.getState().openModal('setup-guide', { telemetrySource: 'help_menu' })
+      useAppStore.getState().openModal('setup-guide', {})
     }) ?? (() => {})
   )
 

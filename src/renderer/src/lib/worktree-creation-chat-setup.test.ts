@@ -67,9 +67,9 @@ describe('native chat creation completed in the background', () => {
       await executeWorktreeCreation('creation-1', request)
 
       const createArgs = vi.mocked(useAppStore.getState().createWorktree).mock.calls[0]
-      expect(createArgs[10]).toBe(agent)
-      expect(createArgs[16]).toBeUndefined()
-      expect(createArgs[25]).not.toHaveProperty('startupDraft')
+      expect(createArgs[9]).toBe(agent)
+      expect(createArgs[15]).toBeUndefined()
+      expect(createArgs[24]).not.toHaveProperty('startupDraft')
       const state = useAppStore.getState()
       const tabs = state.tabsByWorktree[worktree.id]
       expect(tabs).toHaveLength(1)

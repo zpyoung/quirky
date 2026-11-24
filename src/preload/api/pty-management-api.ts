@@ -1,4 +1,4 @@
-import type { DaemonPtyCwdClass } from '../../shared/daemon-adoption-telemetry'
+import type { DaemonPtyCwdClass } from '../../shared/daemon-folder-access-class'
 import type { DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
 
 // Mirror of daemon's `DaemonSessionInfo` (src/main/daemon/types.ts); not imported — preload can't depend on main-only protocol types.

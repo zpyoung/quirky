@@ -212,7 +212,6 @@ export default function OnboardingFlow({
         />
 
         <section
-          ref={flow.setLifecycleRootRef}
           role="dialog"
           aria-label={translate(
             'auto.components.onboarding.OnboardingFlow.277ba45540',

@@ -24,7 +24,6 @@ export function statusesEqual(left: UpdateStatus, right: UpdateStatus): boolean 
       return (
         right.state === 'available' &&
         left.version === right.version &&
-        left.activeNudgeId === right.activeNudgeId &&
         left.releaseUrl === right.releaseUrl &&
         // Why: fetchChangelog creates a fresh object each time, so reference
         // equality is always false. Compare by presence — since update-available
@@ -35,14 +34,12 @@ export function statusesEqual(left: UpdateStatus, right: UpdateStatus): boolean 
       return (
         right.state === 'downloading' &&
         left.version === right.version &&
-        left.activeNudgeId === right.activeNudgeId &&
         left.percent === right.percent
       )
     case 'downloaded':
       return (
         right.state === 'downloaded' &&
         left.version === right.version &&
-        left.activeNudgeId === right.activeNudgeId &&
         left.releaseUrl === right.releaseUrl
       )
     case 'error':
@@ -53,7 +50,6 @@ export function statusesEqual(left: UpdateStatus, right: UpdateStatus): boolean 
         left.retryable === right.retryable &&
         left.retryAction === right.retryAction &&
         left.userInitiated === right.userInitiated &&
-        left.activeNudgeId === right.activeNudgeId &&
         // Recovery identity fences async actions, so same-valued recaptures must reach the renderer.
         left.recovery === right.recovery
       )

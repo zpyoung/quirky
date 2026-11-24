@@ -5,7 +5,7 @@ import type {
   FeatureWallWorkflowId
 } from '../../../../shared/feature-wall-workflows'
 import type { ReviewStep, ReviewStepId } from '../../../../shared/review-steps'
-import type { FeatureWallOpenSourceTelemetry } from '../../../../shared/telemetry-events'
+import type { FeatureWallOpenSource } from '../../../../shared/add-repo-source'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { WorkbenchStep, WorkbenchStepId } from '../../../../shared/workbench-steps'
 import type { InstalledAgentSkillState } from '@/hooks/useInstalledAgentSkills'
@@ -48,7 +48,7 @@ export function FeatureWallTourPanel(props: {
   gifUrl: string | null
   showGif: boolean
   prefersReducedMotion: boolean
-  source: FeatureWallOpenSourceTelemetry
+  source: FeatureWallOpenSource
   orchestrationSkill: InstalledAgentSkillState
   browserUseSkill: InstalledAgentSkillState
   settings: GlobalSettings | null

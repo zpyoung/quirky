@@ -31,9 +31,6 @@ vi.mock('electron', () => ({
   safeStorage: { isEncryptionAvailable: () => false }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn().mockReturnValue({}) }))
-
 const LIVE_REPO = 'live-repo'
 const GONE_REPO = 'gone-repo'
 const LIVE_WORKTREE = `${LIVE_REPO}::/workspace/live`

@@ -1,5 +1,4 @@
 import { DaemonClient } from './client'
-import { createDaemonAuditEligibilityTracker } from './daemon-audit-eligibility-event'
 import type {
   DaemonAuditContext,
   DaemonAuditObservation,
@@ -88,7 +87,6 @@ export abstract class DaemonPtyRuntimeState {
   protected lastAuthenticatedIdentity: DaemonEndpointIdentity | null = null
   protected exactDaemonIncarnation: ExactDaemonIncarnation | null = null
   protected lastAuditObservation: DaemonAuditObservation | null = null
-  protected readonly trackAuditEligibility = createDaemonAuditEligibilityTracker()
   protected auditObservationListeners: ((observation: DaemonAuditObservation) => void)[] = []
   protected identityChangeListeners: ((event: DaemonIdentityChangeEvent) => void)[] = []
   protected historyManager: HistoryManager | null

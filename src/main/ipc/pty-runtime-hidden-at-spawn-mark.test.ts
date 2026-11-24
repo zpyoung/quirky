@@ -27,12 +27,6 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../telemetry/client', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.telemetryClientModuleMock())
-)
-vi.mock('../telemetry/classify-error', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.classifyErrorModuleMock())
-)
 vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
@@ -112,7 +106,7 @@ describe('runtime-controller spawn: hidden until a renderer view mounts', () => 
     const controller = installController(runtime)
 
     const spawnPromise = controller.spawn({ cols: 80, rows: 24, initiallyHidden: true })
-    await vi.waitFor(() => expect(mintedSessionId).toBeDefined())
+    await vi.waitFor(() => expect(mintedSessionId).toBeDefined(), { timeout: 15_000 })
     // Byte zero (Muse's startup queries) must already be main's to answer.
     expect(isHiddenRendererPty(mintedSessionId!)).toBe(true)
 

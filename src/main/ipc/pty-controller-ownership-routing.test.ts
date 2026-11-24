@@ -29,12 +29,6 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../telemetry/client', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.telemetryClientModuleMock())
-)
-vi.mock('../telemetry/classify-error', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.classifyErrorModuleMock())
-)
 vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )

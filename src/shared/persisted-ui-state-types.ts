@@ -142,13 +142,9 @@ export type PersistedUIState = {
   /** Client-side footer presentation; verbose preserves the pre-roster all-window default. */
   statusBarUsageMode?: StatusBarUsageMode
   dismissedUpdateVersion: string | null
-  /** Version when the sign-out notice was seen or dismissed; any value suppresses future appearances. */
-  dismissedUnexpectedSignoutVersion?: string | null
   lastUpdateCheckAt: number | null
   /** Dev-only update channel override; absent means the build's own channel. */
   releaseChannelOverride?: ReleaseChannel | null
-  pendingUpdateNudgeId?: string | null
-  dismissedUpdateNudgeId?: string | null
   /** Whether Orca already tried triggering the macOS notification permission dialog; prevents re-firing every launch. */
   notificationPermissionRequested?: boolean
   /** Once the "your sessions won't be interrupted" reassurance card is seen, never show it again. */
@@ -217,18 +213,6 @@ export type PersistedUIState = {
   _jiraIssueWorktreeCardPropertyDefaulted?: boolean
   /** One-shot backfill flag for 'host', which became a toggleable property after earlier profiles were already stamped. */
   _hostWorktreeCardPropertyDefaulted?: boolean
-  /** Agent total when the star countdown began or was deferred; preserved across app updates. */
-  starNagBaselineAgents?: number | null
-  /** Legacy baseline version retained for older builds; no longer resets the countdown. */
-  starNagAppVersion?: string | null
-  /** Next agents-since-baseline threshold that fires the star-nag; starts at 35, doubles per dismissal without starring. */
-  starNagNextThreshold?: number
-  /** Once the user has starred Orca (any entry point), permanently suppress the nag. */
-  starNagCompleted?: boolean
-  /** Timestamp until which nonterminal dismissals suppress threshold prompts (force-show bypasses for dev/testing). */
-  starNagDeferredUntil?: number | null
-  /** Version that consumed the one-time value-moment ask; any saved version suppresses future attempts. Main-owned. */
-  starNagAgentValueMomentAppVersion?: string | null
   trustedOrcaHooks?: PersistedTrustedOrcaHooks
   setupScriptPromptDismissedRepoIds?: string[]
   /** Pet overlay visibility, separate from the experimentalPet settings flag so "Hide pet" is a reversible dismiss; absent = true. */

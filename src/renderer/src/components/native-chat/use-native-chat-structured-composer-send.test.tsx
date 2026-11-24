@@ -12,7 +12,6 @@ import type { NativeChatStructuredComposerTransport } from './native-chat-compos
 import type { AgentComposerImageAttachment as NativeChatComposerImageAttachment } from './fork-agent-composer/AgentComposerField'
 import { useNativeChatStructuredComposerSend } from './use-native-chat-structured-composer-send'
 
-vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatMessageSent: vi.fn() }))
 vi.mock('@/lib/worker-terminal-takeover-report', () => ({
   reportStructuredSessionUserInput: vi.fn()
 }))

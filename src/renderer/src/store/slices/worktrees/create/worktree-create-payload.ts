@@ -61,7 +61,6 @@ function sharedCreateFields(
     ...((request.displayNameKind ?? options?.displayNameKind)
       ? { displayNameKind: request.displayNameKind ?? options?.displayNameKind }
       : {}),
-    ...(request.telemetrySource ? { telemetrySource: request.telemetrySource } : {}),
     ...(request.linkedIssue !== undefined ? { linkedIssue: request.linkedIssue } : {}),
     ...(request.linkedPR !== undefined ? { linkedPR: request.linkedPR } : {}),
     ...(request.pushTarget ? { pushTarget: request.pushTarget } : {}),

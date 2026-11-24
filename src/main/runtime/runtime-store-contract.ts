@@ -150,7 +150,6 @@ export type RuntimeStore = {
     minimaxEndpoint?: GlobalSettings['minimaxEndpoint']
     zcodePlanSite?: GlobalSettings['zcodePlanSite']
     prBotAuthorOverrides?: GlobalSettings['prBotAuthorOverrides']
-    artifactSharingEnabled?: GlobalSettings['artifactSharingEnabled']
     terminalQuickCommands?: GlobalSettings['terminalQuickCommands']
     gitlabProjects?: GlobalSettings['gitlabProjects']
     mobileAutoRestoreFitMs?: number | null
@@ -168,7 +167,6 @@ export type RuntimeStore = {
     hostSettingOverrides?: GlobalSettings['hostSettingOverrides']
     activeRuntimeEnvironmentId?: GlobalSettings['activeRuntimeEnvironmentId']
     showPinnedWorktreesInGroups?: GlobalSettings['showPinnedWorktreesInGroups']
-    agentSkillSharingEnabled?: GlobalSettings['agentSkillSharingEnabled']
     nativeChatSessionOptions?: GlobalSettings['nativeChatSessionOptions']
     nativeChatPermissionMode?: GlobalSettings['nativeChatPermissionMode']
     agentNativeChatPermissionModes?: GlobalSettings['agentNativeChatPermissionModes']

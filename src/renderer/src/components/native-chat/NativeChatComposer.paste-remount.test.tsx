@@ -59,12 +59,6 @@ vi.mock('../../../../shared/remote-runtime-pty-id', async (importOriginal) => ({
   ...(await importOriginal<typeof RemoteRuntimePtyIdModule>()),
   isRemoteRuntimePtyId: () => false
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({
-  emitNativeChatMessageSent: vi.fn(),
-  emitNativeChatPickerItemAccepted: vi.fn(),
-  emitNativeChatPickerOpened: vi.fn(),
-  emitNativeChatSendClassified: vi.fn()
-}))
 vi.mock('./fork-agent-composer/AgentComposerField', async (importOriginal) => {
   const original = await importOriginal<{
     AgentComposerField: typeof AgentComposerFieldComponent

@@ -239,7 +239,7 @@ describe('publishCompleteDraftReleases', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse([release])))
 
     const result = await publishCompleteDraftReleases({
-      repo: 'zpyoung/orca',
+      repo: 'zpyoung/quirky',
       token: 'token',
       fetchImpl,
       isDraftBuiltFromCurrentRef: vi.fn(async () => true),

@@ -13,8 +13,6 @@ import {
   getDaemonHistoryDir as getHistoryDir,
   getDaemonRuntimeDir as getRuntimeDir
 } from './daemon-launch-paths'
-import { trackDaemonRetired } from './daemon-lifecycle-event'
-import { attributeNextDaemonReplacement } from './daemon-out-of-process-launcher'
 import {
   disposeProviderSubscriptionsOnly,
   getCurrentDaemonAdapter,
@@ -27,11 +25,7 @@ import type { DaemonRespawnReason } from './daemon-pty-runtime-state'
 import { DaemonPtyRouter } from './daemon-pty-router'
 import { isHoldingForNewerProtocolDaemon } from './daemon-newer-protocol-hold'
 import { cleanupDaemonForProtocol } from './daemon-protocol-cleanup'
-import {
-  isDaemonRestartInFlight,
-  runCoalescedDaemonRestart,
-  type RestartDaemonResult
-} from './daemon-restart-state'
+import { runCoalescedDaemonRestart, type RestartDaemonResult } from './daemon-restart-state'
 import {
   getDaemonPidPath,
   getDaemonSocketPath,
@@ -136,20 +130,8 @@ async function runRestartDaemon(
     packagedAppVersion: currentSpawner.staleDaemonRecycleVersion,
     historyPath: getHistoryDir(),
     respawn: async (reason: DaemonRespawnReason) => {
-      // Why: attribute rather than emit — the launcher below is the one that completes the
-      // replacement, and emitting here would fire before the outcome is known.
-      // Caveat: a wedged-but-alive daemon (#8689) can still report died_respawn here and
-      // failed_health_check from the launcher — the app cannot tell wedged from dead at this point.
       if (reason === 'daemon_died') {
         console.warn('[daemon] Daemon process died — respawning')
-        // Why: a manual restart tears the daemon down under a still-live adapter, so a pane
-        // respawning on its synthetic exit would bill a user action to the crash bucket.
-        if (!isDaemonRestartInFlight()) {
-          trackDaemonRetired('died_respawn')
-        }
-      } else {
-        // Must reach the launcher below without an await in between; see the consume site.
-        attributeNextDaemonReplacement(reason)
       }
       currentSpawner.resetHandle()
       await currentSpawner.ensureRunning()

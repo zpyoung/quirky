@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   AGENT_STATE_RULES_BUNDLE_MAX_BYTES,
-  LIVE_UPDATABLE_AGENT_STATE_RULE_IDS,
   parseAgentStateRulesBundle
 } from './agent-state-rules-bundle'
 import { BUNDLED_AGENT_STATE_RULE_FILES } from './agent-state-rules-catalog'
@@ -20,17 +19,16 @@ function bundle(overrides: Record<string, unknown> = {}): string {
   })
 }
 
-function rejection(text: string, scope: 'live-updatable' | 'any-agent' = 'live-updatable') {
-  const result = parseAgentStateRulesBundle(text, scope)
+function rejection(text: string) {
+  const result = parseAgentStateRulesBundle(text)
   return result.ok ? null : result.error
 }
 
 describe('agent state rules bundle', () => {
-  it('accepts a live-updatable file and carries the bundledOnly flag', () => {
-    const result = parseAgentStateRulesBundle(bundle({ bundledOnly: true }), 'live-updatable')
-    expect(result).toMatchObject({
+  it('accepts a bundle of valid rule files', () => {
+    expect(parseAgentStateRulesBundle(bundle())).toMatchObject({
       ok: true,
-      bundle: { version: 2, bundledOnly: true }
+      bundle: { version: 2 }
     })
   })
 
@@ -46,7 +44,7 @@ describe('agent state rules bundle', () => {
       'agent state rules file 0'
     ],
     ['two files for one agent', bundle({ files: [file('claude'), file('claude')] }), 'two files'],
-    ['an agent with no transcript suite', bundle({ files: [file('gemini')] }), 'gemini']
+    ['a bundledOnly field', bundle({ bundledOnly: true }), 'Unrecognized key']
   ])('rejects %s', (_label, text, error) => {
     expect(rejection(text)).toContain(error)
   })
@@ -57,12 +55,7 @@ describe('agent state rules bundle', () => {
     )
   })
 
-  it('lets a local override carry any agent', () => {
-    expect(rejection(bundle({ files: [file('gemini')] }), 'any-agent')).toBeNull()
-  })
-
-  it('names only agents that have a bundled rule file', () => {
-    const bundled = new Set<string>(BUNDLED_AGENT_STATE_RULE_FILES.map((rules) => rules.id))
-    expect([...LIVE_UPDATABLE_AGENT_STATE_RULE_IDS].filter((id) => !bundled.has(id))).toEqual([])
+  it('accepts any bundled agent', () => {
+    expect(rejection(bundle({ files: [file('gemini')] }))).toBeNull()
   })
 })

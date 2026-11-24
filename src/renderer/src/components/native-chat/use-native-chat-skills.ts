@@ -8,7 +8,6 @@ import {
   readsSkillSource
 } from '../../../../shared/native-chat-agent-profiles'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
-import { emitNativeChatSkillDiscovery } from '@/lib/native-chat-telemetry'
 import {
   isNativeChatSkillDiscoveryAwaitingDirectory,
   resolveNativeChatSkillDiscoveryContext,
@@ -120,11 +119,6 @@ export function useNativeChatSkills(
       return
     }
     if (context.executionHostKind === 'ssh') {
-      emitNativeChatSkillDiscovery({
-        agent,
-        outcome: 'unavailable',
-        executionHostKind: 'ssh'
-      })
       setState({
         status: 'error',
         skills: [],
@@ -138,11 +132,6 @@ export function useNativeChatSkills(
     const paneCacheKey = context.key
     const cached = paneDiscoveryCache.current.get(paneCacheKey)
     if (cached) {
-      emitNativeChatSkillDiscovery({
-        agent,
-        outcome: 'ready',
-        executionHostKind: context.executionHostKind
-      })
       setState({ status: 'ready', skills: cached.skills, error: null, contextKey: context.key })
       return
     }
@@ -159,11 +148,6 @@ export function useNativeChatSkills(
         if (cancelled) {
           return
         }
-        emitNativeChatSkillDiscovery({
-          agent,
-          outcome: 'ready',
-          executionHostKind: context.executionHostKind
-        })
         setState({ status: 'ready', skills: result.skills, error: null, contextKey: paneCacheKey })
       },
       (reason) => {
@@ -172,11 +156,6 @@ export function useNativeChatSkills(
         }
         const error = reason instanceof Error ? reason : new Error(String(reason))
         const timedOut = /timed?\s*out|timeout/i.test(error.message)
-        emitNativeChatSkillDiscovery({
-          agent,
-          outcome: timedOut ? 'timeout' : 'error',
-          executionHostKind: context.executionHostKind
-        })
         setState({
           status: 'error',
           skills: [],

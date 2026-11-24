@@ -1,5 +1,4 @@
 import { DeveloperPermissionsPane } from './DeveloperPermissionsPane'
-import { PrivacyPane } from './PrivacyPane'
 import { RuntimeEnvironmentsPane } from './RuntimeEnvironmentsPane'
 import { RuntimeServersHeaderActions } from './runtime-servers-header-actions'
 import { RuntimeServersPageProvider } from './runtime-servers-page-context'
@@ -93,21 +92,4 @@ export function renderDeveloperPermissionsSettingsSection(
       ) : null}
     </SettingsSection>
   ) : null
-}
-
-export function renderPrivacySettingsSection(context: SettingsRenderContext): React.JSX.Element {
-  const { model, navigation, view } = context
-  return (
-    <SettingsSection
-      id="privacy"
-      title={translate('auto.components.settings.Settings.d7e3f62d70', 'Privacy & Telemetry')}
-      description={translate(
-        'auto.components.settings.Settings.c1b43dc4e2',
-        'Anonymous usage data and telemetry controls.'
-      )}
-      searchEntries={navigation.getSectionSearchEntries('privacy')}
-    >
-      {view.isSectionMounted('privacy') ? <PrivacyPane settings={model.settings} /> : null}
-    </SettingsSection>
-  )
 }

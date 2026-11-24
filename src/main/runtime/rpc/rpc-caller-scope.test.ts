@@ -44,8 +44,7 @@ describe('every RPC method declares a known permission', () => {
     expect(permissionOf('settings.update')).toBe('settings-write')
     expect(permissionOf('settings.getAgentLaunch')).toBe('workspace')
     expect(permissionOf('settings.mutateAgentLaunch')).toBe('settings-write')
-    expect(permissionOf('skills.install')).toBe('skills-admin')
-    expect(permissionOf('skills.share')).toBe('skills-admin')
+    expect(permissionOf('skills.delete')).toBe('skills-admin')
     expect(permissionOf('pairing.provisionRelay')).toBe('pairing-admin')
     expect(permissionOf('ssh.connect')).toBe('host-admin')
     expect(permissionOf('network.browserTunnel')).toBe('host-admin')
@@ -67,7 +66,7 @@ describe('paired runtime clients', () => {
     expect(errorCode(response)).not.toBe('forbidden')
   })
 
-  it.each(['settings.update', 'accounts.selectClaude', 'skills.install', 'updater.check'])(
+  it.each(['settings.update', 'accounts.selectClaude', 'skills.delete', 'updater.check'])(
     'keep the remote UI surface: %s',
     async (method) => {
       const response = await dispatchAs(PAIRED, method, {})

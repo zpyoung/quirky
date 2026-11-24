@@ -2,8 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer } from './server'
 import { PANE } from './server.test-fixtures'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 afterEach(() => vi.restoreAllMocks())
 
 const working = { agentType: 'omp', state: 'working', prompt: 'new turn' }

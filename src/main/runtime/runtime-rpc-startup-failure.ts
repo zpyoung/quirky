@@ -1,11 +1,16 @@
 import { dialog, type BrowserWindow, type MessageBoxOptions } from 'electron'
 
-import type { RuntimeRpcStartErrorClass } from '../../shared/telemetry-events'
 import { translateMain } from '../i18n/main-i18n'
-import { track } from '../telemetry/client'
 import { waitForWindowToShow } from '../window/wait-for-window-to-show'
 
 const MAX_VISIBLE_CAUSE_LENGTH = 500
+
+type RuntimeRpcStartErrorClass =
+  | 'permission_denied'
+  | 'address_in_use'
+  | 'storage_unavailable'
+  | 'invalid_path'
+  | 'unknown'
 
 const ERROR_CLASS_BY_CODE: Readonly<Record<string, RuntimeRpcStartErrorClass>> = {
   EACCES: 'permission_denied',
@@ -116,13 +121,6 @@ function createRuntimeRpcStartupFailureDialogOptions(error: unknown): MessageBox
 
 export function recordRuntimeRpcStartFailure(error: unknown): void {
   console.error('[runtime] Failed to start local RPC transport:', error)
-  try {
-    track('runtime_rpc_start_failed', {
-      error_class: classifyRuntimeRpcStartFailure(error)
-    })
-  } catch (telemetryError) {
-    console.error('[runtime] Failed to record RPC startup failure telemetry:', telemetryError)
-  }
 }
 
 export async function showRuntimeRpcStartupFailureDialog(

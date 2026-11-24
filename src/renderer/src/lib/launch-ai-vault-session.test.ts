@@ -42,10 +42,6 @@ vi.mock('@/components/tab-bar/reconcile-order', () => ({
   ) => [...terminalIds, ...editorIds, ...browserIds]
 }))
 
-vi.mock('@/lib/telemetry', () => ({
-  tuiAgentToAgentKind: (agent: string) => agent
-}))
-
 vi.mock('@/lib/worktree-runtime-owner', () => ({
   runtimeEnvironmentIdWithLegacyFallbackUnlessTwin:
     runtimeMocks.runtimeEnvironmentIdWithLegacyFallbackUnlessTwin
@@ -92,7 +88,7 @@ describe('launchAiVaultSessionInNewTab', () => {
     expect(queuedStartups()).toContainEqual({
       command: 'claude --resume session-1',
       telemetry: {
-        agent_kind: 'claude',
+        agent_kind: 'claude-code',
         launch_source: 'sidebar',
         request_kind: 'resume'
       }
@@ -135,7 +131,7 @@ describe('launchAiVaultSessionInNewTab', () => {
       launchAgent: 'claude',
       resumeProviderSession: { key: 'session_id', id: 'session-1' },
       telemetry: {
-        agent_kind: 'claude',
+        agent_kind: 'claude-code',
         launch_source: 'sidebar',
         request_kind: 'resume'
       }

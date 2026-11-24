@@ -24,7 +24,6 @@ import { JIRA_COMMAND_SPECS } from './jira'
 import { LINEAR_COMMAND_SPECS } from './linear'
 import { VM_COMMAND_SPECS } from './vm'
 import { SKILL_COMMAND_SPECS } from './skills'
-import { ARTIFACT_COMMAND_SPECS } from './artifacts'
 import { LEDGER_COMMAND_SPECS } from './ledger'
 import { SEARCH_COMMAND_SPECS } from './search'
 import { PROFILE_STATE_COMMAND_SPECS } from './profile-state'
@@ -36,7 +35,6 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...ASK_COMMAND_SPECS,
   ...HEIMDALL_COMMAND_SPECS,
   ...LOOP_COMMAND_SPECS,
-  ...ARTIFACT_COMMAND_SPECS,
   ...ACCOUNT_COMMAND_SPECS,
   ...PROJECT_COMMAND_SPECS,
   ...FILE_COMMAND_SPECS,

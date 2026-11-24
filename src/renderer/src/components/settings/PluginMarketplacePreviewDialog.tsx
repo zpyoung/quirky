@@ -138,7 +138,6 @@ export function PluginMarketplacePreviewDialog({
   onConfirm
 }: PluginMarketplacePreviewDialogProps): React.JSX.Element {
   const contributions = preview ? contributionSummary(preview) : []
-  const blocked = preview?.blockedByKillList
   const provenanceSource: PluginConsentSource | undefined = preview
     ? {
         kind: preview.bundled ? 'bundled' : 'marketplace',
@@ -239,15 +238,6 @@ export function PluginMarketplacePreviewDialog({
                 </span>
               </div>
             ) : null}
-            {blocked ? (
-              <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3.5 py-3 text-sm text-destructive">
-                {translate(
-                  'auto.components.settings.PluginMarketplacePreviewDialog.blocked',
-                  "Orca's safety list blocks this plugin: {{value0}}",
-                  { value0: blocked.reason }
-                )}
-              </p>
-            ) : null}
             {currentVersion ? (
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Check className="size-4 shrink-0" aria-hidden="true" />
@@ -274,7 +264,7 @@ export function PluginMarketplacePreviewDialog({
                       'Cancel'
                     )}
                   </Button>
-                  <Button disabled={busy || Boolean(blocked)} onClick={onConfirm}>
+                  <Button disabled={busy} onClick={onConfirm}>
                     {busy ? <Loader2 className="animate-spin" /> : null}
                     {mode === 'update'
                       ? translate(

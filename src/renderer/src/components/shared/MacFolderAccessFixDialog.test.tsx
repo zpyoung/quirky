@@ -4,18 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-const { trackTelemetry, restart, openSettings, resetFolderAccess, dismissToast } = vi.hoisted(
-  () => ({
-    trackTelemetry: vi.fn(),
-    restart: vi.fn(async () => ({ success: true })),
-    openSettings: vi.fn(async () => {}),
-    resetFolderAccess: vi.fn(),
-    dismissToast: vi.fn()
-  })
-)
+const { restart, openSettings, resetFolderAccess, dismissToast } = vi.hoisted(() => ({
+  restart: vi.fn(async () => ({ success: true })),
+  openSettings: vi.fn(async () => {}),
+  resetFolderAccess: vi.fn(),
+  dismissToast: vi.fn()
+}))
 
 vi.mock('sonner', () => ({ toast: { dismiss: dismissToast } }))
-vi.mock('@/lib/telemetry', () => ({ track: trackTelemetry }))
 vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string, options?: Record<string, string>) =>
     fallback.replace(/\{\{(\w+)\}\}/g, (match, name: string) => options?.[name] ?? match)
@@ -84,7 +80,6 @@ function footerButton(name: string): HTMLElement {
 }
 
 beforeEach(() => {
-  trackTelemetry.mockReset()
   restart.mockReset().mockResolvedValue({ success: true })
   openSettings.mockReset().mockResolvedValue(undefined)
   resetFolderAccess.mockReset()
@@ -206,10 +201,6 @@ describe('MacFolderAccessFixDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Open System Settings' }))
 
     expect(openSettings).toHaveBeenCalledWith({ id: 'files-and-folders' })
-    expect(trackTelemetry).toHaveBeenCalledWith('daemon_folder_access_notice', {
-      action: 'settings_opened',
-      cwd_class: 'documents'
-    })
   })
 
   it('restarts the terminal service without a second confirmation', async () => {
@@ -219,10 +210,6 @@ describe('MacFolderAccessFixDialog', () => {
     await userEvent.click(restartButton())
 
     expect(restart).toHaveBeenCalledTimes(1)
-    expect(trackTelemetry).toHaveBeenCalledWith('daemon_folder_access_notice', {
-      action: 'restart_clicked',
-      cwd_class: 'documents'
-    })
   })
 
   it('shows a busy state while the restart runs', async () => {
@@ -291,7 +278,7 @@ describe('MacFolderAccessFixDialog', () => {
     expect(restartButton().hasAttribute('disabled')).toBe(false)
   })
 
-  it('reports the reset click and flips to Restart once the re-probe allows it', async () => {
+  it('clicks reset and flips to Restart once the re-probe allows it', async () => {
     probed('allowed')
     openWith('denied')
     render(<MacFolderAccessFixDialog />)
@@ -302,10 +289,6 @@ describe('MacFolderAccessFixDialog', () => {
       expect(restartButton()).toBeTruthy()
     })
     expect(resetFolderAccess).toHaveBeenCalledTimes(1)
-    expect(trackTelemetry).toHaveBeenCalledWith('daemon_folder_access_notice', {
-      action: 'reset_clicked',
-      cwd_class: 'documents'
-    })
     expect(screen.queryByText('Still blocked after the reset.')).toBeNull()
   })
 

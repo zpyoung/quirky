@@ -1,12 +1,25 @@
 import type { DiscoveredSkill } from '../../../../shared/skills'
 
+export function updatedSkillSelection(
+  current: ReadonlySet<string>,
+  skillId: string,
+  selected: boolean,
+  maxSelection?: number
+): Set<string> {
+  const next = new Set(current)
+  if (selected && (maxSelection === undefined || next.size < maxSelection)) {
+    next.add(skillId)
+  } else {
+    next.delete(skillId)
+  }
+  return next
+}
+
 /**
- * The range/select-all/retain-across-rescan logic both selection modes share.
+ * The range/select-all/retain-across-rescan logic for skill selection.
  *
- * `collisionKey` is what they do *not* share. Share collapses selections by
- * lowercase name, because two skills cannot publish under one name. Delete has
- * no such constraint — two rows named `foo` from different roots must both be
- * selectable — so it passes `null` and nothing collapses.
+ * `collisionKey` collapses selections that share a key; returning `null` keeps
+ * every row independently selectable.
  */
 export type SkillSelectionPolicy = {
   isEligible: (skill: DiscoveredSkill) => boolean

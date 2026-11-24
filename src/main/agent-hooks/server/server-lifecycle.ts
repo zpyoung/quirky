@@ -14,7 +14,6 @@ import { resolveHookSource } from '../../../shared/agent-hook-listener/source-ro
 import { HOOK_REQUEST_SLOWLORIS_MS } from '../../../shared/agent-hook-listener/listener-limits'
 import { isHookRequestTruncatedError } from '../../../shared/agent-hook-transport-interference'
 import { clearAllListenerCaches } from '../../../shared/agent-hook-listener/listener-state'
-import { trackEmptyPaneKeyHook } from './server-transport-rules'
 import { sessionInfoService } from '../../fork-session-info/session-info-service'
 import { AgentHookServerStatusHookLifecycle } from './server-status-hook-lifecycle'
 import { OPENCODE_STARTUP_PROMPT_CLAIM_PATH } from '../../../shared/opencode-startup-prompt'
@@ -132,7 +131,6 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
         }
         // Why: merge transport headers before normalization so relay-compatible fields have one canonical path.
         const hookBody = mergeAgentHookRequestHeaders(body, req.headers)
-        trackEmptyPaneKeyHook(hookBody)
         const aliasedBody = this.normalizeHookBodyPaneKeyAlias(hookBody)
         if (await this.ingestTmuxHook(source, aliasedBody)) {
           res.writeHead(204)
@@ -266,7 +264,6 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
     this.clearStartupPromptClaims = null
     this.onStartupPromptClaim = null
     this.onPaneStatusCleared = null
-    this.onTransportInterference = null
     this.transportInterference.reset()
     for (const timer of this.assistantMessageRetryTimers.values()) {
       clearTimeout(timer)

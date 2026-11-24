@@ -38,7 +38,7 @@ function placement(status: SkillFreshnessStatus, index = 0): SkillFreshnessInsta
     topology: 'canonical-copy',
     status,
     currentPackageDigest: 'current',
-    lockSource: 'stablyai/orca',
+    lockSource: 'zpyoung/quirky',
     errorCategory: null
   }
 }

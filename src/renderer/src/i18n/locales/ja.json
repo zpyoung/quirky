@@ -573,20 +573,9 @@
         "orca": {
           "profiles": {
             "612f7f6861": "プロファイルの作成に失敗しました",
-            "319d7cf39b": "クラウドプロファイルが作成されました",
-            "d6e764e7db": "このプロファイルを再接続してください",
-            "f0c9e11a6d": "クラウドプロファイルの作成に失敗しました",
-            "8b8fa73174": "Orca Cloud へのサインインが設定されていません",
-            "33290e88ed": "プロファイルの接続に失敗しました",
-            "9fcb07a796": "プロファイルが接続されました",
-            "2f6c78a039": "プロファイル認証の更新に失敗しました",
-            "a37b5e6d37": "プロファイルからサインアウトしました",
-            "83600521e7": "サインアウトに失敗しました",
-            "76deec8f58": "組織の切り替えに失敗しました",
             "7d4bc516ee": "プロファイルの切り替えに失敗しました",
             "f518e89aa5": "プロジェクトはそのプロファイルに既に存在します",
-            "f03ae7f27b": "プロジェクトの転送に失敗しました",
-            "signInTimedOut": "サインインがタイムアウトしました"
+            "f03ae7f27b": "プロジェクトの転送に失敗しました"
           }
         },
         "runtime": {
@@ -1013,22 +1002,6 @@
       "pluginCommandKeybindings": {
         "group": "プラグイン"
       },
-      "feedback": {
-        "image": {
-          "attachments": {
-            "fallbackName": "画像の添付",
-            "unsupportedType": "{{fileName}} は対応していない画像形式です。",
-            "empty": "{{fileName}} は空です。",
-            "tooLarge": "{{fileName}} は {{maxSize}} を超えています。",
-            "tooMany": "画像は最大 {{maxCount}} 件まで添付できます。",
-            "dimensionsTooLarge": "{{fileName}} は画像サイズが大きすぎるため、安全にプレビューできません。",
-            "invalidImage": "{{fileName}} は有効な画像として読み取れません。",
-            "additionalErrors": "ほかに {{count}} 件の画像を添付できませんでした。",
-            "totalTooLarge": "{{fileName}} を追加すると添付ファイルの合計が {{maxSize}} を超えます。",
-            "compressed": "{{fileName}} を添付ファイルの上限に収めるため、{{originalSize}} から {{size}} に圧縮しました。"
-          }
-        }
-      },
       "activateAiVaultStructuredSession": {
         "unavailable": "構造化 Agent セッションはまだ利用できません。しばらくしてから再試行してください。",
         "gone": "このチャットはこのホスト上に存在しないため、ここで再度開くことはできません。",
@@ -1147,15 +1120,12 @@
         "225071c560": "実験的機能",
         "e338c507c1": "トラブルシューティングのための低レベルの互換性設定。",
         "580a04cd81": "詳細設定",
-        "8400cfe1c1": "匿名の使用状況データとテレメトリ制御。",
-        "3618579df6": "プライバシーとテレメトリ",
         "65ec7d1968": "ターミナルで起動される開発者ツールの macOS プライバシーアクセス。",
         "d91ae31fbd": "macOS のアクセス許可",
         "95a1886d94": "スマートフォンからターミナルと Agent を操作します。",
         "1cd25673df": "モバイル",
         "31e57d1c70": "ファイル、ターミナル、Git、ワークスペースに既存のマシンを SSH 経由で使用します。",
         "94a5afe910": "SSH ホスト",
-        "40d80bad8a": "ベータ",
         "de0c2907a1": "リモート Orca サーバー",
         "b351014180": "Orca の統計に加え、Claude、Codex、OpenCode、Muse のトークン分析と Grok サブスクリプション使用状況。",
         "d72a58b5b9": "統計と使用状況",
@@ -1218,12 +1188,8 @@
         "pluginsTitle": "プラグイン",
         "pluginsDescription": "実験的機能の Orca プラグインをインストール・管理します。",
         "tasksDescription": "プロバイダーを接続し、Linear スキルをインストールして、タスクに表示する項目を選択します。",
-        "artifactsTitle": "アーティファクト",
-        "artifactsDescription": "HTML および Markdown ファイルをチームと共有し、パブリックリンクを管理します。",
         "automationsTitle": "自動化",
         "automationsDescription": "Agent の作業をスケジュールし、自動化をサイドバーに表示するかどうかを選択します。",
-        "shareSkillsTitle": "スキルを共有する",
-        "shareSkillsDescription": "非公開リンクを使用してスキルを共有してください。持っている人なら誰でもインストールできます。",
         "floatingWorkspaceWebDescription": "グローバルターミナルと markdown タブ。"
       },
       "useAppMenuPaste": {
@@ -1288,15 +1254,6 @@
         "d3e8a1f4b2": "アカウントを切り替えました",
         "9375620cc3": "このセッションを再起動して {{value0}} を使用してください。それまでは前のアカウントのままです。",
         "6133594b12": "以前のアカウントを保持"
-      },
-      "FirstLaunchBanner": {
-        "b9e1b966c7": "通知を閉じる",
-        "94cc673726": "了解",
-        "fc5cc29955": "オプトアウト",
-        "d1deebb050": "プライバシーポリシー",
-        "958d2cc31b": "使用している機能を匿名でカウントすることは、何を構築するかを優先するのに役立ちます。ファイルの内容、プロンプト、ターミナル出力など、あなたを特定するものは何もありません。 [設定] -> [プライバシーとテレメトリ]でいつでも変更できます。",
-        "9784b4d7bc": "次に何を構築するかを決定するのにご協力ください",
-        "fcbee32f08": "テレメトリ通知"
       },
       "GitHubItemDialog": {
         "3ab6ac0fc8": "選択した GitHub Issue または PR をプレビュー・編集します。",
@@ -1610,7 +1567,6 @@
         "6ca6ff404e": "ORCA",
         "520304a067": "Orca のロゴ",
         "ce44fad849": "依存関係が欠落している",
-        "c1cf168479": "非表示",
         "00cee697c1": "ターミナルで「gh auth login」を実行して、GitHub アカウントに接続します。",
         "9f96d018b7": "GitHub CLI が認証されていません",
         "73e1ad4282": "Orca は、GitHub CLI (gh) を使用して、PR、Issue、チェックを表示します。",
@@ -1620,9 +1576,6 @@
         "cd21242762": "プロジェクトを追加して開始します。",
         "9c00bd4adf": "開始するには、サイドバーからワークスペースを選択します。",
         "16e9e3df89": "星付き",
-        "0d0ace8861": "GitHub でスターを付ける",
-        "ec43b38ba7": "GitHub でスター済み",
-        "157bb5ecbb": "GitHub を開く",
         "preflightDismiss": "閉じる"
       },
       "LinearIssueMarkdownDescriptionEditor": {
@@ -2029,16 +1982,8 @@
         "92b0f9d921": "認証されているので、再試行してください。",
         "cd8c34aac1": "gh",
         "cf82170065": "リポジトリにスターを付けることができませんでした。確認する",
-        "30c36231c1": "Orca はオープンソースです。今日役に立ったなら、GitHub のスターが他の開発者の発見につながります。",
-        "b5e685e4d9": "閉じる",
-        "5f6df21046": "Orca を楽しんでいますか？",
-        "2d67b6c849": "GitHub でスターを付ける",
-        "af3c9bbb37": "スターを付けています…",
         "68a41bc3aa": "スターを付けられませんでした:",
         "996bf76e46": "ブラウザで GitHub を開いて完了してください。",
-        "d32015fec7": "開いています…",
-        "157bb5ecbb": "GitHub を開く",
-        "8c967b4d15": "後で",
         "73dfd4eb8d": "今後表示しない"
       },
       "TaskPage": {
@@ -4631,8 +4576,6 @@
           "08a321a984": "現在の検索条件とフィルターに一致するスキルはありません。",
           "cd7893fbc1": "スキルをスキャン中",
           "35b9a724a0": "利用可能",
-          "c13b82793c": "インストールを管理",
-          "aee7b99cc6": "リンクからインストール",
           "filterProvider": "Agent で絞り込み",
           "filterSource": "ソースで絞り込み",
           "allSources": "すべて",
@@ -4640,12 +4583,7 @@
           "closeSkills": "スキルを閉じる",
           "closeTooltip": "閉じる · Esc",
           "moreActions": "その他の操作",
-          "sharedLinks": "共有リンク",
-          "emptyCopy": "スキャンしたスキルフォルダーは空です。共有バンドルをインストールするか、スキルを追加後に更新してください。",
           "retry": "再試行",
-          "remoteShareNotice": "これらのスキルは {{host}} にあります。共有するには、そのマシンでスキルを開いてください。",
-          "viewSwitch": "表示",
-          "searchLinks": "リンクを検索",
           "deleteSkills": "スキルを削除…",
           "984405683f": "プラグイン",
           "4d177feabd": "同梱",
@@ -4663,15 +4601,10 @@
           "0c74e7ff34": "インストール済み"
         },
         "SkillShareSelectionControls": {
-          "01c5a15e02": "スキルを共有",
           "01c5a15e05": "{{value0}} スキルを共有する",
           "01c5a15e01": "共有をキャンセルする",
           "01c5a15e03": "{{value0}} が選択されました",
-          "01c5a15e04": "すべての結果を選択",
-          "01c5a15e06": "このスキルをそのマシン上で開いて共有します。",
-          "01c5a15e07": "このスキルを共有する前にインストールしてください。",
-          "01c5a15e08": "共有できるのは自宅とワークスペースのスキルのみです。",
-          "01c5a15e09": "この名前のスキルはすでに別のソースから選択されています。"
+          "01c5a15e04": "すべての結果を選択"
         },
         "SkillRow": {
           "updatedUnknown": "日付なし",
@@ -4681,7 +4614,6 @@
           "skillActions": "{{value0}} の操作",
           "viewDetails": "詳細を表示",
           "deleteSkill": "削除…",
-          "notShareable": "共有不可",
           "detailSource": "ソース",
           "detailContents": "コンテンツ",
           "notDeletable": "削除できません"
@@ -4713,14 +4645,6 @@
           "resultOne": "{{count}} 件の結果",
           "resultOther": "{{count}} 件の結果",
           "selected": "{{count}} 件を選択",
-          "shareOne": "{{count}} 件のスキルを共有",
-          "shareOther": "{{count}} 件のスキルを共有",
-          "linkOne": "{{count}} 件のリンク",
-          "linkOther": "{{count}} 件のリンク",
-          "installOne": "{{count}} スキルをインストールする",
-          "installOther": "{{count}} スキルをインストールする",
-          "retryOne": "{{count}} スキルを再試行してください",
-          "retryOther": "{{count}} スキルを再試行してください",
           "deleteOne": "{{count}} スキルを削除",
           "deleteOther": "{{count}} スキルを削除",
           "deletedOne": "{{count}} スキルを削除しました",
@@ -4737,7 +4661,6 @@
         "SkillsSelectionHeader": {
           "exit": "選択を終了",
           "exitTooltip": "選択を終了 · Esc",
-          "title": "共有するスキルを選択",
           "selectAll": "対象の {{count}} 件をすべて選択",
           "clear": "クリア",
           "deleteTitle": "削除するスキルを選択"
@@ -4850,33 +4773,14 @@
           "remote": "接続済みランタイム"
         },
         "SkillShareDialog": {
-          "reconnect": "共有する前に Orca アカウントを再接続してください。",
-          "unconfigured": "共有する前に Orca Cloud アカウントに接続してください。",
-          "prepareFailed": "このスキルを共有用に準備できませんでした。",
           "peopleRequired": "少なくとも 1 人のチームメイトを選択してください。",
-          "publishCancelled": "アップロードがキャンセルされました。準備されたコピーは引き続き再試行できます。",
-          "publishFailed": "このスキルを公開できませんでした。準備されたコピーは引き続き再試行できます。",
-          "nameTaken": "スキル名「{{name}}」はすでに使用されています。共有するにはスキルの名前を変更してください。",
-          "copied": "共有リンクがコピーされました",
-          "preparing": "プレビューを準備しています…",
-          "ready": "スキルリンク準備完了",
-          "title": "スキルをシェアする",
           "readyDescription": "受信者は Orca を検査またはインストールする前に Orca で認証します。",
           "newVersionDescription": "正確なファイルを確認してから、不変バージョンを既存のクラウドパッケージに公開します。",
           "description": "正確なファイルを確認し、ファイルにアクセスできるユーザーを選択して、不変バージョンを公開します。",
-          "0f07fa2a79": "スキルの公開",
-          "7aa4ba0dba": "新規バージョンを公開する",
-          "3a51d0f34f": "アップロードをキャンセルする",
-          "e9d652ae3d": "キャンセル中…",
-          "30985d4fc0": "キャンセル",
-          "3af85f6add": "完了",
           "readyDescriptionV2": "この非公開リンクを知っている人は誰でもスキルを検査してインストールできます。",
-          "descriptionV2": "正確なファイルを確認してから、非公開リンクの背後にある不変バージョンを公開します。",
-          "publishBundle": "バンドルの公開",
-          "cancelRequestFailed": "Orca はキャンセルリクエストを送信できませんでした。アップロードはまだ完了している可能性があります。"
+          "descriptionV2": "正確なファイルを確認してから、非公開リンクの背後にある不変バージョンを公開します。"
         },
         "SkillCard": {
-          "d25a1b8ae6": "スキルをシェアする",
           "01c5a16e01": "{{value0}} を選択してください"
         },
         "SkillCloudManagementActions": {
@@ -4901,17 +4805,9 @@
         },
         "SkillInstallDialog": {
           "39acb9e8f4": "スキルのインストール",
-          "59c3b76cdd": "インストールを再試行します",
-          "241e72f9d6": "インストール中…",
-          "05588076a9": "インストールをキャンセルする",
-          "d198ec91e5": "閉じる",
-          "4a00d133c5": "Orca は、選択したマシンを変更する前に、アクセスとパッケージの ID を検証します。",
-          "fcbec627cc": "シェアスキルをインストールする",
-          "01c5a14e01": "共有スキルをインストールする",
-          "opening": "このリンクを開くと…"
+          "4a00d133c5": "Orca は、選択したマシンを変更する前に、アクセスとパッケージの ID を検証します。"
         },
         "SkillInstallManagementDialog": {
-          "8095927ff3": "閉じる",
           "e91af0079f": "削除",
           "470d8d2476": "削除の確認",
           "c1d03ee50d": "インストールをキャンセルする",
@@ -4923,71 +4819,24 @@
           "74b70892ea": "ローカルファイルが変更されました",
           "86ed219b55": "バージョンを選択してください",
           "9c04bd0120": "インストールされているバージョン",
-          "64c71cf7b9": "このマシンには Orca 管理のスキルインストールが見つかりませんでした。",
-          "0900db719a": "— 切断されました",
-          "176fef9516": "・ SSH",
-          "6cb1fbe039": "このコンピュータ",
-          "3677ae58e7": "Orca によってインストールされたバージョンを更新、ロールバック、または安全に削除します。",
-          "44d118a8f7": "インストールされたスキルを管理する",
           "1c9e7f420a": "インストールされたバンドルスキル",
           "34c2ef9e71": "{{count}} スキルをインストールする",
           "a0cab67c2f": "{{count}} スキルを削除します",
           "f970d8088d": "{{count}} スキルの削除を確認する",
-          "dab29e4b54": "{{installed}} がインストールされました · {{updated}} が更新されました · {{keptLocal}} はローカルに保持されました",
           "installAnotherMachine": "別のマシンにインストールする"
         },
         "SkillInstallReviewContent": {
-          "89e2601162": "廃棄して交換する",
-          "a5675fb371": "内容を変更せずに放置しました。それを保持するか、明示的に破棄してこのバージョンに置き換えます。",
-          "37d990b94c": "変わった",
-          "2a31912f14": "Orca 発見",
-          "651b7d8a57": "ローカルコピーには決定が必要です",
           "98ed90e523": "スキルには指示が含まれており、スクリプトが含まれる場合もあります。それを作成者からのコードとして扱います。",
           "f72ee4022a": "SHA-256",
           "3d8421ca2f": "実行可能",
           "87137bcb8d": "スクリプト",
           "fab8fce842": "ファイル",
           "8f9833d509": "不変バージョン",
-          "66270286ac": "・安全にリトライできる。",
-          "1b6ad2ca5c": "チェックされました。",
-          "3fc62a61eb": "配置",
-          "157de228b4": "スキルを検査する",
-          "69236de8d6": "確認中…",
-          "27672470d9": "リンクを開いても何もインストールされません。まず不変バージョンを確認してください。",
-          "66cff7a804": "https://app.orca.dev/skills/share/…",
-          "93eb0fe8c7": "Orca のスキルリンク",
-          "releaseNotes": "リリースノート:",
-          "targetHeader": "インストール対象"
-        },
-        "SkillInstallTargetFields": {
-          "8e6a972229": "このマシンにはワークスペースがありません。",
-          "7a366323e7": "フォルダー",
-          "d628c416a2": "Git ワークツリー",
-          "5845cfe543": "ワークツリーまたはフォルダーを選択してください",
-          "0e5b43a9e3": "ワークスペース",
-          "0c10a406fb": "WSL ・",
-          "e5b0d15e64": "ホストオペレーティングシステム",
-          "cb47652227": "実行環境",
-          "a4dfd33095": "1 つのワークスペース",
-          "c779621aa0": "グローバルスキル",
-          "63cc9e31fe": "行き先",
-          "85d85880df": "・ SSH",
-          "71eefd7660": "— 切断されました",
-          "0785d0a503": "— アップデートが必要です",
-          "8562dd1e6e": "このコンピュータ",
-          "b8a0b706ad": "機械"
-        },
-        "SkillInstallWorkspaceCombobox": {
-          "search": "ワークスペースを検索…",
-          "empty": "ワークスペースが見つかりません。"
+          "27672470d9": "リンクを開いても何もインストールされません。まず不変バージョンを確認してください。"
         },
         "SkillShareReviewContent": {
           "e3caf6baeb": "このリンクを取り消すと、今後のアクセスがブロックされます。受信者のマシンに既にインストールされているコピーは削除されません。",
-          "6d6233a3a4": "リンクをコピー",
-          "0142581727": "アップロード中…",
           "ad940367a5": "検証して公開しています…",
-          "bf02d6ed9e": "このバージョンでは何が変更されましたか?",
-          "f0c0411549": "リリースノート",
           "4895d3e0ee": "チームメイトがいません。",
           "8188f5d765": "リンクにアクセスできます。",
           "fe204e06f0": "組織",
@@ -4995,44 +4844,25 @@
           "f25429e266": "選ばれた人々",
           "0a49d901ab": "組織",
           "6817a7f6f8": "スキルアクセス",
-          "c15d90c10b": "接続された Orca Cloud アカウントが必要です。",
           "266527d295": "{{value0}}{{value1}} として公開します。",
           "78d863235c": "アクセス",
-          "b3b1d4b911": "SHA-256",
           "77f636eac3": "実行可能",
           "8edd32622f": "スクリプト",
           "3121f44358": "ファイル",
-          "2dca0b720b": "新規スキルバージョンを公開する",
           "01c5a17e01": "{{value0}} スキル",
           "01c5a17e02": "含まれるスキルを確認する",
           "01c5a17e03": "{{value0}} ファイル · {{value1}}",
           "unlistedLinkTitle": "非公開リンク",
           "unlistedPublishingAs": "{{value0}} として公開します。リンクを知っている人は誰でも、これらのスキルを検査してインストールできます。",
-          "unlistedLinkDetails": "リンクは検索できず、公開されていません。今後のアクセスをブロックするには、これを取り消します。インストールされたコピーは残ります。",
-          "bundleReady": "スキルバンドルリンクの準備ができました",
-          "publishBundleVersion": "新規スキルバンドルバージョンを公開する",
-          "shareBundle": "スキルバンドルを共有する",
-          "publishingLink": "リンクを公開中…",
-          "verifyingPackage": "パッケージを確認中…"
+          "unlistedLinkDetails": "リンクは検索できず、公開されていません。今後のアクセスをブロックするには、これを取り消します。インストールされたコピーは残ります。"
         },
         "SkillBundleInstallFlow": {
-          "01c5a13e01": "閉じる",
-          "01c5a13e02": "インストールをキャンセルする",
-          "01c5a13e03": "インストール中…",
           "01c5a13e04": "{{value0}} スキルを再試行してください",
           "01c5a13e05": "{{value0}} スキルをインストールする"
         },
         "SkillBundleInstallOutcome": {
-          "01c5a12e01": "インストール済み",
-          "01c5a12e02": "更新済み",
-          "01c5a12e03": "変わらない",
-          "01c5a12e04": "ローカルに維持",
           "01c5a12e05": "失敗",
-          "01c5a12e06": "キャンセル",
-          "01c5a12e07": "バンドルのインストールには注意が必要です。",
-          "01c5a12e08": "スキルがインストールされ、検証されました。",
-          "01c5a12e09": "{{value0}} 選択されたスキルがチェックされました。",
-          "01c5a12e10": "再試行が必要です"
+          "01c5a12e06": "キャンセル"
         },
         "SkillBundleInstallReview": {
           "01c5a11e01": "不変バージョン",
@@ -5041,17 +4871,12 @@
           "01c5a11e04": "{{value0}} スクリプト",
           "01c5a11e05": "{{value0}} 実行可能ファイル",
           "01c5a11e06": "SHA-256",
-          "01c5a11e09": "リリースノート:",
           "01c5a11e0a": "スキルには指示が含まれており、スクリプトが含まれる場合もあります。それらを作成者からのコードとして扱います。",
           "01c5a11e0b": "インストールするスキル",
           "01c5a11e0c": "このバンドルから任意のサブセットを選択します。",
-          "01c5a11e0d": "すべて選択",
           "01c5a11e0e": "説明なし",
           "01c5a11e0f": "{{value0}} ファイル · {{value1}} スクリプト",
           "01c5a11e10": "{{value0}} 実行可能ファイル",
-          "01c5a11e11": "ローカルコピーには決定が必要です",
-          "01c5a11e12": "Orca はデフォルトでこれらのローカルコピーを保持します。破棄して置き換えるコピーのみを選択します。",
-          "01c5a11e13": "{{value0}} ({{value1}}) を置き換えます",
           "01c5a11e14": "{{value0}} 新規",
           "01c5a11e15": "{{value0}} は変更なし",
           "01c5a11e16": "{{value0}} の更新",
@@ -5060,104 +4885,25 @@
         "SkillManagedInstallList": {
           "86c76cb262": "{{count}} スキルバンドル"
         },
-        "skill-install-progress-state": {
-          "currentSkill": "{{value0}} または {{value1}} をインストールしています: {{value2}}…"
-        },
         "SkillSelectionBar": {
           "selectAll": "対象となる{{count}}をすべて選択してください",
           "clear": "クリア"
         },
         "share": {
-          "fileExecutable": "実行可能",
-          "fileScript": "スクリプト",
-          "reviewFiles": "実行できるファイルを確認する",
-          "reviewSkills": "含まれるスキルを確認する",
-          "releaseNotesVersion": "リリースノート",
-          "releaseNotesOptional": "リリースノートを追加する (オプション)",
-          "releaseNotesFirst": "このリリースについて説明する",
           "readyDescription": "リンクをコピーして共有します。",
           "newVersionDescription": "不変バージョンを既存のパッケージに公開します。",
           "description": "非公開リンクの背後に不変バージョンを公開します。",
           "accessSummary": "リンクを知っている人は誰でもこれをインストールできます。これはどこにもリストされておらず、これを取り消すと、既にインストールされているコピーではなく、新規インストールがブロックされます。 {{value0}} として公開します。",
-          "manageLinks": "[設定] でこのリンクを管理または取り消します",
-          "scriptOne": "{{count}} スクリプト",
-          "scriptOther": "{{count}} スクリプト",
-          "executableOne": "{{count}} 実行可能ファイル",
-          "executableOther": "{{count}} 実行可能ファイル",
-          "noExecutableContent": "スクリプトや実行可能ファイルはありません",
-          "newVersionDescriptionPlain": "新規バージョンを既存のリンクに追加します。",
-          "accessSummaryShort": "リストにないリンク — これを持っている人は誰でもこれをインストールできます。 {{value0}} として公開します。",
-          "accessSummaryPlain": "リストにないリンク — これを持っている人は誰でもこれをインストールできます。"
-        },
-        "description": {
-          "showLess": "表示を少なくする",
-          "showMore": "もっと見る"
+          "accessSummaryShort": "リストにないリンク — これを持っている人は誰でもこれをインストールできます。 {{value0}} として公開します。"
         },
         "install": {
-          "authorizing": "パッケージへのアクセスを許可しています…",
-          "installing": "ダウンロード、検証、インストール中…",
-          "selectSkill": "少なくとも 1 つのスキルを選択します。",
-          "chooseWorkspace": "ワークスペースを選択します。",
-          "reconnectBeforeInstalling": "インストールする前に Orca アカウントを再接続してください。",
-          "bundleVerificationFailed": "Orca が要求されたバンドルを検証する前にインストールが失敗しました。",
-          "destinationAlreadyFinished": "宛先はすでにこのインストールを完了していました。",
-          "enterShareLink": "Orca スキル共有リンクを入力します。",
-          "shareUnavailable": "この共有は使用できません。リンクが無効、期限切れ、または取り消されている可能性があります。",
-          "requestedVersionVerificationFailed": "Orca が要求されたバージョンを確認する前にインストールが失敗しました。",
-          "versionVerificationFailed": "Orca は要求されたバージョンを確認できませんでした。",
-          "inspectManagedFailed": "Orca は、このマシン上の管理対象インストールを検査できませんでした。",
-          "reconnectForVersionHistory": "Orca アカウントを再接続して、バージョン履歴を読み込みます。",
-          "versionHistoryUnavailable": "このスキルではバージョン履歴は利用できません。",
-          "bundleSkillsMissing": "このバージョンには、インストールされているバンドルスキルは含まれていません。",
-          "reconnectBeforeVersionChange": "バージョンを変更する前に、Orca アカウントを再接続してください。",
-          "removeFailed": "Orca はこのスキルを安全に削除できませんでした。",
-          "agentsLabel": "エージェント",
           "agentsCanonical": "{{value0}} には常にインストールされ、{{value1}} と読み取られます。",
           "agentsNoneChosen": "追加の Agent は不要",
           "agentsSummary": "また: {{value0}}",
-          "agentNotInstalled": "未インストール",
           "bundleDestinationSummary": "{{value0}} 新規 · {{value1}} すでにインストールされています · {{value2}} 決定が必要です",
           "trustNote": "スキルは、作成者からの指示とコードです。信頼できるものをインストールしてください。",
-          "agentsNone": "Agent が選択されていません",
-          "agentsSelected": "インストール対象: {{value0}}",
           "agentAlways": "いつも",
-          "agentsCanonicalNote": "{{value0}} は、インストールごとに書き込まれる {{value1}} を読み取ります。",
-          "linkHint": "リンクを開いても何もインストールされません。最初にリンクを確認してください。",
-          "rowNeedsDecision": "決断が必要です",
-          "rowInstalled": "すでにインストールされています",
-          "rowUpdate": "更新",
-          "rowNew": "新規",
-          "chooseSkills": "このリンクからインストールするものを選択してください。",
-          "singleRunnableWarning": "このスキルにはスクリプトまたはバイナリファイルが含まれます。",
-          "runnableWarning": "選択されたスキル {{selectedCount}} の {{affectedCount}} には、スクリプトまたはバイナリファイル {{affected}} が含まれています。",
-          "reviewRunnableFiles": "スクリプトまたはバイナリファイルが含まれます",
-          "reviewSupportingFiles": "サポートファイルが含まれています",
-          "reviewInstructions": "このスキルについて",
-          "supportingFileWarning": "選択されたスキルには SKILL.md 以降の {{fileCount}} が含まれます。",
-          "agentAccessWarning": "スキルには、Agent が従うべき指示が含まれています。この共有リンクのソースを信頼できる場合にのみ続行してください。",
-          "fileBinary": "バイナリ",
-          "fileRunnable": "実行可能",
-          "agentsCountBadge": "{{count}} が選択されました",
-          "agentsCountLabel": "{{count}} {{label}}",
-          "targetAgentsHeader": "対象 Agent",
-          "deselectAll": "オプションの選択を解除します",
-          "selectAll": "すべて選択",
-          "canonicalHeader": "標準 Agent (常に含まれます)",
-          "canonicalExplanation": "これらの Agent はネイティブで {{root}} を読み取り、Orca はデフォルトでこれをインストールします。",
-          "additionalAgentsHeader": "追加の Agent ディレクトリ"
-        },
-        "SkillSharedLinkRow": {
-          "contentsUnavailable": "このリンクに含まれるものを読み込めませんでした。",
-          "loading": "コンテンツを読み込み中…",
-          "deleteFailed": "Orca はこれをクラウドから削除できませんでした。",
-          "deleted": "クラウドから削除されました",
-          "confirmDelete": "削除の確認",
-          "moreActions": "{{name}} のその他の操作",
-          "deletePackage": "クラウドから削除"
-        },
-        "SkillSharedLinksView": {
-          "loading": "共有リンクを読み込み中…",
-          "noMatches": "この検索に一致するリンクはありません。"
+          "agentsCanonicalNote": "{{value0}} は、インストールごとに書き込まれる {{value1}} を読み取ります。"
         },
         "SkillsSharedLinksHeader": {
           "back": "スキルに戻る",
@@ -5165,34 +4911,7 @@
           "unlisted": "非公開 — リンクを知っている人のみが開くことができます。"
         },
         "managedInstall": {
-          "versionLabel": "バージョン",
-          "editedWarning": "編集内容は、破棄しない限り保持されます。",
-          "finishInstall": "インストールを完了する",
-          "useVersion": "このバージョンを使用してください",
-          "reinstall": "再インストール",
-          "cancel": "キャンセル",
-          "sendToMachine": "別のマシンに送信する",
-          "confirmRemove": "削除の確認",
-          "remove": "削除",
-          "discardEditsRemove": "編集内容を破棄して削除します",
-          "discardEdits": "編集内容を破棄して再インストールする",
-          "titleMore": "{{name}} +{{count}}",
-          "scopeWorkspace": "このワークスペース",
-          "scopeGlobal": "どこでも",
-          "installedOn": "{{date}} がインストールされました",
-          "stateEdited": "インストール後に編集しました",
-          "stateMissing": "ファイルがありません",
-          "skillEdited": "編集済み",
-          "skillMissing": "不足",
-          "versionCurrent": "{{date}} (インストール済み)",
-          "installElsewhere": "別の場所にインストールします…"
-        },
-        "skillWarningPreview": {
-          "bundleDescription": "あらゆる警告レベルをカバーするプレビューバンドル。",
-          "instructionsOnlyDescription": "手順はすべて SKILL.md に含まれています。",
-          "supportingFilesDescription": "主要な説明以外に、読み取り可能な参照ファイルが含まれています。",
-          "runnableFilesDescription": "Agent がアクセス権を使用して実行できるスクリプトが含まれます。",
-          "binaryFilesDescription": "不透明なアセットと実行可能バイナリが含まれます。"
+          "sendToMachine": "別のマシンに送信する"
         },
         "SkillDelete": {
           "dismissResults": "閉じる",
@@ -5503,30 +5222,6 @@
           "822ff300ad": "閉じる",
           "5bfd5c8779": "セットアップスクリプトを閉じる"
         },
-        "SidebarFeedbackDialog": {
-          "8bf619e4cf": "キャンセル",
-          "8de03e23c5": "入力したフィードバックのみを送信するか、「gh」に接続して GitHub ID を含めます。",
-          "d20439c560": "GitHub ID を確認しています…",
-          "5b120b9634": "匿名で送信",
-          "c9e5ea0791": "GitHub:",
-          "d46ddd66fc": "何を改善できるでしょうか?",
-          "3460258a54": "Xをフォロー",
-          "26108d3699": "Discord に参加",
-          "d245c4ef6c": "GitHub Issue",
-          "9b33530b3d": "その他の連絡方法",
-          "a828fa4aee": "何が機能しているのか、何が壊れているのか、Orca が次に何をすべきかを共有します。",
-          "0eb643f07f": "フィードバックを送信する",
-          "60b721e857": "フィードバックの送信に失敗しました。もう一度試す。",
-          "7a46c228b8": "フィードバックありがとうございます。",
-          "a2fd890d9e": "送信する前に、フィードバックを入力してください。",
-          "f2e42e1307": "送信",
-          "69969ba364": "送信中…",
-          "imageReadFailed": "添付された画像を読み取れませんでした。もう一度添付してください。",
-          "attachWhileSending": "現在のフィードバックの送信が完了してから、画像を追加してください。",
-          "imagesNotDelivered": "フィードバックを送信しましたが、画像が届いたかどうかは確認できませんでした。",
-          "imagesNotIncluded": "フィードバックを送信しました。スクリーンショットをアップロードできなかったため、含まれていません。",
-          "imagesRejected": "フィードバックを送信しました。スクリーンショットが大きすぎてアップロードできなかったため、含まれていません。"
-        },
         "SidebarFilter": {
           "e3b3898218": "プロジェクトを追加",
           "92a23e6d07": "フィルターをリセットする",
@@ -5570,7 +5265,6 @@
           "0ccba862b8": "GitHub タスクを開く",
           "fee535205b": "タスク",
           "d599269755": "サイドバーから非表示",
-          "artifacts": "アーティファクト",
           "skills": "スキル"
         },
         "SidebarRepositoryFilterSection": {
@@ -5588,20 +5282,15 @@
         "SidebarSettingsHelpMenu": {
           "ad3d3ed7f1": "Orca を再起動",
           "29c56f30ee": "アップデートをチェックする",
-          "eb9884e55b": "Discord",
           "5687ab246a": "GitHub",
-          "5f83d86d92": "変更履歴",
-          "cdc87f897e": "ドキュメント",
           "e565171a7c": "キーボードショートカット",
-          "4cf5b868d7": "フィードバックを送信する",
           "a428c25998": "設定",
           "2991a0106c": "ヘルプ",
           "4e8f5710d3": "Orca を再起動できませんでした。",
           "5161eef55d": "Orca を再起動しています…",
           "d396773ef0": "チェック中",
           "f8a2c91d4e": "マイルストーン",
-          "b7e4d2a19c": "オンボーディング",
-          "c4f8e1b72a": "X"
+          "b7e4d2a19c": "オンボーディング"
         },
         "SidebarToolbar": {
           "19e32d0e5f": "フォルダーピッカーを開いてプロジェクトを追加します",
@@ -6493,12 +6182,6 @@
         "WorktreeDeveloperMenu": {
           "developer": "Developer",
           "parkTerminal": "ターミナルを退避"
-        },
-        "SidebarFeedbackImageAttachments": {
-          "preparing": "添付ファイルを準備しています…",
-          "attachImages": "Attach",
-          "removeImage": "{{fileName}} を削除",
-          "screenshotsHint": "スクリーンショットを最大 {{count}} 件、合計 {{maxSize}} まで添付できます"
         },
         "WorkspaceKanbanSearchField": {
           "bdb753c78d": "一致するワークスペースはありません",
@@ -7514,20 +7197,12 @@
           "confirm_running_terminal_close_description": "ターミナルを閉じるときに、実行中の Agent またはコマンドを停止する前に確認してください。"
         },
         "GeneralSupportSection": {
-          "af7d9f4396": "サポートありがとうございます!",
-          "6922c1fa2b": "GitHub 上のスター Orca",
-          "511782265b": "gh CLI を介して GitHub スターでプロジェクトをサポートします。",
-          "55a87e5fd1": "Orca をサポートする",
-          "964acc6bb4": "スター",
           "73b327e793": "再試行",
           "c9f96d4234": "エラー",
-          "397719bee5": "スターを付けています…",
           "1e29570462": "スター付け中",
           "9d181300e3": "星付き",
           "5c49f02662": "隠れた",
-          "b3f0584f5d": "読み込み中",
-          "cb65c75b11": "開いています…",
-          "f2d4f877b2": "GitHub を開く"
+          "b3f0584f5d": "読み込み中"
         },
         "GeneralUpdateSettingsSection": {
           "8a52ca1d02": "リリースノート",
@@ -7575,10 +7250,7 @@
           "externalWorktrees": "外部ワークツリー",
           "externalWorktreesDescription": "Orca 外で作成されたワークツリーをデフォルトで表示するかどうかを選択します。",
           "show": "表示",
-          "hide": "非表示",
-          "31e300af1c": "アーティファクトを削除する前に確認する",
-          "fb29a73a17": "共有アーティファクトを削除し、そのパブリックリンクを解除する前に、確認ダイアログを表示します。",
-          "bf46474e33": "共有アーティファクトを削除する前に確認を表示します。そのパブリックリンクを保持している人はアクセスできなくなります。"
+          "hide": "非表示"
         },
         "GhosttyImportModal": {
           "9d3e56ca36": "変更を適用する",
@@ -8035,37 +7707,7 @@
           "d3dc559225": "インストールコマンドのコピーに失敗しました。",
           "239bf9132b": "インストールコマンドをコピーしました。"
         },
-        "PrivacyDiagnosticBundleControls": {
-          "dc8404a930": "診断ファイルを作成",
-          "a5acaffdb6": "破棄",
-          "aca2c8a367": "サポートに送信",
-          "798b6f0be5": "確認用ファイルを開く",
-          "2ae9a6b63e": "完了",
-          "7f14a1733c": "送信済みファイルを削除",
-          "2801d4ce22": "参照 ID をコピー",
-          "d8be621237": "先に確認用ファイルを開いてください。",
-          "61676df223": "診断情報を送信しました。サポートにこの参照 ID を共有してください: {{value0}}。",
-          "fd7b3891af": "確認用ファイル（{{value0}}）を開きました。このファイルをサポートに送信するか、破棄できます。",
-          "62340d4439": "確認用ファイル（{{value0}}）の準備ができました。開いて送信内容を確認してから、サポートに送信するか選択してください。",
-          "19ec5e29b3": "最近のアプリ操作とエラーを、送信前に確認できる編集済みファイルにまとめます。送信を選ぶまで何もアップロードされません。"
-        },
-        "PrivacyDiagnosticsSection": {
-          "af2fc82cde": "アプリ診断情報をサポートに送信",
-          "c18cbe45df": "送信済みの診断情報を削除しました",
-          "7a4944595b": "参照 ID をコピーできませんでした",
-          "13eb2c65a1": "参照 ID をコピーしました",
-          "860bca9ec9": "確認用ファイルを破棄しました",
-          "49fc6c80e8": "診断情報を送信しました",
-          "db3228e01a": "確認用ファイルを開きました",
-          "a2b3505c77": "確認用ファイルを作成しました"
-        },
         "PrivacyPane": {
-          "36e0e2e63b": "環境変数。設定を解除し、再起動して再度有効にします。",
-          "79a0f3c16c": "テレメトリは、",
-          "e3970bbbf5": "CI 環境変数が設定されているため、テレメトリは無効になっています。設定を解除して再起動してください。",
-          "fe904ac984": "匿名の使用状況データを共有する",
-          "77410e0566": "プライバシーポリシー",
-          "8bfdd23a88": "次に何を構築するかを考えるのに協力してください。 Orca は、使用した機能と問題が発生した場所の匿名のカウントを送信します。",
           "afec8b03be": "ci"
         },
         "QuickCommandsPane": {
@@ -8540,8 +8182,6 @@
           "8b017f2506": "実験的機能",
           "499c1cd7f9": "トラブルシューティングのための低レベルの互換性設定。",
           "1c87f8d024": "詳細設定",
-          "c1b43dc4e2": "匿名の使用状況データとテレメトリ制御。",
-          "d7e3f62d70": "プライバシーとテレメトリ",
           "9b83cc62c2": "ターミナルで起動される開発者ツールの macOS プライバシーアクセス。",
           "65660d4548": "macOS のアクセス許可",
           "c6c01ac209": "スマートフォンからターミナルと Agent を操作します。",
@@ -9958,13 +9598,6 @@
         },
         "general": {
           "search": {
-            "bdfb6dc21b": "のように",
-            "e6b01c8e30": "フィードバック",
-            "b65665703a": "サポート",
-            "06ea5a69a6": "GitHub",
-            "e4fb4516d0": "星",
-            "e0b8c8bc25": "gh CLI を介して GitHub スターでプロジェクトをサポートします。",
-            "36a72f0d9e": "GitHub 上のスター Orca",
             "c61b14be7c": "grok",
             "5d9ba08673": "copilot",
             "f472e97440": "aider",
@@ -10490,38 +10123,6 @@
             "a7f76b4ca7": "オーケストレーション",
             "e05ff36753": "メッセージング、タスク DAG、ディスパッチ、意思決定ゲートを介して複数のコーディング Agent を調整します。",
             "c34045764e": "Agent オーケストレーション"
-          }
-        },
-        "privacy": {
-          "search": {
-            "3922051573": "データ",
-            "e8bc614a18": "無効化",
-            "d8191ae5ca": "環境変数",
-            "94e04427f6": "環境",
-            "664f1a8984": "継続的インテグレーション",
-            "5854a5c752": "ci",
-            "69637f4dc4": "orca_telemetry_disabled",
-            "058550f6bc": "追跡しない",
-            "83a6cd79b3": "追跡しない",
-            "f7a2d9f137": "テレメトリ送信を無効にする環境変数。",
-            "e058a3c98d": "テレメトリ環境変数",
-            "1686c07fee": "サポート",
-            "c0494ff48a": "診断",
-            "8b08f32366": "アプリ診断とサポート共有のコントロール。",
-            "6d258d2ed6": "診断",
-            "ead1deded2": "共有",
-            "27a27b2f63": "身を引く",
-            "4d4bb76bf4": "オプトインする",
-            "b021b9cb81": "匿名",
-            "79c319948b": "使用量",
-            "77d3180def": "テレメトリー",
-            "b707cc3981": "匿名の機能使用イベントを送信して、Orca の改善にご協力ください。",
-            "57b283461a": "匿名の使用状況データを共有する",
-            "2b5a5c312f": "posthog",
-            "4104f6f0f3": "分析",
-            "10124159f1": "プライバシー",
-            "aa3b794c17": "匿名の製品使用状況データ、診断、テレメトリ制御。",
-            "5c508bad41": "プライバシーとテレメトリ"
           }
         },
         "quick": {
@@ -11429,13 +11030,6 @@
           "cancel": "キャンセル",
           "applyRuntimeChange": "ランタイムの変更を適用"
         },
-        "PrivacyDiagnosticsRows": {
-          "5a7cbe069a": "DO_NOT_TRACK=1 が設定されています — 診断ファイルの作成と送信は無効です。",
-          "63d03261d1": "ORCA_TELEMETRY_DISABLED=1 が設定されています — 診断ファイルの作成と送信は無効です。",
-          "d37e92a06b": "ORCA_DIAGNOSTICS_DISABLED=1 が設定されています — アプリ診断はオフです。",
-          "5ebb31e1fb": "CI で実行中です — 診断はオフです。",
-          "e27c8d45bf": "環境変数により診断は無効になっています。"
-        },
         "ShortcutCommandBlock": {
           "eb72c52c28": "ショートカットを押すか、修飾キーを 2 回続けて押してください（例: {{value0}}）。Esc でキャンセルします。",
           "70b5d25583": "{{value0}} のショートカット",
@@ -11527,13 +11121,6 @@
           "notificationPlayground": "通知プレイグラウンド",
           "notificationPlaygroundDescription": "トーストレイアウト、復元操作、長文コピーの折り返しを確認するための開発専用トリガー。",
           "devOnly": "開発専用",
-          "orcaCloud": "Orca Cloud",
-          "orcaCloudDescription": "ファーストパーティクラウドサインインの開発者限定プレビュー。本番環境では非表示。開発環境では、ORCA_CLOUD_API_URLとORCA_CLOUD_CLIENT_IDを設定するとサイドバーのアカウント切替にも表示されます。",
-          "orcaCloudStatus": "状態",
-          "orcaCloudSignOut": "サインアウト",
-          "orcaCloudConnect": "プロファイルを接続",
-          "orcaCloudRefresh": "ステータスを更新",
-          "orcaCloudNotConfigured": "ORCA_CLOUD_API_URLとORCA_CLOUD_CLIENT_IDを設定して、この開発ビルドで Orca Cloudのサインインをプレビューします。",
           "deleteAnywayClicked": "とにかく削除をクリックしました"
         },
         "EphemeralVmRecipeRow": {
@@ -11694,22 +11281,12 @@
           "standby": "待機中 — リレー対象のデバイスがありません"
         },
         "MobilePairingConnectionOptions": {
-          "ready": "準備完了",
-          "connecting": "接続中",
-          "available": "利用可能",
-          "reconnecting": "再接続中",
           "unavailable": "利用不可",
-          "signIn": "Relay にサインイン",
           "localDescription": "スマートフォンがこの Wi‑Fi または Tailscale に接続されている必要があります。アカウントは不要です。",
           "pathGroup": "スマートフォンがこのコンピュータに到達する方法",
           "anywhereTitle": "Orca Relay",
-          "anywhereDescription": "スマートフォンはモバイル回線または任意の Wi‑Fi から接続できます。サインインが必要なのは Relay のみです。",
           "relayUnavailable": "このビルドでは Orca Relay を利用できません。LAN をご利用ください。",
-          "signInAgain": "Relay に再サインイン",
-          "localTitle": "LAN",
-          "retrying": "再試行中",
-          "relayCell": "リレーセル",
-          "relaySignInDetail": "このデスクトップを Orca にサインインさせ、スマートフォンの通信を Orca のサーバー経由でルーティングします。LAN ではアカウントは不要です。"
+          "localTitle": "LAN"
         },
         "MobilePairingSetupSection": {
           "title": "スマートフォンをペアリング",
@@ -11929,8 +11506,6 @@
           "official": "公式",
           "installed": "インストール済み",
           "noDescription": "説明はありません。",
-          "blocked": "Orca の安全リストによりブロック: {{value0}}",
-          "blockedAction": "ブロック中",
           "checkUpdate": "更新を確認",
           "install": "インストール"
         },
@@ -11953,7 +11528,6 @@
           "noContributions": "マニフェストメタデータのみ",
           "capabilities": "要求されたアクセス",
           "workerWarning": "機能はこのプラグインが Orca APIを使用する方法を制限します。ワーカーは引き続きコンピュータで通常のプロセスとして実行され、ファイル、ネットワーク、その他のプロセスへの完全なアクセス権を持ちます。",
-          "blocked": "Orca の安全リストがこのプラグインをブロック: {{value0}}",
           "current": "このプラグインコンテンツはすでにインストールされています。",
           "close": "閉じる",
           "cancel": "キャンセル",
@@ -12014,7 +11588,6 @@
           "rollbackFailed": "このプラグインをロールバックできませんでした。以前の不変バージョンが利用できない可能性があります。"
         },
         "PluginSettingsRow": {
-          "blocked": "ブロック中",
           "needsReview": "レビュー待ち",
           "restarting": "再起動中",
           "invalid": "無効",
@@ -12030,8 +11603,6 @@
           "dev": "開発",
           "bundled": "同梱",
           "noDescription": "説明はありません。",
-          "killListMessage": "Orca の安全リストがこのプラグインを無効にしました: {{value0}}",
-          "viewAdvisory": "アドバイザリーを表示",
           "runtimeError": "プラグインが有効化またはワーカーエラー後に停止しました。",
           "restartCount": " · {{value0}}回再起動",
           "moreActions": "{{value0}}の追加操作",
@@ -12240,11 +11811,7 @@
           "switchTo": "このバージョンに切り替える",
           "alreadyRunning": "現在このバージョンを使用しています。",
           "willSwitch": "{{value0}} → {{value1}}",
-          "webUnavailable": "バージョンの切り替えはデスクトップアプリでのみ利用できます。",
-          "devChannelUnsupportedAria": "{{value0}} ({{value1}} のみ)",
-          "devChannelUnsupported": "{{value0}} のバージョンは {{value1}} 向けにのみ提供されます。Linux では Stable または RC を利用してください。",
-          "downloadInstaller": "インストーラーをダウンロードする",
-          "manualInstallHint": "{{value0}} の Windows 版は署名されていないため、アプリ内の更新機能では署名済みのバージョンに上書きインストールできません。ダウンロードしたインストーラーを一度実行してください。Windows に発行元不明の警告が表示されます。その後は、Stable に戻す場合も含め、ここからバージョンを切り替えられます。"
+          "webUnavailable": "バージョンの切り替えはデスクトップアプリでのみ利用できます。"
         },
         "VoiceMicrophoneSetting": {
           "systemDefault": "システムのデフォルト",
@@ -12270,69 +11837,7 @@
           "account": "Orca アカウント",
           "connected": "接続済み",
           "signInRequired": "アーティファクトをアップロードして管理するには、サインインが必要です。",
-          "signIn": "Orca にサインインする",
-          "title": "アーティファクト",
-          "description": "HTML および Markdown ファイルをチームと共有し、パブリックリンクを管理します。",
-          "howToTitle": "アーティファクトの使用方法",
-          "howToDescription": "HTML または Markdown ファイルをパブリックリンクとして公開し、チームと共有します。",
-          "shareStepTitle": "共有するファイルを選択してください",
-          "shareStepDescription": "HTML または Markdown ファイルを開き、[成果物として共有] を選択するか、Agent に共有を依頼します。",
-          "linkStepTitle": "パブリックリンクをコピーする",
-          "linkStepDescription": "公開したら、リンクをコピーしてチームに送信します。",
-          "manageStepTitle": "Orca で管理する",
-          "manageStepDescription": "サイドバーからアーティファクトを開いて、リンクをプレビューまたは削除します。",
-          "openArtifacts": "オープンアーティファクト",
-          "openArtifactsDescription": "アカウントを通じて共有されたリンクを表示および削除します。",
-          "showButton": "「成果物を表示」ボタン",
-          "showButtonDescription": "サイドバーにアーティファクトのショートカットを表示します。",
-          "openArtifactsDescriptionV2": "アカウントを通じて共有されたリンクをプレビュー、コピー、管理します。",
-          "signInTitle": "サインインして成果物を共有する",
-          "signInDescription": "Orca アカウントを使用して、アーティファクトをアップロードし、そのパブリックリンクを管理します。",
-          "signInAgain": "再度サインインしてください",
-          "enableStepTitle": "アーティファクトの共有を有効にする",
-          "enableStepWebDescription": "ホストデバイスの Orca デスクトップアプリで [設定] → [アーティファクト] を開き、公開を有効にします。",
-          "enableStepDescription": "上の「パブリックアーティファクトリンクの公開を許可」をオンにします。",
-          "allowPublishing": "パブリックアーティファクトリンクの公開を許可する",
-          "allowPublishingWebDescription": "デスクトップのみ。この設定を変更するには、ホストデバイスで「設定」→「アーティファクト」を開きます。",
-          "allowPublishingDescription": "HTML ファイルと Markdown ファイルを、URL を知っている人なら誰でも開くことができるリンクとして公開します。既存のリンクは、アーティファクトから削除するまで残ります。",
-          "howToDescriptionDisabled": "上記のアーティファクト共有を有効にして、HTML または Markdown ファイルをパブリックリンクとして公開します。",
-          "allowPublishingSearchDescription": "Orca が HTML および Markdown ファイルをパブリックリンクとして公開できるようにします。",
-          "keywordArtifacts": "アーティファクト",
-          "keywordShare": "共有",
-          "keywordPublish": "公開",
-          "keywordPublic": "公共",
-          "keywordPermission": "許可",
-          "keywordHtml": "HTML",
-          "keywordMarkdown": "Markdown",
-          "keywordUpload": "アップロード"
-        },
-        "orcaAccount": {
-          "connected": "接続済み",
-          "reconnectRequired": "セッションの有効期限が切れました。クラウド機能を使用するには、再度サインインします。",
-          "unavailable": "このビルドでは Orca サインインは利用できません。",
-          "signedOut": "サインインして、Artifacts や Orca Relay などのクラウド機能を使用して Orca を拡張します。",
-          "checking": "アカウントのステータスを確認しています…",
-          "account": "Orca アカウント",
-          "signOut": "サインアウト",
-          "signInAgain": "再度サインインしてください",
-          "signIn": "Orca にサインインする",
-          "title": "Orca アカウント",
-          "description": "作業を即座に共有し、どこにいても Orca Mobile からデスクトップにアクセスできます。",
-          "searchDescription": "Artifacts と Orca Relay で使用されるアカウントにサインインまたはサインアウトします。",
-          "benefitsTitle": "アカウントに含まれています",
-          "artifactsTitle": "成果物の共有",
-          "artifactsDescription": "HTML ファイルと Markdown ファイルを公開し、Orca からのすべての共有リンクを管理します。",
-          "relayTitle": "Orca リレー",
-          "relayDescription": "Orca Mobile を携帯電話または Wi-Fi 経由でこのデスクトップに接続します。",
-          "skillsTitle": "スキルの共有",
-          "skillsDescription": "1 つのスキルまたはスキルセット全体を非公開リンクで共有し、使用するマシンにインストールします。",
-          "keywordAccount": "アカウント",
-          "keywordLogin": "ログイン",
-          "keywordLogout": "ログアウト",
-          "keywordSignIn": "サインイン",
-          "keywordSignOut": "サインアウト",
-          "keywordRelay": "リレー",
-          "keywordCloud": "雲"
+          "openArtifactsDescription": "アカウントを通じて共有されたリンクを表示および削除します。"
         },
         "automations": {
           "showButton": "オートメーションボタンを表示",
@@ -12355,52 +11860,7 @@
           "keywordRuns": "実行"
         },
         "shareSkills": {
-          "title": "スキルを共有する",
-          "description": "非公開リンクを使用してスキルを共有してください。持っている人なら誰でもインストールできます。",
-          "allowAgentPublishing": "Agent と Orca CLI がスキルリンクを公開できるようにする",
-          "allowAgentPublishingDescription": "コマンドが明示的に指定されたインストール済みスキルを公開できるようにします。スキルフォルダーにはスクリプト、設定、またはシークレットを含めることができるため、これはデフォルトではオフになっています。",
-          "allowAgentPublishingWebDescription": "デスクトップのみ。この設定を変更するには、ホストデバイスで [設定] → [スキルの共有] を開きます。",
-          "selectTitle": "1 つ以上のスキルを選択してください",
-          "selectDescription": "[スキル] を開き、[スキルの共有] を選択して、1 つのリンクにバンドルするスキルを選択します。",
-          "reviewTitle": "レビューして公開する",
-          "reviewDescription": "不変バンドルをアップロードする前に、含まれているファイル、スクリプト、および実行可能ファイルを確認してください。",
-          "copyTitle": "非公開リンクをコピーする",
-          "copyDescription": "リンクを知っている人は誰でも、サインインせずにすべてまたは選択したスキルを検査してインストールできます。",
-          "manageTitle": "リンクを管理または取り消す",
-          "manageDescription": "取り消すと、今後のアクセスがブロックされます。別のマシンにすでにインストールされているスキルはそこに残ります。",
-          "linkTitle": "非公開スキルリンク",
-          "linkDescription": "共有バンドルは Orca で検索したりリストしたりすることはできません。リンクは認証情報なので、信頼できる人にのみ送信してください。",
-          "signInTitle": "サインインしてスキルを共有する",
-          "signInWebDescription": "公開とリンク管理は Orca デスクトップアプリで利用できます。",
-          "signInDescription": "Orca アカウントを使用してバンドルを公開し、そのリンクを管理します。受信者にはアカウントは必要ありません。",
-          "signInAgain": "再度サインインしてください",
-          "signIn": "Orca にサインインする",
-          "howToTitle": "スキルを共有する方法",
-          "howToDescription": "1 つのスキル、または 30 個のスキルのコレクションなどのバンドルを 1 つのリンクで公開します。",
-          "openSkills": "オープンスキル",
-          "openSkillsDescription": "バンドルを公開したり、リンクからインストールしたり、インストールおよび共有されたスキルを管理したりできます。",
-          "searchDescription": "非公開リンクを使用してスキルを共有してください。持っている人なら誰でもインストールできます。",
-          "linksReconnect": "共有リンクを管理するには、再度サインインしてください。",
-          "linksUnavailable": "現在、共有リンクは利用できません。",
-          "linkCopied": "共有リンクがコピーされました",
-          "linkRevoked": "リンクが取り消されました",
-          "revokeFailed": "Orca はこのリンクを取り消すことができませんでした。",
-          "activeLinks": "アクティブな共有リンク",
-          "activeLinksDescription": "リンクを知っている人だけが開くことができます。リンクの共有を解除すると、今後の検査とインストールがブロックされます。",
-          "refreshLinks": "更新",
-          "noActiveLinks": "アクティブなリンクはありません。スキルバンドルを作成するには、[スキル] からスキルバンドルを公開します。",
-          "copyLink": "リンクをコピー",
-          "confirmUnshare": "共有解除の確認",
-          "unshare": "共有を解除する",
-          "showButton": "「スキルを表示」ボタン",
-          "showButtonDescription": "サイドバーにスキルのショートカットを表示します。",
-          "manageInSkills": "スキルで管理",
-          "keywordSkills": "スキル",
-          "keywordShare": "共有",
-          "keywordBundle": "バンドル",
-          "keywordLink": "リンク",
-          "keywordUnlisted": "非上場",
-          "keywordRevoke": "取り消す"
+          "refreshLinks": "更新"
         },
         "bitbucket": {
           "credentials": {
@@ -15199,9 +14659,6 @@
             "33dca8bbbe": "Orca のワークフローごとの短いツアー。",
             "3567e147c8": "Orca を知る"
           },
-          "FeatureWallPreview": {
-            "a666384798": "このワークフローでも"
-          },
           "FeatureWallRail": {
             "69ea857689": "完了",
             "7593d15f94": "ワークフロー"
@@ -16474,32 +15931,15 @@
       "crash": {
         "report": {
           "CrashReportDialog": {
-            "b4951cd27c": "レポートの送信",
-            "88fea8e84e": "送信しないでください",
             "50b00dc327": "詳細をコピー",
             "6d3ebe216a": "診断テキスト",
             "835037edc9": "・ Orca",
             "56a3dfa283": "クラッシュレポートの送信に失敗しました。",
-            "8e24fe4f75": "クラッシュレポートが送信されました。",
             "8b8473c544": "クラッシュレポートがコピーされました。",
             "b175e90213": "クラッシュレポートはありません。",
             "765591798d": "クラッシュレポートを確認しています…",
             "b2e36f53a1": "クラッシュレポートを送信できませんでした。診断チケット {{value0}} はアップロードされましたが、関連付けられていません。",
-            "ead6fc0510": "自動のクラッシュレポートは取得されませんでした。詳細を送信し、利用できる場合は最近の診断ログを添付できます。",
-            "b082f27490": "最近の診断ログを添付",
-            "e59f0b9427": "上限を設けて秘匿処理したログをまとめ、レポートと一緒に送信します。"
-          },
-          "submit": {
-            "notice": {
-              "unknownError": "クラッシュレポートの要求が、理由を返す前に失敗しました。",
-              "ticketUploaded": "診断チケット {{value0}} はアップロードされましたが、関連付けられていません。",
-              "uncheckDiagnostics": "[最近の診断ログを添付] のチェックを外してもう一度試すか、詳細をコピーしてください。",
-              "checkConnection": "接続を確認してもう一度試すか、詳細をコピーしてください。",
-              "notSent": "クラッシュレポートは送信されませんでした",
-              "copyDetails": "詳細をコピー",
-              "sentWithoutDiagnostics": "診断ログなしでクラッシュレポートを送信しました",
-              "diagnosticsReason": "診断ログは添付されませんでした: {{value0}}"
-            }
+            "ead6fc0510": "自動のクラッシュレポートは取得されませんでした。詳細を送信し、利用できる場合は最近の診断ログを添付できます。"
           },
           "copy": {
             "copyFailed": "クラッシュレポートの詳細をコピーできませんでした。"
@@ -17787,37 +17227,9 @@
       "ShortcutKeyCombo": {
         "07eb4985a1": "{{value0}} を 2 回押す"
       },
-      "star": {
-        "nag": {
-          "StarNagToastHost": {
-            "starredThanks": "スターを付けました。ありがとうございます！",
-            "githubOpened": "GitHub を開きました",
-            "opening": "開いています…",
-            "starring": "スターを付けています…",
-            "openGithub": "GitHub を開く",
-            "starOnGithub": "GitHub でスターを付ける",
-            "onboardingCompleted": "初期設定が完了しました！",
-            "body": "ここまでの Orca を気に入っていただけたら、GitHub でスターを付けると他の開発者が見つけやすくなります。",
-            "dismiss": "閉じる",
-            "later": "後で"
-          }
-        }
-      },
       "nativeChat": {
         "contextMenu": {
           "copy": "コピー"
-        }
-      },
-      "orca": {
-        "profiles": {
-          "signout": {
-            "confirm": {
-              "title": "Orca からログアウトしますか？",
-              "description": "このデバイスで Orca からログアウトします。ローカルのプロジェクトとワークツリーには影響しません。",
-              "cancel": "キャンセル",
-              "action": "サインアウト"
-            }
-          }
         }
       },
       "linear-issue-attribute-filter-dropdowns": {
@@ -17908,118 +17320,11 @@
       },
       "artifacts": {
         "ArtifactsPage": {
-          "deleteTitle": "成果物を削除しますか？",
-          "deleteDescription": "「{{name}}」は公開リンクで利用できなくなります。",
-          "delete": "削除",
-          "signInAgain": "再度 Orca にサインインして、アーティファクトをロードします。",
-          "loadFailed": "アーティファクトをロードできませんでした。",
-          "deleteFailed": "アーティファクトを削除できませんでした。",
-          "title": "アーティファクト",
-          "refresh": "更新",
-          "signInHeading": "Orca にサインインする",
-          "signInCopy": "サインインして、アカウントを通じて共有されたアーティファクトを表示および管理します。",
-          "signIn": "Orca にサインインする",
-          "empty": "共有アーティファクトなし",
-          "emptyCopy": "HTML または Markdown ファイルを開き、[成果物として共有] を選択するか、Agent に共有するように依頼します。",
-          "openArtifact": "開いたアーティファクト",
-          "deleteArtifact": "アーティファクトの削除",
-          "moreAvailable": "さらに多くのアーティファクトが利用可能です",
-          "moreAvailableCopy": "続行するには次のページをロードしてください。",
-          "loadMoreFailed": "これ以上のアーティファクトをロードできませんでした。",
-          "publishingOff": "公開はオフになっています",
-          "publishingOffCopy": "このデバイスにはまだパブリックアーティファクトリンクを作成できるものはありません。 [設定] → [アーティファクト] で公開を許可し、開いている HTML または Markdown ファイルから共有するか、Agent に問い合わせてください。",
-          "openArtifactsSettings": "「設定」→「アーティファクト」を開きます",
-          "retry": "再試行",
-          "reconnectHeading": "Orca に再度サインインします",
-          "reconnectCopy": "アカウントを通じて共有されたアーティファクトを表示および管理するには、再度サインインします。",
-          "signInAgainAction": "再度サインインしてください",
-          "unconfiguredCopy": "このマシンでは Orca アカウントのサインインがまだ設定されていません。",
-          "openAccountSettings": "アカウント設定を開く"
-        },
-        "ArtifactPublishButton": {
-          "a4a49da6af": "成果物として共有",
-          "confirmTitle": "成果物として共有",
-          "confirmDescription": "これにより、現在のファイルが URL を知っている誰でも閲覧できるリンクに公開されます。",
-          "accountTitle": "Orca アカウント",
-          "accountDescription": "このリンクを作成・管理するにはサインインしてください。",
-          "signInAgain": "再度サインイン",
-          "signIn": "サインイン",
-          "publishingOffTitle": "成果物の共有はオフになっています",
-          "publishingOffDescription": "公開リンクについて確認し、設定で共有を有効にしてください。",
-          "openSettings": "成果物の設定を開く",
-          "sharing": "共有中…",
-          "sharePublicLink": "リンクを生成",
-          "publishedDescription": "このリンクを知っている人は誰でも共有ファイルを閲覧できます。",
-          "checkingLink": "既存のリンクを確認しています…",
-          "checkFailed": "既存のリンクを確認できませんでした。",
-          "tryAgain": "再試行"
+          "openArtifact": "開いたアーティファクト"
         },
         "artifact-publish-flow": {
-          "9a078a0c65": "成果物の共有は利用できません",
-          "bba20daa6d": "Orca にサインインしてもう一度お試しください。",
-          "54b1805328": "成果物を共有できませんでした",
-          "430019efd0": "成果物を共有しました",
-          "2fc727c831": "成果物を更新しました",
-          "5cb4f5ec36": "リンクをコピー",
-          "fbb5018602": "このファイルは空です。",
-          "6112db5a1c": "この成果物は大きすぎるため共有できません。",
-          "e2ed5acd8c": "Orca はこのファイルを読み取れませんでした。ワークスペースから開いて再試行してください。",
-          "visualUnreadable": "共有するためにこのビジュアルを読み取れませんでした。",
-          "6d475e9b25": "成果物として共有できるのはローカルの HTML ファイルと Markdown ファイルのみです。",
-          "29a406be09": "成果物にはテキストが含まれている必要があります。"
-        },
-        "ArtifactPublishedLinkPanel": {
-          "copyLink": "リンクをコピー",
-          "openLink": "リンクを開く",
-          "updating": "更新中…",
-          "update": "共有コンテンツを更新する"
-        },
-        "copySuccess": "アーティファクトリンクがコピーされました",
-        "copyFailed": "アーティファクトのリンクをコピーできませんでした",
-        "copyLink": "リンクをコピー",
-        "openInBrowser": "ブラウザで開く",
-        "preview": "アーティファクトのプレビュー",
-        "previewUnavailable": "プレビューは利用できません",
-        "previewUnavailableDescription": "このアーティファクトをブラウザで開いて表示します。",
-        "actions": "アーティファクトの操作",
-        "ArtifactActions": {
-          "more": "その他のアーティファクト操作"
-        },
-        "ArtifactCollection": {
-          "loadMore": "さらにロードする",
-          "noMatches": "一致なし"
-        },
-        "ArtifactDetailHeader": {
-          "publicLink": "このリンクを知っている人は誰でも閲覧できます",
-          "close": "閉じる"
-        },
-        "updatedAt": "{{when}} を更新しました",
-        "updatedRecently": "最近",
-        "expiryUnknown": "有効期限不明",
-        "expired": "リンクの有効期限が切れました",
-        "expires": "リンクの有効期限が切れます {{when}}",
-        "ArtifactDetailDrawer": {
-          "description": "この共有アーティファクトをプレビューして管理します。"
-        },
-        "ArtifactListSearchField": {
-          "label": "アーティファクトの検索",
-          "placeholder": "検索…",
-          "clear": "検索をクリア"
-        },
-        "ArtifactListTableHeader": {
-          "name": "名前",
-          "type": "タイプ",
-          "size": "サイズ",
-          "updated": "更新済み",
-          "expires": "有効期限が切れます",
-          "actions": "操作"
-        },
-        "ArtifactsPageSkeleton": {
-          "loading": "アーティファクトを読み込んでいます"
-        },
-        "expiredCompact": "期限切れ",
-        "typeMarkdown": "Markdown",
-        "typeHtml": "HTML"
+          "5cb4f5ec36": "リンクをコピー"
+        }
       },
       "ComposerParentWorktreePicker": {
         "label": "親ワークツリー",
@@ -18131,20 +17436,6 @@
         "label": "{{value0}} をワークスペースからリンク解除します",
         "description": "Orca は、このワークスペースの {{value0}} {{value1}} の詳細を非表示にします。 {{value0}} と {{value2}} のブランチは変更されません。"
       },
-      "UnexpectedSignoutCard": {
-        "9f2c1a4b7d": "サインアウトされました",
-        "3e8f5c2a91": "閉じる",
-        "7b4d9e1f2a": "アーティファクトの共有、Orca Relay、およびスキルの共有を復元するには、{{value0}} として再度サインインします。",
-        "5a1c8d3e6f": "再度サインインして、アーティファクトの共有、Orca Relay、およびスキルの共有を復元します。",
-        "1f6b2c9d4e": "何が戻ってくるか",
-        "8d2e4f7a1b": "成果物の共有",
-        "2c9a5b6e8d": "HTML ファイルと Markdown ファイルを公開し、Orca からのすべての共有リンクを管理します。",
-        "6e3f1a9c5b": "Orca リレー",
-        "4b7d2e8f1a": "Orca Mobile を携帯電話または Wi-Fi 経由でこのデスクトップに接続します。",
-        "9a4c6b2d7e": "スキルの共有",
-        "3d8e5f1b9c": "非公開リンクでスキルを共有し、使用するマシンにインストールします。",
-        "c5b3e8a17d": "Orca にサインインする"
-      },
       "NativeChatResumeOutcomeRow": {
         "openChat": "チャットを開く",
         "retry": "再試行",
@@ -18227,14 +17518,6 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
-      },
-      "OrcaSignInProgress": {
-        "waiting": "ブラウザでのサインインを待っています",
-        "copyLink": "サインインリンクをコピー",
-        "copied": "サインインリンクをコピーしました",
-        "copyFailed": "リンクをコピーできませんでした。",
-        "signingIn": "サインイン中…",
-        "cancel": "キャンセル"
       }
     },
     "i18n": {

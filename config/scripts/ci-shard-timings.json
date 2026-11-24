@@ -4309,7 +4309,7 @@
       "src/main/runtime/agent-state-rules/agent-state-rule-regions.test.ts": 361,
       "src/main/runtime/agent-state-rules/agent-state-rules-bundle.test.ts": 280,
       "src/main/runtime/agent-state-rules/agent-state-rules-engine.test.ts": 344,
-      "src/main/runtime/agent-state-rules/agent-state-rules-live-update.test.ts": 544,
+      "src/main/runtime/agent-state-rules/agent-state-rules-override.test.ts": 544,
       "src/main/runtime/agent-state-rules/agent-state-text-anchors.test.ts": 314,
       "src/main/runtime/agent-terminal-launch-host.test.ts": 4836,
       "src/main/runtime/agent-terminal-startup-prompt.test.ts": 4094,

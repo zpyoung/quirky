@@ -25,10 +25,6 @@ vi.mock('electron', () => ({
     decryptString: (ciphertext: Buffer) => ciphertext.toString('utf-8').slice('encrypted:'.length)
   }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: () => ({ nth_repo_added: 2 })
-}))
 
 const host = (id: string, extra: Partial<SshTarget> = {}): SshTarget => ({
   id,

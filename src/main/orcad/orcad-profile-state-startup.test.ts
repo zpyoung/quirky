@@ -2,13 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createProfileStateStoreForStartupMock,
-  emitMock,
   ensureActiveOrcaProfileMock,
   initOrcaProfilePathsMock,
   initSshHostKeyStoreFileMock
 } = vi.hoisted(() => ({
   createProfileStateStoreForStartupMock: vi.fn(),
-  emitMock: vi.fn(),
   ensureActiveOrcaProfileMock: vi.fn(),
   initOrcaProfilePathsMock: vi.fn(),
   initSshHostKeyStoreFileMock: vi.fn()
@@ -24,9 +22,6 @@ vi.mock('../orca-profiles/profile-index-store', () => ({
 vi.mock('../ssh/ssh-host-key-store', () => ({
   initSshHostKeyStoreFile: initSshHostKeyStoreFileMock
 }))
-vi.mock('./orcad-profile-state-telemetry', () => ({
-  emitOrcadProfileStateAuthoritySelected: emitMock
-}))
 
 const { createOrcadProfileStateStartup } = await import('./orcad-profile-state-startup')
 
@@ -40,7 +35,7 @@ beforeEach(() => {
 })
 
 describe('orcad profile-state startup', () => {
-  it('selects the capable authority once and publishes bounded metadata', async () => {
+  it('selects the capable authority once and returns bounded metadata', async () => {
     const store = { getSettings: vi.fn() }
     createProfileStateStoreForStartupMock.mockReturnValue({
       store,
@@ -71,10 +66,9 @@ describe('orcad profile-state startup', () => {
       runtime: 'orcad',
       migrated: true
     })
-    expect(emitMock).toHaveBeenCalledWith(result.authority)
   })
 
-  it('publishes nothing before the profile writer is ready', async () => {
+  it('initializes no sidecars before the profile writer is ready', async () => {
     let refuse = (_error: Error) => {}
     createProfileStateStoreForStartupMock.mockImplementationOnce(
       () =>
@@ -86,7 +80,6 @@ describe('orcad profile-state startup', () => {
     const failure = new Error('writer startup refused')
     const rejected = expect(startup).rejects.toBe(failure)
     expect(initSshHostKeyStoreFileMock).not.toHaveBeenCalled()
-    expect(emitMock).not.toHaveBeenCalled()
     refuse(failure)
     await rejected
   })
@@ -105,6 +98,5 @@ describe('orcad profile-state startup', () => {
     })
     await expect(createOrcadProfileStateStartup('/tmp/user-data')).rejects.toBe(failure)
     expect(store.freezeWritesAsync).toHaveBeenCalledOnce()
-    expect(emitMock).not.toHaveBeenCalled()
   })
 })

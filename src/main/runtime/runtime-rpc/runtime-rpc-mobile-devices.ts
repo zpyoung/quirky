@@ -10,8 +10,6 @@ import { RuntimeRpcRequestAdmission } from './runtime-rpc-request-admission'
 
 // Why: below dispatch so a caller-bound RPC context can revoke and mint mobile devices.
 export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
-  private onPushUnregisterQueued?: () => void
-
   async revokeMobileDevice(deviceId: string): Promise<boolean> {
     const revoked = this.revokeMobileDeviceNow(deviceId)
     if (revoked) {
@@ -30,9 +28,6 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
         return false
       }
     }
-    // Why: unpairing must delete the phone's push token at the gateway too, and the
-    // registration id is only readable while the device row still exists.
-    this.queuePushUnregister(deviceId, device.pushRegistration?.registrationId)
     if (!this.deviceRegistry?.removeDevice(deviceId)) {
       return false
     }
@@ -87,23 +82,6 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
         token: device.token
       }))
     }
-  }
-
-  /** Best-effort: a failed enqueue must never block the revoke the user asked for. */
-  protected queuePushUnregister(deviceId: string, registrationId: string | undefined): void {
-    if (!registrationId) {
-      return
-    }
-    try {
-      this.pushUnregisterOutbox.enqueue({ registrationId, deviceId })
-      this.onPushUnregisterQueued?.()
-    } catch (error) {
-      console.error('[runtime] Failed to persist a push token cleanup:', error)
-    }
-  }
-
-  setOnPushUnregisterQueued(callback: (() => void) | null): void {
-    this.onPushUnregisterQueued = callback ?? undefined
   }
 
   protected queueRelayDeviceRevoke(binding: RelayDeviceBinding): boolean {

@@ -11,8 +11,6 @@ import {
   toolUse
 } from './claude-child-work-producer-harness.test-fixture'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
 afterEach(() => vi.restoreAllMocks())
 
 describe('Claude structured child-work producer', () => {

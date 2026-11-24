@@ -2,7 +2,7 @@ import { codebuddyHookService } from '../codebuddy/hook-service'
 import { qwenCodeHookService } from '../qwen-code/hook-service'
 import { qoderCnHookService, qoderHookService } from '../qoder/hook-service'
 import type { AgentHookInstallStatus } from '../../shared/agent-hook-types'
-import type { HookInstallAgent } from '../../shared/telemetry-events'
+import type { AgentHookTarget } from '../../shared/agent-hook-types'
 import { ampHookService } from '../amp/hook-service'
 import { antigravityHookService } from '../antigravity/hook-service'
 import { claudeHookService } from '../claude/hook-service'
@@ -28,21 +28,21 @@ import { zcodeHookService } from '../zcode/hook-service'
 // keeps the other agent services synchronous — the shared loop already awaits.
 export type ManagedAgentHookInstallOptions = { userInitiated?: boolean; cliVersion?: string }
 export type ManagedAgentHookInstaller = readonly [
-  HookInstallAgent,
+  AgentHookTarget,
   (
     options?: ManagedAgentHookInstallOptions
   ) => AgentHookInstallStatus | Promise<AgentHookInstallStatus>
 ]
-export type ManagedAgentHookScriptRefresher = readonly [HookInstallAgent, () => Promise<void>]
+export type ManagedAgentHookScriptRefresher = readonly [AgentHookTarget, () => Promise<void>]
 export type ManagedAgentHookRemover = readonly [
-  HookInstallAgent,
+  AgentHookTarget,
   () => AgentHookInstallStatus | Promise<AgentHookInstallStatus>
 ]
 export type ManagedAgentHookAsyncRemover = readonly [
-  HookInstallAgent,
+  AgentHookTarget,
   () => Promise<AgentHookInstallStatus>
 ]
-export type ManagedAgentHookStatusReader = readonly [HookInstallAgent, () => AgentHookInstallStatus]
+export type ManagedAgentHookStatusReader = readonly [AgentHookTarget, () => AgentHookInstallStatus]
 
 export const MANAGED_AGENT_HOOK_INSTALLERS: readonly ManagedAgentHookInstaller[] = [
   ['claude', (options) => claudeHookService.install({ claudeVersion: options?.cliVersion })],

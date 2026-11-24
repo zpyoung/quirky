@@ -360,7 +360,6 @@ describe('WorktreeJumpPalette Linear URL intent', () => {
     expect(useAppStore.getState().modalData).toMatchObject({
       prefilledName: 'sta-4084-restore-osc-133-shell-integration',
       initialRepoId: 'repo-1',
-      telemetrySource: 'command_palette',
       linkedWorkItem: {
         provider: 'linear',
         type: 'issue',
@@ -694,7 +693,6 @@ describe('WorktreeJumpPalette Linear URL intent', () => {
     expect(useAppStore.getState().modalData).toMatchObject({
       prefilledName: 'agent-terminals-disappearing-randomly',
       initialRepoId: 'repo-1',
-      telemetrySource: 'command_palette',
       linkedWorkItem: {
         provider: 'github',
         type: 'issue',

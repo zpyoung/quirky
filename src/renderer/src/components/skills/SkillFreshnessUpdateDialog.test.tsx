@@ -109,7 +109,7 @@ function placement(
     topology: 'canonical-copy',
     status: 'outdated',
     currentPackageDigest: 'current',
-    lockSource: 'stablyai/orca',
+    lockSource: 'zpyoung/quirky',
     errorCategory: null,
     ...overrides
   }
@@ -376,11 +376,11 @@ describe('SkillFreshnessUpdateDialog', () => {
       state: 'success',
       names: ['orca-cli'],
       finishedAt: 2,
-      output: 'Checking skills from source: stablyai/orca\n  ✓ Updated orca-cli'
+      output: 'Checking skills from source: zpyoung/quirky\n  ✓ Updated orca-cli'
     })
 
     expect(container?.querySelector('pre')?.textContent).toContain(
-      'Checking skills from source: stablyai/orca'
+      'Checking skills from source: zpyoung/quirky'
     )
   })
 
@@ -521,7 +521,7 @@ describe('SkillFreshnessUpdateDialog', () => {
         placement('computer-use', { lockSource: 'acme/agent-skills' }),
         placement('linear-tickets', { lockSource: null }),
         placement('orca-cli'),
-        placement('orchestration', { lockSource: 'https://github.com/stablyai/orca.git' })
+        placement('orchestration', { lockSource: 'https://github.com/zpyoung/quirky.git' })
       ],
       eligibleUpdateNames: ['computer-use', 'linear-tickets', 'orca-cli', 'orchestration'],
       scanIssues: [],

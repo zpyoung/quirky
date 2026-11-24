@@ -26,7 +26,6 @@ export function hostServerDepsStub(
     progress: vi.fn(),
     isFencedBeforeStaging: () => false,
     releaseUnreachableSetup: vi.fn(async () => undefined),
-    report: vi.fn(),
     autoUpdate: vi.fn(async () => ({ outcome: 'skipped' as const, reason: 'current' as const })),
     recordedUpdateFailure: () => null,
     failedThisLaunch: () => true,

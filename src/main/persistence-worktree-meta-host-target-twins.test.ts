@@ -27,8 +27,6 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 const WORKTREE_ID = 'dup::/wt'
 const LOCAL = hostWorktreeTarget({ id: WORKTREE_ID, hostId: 'local' })

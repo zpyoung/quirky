@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { AgentSessionBackgroundTaskState } from '../../shared/agent-session-wire'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import { AgentHookServer, _internals } from '../agent-hooks/server'
@@ -16,9 +16,6 @@ import {
   stopStructuredAgentSessionRuntime
 } from './structured-agent-session-runtime'
 import { scriptedCodexTransport } from './scripted-codex-transport.test-fixture'
-
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 describe('foreground commands in the background-task channel', () => {
   let root: string

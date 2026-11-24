@@ -34,7 +34,6 @@ const fixture = vi.hoisted(() => {
 })
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('electron', () => ({
   app: { isPackaged: false, on: vi.fn(), once: vi.fn(), getPath: () => fixture.userData },
   ipcMain: { handle: vi.fn(), removeHandler: vi.fn(), on: vi.fn(), removeListener: vi.fn() },
@@ -56,7 +55,6 @@ vi.mock('../runtime/orca-runtime', () => ({
     setAgentBrowserBridge() {}
     setEmulatorBridge() {}
     setArtifactService() {}
-    setSkillCloudService() {}
     setAccountServices() {}
     setCommitMessageAgentEnvironmentResolvers() {}
   }
@@ -68,11 +66,10 @@ vi.mock('../ai-vault-search/session-search-enablement', () => ({
   applySessionSearchSettingsChange: vi.fn(),
   installChildSessionSearchService: () => null
 }))
-vi.mock('../runtime/agent-state-rules/agent-state-rules-live-update', () => ({
-  startAgentStateRulesLiveUpdates: () => {}
+vi.mock('../runtime/agent-state-rules/agent-state-rules-override', () => ({
+  startAgentStateRulesOverride: () => {}
 }))
 vi.mock('../artifacts/artifact-cloud-service', () => ({ ArtifactCloudService: class {} }))
-vi.mock('../skills/skill-cloud-service', () => ({ SkillCloudService: class {} }))
 vi.mock('./wsl-orcad-account-env-wiring', () => ({ installWslOrcadAccountShim: vi.fn() }))
 vi.mock('../codex/codex-hook-reconcile', () => ({ startCodexHooks: vi.fn() }))
 vi.mock('../star-nag/service', () => ({

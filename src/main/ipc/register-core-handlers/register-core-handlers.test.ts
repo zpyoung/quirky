@@ -8,7 +8,6 @@ const {
   registerPreflightHandlersMock,
   registerUsageProviderHandlersMock,
   registerGitHubHandlersMock,
-  registerFeedbackHandlersMock,
   registerStatsHandlersMock,
   registerMemoryHandlersMock,
   registerNotebookHandlersMock,
@@ -17,8 +16,6 @@ const {
   registerComputerUsePermissionHandlersMock,
   registerSettingsHandlersMock,
   registerKeybindingHandlersMock,
-  registerTelemetryHandlersMock,
-  registerDiagnosticsHandlersMock,
   registerTerminalRenderDesyncEvidenceHandlerMock,
   registerShellHandlersMock,
   registerPetHandlersMock,
@@ -79,7 +76,6 @@ const {
   registerPreflightHandlersMock: vi.fn(),
   registerUsageProviderHandlersMock: vi.fn(),
   registerGitHubHandlersMock: vi.fn(),
-  registerFeedbackHandlersMock: vi.fn(),
   registerStatsHandlersMock: vi.fn(),
   registerMemoryHandlersMock: vi.fn(),
   registerNotebookHandlersMock: vi.fn(),
@@ -88,8 +84,6 @@ const {
   registerComputerUsePermissionHandlersMock: vi.fn(),
   registerSettingsHandlersMock: vi.fn(),
   registerKeybindingHandlersMock: vi.fn(),
-  registerTelemetryHandlersMock: vi.fn(),
-  registerDiagnosticsHandlersMock: vi.fn(),
   registerTerminalRenderDesyncEvidenceHandlerMock: vi.fn(),
   registerShellHandlersMock: vi.fn(),
   registerPetHandlersMock: vi.fn(),
@@ -207,10 +201,6 @@ vi.mock('../github', () => ({
   registerGitHubHandlers: registerGitHubHandlersMock
 }))
 
-vi.mock('../feedback', () => ({
-  registerFeedbackHandlers: registerFeedbackHandlersMock
-}))
-
 vi.mock('../export', () => ({
   registerExportHandlers: registerExportHandlersMock
 }))
@@ -273,14 +263,6 @@ vi.mock('../localhost-worktree-labels', () => ({
 
 vi.mock('../keybindings', () => ({
   registerKeybindingHandlers: registerKeybindingHandlersMock
-}))
-
-vi.mock('../telemetry', () => ({
-  registerTelemetryHandlers: registerTelemetryHandlersMock
-}))
-
-vi.mock('../diagnostics', () => ({
-  registerDiagnosticsHandlers: registerDiagnosticsHandlersMock
 }))
 
 vi.mock('../shell', () => ({
@@ -465,7 +447,6 @@ describe('registerCoreHandlers', () => {
     registerPreflightHandlersMock.mockReset()
     registerUsageProviderHandlersMock.mockReset()
     registerGitHubHandlersMock.mockReset()
-    registerFeedbackHandlersMock.mockReset()
     registerStatsHandlersMock.mockReset()
     registerMemoryHandlersMock.mockReset()
     registerNotebookHandlersMock.mockReset()
@@ -474,8 +455,6 @@ describe('registerCoreHandlers', () => {
     registerComputerUsePermissionHandlersMock.mockReset()
     registerSettingsHandlersMock.mockReset()
     registerKeybindingHandlersMock.mockReset()
-    registerTelemetryHandlersMock.mockReset()
-    registerDiagnosticsHandlersMock.mockReset()
     registerTerminalRenderDesyncEvidenceHandlerMock.mockReset()
     registerShellHandlersMock.mockReset()
     registerPetHandlersMock.mockReset()
@@ -615,7 +594,6 @@ describe('registerCoreHandlers', () => {
     expect(registerBitbucketHandlersMock).toHaveBeenCalled()
     expect(registerGitLabHandlersMock).toHaveBeenCalledWith(store)
     expect(registerHostedReviewHandlersMock).toHaveBeenCalledWith(store, stats)
-    expect(registerFeedbackHandlersMock).toHaveBeenCalled()
     expect(registerStatsHandlersMock).toHaveBeenCalledWith(stats)
     expect(registerMemoryHandlersMock).toHaveBeenCalledWith(store)
     expect(registerNotebookHandlersMock).toHaveBeenCalledWith(store)
@@ -631,7 +609,6 @@ describe('registerCoreHandlers', () => {
     expect(registerWorkspaceSpaceHandlersMock).toHaveBeenCalledWith(store)
     expect(registerWorkspacePortHandlersMock).toHaveBeenCalledWith(store)
     expect(registerLocalhostWorktreeLabelHandlersMock).toHaveBeenCalledWith(store)
-    expect(registerTelemetryHandlersMock).toHaveBeenCalledWith(store)
     expect(registerOrcaProfileHandlersMock).toHaveBeenCalledWith(store, { onBeforeRelaunch })
     expect(registerSessionHandlersMock).toHaveBeenCalledWith(store, runtime)
     expect(registerUIHandlersMock).toHaveBeenCalledWith(store, {

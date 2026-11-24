@@ -27,10 +27,6 @@ export type UpdaterSetupOptions = {
   getLastUpdateCheckAt?: () => number | null
   onBeforeQuit?: () => void | Promise<void>
   setLastUpdateCheckAt?: (timestamp: number) => void
-  getPendingUpdateNudgeId?: () => string | null
-  getDismissedUpdateNudgeId?: () => string | null
-  setPendingUpdateNudgeId?: (id: string | null) => void
-  setDismissedUpdateNudgeId?: (id: string | null) => void
   getReleaseChannelOverride?: () => ReleaseChannel | null
   installMode?: UpdateInstallMode
   onBeforeQuitFailure?: PreQuitCleanupFailureMode
@@ -104,10 +100,6 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
     return super.listAvailableReleaseBuilds(channel, options)
   }
 
-  dismissNudge(): void {
-    super.dismissNudge()
-  }
-
   dismissAvailableUpdate(): void {
     super.dismissAvailableUpdate()
   }
@@ -119,10 +111,6 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
     this.onBeforeQuitFailure = opts?.onBeforeQuitFailure ?? 'continue'
     this.persistLastUpdateCheckAt = opts?.setLastUpdateCheckAt ?? null
     this._getLastUpdateCheckAt = opts?.getLastUpdateCheckAt ?? null
-    this._getPendingUpdateNudgeId = opts?.getPendingUpdateNudgeId ?? null
-    this._getDismissedUpdateNudgeId = opts?.getDismissedUpdateNudgeId ?? null
-    this._setPendingUpdateNudgeId = opts?.setPendingUpdateNudgeId ?? null
-    this._setDismissedUpdateNudgeId = opts?.setDismissedUpdateNudgeId ?? null
     this.getReleaseChannelOverride = opts?.getReleaseChannelOverride ?? null
     this.updateInstallMode = opts?.installMode ?? 'interactive'
     this.lastInstallDeferralVersion = { download: null, install: null }
@@ -164,7 +152,7 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
     if (this.activeUpdateSource === 'release') {
       autoUpdater.setFeedURL({
         provider: 'generic',
-        url: 'https://github.com/zpyoung/orca/releases/latest/download'
+        url: 'https://github.com/zpyoung/quirky/releases/latest/download'
       })
     }
     if (this.autoUpdaterInitialized) {
@@ -229,11 +217,7 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
       }
     })
 
-    void this.checkForUpdateNudge()
-    this.scheduleUpdateNudgeCheck()
-
     const checkDailyOnWake = () => {
-      void this.checkForUpdateNudge()
       if (
         this.backgroundCheckLaunchPending ||
         this.currentStatus.state === 'checking' ||

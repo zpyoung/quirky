@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { validate } from '../telemetry/validator'
 
-const { trackMock, probeMock } = vi.hoisted(() => ({ trackMock: vi.fn(), probeMock: vi.fn() }))
-vi.mock('../telemetry/client', () => ({ track: trackMock }))
+const { probeMock } = vi.hoisted(() => ({ probeMock: vi.fn() }))
 vi.mock('./daemon-folder-access-probe', () => ({
   probeFolderAccessForFreshDaemon: probeMock
 }))
@@ -27,7 +25,6 @@ const DOCUMENTS = '/Users/alice/Documents/repo'
 
 beforeEach(() => {
   resetDaemonFolderAccessMismatchForTests()
-  trackMock.mockReset()
   probeMock.mockReset().mockResolvedValue('unknown')
   vi.useRealTimers()
 })
@@ -328,103 +325,17 @@ describe('getDaemonFolderAccessTarget', () => {
   })
 
   // Reading evidence is not showing it: the renderer owns the `shown` event.
-  it('emits nothing, and neither does reading the notice', () => {
-    recordDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-    trackMock.mockReset()
-
-    getDaemonFolderAccessTarget(DAEMON)
-    getDaemonFolderAccessMismatch(DAEMON)
-    getDaemonFolderAccessMismatch(DAEMON)
-
-    expect(trackMock).not.toHaveBeenCalled()
-  })
 })
 
 describe('restart outcome', () => {
-  it('counts a replacement daemon that can read the folder as fixed', () => {
-    recordDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-    trackMock.mockReset()
-
-    clearDaemonFolderAccessMismatch(RESTARTED, '/Users/alice/Documents/other')
-
-    expect(trackMock).toHaveBeenCalledWith('daemon_folder_access_notice', {
-      action: 'restart_outcome_fixed',
-      cwd_class: 'documents'
-    })
-    expect(validate('daemon_folder_access_notice', trackMock.mock.calls[0][1]).ok).toBe(true)
-  })
-
-  it('counts a replacement daemon denied the same folder as still denied', () => {
-    recordDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-    trackMock.mockReset()
-
-    recordDaemonFolderAccessMismatch(RESTARTED, DOCUMENTS)
-
-    expect(trackMock).toHaveBeenCalledWith('daemon_folder_access_notice', {
-      action: 'restart_outcome_still_denied',
-      cwd_class: 'documents'
-    })
-    expect(validate('daemon_folder_access_notice', trackMock.mock.calls[0][1]).ok).toBe(true)
-  })
-
-  it('counts one outcome per restart, not one per spawn', () => {
-    recordDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-    trackMock.mockReset()
-
-    clearDaemonFolderAccessMismatch(RESTARTED, DOCUMENTS)
-    clearDaemonFolderAccessMismatch(RESTARTED, DOCUMENTS)
-
-    const outcomes = trackMock.mock.calls.filter(([, props]) =>
-      String(props.action).startsWith('restart_outcome_')
-    )
-    expect(outcomes).toHaveLength(1)
-  })
-
   // The same daemon reading back is a TCC grant landing mid-session, not a restart's verdict.
-  it('says nothing when the daemon that was denied reads the folder itself', () => {
-    recordDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-    trackMock.mockReset()
-
-    clearDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-
-    expect(trackMock).not.toHaveBeenCalled()
-  })
 
   // A readable ~/code after a Documents denial says nothing about Documents.
-  it('says nothing for a spawn in another folder class', () => {
-    recordDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-    trackMock.mockReset()
-
-    clearDaemonFolderAccessMismatch(RESTARTED, '/Users/alice/code/repo')
-    recordDaemonFolderAccessMismatch(RESTARTED, '/Users/alice/Desktop/x')
-
-    const outcomes = trackMock.mock.calls.filter(([, props]) =>
-      String(props.action).startsWith('restart_outcome_')
-    )
-    expect(outcomes).toHaveLength(0)
-  })
-
-  it('says nothing when no denial preceded the spawn', () => {
-    clearDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-    expect(trackMock).not.toHaveBeenCalled()
-  })
 
   // The denial resolved itself before any restart, so the next daemon's denial is its own story.
-  it('says nothing about a denial the same daemon had already read back', () => {
-    recordDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-    clearDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-    trackMock.mockReset()
-
-    recordDaemonFolderAccessMismatch(RESTARTED, DOCUMENTS)
-
-    expect(trackMock).not.toHaveBeenCalled()
-  })
 
   it('still records the replacement denial when the telemetry client throws', () => {
     recordDaemonFolderAccessMismatch(DAEMON, DOCUMENTS)
-    trackMock.mockImplementationOnce(() => {
-      throw new Error('posthog exploded')
-    })
 
     recordDaemonFolderAccessMismatch(RESTARTED, DOCUMENTS)
 

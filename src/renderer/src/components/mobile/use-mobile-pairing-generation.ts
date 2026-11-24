@@ -28,8 +28,6 @@ export function useMobilePairingGeneration(params: {
   setPairingQrError: (value: boolean) => void
   setPairLoading: (value: boolean) => void
   setRelayMintFailure: (value: MobileRelayMintFailure | null) => void
-  /** Re-read on a Relay mint failure: a revoked session is the likeliest cause. */
-  refreshAuthStatus: () => void
 }): {
   generatePairing: (
     rotate: boolean,
@@ -49,8 +47,7 @@ export function useMobilePairingGeneration(params: {
     setPairingUrl,
     setPairingQrError,
     setPairLoading,
-    setRelayMintFailure,
-    refreshAuthStatus
+    setRelayMintFailure
   } = params
 
   const generatePairing = useCallback(
@@ -95,7 +92,6 @@ export function useMobilePairingGeneration(params: {
             setPairingQrError(false)
             if (result.reason === 'relay_mint_failed' && result.relayFailure) {
               setRelayMintFailure(result.relayFailure)
-              refreshAuthStatus()
             } else {
               setRelayMintFailure(null)
               // Why: IPC now forwards reason/guidance for all unavailability paths;
@@ -136,7 +132,6 @@ export function useMobilePairingGeneration(params: {
       hasGeneratedRef,
       mountedRef,
       pairingRequestIdRef,
-      refreshAuthStatus,
       selectedAddress,
       setPairLoading,
       setPairQrDataUrl,

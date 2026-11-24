@@ -58,7 +58,7 @@ export function performContextualTourStepAction(args: {
     case 'open-getting-started':
       args.finishTour()
       args.schedule(() => {
-        args.openModal('setup-guide', { telemetrySource: 'contextual_tour' })
+        args.openModal('setup-guide', {})
       })
       return
     case 'open-client-hosted-browser-settings':

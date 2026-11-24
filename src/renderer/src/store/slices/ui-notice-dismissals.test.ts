@@ -17,10 +17,6 @@ vi.mock('@/lib/active-agent-note-send', () => ({
   sendNotesToActiveAgentSession: mocks.sendNotesToActiveAgentSession
 }))
 
-vi.mock('@/lib/telemetry', () => ({
-  track: mocks.track
-}))
-
 vi.mock('sonner', () => ({
   toast: {
     message: mocks.toastMessage,
@@ -305,82 +301,4 @@ describe('createUISlice clearOsc52ClipboardDefaultOnNotice', () => {
     expect(store.getState().osc52ClipboardDefaultOnNoticePending).toBe(false)
     expect(setUI).toHaveBeenCalledWith({ osc52ClipboardDefaultOnNoticePending: false })
   })
-})
-
-describe('unexpected sign-out dismissal persistence', () => {
-  it('persists a dismissal once even when effects repeat', () => {
-    const setUI = vi.fn(() => Promise.resolve())
-    vi.stubGlobal('window', { api: { ui: { set: setUI } } })
-    const store = createUIStore()
-
-    store.getState().dismissUnexpectedSignoutCard('1.2.3')
-    store.getState().dismissUnexpectedSignoutCard('1.2.3')
-
-    expect(store.getState().dismissedUnexpectedSignoutVersion).toBe('1.2.3')
-    expect(setUI).toHaveBeenCalledExactlyOnceWith({ dismissedUnexpectedSignoutVersion: '1.2.3' })
-  })
-
-  it.each([undefined, null, '1.2.2'])(
-    'does not re-arm a local dismissal from stale hydration (%s)',
-    (dismissedUnexpectedSignoutVersion) => {
-      vi.stubGlobal('window', { api: { ui: { set: vi.fn(() => Promise.resolve()) } } })
-      const store = createUIStore()
-      store.getState().dismissUnexpectedSignoutCard('1.2.3')
-
-      store.getState().hydratePersistedUI(makePersistedUI({ dismissedUnexpectedSignoutVersion }))
-
-      expect(store.getState().unexpectedSignoutDismissedVersions).toContain('1.2.3')
-    }
-  )
-
-  it('defaults legacy profiles and restores dismissal on reopen', () => {
-    const store = createUIStore()
-    expect(store.getState().dismissedUnexpectedSignoutVersion).toBeNull()
-    store
-      .getState()
-      .hydratePersistedUI(
-        makePersistedUI({ dismissedUnexpectedSignoutVersion: undefined }),
-        'startup'
-      )
-    expect(store.getState().dismissedUnexpectedSignoutVersion).toBeNull()
-    const reopened = createUIStore()
-    reopened
-      .getState()
-      .hydratePersistedUI(
-        makePersistedUI({ dismissedUnexpectedSignoutVersion: '1.2.3' }),
-        'startup'
-      )
-    expect(reopened.getState().dismissedUnexpectedSignoutVersion).toBe('1.2.3')
-  })
-
-  it('accepts another window dismissal after hydrating an older version', () => {
-    const store = createUIStore()
-    store
-      .getState()
-      .hydratePersistedUI(
-        makePersistedUI({ dismissedUnexpectedSignoutVersion: '1.2.2' }),
-        'startup'
-      )
-    store
-      .getState()
-      .hydratePersistedUI(makePersistedUI({ dismissedUnexpectedSignoutVersion: '1.2.3' }))
-    expect(store.getState().dismissedUnexpectedSignoutVersion).toBe('1.2.3')
-  })
-})
-
-describe('unexpected sign-out hydrated dismissal history', () => {
-  it.each([undefined, null, '1.2.2', '1.2.4'])(
-    'retains an observed dismissal after a different version sync (%s)',
-    (dismissedUnexpectedSignoutVersion) => {
-      const store = createUIStore()
-      store
-        .getState()
-        .hydratePersistedUI(
-          makePersistedUI({ dismissedUnexpectedSignoutVersion: '1.2.3' }),
-          'startup'
-        )
-      store.getState().hydratePersistedUI(makePersistedUI({ dismissedUnexpectedSignoutVersion }))
-      expect(store.getState().unexpectedSignoutDismissedVersions).toContain('1.2.3')
-    }
-  )
 })

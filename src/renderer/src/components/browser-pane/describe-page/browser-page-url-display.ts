@@ -5,7 +5,7 @@ import {
   normalizeExternalBrowserUrl,
   redactKagiSessionToken
 } from '../../../../../shared/browser-url'
-import { browserFileUrlToAbsolutePath } from './browser-artifact-upload'
+import { browserFileUrlToAbsolutePath } from './browser-file-url'
 import type { BrowserTabPageState } from './browser-page-types'
 
 export function getBrowserPageRuntimeEnvironmentId(

@@ -2,7 +2,7 @@ import { AGENT_JOURNAL_THREAD_SCOPE } from '../../shared/agent-session-journal-t
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { agentSessionFailureFact } from '../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
 import type { AgentChildWorkEvidence } from '../../shared/agent-status-child-work-evidence'
@@ -22,11 +22,6 @@ import { attachRuntimeWorktreeAgentRows } from './runtime-worktree-agent-rows'
 import { collectRuntimeWorktreeAgentSources } from './runtime-worktree-agent-sources'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { codexProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
-
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
 
 // A request that failed reads as failed on every surface the host feeds: the journal's verdict
 // travels the real feed, the status-store ingest and `worktree ps`, never just the projection.

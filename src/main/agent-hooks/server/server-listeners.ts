@@ -5,7 +5,6 @@ import type {
   AgentStatusIpcPayload
 } from '../../../shared/agent-status-types'
 import type { ClaudeStatusLineRateLimits } from '../../../shared/claude-statusline-rate-limits'
-import type { HookTransportInterferenceReport } from '../../../shared/agent-hook-transport-interference'
 import {
   getLegacyStatusListingOrder,
   type HookListenerState
@@ -95,17 +94,6 @@ export abstract class AgentHookServerListeners extends AgentHookServerState {
     }
     return rows.sort((a, b) => a.order - b.order).map(({ entry }) => entry)
   }
-  /**
-   * Notified once per process when repeated hook POSTs are cut off mid-body (#11217).
-   * Why: the listener fails open on every request error, so without this the only symptom is
-   * agent status quietly going stale — for every runtime at once, since they share this transport.
-   */
-  setTransportInterferenceListener(
-    listener: ((report: HookTransportInterferenceReport) => void) | null
-  ): void {
-    this.onTransportInterference = listener
-  }
-
   setListener(listener: ((payload: EnrichedAgentHookEventPayload) => void) | null): void {
     this.onAgentStatus = listener
     if (!listener) {

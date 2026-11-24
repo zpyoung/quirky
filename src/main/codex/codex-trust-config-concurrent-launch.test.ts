@@ -37,7 +37,6 @@ const { codexAppServerCapabilityCache } = await import('./codex-app-server-capab
 const { _internals, grantManagedCodexHookTrust } = await import('./codex-hook-trust-grant')
 const { markCodexProjectTrusted } = await import('../agent-trust-presets')
 const { getLocalCodexTrustConfigFiles } = await import('./codex-home-paths')
-const { setCodexTrustGrantTelemetry } = await import('./codex-trust-grant-telemetry')
 const {
   computeTrustKey,
   computeTrustedHash,
@@ -63,7 +62,6 @@ beforeEach(() => {
 
 afterEach(() => {
   _internals.setGrantSessionRunner(null)
-  setCodexTrustGrantTelemetry(() => {})
   codexAppServerCapabilityCache.clear()
   if (testState.previousUserDataPath === undefined) {
     delete process.env.ORCA_USER_DATA_PATH

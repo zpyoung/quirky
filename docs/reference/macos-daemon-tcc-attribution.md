@@ -41,8 +41,7 @@ So a packaged macOS GUI app starts its daemon from a private copy that the updat
   normal authenticated handshake, fenced by the launch nonce.
 
 Node servers, SSH hosts, unpackaged builds, Linux and Windows keep the fork launcher. Adopting an
-existing daemon never copies. Telemetry reports a daemon started from a copy as
-`spawner_path_class=stable-copy`.
+existing daemon never copies.
 
 Only Developer ID builds exercise the helper path in practice. A local ad hoc build's designated
 requirement is a cdhash, which the helper (a different binary) cannot match, so it falls back to the

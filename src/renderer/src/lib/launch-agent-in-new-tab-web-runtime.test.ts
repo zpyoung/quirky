@@ -59,10 +59,6 @@ vi.mock('@/store', () => ({ useAppStore: { getState: () => store } }))
 vi.mock('sonner', () => ({ toast: { message: vi.fn(), error: mocks.toastError } }))
 vi.mock('@/components/tab-bar/reconcile-order', () => ({ reconcileTabOrder: vi.fn(() => []) }))
 vi.mock('@/lib/agent-paste-draft', () => ({ pasteDraftWhenAgentReady: vi.fn() }))
-vi.mock('@/lib/telemetry', () => ({
-  track: vi.fn(),
-  tuiAgentToAgentKind: (agent: string) => agent
-}))
 vi.mock('@/runtime/runtime-rpc-client', () => ({
   runtimeEnvironmentSupportsCapability: vi.fn().mockResolvedValue(true)
 }))

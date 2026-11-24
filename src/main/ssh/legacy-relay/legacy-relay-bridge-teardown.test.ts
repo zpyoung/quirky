@@ -1,10 +1,9 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LegacyRelayBridgedPane } from '../../../shared/legacy-relay-bridge-contract'
 import { toAppSshPtyId } from '../../../shared/ssh-pty-id'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import type { SshConnection } from '../connection/ssh-connection'
 import type { LegacyRelayTargetBridgeDeps } from './legacy-relay-target-bridge'
-import type { LegacyRelayBridgeHost } from './legacy-relay-bridge-registry'
 
 const TARGET = 'ssh-box'
 const PTY = toAppSshPtyId(TARGET, 'pty-1')
@@ -62,7 +61,6 @@ const { legacyRelayBridgePtyIdForPane } =
   await import('../../../renderer/src/components/terminal-pane/legacy-relay-bridge-panes')
 
 let leases: SshRemotePtyLease[]
-let report: Mock<LegacyRelayBridgeHost['report']>
 
 function lease(): SshRemotePtyLease {
   return {
@@ -78,7 +76,6 @@ function lease(): SshRemotePtyLease {
 
 beforeEach(async () => {
   leases = [lease()]
-  report = vi.fn()
   registry.installLegacyRelayBridge({
     leases: () => leases,
     retireLease: vi.fn(),
@@ -88,8 +85,7 @@ beforeEach(async () => {
     onPanesChanged: (panes) => renderer.listeners.forEach((listener) => listener(panes)),
     onData: vi.fn(),
     onReplay: vi.fn(),
-    onExit: vi.fn(),
-    report
+    onExit: vi.fn()
   })
   await registry.startLegacyRelayBridge(TARGET)
 })
@@ -162,8 +158,7 @@ describe('attaching a bridged pane', () => {
       onPanesChanged: vi.fn(),
       onData: vi.fn(),
       onReplay: (_ptyId, replay) => replays.push(replay),
-      onExit: vi.fn(),
-      report: vi.fn()
+      onExit: vi.fn()
     })
     await expect(registry.attachLegacyRelayPane(PTY)).resolves.toEqual({
       status: 'attached',
@@ -175,19 +170,5 @@ describe('attaching a bridged pane', () => {
       replay: ''
     })
     expect(replays).toEqual(['SCREEN'])
-  })
-})
-
-describe('legacy relay usage telemetry', () => {
-  it('reports a bridging target active once a day, however often it reconnects', async () => {
-    expect(report).toHaveBeenCalledWith(TARGET, 'active', 1)
-    expect(report).toHaveBeenCalledWith(TARGET, 'connected', 1)
-    report.mockClear()
-
-    registry.stopLegacyRelayBridge(TARGET)
-    await registry.startLegacyRelayBridge(TARGET)
-
-    expect(report).toHaveBeenCalledWith(TARGET, 'connected', 1)
-    expect(report).not.toHaveBeenCalledWith(TARGET, 'active', expect.anything())
   })
 })

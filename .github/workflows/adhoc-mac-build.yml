@@ -487,10 +487,6 @@ jobs:
           ORCA_RELEASE_JAVASCRIPT_SOURCE_SHA: ${{ needs.release-javascript.outputs.supported == 'true' && needs.release-javascript.outputs.source_sha || '' }}
           ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: dev
           NODE_OPTIONS: --max-old-space-size=4096
-          # Why: adhoc builds are not an official channel — telemetry's transport
-          # gate accepts only 'stable' or 'rc', so leaving this unset keeps them
-          # silent, which is correct for unvetted branch artifacts.
-          ORCA_DIAGNOSTICS_TOKEN_URL: https://www.onorca.dev/diagnostics/token
 
       - name: Wait for the qualified orcad template
         if: needs.orcad-template-support.outputs.ships == 'true'

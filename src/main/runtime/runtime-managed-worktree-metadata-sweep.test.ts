@@ -23,9 +23,6 @@ vi.mock('electron', () => ({
   safeStorage: { isEncryptionAvailable: () => false }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn().mockReturnValue({}) }))
-
 const gitWorktree = (path: string): GitWorktreeInfo => ({
   path,
   branch: 'main',

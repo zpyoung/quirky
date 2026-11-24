@@ -72,7 +72,6 @@ describe('worktree remote runtime mutations', () => {
         'origin/main',
         'skip',
         { directories: ['src'], presetId: 'preset-1' },
-        'sidebar',
         'Feature title',
         123,
         456,
@@ -92,7 +91,6 @@ describe('worktree remote runtime mutations', () => {
         nestWorkspaces: false,
         refreshLocalBaseRefOnWorktreeCreate: true,
         localBaseRefSuggestionDismissed: false,
-        telemetrySource: 'sidebar',
         displayName: 'Feature title',
         linkedIssue: 123,
         linkedPR: 456,
@@ -126,7 +124,7 @@ describe('worktree remote runtime mutations', () => {
     seedRepoHost(store, 'runtime:env-1')
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'nautilus']
-    args[25] = { nameWasGenerated: true }
+    args[24] = { nameWasGenerated: true }
 
     await createWorktree(...args)
 
@@ -178,7 +176,7 @@ describe('worktree remote runtime mutations', () => {
     }
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'jira-link']
-    args[25] = { linkedWorkItem, linkedTaskSourceContext }
+    args[24] = { linkedWorkItem, linkedTaskSourceContext }
 
     await createWorktree(...args)
 
@@ -208,7 +206,7 @@ describe('worktree remote runtime mutations', () => {
     seedRepoHost(store, 'runtime:env-1')
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'jira-link']
-    args[25] = {
+    args[24] = {
       linkedWorkItem: {
         provider: 'jira',
         type: 'issue',
@@ -250,7 +248,6 @@ describe('worktree remote runtime mutations', () => {
         undefined,
         'skip',
         undefined,
-        'sidebar',
         'Launch agent',
         undefined,
         undefined,
@@ -279,7 +276,6 @@ describe('worktree remote runtime mutations', () => {
           repo: 'repo1',
           name: 'agent-startup',
           setupDecision: 'skip',
-          telemetrySource: 'sidebar',
           displayName: 'Launch agent',
           createdWithAgent: 'codex',
           startupCommand: "codex 'summarize repo'",
@@ -315,8 +311,8 @@ describe('worktree remote runtime mutations', () => {
     seedRepoHost(store, 'runtime:env-1')
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'task-draft', undefined, 'inherit']
-    args[10] = 'codex'
-    args[25] = { startupDraft: 'https://github.com/stablyai/orca/issues/12' }
+    args[9] = 'codex'
+    args[24] = { startupDraft: 'https://github.com/stablyai/orca/issues/12' }
 
     await createWorktree(...args)
 
@@ -355,7 +351,6 @@ describe('worktree remote runtime mutations', () => {
         undefined,
         'skip',
         undefined,
-        'sidebar',
         'Launch local agent',
         undefined,
         undefined,
@@ -382,7 +377,6 @@ describe('worktree remote runtime mutations', () => {
         repoId: 'repo1',
         name: 'local-agent-startup',
         setupDecision: 'skip',
-        telemetrySource: 'sidebar',
         displayName: 'Launch local agent',
         createdWithAgent: 'claude',
         startup: {
@@ -427,7 +421,6 @@ describe('worktree remote runtime mutations', () => {
         'feature/something',
         'origin/main',
         'skip',
-        undefined,
         undefined,
         undefined,
         undefined,

@@ -1,6 +1,3 @@
-import { emitNativeChatToggled } from '@/lib/native-chat-telemetry'
-import type { TuiAgent } from '../../../../../shared/tui-agent'
-import type { AppState } from '../../types'
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
 import { findTabAndWorktree, patchTab, updateGroup } from '../tab-group-state'
 import {
@@ -55,21 +52,9 @@ export function createTabsLabelActions(
     mirrorTabViewModeToHost(get(), tabId, mode)
   }
 
-  // Why: launchAgent lives on the legacy terminal tab (keyed by entityId); toggle telemetry attributes by it.
-  function launchAgentOf(state: AppState, worktreeId: string, entityId: string): TuiAgent | null {
-    return (
-      (state.tabsByWorktree[worktreeId] ?? []).find((terminal) => terminal.id === entityId)
-        ?.launchAgent ?? null
-    )
-  }
-
   /** `to`: the mode main switched to, which a frame may already show. */
   function toggleTabViewModeHere(tabId: string, to?: 'terminal' | 'chat'): void {
-    let toggled: {
-      from: 'terminal' | 'chat'
-      to: 'terminal' | 'chat'
-      agent: TuiAgent | null
-    } | null = null
+    let nextMode: 'terminal' | 'chat' | null = null
     set((state) => {
       const found = findTabAndWorktree(state.unifiedTabsByWorktree, tabId)
       if (!found) {
@@ -81,23 +66,16 @@ export function createTabsLabelActions(
         : found.tab.viewMode === 'chat'
           ? 'chat'
           : 'terminal'
-      const nextMode = oppositeViewMode(fromMode)
-      const agent = launchAgentOf(state, found.worktreeId, found.tab.entityId)
-      toggled = { from: fromMode, to: nextMode, agent }
+      const committedMode = oppositeViewMode(fromMode)
+      nextMode = committedMode
       return {
-        ...patchTab(state.unifiedTabsByWorktree, tabId, { viewMode: nextMode }),
-        ...patchTerminalTabRow(state.tabsByWorktree, tabId, { viewMode: nextMode })
+        ...patchTab(state.unifiedTabsByWorktree, tabId, { viewMode: committedMode }),
+        ...patchTerminalTabRow(state.tabsByWorktree, tabId, { viewMode: committedMode })
       }
     })
-    // Why: emit after the state write so the event reflects the committed mode.
-    const committed = toggled as {
-      from: 'terminal' | 'chat'
-      to: 'terminal' | 'chat'
-      agent: TuiAgent | null
-    } | null
+    const committed = nextMode as 'terminal' | 'chat' | null
     if (committed) {
-      emitNativeChatToggled(committed)
-      mirrorTabViewModeToHost(get(), tabId, committed.to)
+      mirrorTabViewModeToHost(get(), tabId, committed)
     }
   }
 
@@ -146,17 +124,7 @@ export function createTabsLabelActions(
     const shown = found?.tab.viewMode
     const from = viewModeSent.get(tabId)?.mode ?? (shown === 'chat' ? 'chat' : 'terminal')
     const to = oppositeViewMode(from)
-    return sendViewMode(
-      tabId,
-      to,
-      () => toggleTabViewModeHere(tabId, to),
-      () =>
-        emitNativeChatToggled({
-          from,
-          to,
-          agent: found ? launchAgentOf(get(), found.worktreeId, found.tab.entityId) : null
-        })
-    )
+    return sendViewMode(tabId, to, () => toggleTabViewModeHere(tabId, to))
   }
 
   return {

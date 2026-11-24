@@ -25,7 +25,6 @@ import { settleTeardownWithinDeadline, settleWithinMs } from '../quit-teardown-d
 import { quitTeardownStartGate } from '../quit-teardown-start-gate'
 import { setUnreadDockBadgeCount } from '../dock/unread-badge'
 import { destroySystemTray } from '../tray/system-tray'
-import { shutdownTelemetry } from '../telemetry/client'
 import { shutdownObservability } from '../observability'
 import { isQuittingForUpdate } from '../updater'
 import { recordUpdaterLifecycle } from '../updater-lifecycle-diagnostics'
@@ -35,7 +34,6 @@ import { shouldQuitWhenAllWindowsClosed } from './window-all-closed-quit-policy'
 import { mainProcessState as state } from './main-process-state'
 import { isDevParentShutdownRequested } from './configure-process'
 import { getCanonicalUserDataPath } from '../persistence'
-import { flushUnsavedCloudSessions } from '../orca-profiles/profile-cloud-session-owner'
 
 // Why: will-quit fires twice — first pass preventDefaults and runs teardown; second pass exits.
 let daemonDisconnectDone = false
@@ -81,7 +79,6 @@ function installBeforeQuitHandler(): void {
       })
     }
     state.isQuitting = true
-    flushUnsavedCloudSessions()
     state.desktopRelayService?.fenceAndCloseNow()
     state.runtimeRpc?.setMobileRelayPairingProvider(null)
     state.unsubscribeAgentAwakeStatusChanges?.()
@@ -118,8 +115,6 @@ function installWillQuitHandler(): void {
     }
     // Layout-owner build: a pane's grid still inside its write burst joins the final save.
     const paneGridFlush = state.runtime?.flushPaneGrids() ?? null
-    // A renderer can veto before-quit; push must survive until quit is committed.
-    state.desktopPushService?.stop()
     state.unsubscribeSystemResumeBroadcast?.()
     state.unsubscribeSystemResumeBroadcast = null
     // Why: renderer guards can still cancel before this committed phase; `log stream` must survive those vetoes.
@@ -135,14 +130,12 @@ function installWillQuitHandler(): void {
     // Why: before-quit can still be aborted by renderer beforeunload; only remove the Windows tray icon on the committed quit path.
     destroySystemTray()
     // Why: an agent still working at quit gets no terminating hook, so stats.flushAsync() closes those sessions out synchronously (only the write is deferred) — otherwise their duration is lost.
-    state.starNag?.stop()
     state.automations?.stop()
     const heimdallShutdown = beginHeimdallShutdown(state.heimdall)
     // Why: plugin hosts are forked children; dispose sends shutdown and
     // escalates to SIGKILL so they cannot outlive the app. The promise joins
     // the teardown barrier below — quitting before it resolves would let
     // Electron exit first and orphan the hosts.
-    state.pluginKillListService = null
     state.pluginMarketplaceService = null
     state.pluginMarketplaceInstaller = null
     const pluginHostShutdown = state.pluginService?.dispose() ?? Promise.resolve()
@@ -253,7 +246,6 @@ function installWillQuitHandler(): void {
     ]).then(() => {})
     disposeDesktopBrowserBridge()
     const browserClientHostShutdown = shutdownPairedRuntimeBrowserClientHosts()
-    const skillUploadShutdown = state.runtime?.disposeSkillUploadSessions() ?? Promise.resolve()
     // Why: capture pid/runtimeId synchronously (before any await) so a later teardown path can't null them out mid-chain.
     const ownedPid = process.pid
     const ownedRuntimeId = state.runtime?.getRuntimeId()
@@ -295,7 +287,6 @@ function installWillQuitHandler(): void {
       heimdallShutdown,
       { name: 'loops', promise: beginLoopsShutdown(state.loops) },
       { name: 'plugin-hosts', promise: pluginHostShutdown },
-      { name: 'skill-uploads', promise: skillUploadShutdown },
       { name: 'grok-hooks', promise: grokHookCleanup },
       { name: 'ref-maintenance', promise: refMaintenanceShutdown },
       { name: 'codex-backfill-recovery', promise: codexBackfillRecoveryShutdown },
@@ -310,7 +301,7 @@ function installWillQuitHandler(): void {
           console.warn('[shutdown] Quit teardown deadline reached', { pendingTeardowns })
         }
       })
-      .then(() => shutdownTelemetry())
+      .then(() => {})
       .then(() => shutdownObservability())
       .catch(() => {
         /* swallow — telemetry must never prevent app.quit() */

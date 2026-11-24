@@ -208,7 +208,7 @@ export abstract class UpdaterReleaseFeed extends UpdaterInstallExecution {
     }
     this.clearPrereleaseFallbackContext()
     this.clearPublishingWindowLastGoodCheck()
-    const url = 'https://github.com/zpyoung/orca/releases/latest/download'
+    const url = 'https://github.com/zpyoung/quirky/releases/latest/download'
     console.info(
       `[updater] release feed fallback: current=${currentVersion} includePrerelease=${includePrerelease} → ${url}`
     )

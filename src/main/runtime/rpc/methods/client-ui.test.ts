@@ -578,8 +578,6 @@ describe('client UI RPC methods', () => {
     ],
     ['taskResumeState.jiraPreset', { taskResumeState: { jiraPreset: 'assigned' } }],
     ['taskResumeState.jiraQuery', { taskResumeState: { jiraQuery: 'ENG' } }],
-    ['dismissedUnexpectedSignoutVersion', { dismissedUnexpectedSignoutVersion: '1.2.3' }],
-    ['dismissedUnexpectedSignoutVersion null', { dismissedUnexpectedSignoutVersion: null }],
     ['activeView', { activeView: 'tasks' }],
     ['showDotfilesByWorktree', { showDotfilesByWorktree: { 'repo::/worktree': true } }],
     ['setupGuideSidebarDismissed', { setupGuideSidebarDismissed: true }],
@@ -777,28 +775,6 @@ describe('client UI RPC methods', () => {
       worktreeCardProperties: ['status', 'unread', 'ci', 'issue', 'pr']
     })
     expect(response).toMatchObject({ ok: true, result: { ui: omitPairingLocalUiFields(updated) } })
-  })
-
-  it('rejects each star-nag persisted state mutation field from remote clients', async () => {
-    const runtime = {
-      getRuntimeId: () => 'test-runtime',
-      updateUIState: vi.fn()
-    } as unknown as OrcaRuntimeService
-    const dispatcher = new RpcDispatcher({ runtime, methods: CLIENT_UI_METHODS })
-    const forbiddenPayloads = [
-      { starNagBaselineAgents: 10 },
-      { starNagAppVersion: '1.2.3' },
-      { starNagAgentValueMomentAppVersion: '1.2.3' },
-      { starNagNextThreshold: 70 },
-      { starNagCompleted: true },
-      { starNagDeferredUntil: null }
-    ]
-
-    for (const payload of forbiddenPayloads) {
-      const response = await dispatcher.dispatch(makeRequest('ui.set', payload))
-      expect(response).toMatchObject({ ok: false, error: { code: 'invalid_argument' } })
-    }
-    expect(runtime.updateUIState).not.toHaveBeenCalled()
   })
 
   it('rejects unknown feature interaction ids for increment RPC', async () => {

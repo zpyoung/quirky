@@ -61,9 +61,7 @@ import { STRUCTURED_AGENT_SESSION_ATTACHMENT_METHODS } from './structured-agent-
 import { STRUCTURED_AGENT_SESSION_VISUAL_METHODS } from './structured-agent-session-visual'
 import { STRUCTURED_AGENT_SESSION_AGENTS_METHODS } from './structured-agent-session-agents'
 import { MANAGED_RUNTIME_INSTALL_METHODS } from './managed-runtime-install'
-import { ARTIFACT_METHODS } from './artifacts'
 import { LEDGER_METHODS } from './ledger'
-import { ARTIFACT_PASSWORD_METHODS } from './fork-artifact-passwords/artifact-password-methods'
 import { AGENT_HOOK_METHODS } from './agent-hooks'
 import { AGENT_LAUNCH_METHODS } from './agent-launch'
 import { ASK_METHODS } from './fork-ask-question-tool/ask'
@@ -86,9 +84,7 @@ export const ALL_RPC_METHODS = [
   ...ORCAD_MIGRATION_METHODS,
   ...AGENT_HOOK_METHODS,
   ...AI_VAULT_METHODS,
-  ...ARTIFACT_METHODS,
   ...LEDGER_METHODS,
-  ...ARTIFACT_PASSWORD_METHODS,
   ...ASK_METHODS,
   ...HEIMDALL_METHODS,
   ...LOOPS_METHODS,

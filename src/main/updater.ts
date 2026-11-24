@@ -85,10 +85,6 @@ export async function listAvailableReleaseBuilds(
   return updater.listAvailableReleaseBuilds(channel, options)
 }
 
-export function dismissNudge(): void {
-  updater.dismissNudge()
-}
-
 export function dismissAvailableUpdate(): void {
   updater.dismissAvailableUpdate()
 }

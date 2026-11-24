@@ -33,11 +33,6 @@ vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
-const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
-  trackMock: vi.fn(),
-  getCohortAtEmitMock: vi.fn()
-}))
-
 vi.mock('electron', () => ({
   app: {
     getPath: () => testState.dir
@@ -53,14 +48,6 @@ vi.mock('electron', () => ({
       return decoded.slice('encrypted:'.length)
     }
   }
-}))
-
-vi.mock('./telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('./telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
 }))
 
 describe('Store host-partitioned workspace sessions', () => {

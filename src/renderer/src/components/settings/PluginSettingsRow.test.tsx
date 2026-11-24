@@ -35,10 +35,6 @@ const plugin: PluginHostListEntry = {
   commands: [],
   hasWorker: false,
   restarts: 0,
-  blockedByKillList: {
-    reason: 'A vulnerable release was revoked',
-    advisoryUrl: 'https://onorca.dev/advisories/orca-skills'
-  },
   source: {
     kind: 'bundled',
     reference: 'bundled:stablyai.orca-skills',
@@ -52,7 +48,7 @@ afterEach(() => {
 })
 
 describe('PluginSettingsRow', () => {
-  it('shows official provenance and prevents re-enabling killed plugins', async () => {
+  it('shows official provenance', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -74,12 +70,7 @@ describe('PluginSettingsRow', () => {
     // Why: official provenance renders as an icon with an accessible label, not badge text.
     expect(container.querySelector('[aria-label="Official"]')).toBeTruthy()
     expect(container.textContent).toContain('Bundled')
-    expect(container.textContent).toContain('A vulnerable release was revoked')
-    expect(container.textContent).toContain('View advisory')
     expect(container.textContent).not.toContain('Remove')
-    expect(
-      container.querySelector<HTMLButtonElement>('[aria-label="Enable Orca Skills"]')?.disabled
-    ).toBe(true)
     act(() => root.unmount())
   })
 })

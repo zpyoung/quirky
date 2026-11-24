@@ -13,9 +13,6 @@ import {
 import { AgentHookServer } from './server'
 import { GOOD_PANE, PANE } from './server.test-fixtures'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
-
 const SESSION = 'canonical-session-one'
 const SCOPE: AgentStatusExecutionScope = {
   executionHostId: 'local',

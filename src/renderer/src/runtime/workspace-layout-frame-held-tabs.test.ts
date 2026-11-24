@@ -44,8 +44,7 @@ type Call = {
 }
 const effects = vi.hoisted(() => ({
   graphSync: vi.fn(),
-  mirrorViewMode: vi.fn(),
-  chatToggled: vi.fn()
+  mirrorViewMode: vi.fn()
 }))
 vi.mock('@/runtime/sync-runtime-graph', async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -54,10 +53,6 @@ vi.mock('@/runtime/sync-runtime-graph', async (importOriginal) => ({
 vi.mock('@/store/slices/tabs/tabs-host-mirroring', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   mirrorTabViewModeToHost: effects.mirrorViewMode
-}))
-vi.mock('@/lib/native-chat-telemetry', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  emitNativeChatToggled: effects.chatToggled
 }))
 
 const rpc = vi.hoisted((): { calls: Call[] } => ({ calls: [] }))
@@ -409,7 +404,7 @@ describe('a change main applies first, with frames flowing', () => {
     sync.close()
   })
 
-  it('runs a view toggle’s bookkeeping once, after main’s frame shows the toggle', async () => {
+  it('applies a view toggle once, after main’s frame shows the toggle', async () => {
     const { store, sync, answer } = await boot()
     store.getState().toggleTabViewMode('tab-agent')
     const toggle = rpc.calls.length - 1
@@ -426,10 +421,6 @@ describe('a change main applies first, with frames flowing', () => {
     expect(agent().viewMode).toBe('terminal')
     // Main owns the workspace: the paired-server mirror is not asked.
     expect(effects.mirrorViewMode).not.toHaveBeenCalled()
-    expect(effects.chatToggled).toHaveBeenCalledTimes(1)
-    expect(effects.chatToggled).toHaveBeenCalledWith(
-      expect.objectContaining({ from: 'chat', to: 'terminal' })
-    )
 
     // The answered send is settled: the next toggle flips from what is shown, back to chat.
     store.getState().toggleTabViewMode('tab-agent')

@@ -4,11 +4,6 @@ import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import { TEST_WORKTREE_ID, store } from '../orca-runtime-test-fixtures.spec'
 import { AgentHookServer, _internals } from '../../agent-hooks/server'
 
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
-
 /** Covers the production status-store read, which a hand-built projection snapshot can bypass. */
 const SESSION = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
 const SUBJECT = makeStructuredAgentStatusSubject(

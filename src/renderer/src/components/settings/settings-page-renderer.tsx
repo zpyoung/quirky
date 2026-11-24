@@ -13,15 +13,12 @@ import {
   renderOrchestrationSettingsSection
 } from './settings-capability-section-renderers'
 import {
-  renderArtifactsSettingsSection,
   renderSessionHistorySettingsSection,
   renderAutomationsSettingsSection,
   renderGeneralSettingsSection,
   renderIntegrationsSettingsSection,
   renderMobileSettingsSection,
-  renderOrcaAccountSettingsSection,
-  renderSetupGuideSettingsSection,
-  renderShareSkillsSettingsSection
+  renderSetupGuideSettingsSection
 } from './settings-setup-workflow-section-renderers'
 import {
   renderGitSettingsSection,
@@ -44,7 +41,6 @@ import {
 } from './settings-interface-secondary-section-renderers'
 import {
   renderDeveloperPermissionsSettingsSection,
-  renderPrivacySettingsSection,
   renderServersSettingsSection,
   renderSshSettingsSection
 } from './settings-remote-security-section-renderers'
@@ -136,14 +132,11 @@ export function renderSettingsPage(context: SettingsRenderContext): React.JSX.El
                   {renderOrchestrationSettingsSection(context)}
                   {renderLinearSettingsSection(context)}
                   {renderDesktopCapabilitySettingsSections(context)}
-                  {renderOrcaAccountSettingsSection(context)}
                   {renderSetupGuideSettingsSection(context)}
                   {renderGeneralSettingsSection(context)}
                   {renderIntegrationsSettingsSection(context)}
                   {renderMobileSettingsSection(context)}
                   {renderAutomationsSettingsSection(context)}
-                  {renderArtifactsSettingsSection(context)}
-                  {renderShareSkillsSettingsSection(context)}
                   {renderSessionHistorySettingsSection(context)}
                   {renderGitSettingsSection(context)}
                   {renderTasksSettingsSection(context)}
@@ -162,7 +155,6 @@ export function renderSettingsPage(context: SettingsRenderContext): React.JSX.El
                   {renderServersSettingsSection(context)}
                   {renderSshSettingsSection(context)}
                   {renderDeveloperPermissionsSettingsSection(context)}
-                  {renderPrivacySettingsSection(context)}
                   {renderAdvancedSettingsSection(context)}
                   {renderDevSettingsSection(context)}
                   {renderExperimentalSettingsSection(context)}

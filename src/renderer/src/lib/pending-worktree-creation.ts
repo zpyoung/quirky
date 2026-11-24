@@ -1,7 +1,6 @@
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { FolderWorkspaceLinkedTask } from '../../../shared/folder-workspace-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
-import type { WorkspaceSource as WorkspaceCreateTelemetrySource } from '../../../shared/workspace-source'
 import type {
   CreateSparseCheckoutRequest,
   SetupDecision,
@@ -83,7 +82,6 @@ export type WorktreeCreationRequest = {
     }
   }
   sparseCheckout?: CreateSparseCheckoutRequest
-  telemetrySource?: WorkspaceCreateTelemetrySource
   linkedIssue?: number
   linkedPR?: number
   pushTarget?: GitPushTarget

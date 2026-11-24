@@ -25,8 +25,8 @@ const RICH_CHANGELOG: ChangelogData = {
   release: {
     title: 'Inline Diffs',
     description: 'Review diffs without leaving the terminal.',
-    mediaUrl: 'https://onorca.dev/media/inline-diffs.png',
-    releaseNotesUrl: 'https://onorca.dev/changelog/1.2.0'
+    mediaUrl: 'https://example.test/media/inline-diffs.png',
+    releaseNotesUrl: 'https://example.test/changelog/1.2.0'
   },
   releasesBehind: 3
 }
@@ -45,7 +45,6 @@ beforeEach(() => {
       updater: {
         download: vi.fn().mockResolvedValue(undefined),
         quitAndInstall: vi.fn().mockResolvedValue(undefined),
-        dismissNudge: vi.fn().mockResolvedValue(undefined),
         dismissAvailableUpdate: vi.fn().mockResolvedValue(undefined)
       }
     },
@@ -163,49 +162,6 @@ describe('dismissUpdate', () => {
     store.getState().dismissUpdate()
 
     expect(store.getState().dismissedUpdateVersion).toBeNull()
-  })
-})
-
-// ── dismissUpdate nudge-aware path ───────────────────────────────────
-
-describe('dismissUpdate nudge-aware', () => {
-  it('calls dismissNudge when the current status has an activeNudgeId', () => {
-    const store = createTestStore()
-    setState(store, {
-      state: 'available',
-      version: '1.2.0',
-      changelog: null,
-      activeNudgeId: 'campaign-1'
-    })
-
-    store.getState().dismissUpdate()
-
-    expect(store.getState().dismissedUpdateVersion).toBe('1.2.0')
-    expect(window.api.updater.dismissNudge).toHaveBeenCalledTimes(1)
-  })
-
-  it('does not call dismissNudge when the status has no activeNudgeId', () => {
-    const store = createTestStore()
-    setState(store, { state: 'available', version: '1.2.0', changelog: null })
-
-    store.getState().dismissUpdate()
-
-    expect(store.getState().dismissedUpdateVersion).toBe('1.2.0')
-    expect(window.api.updater.dismissNudge).not.toHaveBeenCalled()
-  })
-
-  it('calls dismissNudge when dismissing during a nudge-driven download', () => {
-    const store = createTestStore()
-    setState(store, {
-      state: 'downloading',
-      percent: 50,
-      version: '1.2.0',
-      activeNudgeId: 'campaign-1'
-    })
-
-    store.getState().dismissUpdate()
-
-    expect(window.api.updater.dismissNudge).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -8,11 +8,6 @@ import { RelayAgentHookServer } from '../../wsl-guest/agent-hook-server'
 import { AGENT_STATUS_STALE_AFTER_MS } from '../../shared/agent-status-types'
 import type { AgentHookSource } from '../../shared/agent-hook-relay'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
-
 const CHILD_COUNT = 32
 
 afterEach(() => vi.restoreAllMocks())

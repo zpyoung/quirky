@@ -1,6 +1,6 @@
 import type { AgentLaunchOptionSelection } from '../../../shared/fork-automation-launch-settings/agent-launch-overrides'
 import type { ParsedAgentStatusPayload } from '../../../shared/agent-status-types'
-import type { LaunchSource } from '../../../shared/telemetry-events'
+import type { LaunchSource } from '../../../shared/agent-kind'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AgentStartupPlan } from '@/lib/tui-agent-startup'
 import type { AgentStartupShell } from '../../../shared/tui-agent-startup-shell'

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import {
   createNewProfileNativeChatUpgradeTipAudience,
@@ -67,45 +66,6 @@ export class LoadedCohortMigrationOperations {
       version: 1,
       membership: 'excluded',
       basis: chatUi === false ? 'chat-ui-off' : 'chat-ui-unset'
-    }
-  }
-
-  migrateTelemetry(state: PersistedState, fileExistedOnLoad: boolean): PersistedState {
-    const existing = state.settings?.telemetry
-    // Why: require all three invariants; keying on existedBeforeTelemetryRelease alone lets a partial block skip migration.
-    if (
-      typeof existing?.existedBeforeTelemetryRelease === 'boolean' &&
-      typeof existing.installId === 'string' &&
-      existing.installId.length > 0 &&
-      (existing.optedIn === true || existing.optedIn === false || existing.optedIn === null)
-    ) {
-      return state
-    }
-    // Why: resolve cohort once; re-inferring it in the optedIn fallback could misclassify a partially-written new user.
-    const resolvedExistedBefore =
-      typeof existing?.existedBeforeTelemetryRelease === 'boolean'
-        ? existing.existedBeforeTelemetryRelease
-        : fileExistedOnLoad
-    return {
-      ...state,
-      settings: {
-        ...state.settings,
-        telemetry: {
-          ...existing,
-          existedBeforeTelemetryRelease: resolvedExistedBefore,
-          // Why: preserve any explicit opt-in/out; fall back to cohort default only when optedIn is undefined, never when false.
-          optedIn:
-            existing?.optedIn === true || existing?.optedIn === false || existing?.optedIn === null
-              ? existing.optedIn
-              : resolvedExistedBefore
-                ? null
-                : true,
-          installId:
-            typeof existing?.installId === 'string' && existing.installId.length > 0
-              ? existing.installId
-              : randomUUID()
-        }
-      }
     }
   }
 }

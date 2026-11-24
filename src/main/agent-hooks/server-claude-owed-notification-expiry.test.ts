@@ -5,11 +5,6 @@ import { CLAUDE_OWED_TASK_NOTIFICATION_LEASE_MS } from '../../shared/claude-owed
 import { AgentHookServer, _internals } from './server'
 import { buildBody, PANE, postHookEvent, RUNNING_SHELL } from './server.test-fixtures'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
-
 beforeEach(() => {
   _internals.resetCachesForTests()
   // Why shouldAdvanceTime: the hooks are real loopback POSTs, which need the clock to move.

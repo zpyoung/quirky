@@ -1,4 +1,3 @@
-import { getArtifactsSettingsSearchEntries } from '@/components/settings/artifacts-settings-search'
 import { getAutomationsSettingsSearchEntries } from '@/components/settings/automations-settings-search'
 import { getBrowserPaneCombinedSearchEntries } from '@/components/settings/browser-pane-search'
 import { getCommitMessageAiPaneSearchEntries } from '@/components/settings/commit-message-ai-search'
@@ -8,14 +7,11 @@ import { getGitPaneSearchEntries } from '@/components/settings/git-search'
 import { getMobileEmulatorSearchEntries } from '@/components/settings/mobile-emulator-search'
 import { getQuickCommandsPaneSearchEntries } from '@/components/settings/quick-commands-search'
 import { getForkSessionHandoffNavSections } from '@/components/settings/fork-session-handoff/handoff-settings-nav-section'
-import { getShareSkillsSettingsSearchEntries } from '@/components/settings/share-skills-settings-search'
 import { getTasksPaneSearchEntries } from '@/components/settings/tasks-search'
 import { translate } from '@/i18n/i18n'
 import type { SettingsNavSection } from '@/lib/settings-navigation-types'
 import {
-  BookOpen,
   CalendarClock,
-  Files,
   History,
   GitBranch,
   Globe,
@@ -43,32 +39,6 @@ export function buildWorkflowSettingsSections(
       icon: CalendarClock,
       searchEntries: getAutomationsSettingsSearchEntries(),
       group: 'workflows'
-    },
-    {
-      id: 'artifacts',
-      title: translate('auto.hooks.useSettingsNavigationMetadata.artifactsTitle', 'Artifacts'),
-      description: translate(
-        'auto.hooks.useSettingsNavigationMetadata.artifactsDescription',
-        'Share HTML and Markdown files with your team and manage their public links.'
-      ),
-      icon: Files,
-      searchEntries: getArtifactsSettingsSearchEntries(),
-      group: 'workflows',
-      badge: translate('auto.hooks.useSettingsNavigationMetadata.40d80bad8a', 'Beta')
-    },
-    {
-      id: 'share-skills',
-      title: translate('auto.hooks.useSettingsNavigationMetadata.shareSkillsTitle', 'Share Skills'),
-      description: translate(
-        'auto.hooks.useSettingsNavigationMetadata.shareSkillsDescription',
-        'Share your skills with an unlisted link. Anyone who has it can install them.'
-      ),
-      // Why: the sidebar entry and the page header both use BookOpen for
-      // skills, so the settings row that opens them matches.
-      icon: BookOpen,
-      searchEntries: getShareSkillsSettingsSearchEntries(),
-      group: 'workflows',
-      badge: translate('auto.hooks.useSettingsNavigationMetadata.40d80bad8a', 'Beta')
     },
     {
       id: 'session-history',

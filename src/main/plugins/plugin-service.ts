@@ -63,9 +63,7 @@ export class PluginService {
 
   constructor(options: PluginServiceOptions) {
     this.options = options
-    this.contentPacks = new PluginContentPackRegistry(this.contentVerifier, (pluginKey) =>
-      Boolean(this.options.getPluginKillListEntry?.(pluginKey))
-    )
+    this.contentPacks = new PluginContentPackRegistry(this.contentVerifier)
     this.audit = new PluginAuditLog(getPluginsDataDir(options.userDataPath))
     this.panels = new PluginPanelController({
       resolveApprovedPlugin: (pluginKey) => {
@@ -215,8 +213,7 @@ export class PluginService {
     return (
       this.contentPacksReady &&
       this.activationState(plugin) === 'approved' &&
-      !this.contentPacks.error(plugin.pluginKey) &&
-      !this.options.getPluginKillListEntry?.(plugin.pluginKey)
+      !this.contentPacks.error(plugin.pluginKey)
     )
   }
 
@@ -225,12 +222,7 @@ export class PluginService {
   }
 
   activationError(pluginKey: string): string | null {
-    const blocked = this.options.getPluginKillListEntry?.(pluginKey)
-    return (
-      (blocked ? `Blocked by Orca's plugin safety list: ${blocked.reason}` : null) ??
-      this.contentPacks.error(pluginKey) ??
-      this.workerController.activationError(pluginKey)
-    )
+    return this.contentPacks.error(pluginKey) ?? this.workerController.activationError(pluginKey)
   }
 
   /** Consented capability kinds for an approved plugin; null otherwise so

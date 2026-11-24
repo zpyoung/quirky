@@ -20,7 +20,6 @@ const {
   netConnectMock,
   probeSocketExistsMock,
   spawnerInstances,
-  trackDaemonReplacedMock,
   importFresh,
   installDefaultNetConnectStub,
   moduleFactories
@@ -41,7 +40,6 @@ vi.mock('./daemon-stale-kill', () => moduleFactories.daemonStaleKill())
 vi.mock('./daemon-process-start-time', () => moduleFactories.daemonProcessStartTime())
 vi.mock('./daemon-pid-file-parse', () => moduleFactories.daemonPidFileParse())
 vi.mock('./client', () => moduleFactories.client())
-vi.mock('./daemon-lifecycle-event', () => moduleFactories.daemonLifecycleEvent())
 vi.mock('./daemon-spawner', () => moduleFactories.daemonSpawner())
 vi.mock('./daemon-pty-adapter', () => moduleFactories.daemonPtyAdapter())
 vi.mock('../ipc/pty/provider/registry', () => moduleFactories.ptyProviderRegistry())
@@ -117,9 +115,6 @@ describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
       ]),
       expect.objectContaining({ cwd: '/fake/userData', detached: true })
     )
-    // STA-2376: different-app-path replacement, emitted exactly once.
-    expect(trackDaemonReplacedMock).toHaveBeenCalledTimes(1)
-    expect(trackDaemonReplacedMock).toHaveBeenCalledWith('different_app_path', 0)
   })
 
   it('adopts the winner when a launched daemon loses the endpoint race', async () => {
@@ -206,9 +201,6 @@ describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
     await launcher('/fake/socket', '/fake/token')
 
     expect(forkMock).toHaveBeenCalledTimes(1)
-    // STA-3491: attribution-severed replacement is billed to its own reason, exactly once.
-    expect(trackDaemonReplacedMock).toHaveBeenCalledTimes(1)
-    expect(trackDaemonReplacedMock).toHaveBeenCalledWith('severed_tcc_attribution', 0)
   })
 
   it('preserves a severed-attribution daemon that owns live sessions', async () => {
@@ -235,7 +227,6 @@ describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
     expect(handle).toBeDefined()
     expect(forkMock).not.toHaveBeenCalled()
     expect(killStaleDaemonMock).not.toHaveBeenCalled()
-    expect(trackDaemonReplacedMock).not.toHaveBeenCalled()
   })
 
   it('holds a full adoption pair before a healthy launcher resolves', async () => {

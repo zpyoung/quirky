@@ -16,11 +16,6 @@ import { getDefaultWorkspaceSession } from '../shared/constants'
 import { TEST_LEAF_1 } from './persistence-session-fixtures'
 import { PtyExitProof } from './pty-exit-proof'
 
-const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
-  trackMock: vi.fn(),
-  getCohortAtEmitMock: vi.fn()
-}))
-
 vi.mock('electron', () => ({
   app: {
     getPath: () => testState.dir
@@ -36,14 +31,6 @@ vi.mock('electron', () => ({
       return decoded.slice('encrypted:'.length)
     }
   }
-}))
-
-vi.mock('./telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('./telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
 }))
 
 describe('Store SSH remote PTY bindings across host partitions', () => {

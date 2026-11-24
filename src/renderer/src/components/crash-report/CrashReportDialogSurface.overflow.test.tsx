@@ -1,12 +1,10 @@
 // @vitest-environment happy-dom
 
 import type { ReactNode } from 'react'
-import { cleanup, render, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CrashReportRecord } from '../../../../shared/crash-reporting'
 import { CrashReportDialogSurface } from './CrashReportDialogSurface'
-
-const viewer = vi.fn(async () => null)
 
 vi.mock('./use-crash-report-copy', () => ({
   useCrashReportCopy: () => vi.fn(async () => {})
@@ -45,18 +43,10 @@ function crashReport(error: string): CrashReportRecord {
   }
 }
 
-beforeEach(() => {
-  viewer.mockClear()
-  Object.defineProperty(window, 'api', {
-    configurable: true,
-    value: { gh: { viewer } }
-  })
-})
-
 afterEach(() => cleanup())
 
 describe('CrashReportDialogSurface overflow containment', () => {
-  it('keeps unbroken diagnostic output inside the dialog grid', async () => {
+  it('keeps unbroken diagnostic output inside the dialog grid', () => {
     const unbrokenError = 'A'.repeat(1000)
     const { container } = render(
       <CrashReportDialogSurface
@@ -67,7 +57,6 @@ describe('CrashReportDialogSurface overflow containment', () => {
         onReportChange={() => {}}
       />
     )
-    await waitFor(() => expect(viewer).toHaveBeenCalledOnce())
 
     const dialog = container.querySelector('[role="dialog"]')
     const output = dialog?.querySelector('pre')

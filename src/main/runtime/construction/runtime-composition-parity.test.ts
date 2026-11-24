@@ -3,7 +3,6 @@ import { join, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RUNTIME_CAPABILITIES } from '../../../shared/protocol-version'
 import { SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY } from '../../../shared/ssh-target-management'
-import { SKILL_INSTALL_CAPABILITY } from '../../../shared/skill-install-capability'
 
 /**
  * Electron (`main-process-*`) and orcad (`orcad-entry.ts`) each compose the same runtime, and every
@@ -28,17 +27,6 @@ type DeclaredDifference = {
 }
 
 const DECLARED_HOST_DIFFERENCES: readonly DeclaredDifference[] = [
-  {
-    wiring: 'runtime.setArtifactService',
-    missingOn: 'orcad',
-    reason: 'Artifact sharing uses the desktop sign-in; a headless host has none yet.'
-  },
-  {
-    wiring: 'runtime.setSkillCloudService',
-    missingOn: 'orcad',
-    reason: 'Skill sharing uses the desktop sign-in; installs from Git still work on orcad.',
-    advertisedUnserved: [SKILL_INSTALL_CAPABILITY]
-  },
   {
     wiring: 'registerSshHandlers',
     missingOn: 'orcad',
@@ -94,12 +82,6 @@ const DECLARED_HOST_DIFFERENCES: readonly DeclaredDifference[] = [
     wiring: 'ctor:orchestrationEnvironmentTransport',
     missingOn: 'orcad',
     reason: 'Cross-environment orchestration dials paired environments from the desktop only.'
-  },
-  {
-    wiring: 'ctor:skillTransactionRecovery',
-    missingOn: 'orcad',
-    reason:
-      'No startup skill-transaction recovery runs on orcad, so installs need not wait for one.'
   },
   {
     wiring: 'rpc-option:exposeNetworkByDefault',

@@ -67,7 +67,6 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 
 describe('terminal URL click preference persistence', () => {
   beforeEach(() => {

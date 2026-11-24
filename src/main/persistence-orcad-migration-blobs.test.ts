@@ -17,8 +17,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-
 // A kind with no installer yet, so the channel's own behaviour is all that runs.
 const bytes = Buffer.from('session record one\nsession record two\n')
 const blob: OrcadMigrationBlobDescriptor = {

@@ -8,7 +8,6 @@ const {
   daemonClientMock,
   spawnerInstances,
   ensureRunningOverrides,
-  trackDaemonReplacedMock,
   localFallbackProvider,
   importFresh,
   installDefaultNetConnectStub,
@@ -38,7 +37,6 @@ vi.mock('./daemon-stale-kill', () => moduleFactories.daemonStaleKill())
 vi.mock('./daemon-process-start-time', () => moduleFactories.daemonProcessStartTime())
 vi.mock('./daemon-pid-file-parse', () => moduleFactories.daemonPidFileParse())
 vi.mock('./client', () => moduleFactories.client())
-vi.mock('./daemon-lifecycle-event', () => moduleFactories.daemonLifecycleEvent())
 vi.mock('./daemon-spawner', () => moduleFactories.daemonSpawner())
 vi.mock('./daemon-pty-adapter', () => moduleFactories.daemonPtyAdapter())
 vi.mock('../ipc/pty/provider/registry', () => moduleFactories.ptyProviderRegistry())
@@ -151,7 +149,6 @@ describe('daemon-init: a daemon whose AppImage files are gone', () => {
     await launcher()('/fake/socket', '/fake/token')
 
     expect(forkMock).toHaveBeenCalledTimes(1)
-    expect(trackDaemonReplacedMock).toHaveBeenCalledWith('severed_host_image', 0)
   })
 
   it('quarantines a daemon kept by the failed-health branch too', async () => {

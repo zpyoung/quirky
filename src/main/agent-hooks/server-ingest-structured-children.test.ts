@@ -7,9 +7,6 @@ import {
 } from '../../shared/agent-status-subject'
 import { AgentHookServer } from './server'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
-
 const SUBJECT = makeStructuredAgentStatusSubject(
   {
     executionHostId: 'ssh:build-box',

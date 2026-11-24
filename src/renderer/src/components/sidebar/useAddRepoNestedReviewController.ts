@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type { AddRepoExistingWorkspaceSource } from '../../../../shared/telemetry-events'
+import type { AddRepoExistingWorkspaceSource } from '../../../../shared/add-repo-source'
 import type { ProjectGroupImportResult } from '../../../../shared/project-group-types'
 import type { WorktreeFetchOptions } from '@/store/slices/worktree-helpers'
 import { useAddRepoNestedImportFlow } from './useAddRepoNestedImportFlow'
@@ -45,10 +45,7 @@ export function useAddRepoNestedReviewController({
 }): ReturnType<typeof useAddRepoNestedReviewState> &
   Pick<
     ReturnType<typeof useAddRepoNestedImportFlow>,
-    | 'handleImportNestedRepos'
-    | 'handleOpenNestedRootFolder'
-    | 'resetNestedImportFlow'
-    | 'trackNestedBackAction'
+    'handleImportNestedRepos' | 'handleOpenNestedRootFolder' | 'resetNestedImportFlow'
   > {
   const review = useAddRepoNestedReviewState({
     activeRuntimeEnvironmentId: reviewRuntimeEnvironmentId,

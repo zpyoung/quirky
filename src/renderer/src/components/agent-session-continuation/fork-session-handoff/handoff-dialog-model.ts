@@ -14,7 +14,7 @@ import type { SecretScanHit } from '@/lib/fork-session-handoff/handoff-secret-sc
 import type { HandoffTranscriptReachability } from '@/lib/fork-session-handoff/handoff-transcript-reachability'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
-import type { LaunchSource } from '../../../../../shared/telemetry-events'
+import type { LaunchSource } from '../../../../../shared/agent-kind'
 import {
   getHandoffAnchorRepoId,
   resolveHandoffTarget,
@@ -144,15 +144,12 @@ async function createInlineHandoffWorktree(args: {
       )
     )
   }
-  const telemetrySource =
-    args.launchSource === 'terminal_context_menu' ? 'terminal_context_menu' : 'sidebar'
   const result = await state.createWorktree(
     repoId,
     args.name.trim(),
     args.baseBranch.trim() || undefined,
     undefined,
-    undefined,
-    telemetrySource
+    undefined
   )
   return result.worktree.id
 }

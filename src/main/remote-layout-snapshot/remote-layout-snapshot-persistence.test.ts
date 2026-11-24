@@ -21,7 +21,6 @@ vi.mock('electron', () => ({
   ipcMain: { on: () => {}, handle: () => {} },
   BrowserWindow: { getAllWindows: () => [] }
 }))
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []

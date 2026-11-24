@@ -1,5 +1,5 @@
 import { useId, useRef } from 'react'
-import { ClipboardCopy, FolderOpen, Info, MoreHorizontal, Share2, Trash2 } from 'lucide-react'
+import { ClipboardCopy, FolderOpen, Info, MoreHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -43,7 +43,6 @@ export function SkillRow({
   selectionMode,
   selected,
   selectable,
-  shareable,
   deletable,
   deleteDisabledReason,
   disabledLabel,
@@ -51,7 +50,6 @@ export function SkillRow({
   focusable,
   onOpenDetail,
   onSelectionChange,
-  onShare,
   onDelete,
   onReveal,
   onFocus,
@@ -61,12 +59,9 @@ export function SkillRow({
   selectionMode: boolean
   selected: boolean
   selectable: boolean
-  shareable: boolean
   deletable: boolean
   /** Shown on the `Delete…` item itself, so it reads outside selection mode too. */
   deleteDisabledReason: string | null
-  /** Mode-dependent: a delete-ineligible row and a share-ineligible row need
-   *  different copy in the same visual slot. */
   disabledLabel: string
   /** Row-specific explanation only; page-wide causes are stated once above the
    *  list instead of once per row. */
@@ -74,7 +69,6 @@ export function SkillRow({
   focusable: boolean
   onOpenDetail: () => void
   onSelectionChange: (selected: boolean, range: boolean) => void
-  onShare: () => void
   onDelete: () => void
   onReveal: () => void
   onFocus: () => void
@@ -98,13 +92,6 @@ export function SkillRow({
       label: translate('auto.components.skills.SkillRow.viewDetails', 'View details'),
       icon: <Info />,
       onSelect: onOpenDetail
-    },
-    {
-      key: 'share',
-      label: translate('auto.components.skills.SkillCard.d25a1b8ae6', 'Share skill'),
-      icon: <Share2 />,
-      disabled: !shareable,
-      onSelect: onShare
     },
     {
       key: 'reveal',

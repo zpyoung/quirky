@@ -13,19 +13,6 @@ import {
 import { AgentHookServer, _internals } from './server'
 import { PANE } from './server.test-fixtures'
 
-const { getCohortAtEmitMock, trackMock } = vi.hoisted(() => ({
-  getCohortAtEmitMock: vi.fn(),
-  trackMock: vi.fn()
-}))
-
-vi.mock('../telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
-}))
-
 const SESSION = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
 const SUBJECT = makeStructuredAgentStatusSubject(
   {
@@ -83,9 +70,6 @@ function summary(over: Partial<AgentSessionStatusSummary> = {}): AgentSessionSta
 
 beforeEach(() => {
   _internals.resetCachesForTests()
-  trackMock.mockReset()
-  getCohortAtEmitMock.mockReset()
-  getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
 })
 
 afterEach(() => {

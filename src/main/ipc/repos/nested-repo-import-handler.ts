@@ -17,7 +17,6 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { detectRepoIconAndUpstream } from '../../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
 import { invalidateAuthorizedRootsCache } from '../registered-worktree-roots-cache'
-import { emitRepoAdded } from './repo-added-telemetry'
 import { notifyReposChanged } from './repos-changed-notification'
 import { ProjectGroupImportNestedArgs, parseProjectGroupIpcArgs } from './repo-ipc-arg-schemas'
 import { getCompletedNestedRepoScan, scanNestedReposForIpc } from './nested-repo-scan-ipc'
@@ -135,7 +134,6 @@ export function registerNestedRepoImportHandler(mainWindow: BrowserWindow, store
           importedProjectIdsByRepoPath.set(normalizedImportRepoPath, repo.id)
           results.push({ path: repoPath, projectId: repo.id, status: 'imported' })
           // Why: reaches here only after the isGitRepoAsync guard above confirmed a git repo, so always true.
-          emitRepoAdded('folder_picker', false, true)
         } catch (error) {
           results.push({
             path: repoPath,
