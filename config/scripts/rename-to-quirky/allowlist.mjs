@@ -5,10 +5,9 @@
  */
 import { execFileSync } from 'node:child_process'
 import { lstatSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join, resolve } from 'node:path'
 
-export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+export const REPO_ROOT = resolve(import.meta.dirname, '../../..')
 
 export class UsageError extends Error {}
 

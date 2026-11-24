@@ -33,8 +33,10 @@ import { mapGeneric } from './rename-to-quirky/mapping.mjs'
 
 const SET_NAMES = ['rendererWithoutMain', 'mainSendWithoutRenderer']
 
-const STRING_LITERAL =
-  String.raw`(?:'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|` + '`((?:[^`\\\\$\\n]|\\\\.|\\$(?!\\{))*)`)'
+const STRING_LITERAL = [
+  String.raw`(?:'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`,
+  '`((?:[^`\\\\$\\n]|\\\\.|\\$(?!\\{))*)`)'
+].join('')
 const CHANNEL_NAME = /(?:^|_)CHANNELS?$/
 const IDENTIFIER = String.raw`[A-Za-z_$][\w$]*`
 
@@ -54,7 +56,19 @@ const KIND_BY_CALL = {
 }
 
 const REGEX_PRECEDING_KEYWORDS = new Set([
-  'return', 'typeof', 'case', 'delete', 'void', 'throw', 'in', 'of', 'new', 'else', 'do', 'yield', 'await'
+  'return',
+  'typeof',
+  'case',
+  'delete',
+  'void',
+  'throw',
+  'in',
+  'of',
+  'new',
+  'else',
+  'do',
+  'yield',
+  'await'
 ])
 
 const SIMPLE_ESCAPES = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', 0: '\0' }
@@ -255,7 +269,7 @@ function decodeLiteral(raw) {
       const digits = codePoint ?? unit ?? hex
       if (digits !== undefined) {
         try {
-          return String.fromCodePoint(parseInt(digits, 16))
+          return String.fromCodePoint(Number.parseInt(digits, 16))
         } catch {
           return whole
         }
@@ -343,7 +357,9 @@ function parseSpecifierList(text) {
   const out = []
   for (const part of text.split(',')) {
     const trimmed = part.trim().replace(/^type\s+/, '')
-    const pair = trimmed.match(new RegExp(String.raw`^(${IDENTIFIER})(?:\s+as\s+(${IDENTIFIER}))?$`))
+    const pair = trimmed.match(
+      new RegExp(String.raw`^(${IDENTIFIER})(?:\s+as\s+(${IDENTIFIER}))?$`)
+    )
     if (pair) {
       out.push({ imported: pair[1], local: pair[2] ?? pair[1] })
     }
@@ -362,17 +378,26 @@ function collectBindings(file, view, fileSet) {
     return close === -1 ? null : view.code.slice(end, close)
   }
 
-  const named = /\b(import|export)\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s*(?:(from)\s*(['"]))?/g
+  const named =
+    /\b(import|export)\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s*(?:(from)\s*(['"]))?/g
   for (const match of view.masked.matchAll(named)) {
     const [whole, keyword, body, from, quote] = match
     const list = parseSpecifierList(body)
     if (keyword === 'import' && from) {
-      const target = resolveSpecifier(file, specifierAfter(match.index + whole.length, quote) ?? '', fileSet)
+      const target = resolveSpecifier(
+        file,
+        specifierAfter(match.index + whole.length, quote) ?? '',
+        fileSet
+      )
       for (const { imported, local } of list) {
         imports.set(local, { module: target, imported })
       }
     } else if (keyword === 'export' && from) {
-      const target = resolveSpecifier(file, specifierAfter(match.index + whole.length, quote) ?? '', fileSet)
+      const target = resolveSpecifier(
+        file,
+        specifierAfter(match.index + whole.length, quote) ?? '',
+        fileSet
+      )
       for (const { imported, local } of list) {
         reExports.set(local, { module: target, name: imported })
       }
@@ -383,7 +408,11 @@ function collectBindings(file, view, fileSet) {
     }
   }
   for (const match of view.masked.matchAll(/\bexport\s*\*\s*from\s*(['"])/g)) {
-    const target = resolveSpecifier(file, specifierAfter(match.index + match[0].length, match[1]) ?? '', fileSet)
+    const target = resolveSpecifier(
+      file,
+      specifierAfter(match.index + match[0].length, match[1]) ?? '',
+      fileSet
+    )
     if (target) {
       stars.push(target)
     }
@@ -468,7 +497,12 @@ function collectChannels(root) {
     modules.set(file, { defs: collectConsts(view), ...collectBindings(file, view, fileSet) })
   }
 
-  const sets = { mainHandle: new Set(), rendererSend: new Set(), rendererListen: new Set(), mainSend: new Set() }
+  const sets = {
+    mainHandle: new Set(),
+    rendererSend: new Set(),
+    rendererListen: new Set(),
+    mainSend: new Set()
+  }
   for (const [file, view] of views) {
     for (const call of view.masked.matchAll(CALL_PATTERN)) {
       const kind = KIND_BY_CALL[`${call[1]}.${call[2]}`]
@@ -476,7 +510,11 @@ function collectChannels(root) {
         continue
       }
       const argStart = call.index + call[0].length
-      for (const channel of resolveChannels(view.code.slice(argStart, argStart + 300), modules, file)) {
+      for (const channel of resolveChannels(
+        view.code.slice(argStart, argStart + 300),
+        modules,
+        file
+      )) {
         sets[kind].add(channel)
       }
     }
@@ -509,7 +547,8 @@ function loadBaseline(file, mapNames) {
 
 function formatSets(sets) {
   return SET_NAMES.map(
-    (name) => `${name} (${sets[name].length})\n${sets[name].map((channel) => `  ${channel}`).join('\n')}`
+    (name) =>
+      `${name} (${sets[name].length})\n${sets[name].map((channel) => `  ${channel}`).join('\n')}`
   ).join('\n')
 }
 
@@ -523,7 +562,10 @@ function main() {
     if (options.baseline) {
       const baseline = loadBaseline(options.baseline, options.applyRenameMapping)
       result = Object.fromEntries(
-        SET_NAMES.map((name) => [name, current[name].filter((channel) => !baseline[name].has(channel))])
+        SET_NAMES.map((name) => [
+          name,
+          current[name].filter((channel) => !baseline[name].has(channel))
+        ])
       )
     }
   } catch (error) {

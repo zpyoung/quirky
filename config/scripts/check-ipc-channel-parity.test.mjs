@@ -1,11 +1,10 @@
 import { spawnSync } from 'node:child_process'
 import { chmodSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createFixtureRepo } from './rename-to-quirky/fixture-repo.mjs'
 
-const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'check-ipc-channel-parity.mjs')
+const SCRIPT = join(import.meta.dirname, 'check-ipc-channel-parity.mjs')
 const repos = []
 
 function makeRepo(files) {
@@ -211,8 +210,8 @@ describe('check-ipc-channel-parity.mjs', () => {
         "  ipcRenderer.invoke('c:inBlock')",
         '*/',
         "const url = 'http://example.com'; ipcRenderer.invoke('c:afterUrl')",
-        "const text = \"ipcRenderer.invoke('c:inString')\"",
-        'const tpl = `ipcRenderer.invoke(\'c:inTemplate\')`',
+        'const text = "ipcRenderer.invoke(\'c:inString\')"',
+        "const tpl = `ipcRenderer.invoke('c:inTemplate')`",
         "ipcRenderer.invoke(/* c:inline */ 'c:live')",
         ''
       ].join('\n')

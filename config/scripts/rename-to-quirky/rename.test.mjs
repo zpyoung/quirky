@@ -1,13 +1,12 @@
 import { spawnSync } from 'node:child_process'
 import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createFixtureRepo } from './fixture-repo.mjs'
 import { applyMapping, isBoundaryMatch, mapGeneric } from './mapping.mjs'
 import { planPathMoves } from './plan-moves.mjs'
 
-const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'rename.mjs')
+const SCRIPT = join(import.meta.dirname, 'rename.mjs')
 const repos = []
 
 function makeRepo(files) {
@@ -117,7 +116,8 @@ describe('applyMapping', () => {
   })
 
   it('remaps the homepage field even though stablyai/orca is a keep token', () => {
-    const input = '{"homepage": "https://github.com/stablyai/orca", "bugs": "github.com/stablyai/orca/issues"}'
+    const input =
+      '{"homepage": "https://github.com/stablyai/orca", "bugs": "github.com/stablyai/orca/issues"}'
     const { text } = applyMapping(input, { relPath: 'package.json', keepTokens: ['stablyai/orca'] })
     expect(text).toBe(
       '{"homepage": "https://github.com/zpyoung/quirky", "bugs": "github.com/stablyai/orca/issues"}'
@@ -125,7 +125,9 @@ describe('applyMapping', () => {
   })
 
   it('does not treat zpyoung/orca as a keep token', () => {
-    expect(applyMapping('zpyoung/orca', { keepTokens: ['stablyai/orca'] }).text).toBe('zpyoung/quirky')
+    expect(applyMapping('zpyoung/orca', { keepTokens: ['stablyai/orca'] }).text).toBe(
+      'zpyoung/quirky'
+    )
   })
 
   it('moves only the two websocket port declarations, each in its own file', () => {
@@ -170,18 +172,26 @@ describe('planPathMoves', () => {
   })
 
   it('flags two sources that map to one target, ignoring case', () => {
-    const plan = planPathMoves(['a/orca.txt', 'a/Orca.txt'], (p) => p.toLowerCase().replace('orca', 'quirky'), () => false)
+    const plan = planPathMoves(
+      ['a/orca.txt', 'a/Orca.txt'],
+      (p) => p.toLowerCase().replace('orca', 'quirky'),
+      () => false
+    )
     expect(plan.collisions).toHaveLength(1)
   })
 
   it('flags a target that already exists', () => {
     const plan = planPathMoves(['a/orca.txt'], mapPath, (p) => p === 'a/quirky.txt')
-    expect(plan.collisions).toEqual([{ from: 'a/orca.txt', to: 'a/quirky.txt', reason: 'target exists' }])
+    expect(plan.collisions).toEqual([
+      { from: 'a/orca.txt', to: 'a/quirky.txt', reason: 'target exists' }
+    ])
   })
 
   it('flags a target whose parent directory is an existing file', () => {
     const plan = planPathMoves(['a/orca/x.txt'], mapPath, (p) => (p === 'a/quirky' ? 'file' : null))
-    expect(plan.collisions).toEqual([{ from: 'a/orca/x.txt', to: 'a/quirky/x.txt', reason: 'parent a/quirky is a file' }])
+    expect(plan.collisions).toEqual([
+      { from: 'a/orca/x.txt', to: 'a/quirky/x.txt', reason: 'parent a/quirky is a file' }
+    ])
   })
 
   it('accepts a target whose parent directory exists', () => {
@@ -252,7 +262,7 @@ describe('rename.mjs', () => {
   it('leaves skipPaths unedited and unmoved', () => {
     const repo = makeRepo({
       'vendor/orca-lib/x.txt': 'orca\n',
-      'LICENSE': 'Orca license\n',
+      LICENSE: 'Orca license\n',
       'src/keep.ts': 'orca\n'
     })
     const { report } = rename(repo, { allowlist: { skipPaths: ['vendor/**', 'LICENSE'] } })
@@ -276,7 +286,9 @@ describe('rename.mjs', () => {
       'src/quirky/quirky-utils/quirkyThing.ts',
       'src/quirky/readme.md'
     ])
-    expect(repo.read('src/quirky/quirky-utils/quirkyThing.ts')).toBe('export const quirkyThing = 1\n')
+    expect(repo.read('src/quirky/quirky-utils/quirkyThing.ts')).toBe(
+      'export const quirkyThing = 1\n'
+    )
     expect(repo.exists('src/orca')).toBe(false)
     expect(repo.git('status', '--porcelain')).not.toMatch(/^\?\?/m)
     expect(report.pathMoves).toContainEqual({
@@ -333,12 +345,18 @@ describe('rename.mjs', () => {
   })
 
   it('never edits binary files but still moves them', () => {
-    const bytes = Buffer.concat([Buffer.from('PNG'), Buffer.from([0, 1, 2]), Buffer.from('orca Orca')])
+    const bytes = Buffer.concat([
+      Buffer.from('PNG'),
+      Buffer.from([0, 1, 2]),
+      Buffer.from('orca Orca')
+    ])
     const repo = makeRepo({ 'assets/orca-logo.png': bytes })
     const { report } = rename(repo)
     expect(repo.readBytes('assets/quirky-logo.png').equals(bytes)).toBe(true)
     expect(report.filesChanged).toBe(0)
-    expect(report.pathMoves).toEqual([{ from: 'assets/orca-logo.png', to: 'assets/quirky-logo.png' }])
+    expect(report.pathMoves).toEqual([
+      { from: 'assets/orca-logo.png', to: 'assets/quirky-logo.png' }
+    ])
   })
 
   it('leaves files that are not valid utf8 alone', () => {
@@ -402,7 +420,8 @@ describe('rename.mjs', () => {
   })
 
   it('exits 2 on bad arguments', () => {
-    const run = (...args) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' }).status
+    const run = (...args) =>
+      spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' }).status
     expect(run('--nope')).toBe(2)
     expect(run('--report')).toBe(2)
     expect(run('--root', '/definitely/not/a/dir')).toBe(2)
@@ -411,9 +430,13 @@ describe('rename.mjs', () => {
   it('exits 2 on a malformed allowlist', () => {
     const repo = makeRepo({ 'a.txt': 'orca\n' })
     const bad = repo.writeAllowlist({ skipPaths: 'nope' })
-    const result = spawnSync(process.execPath, [SCRIPT, '--dry-run', '--root', repo.root, '--allowlist', bad], {
-      encoding: 'utf8'
-    })
+    const result = spawnSync(
+      process.execPath,
+      [SCRIPT, '--dry-run', '--root', repo.root, '--allowlist', bad],
+      {
+        encoding: 'utf8'
+      }
+    )
     expect(result.status).toBe(2)
   })
 })

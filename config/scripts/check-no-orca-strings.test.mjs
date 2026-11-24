@@ -1,11 +1,10 @@
 import { spawnSync } from 'node:child_process'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createFixtureRepo } from './rename-to-quirky/fixture-repo.mjs'
 import { globToRegExp, matchesAnyGlob } from './rename-to-quirky/allowlist.mjs'
 
-const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'check-no-orca-strings.mjs')
+const SCRIPT = join(import.meta.dirname, 'check-no-orca-strings.mjs')
 const repos = []
 
 function makeRepo(files) {
@@ -92,7 +91,7 @@ describe('check-no-orca-strings.mjs', () => {
   })
 
   it('honours skipPaths', () => {
-    const repo = makeRepo({ 'LICENSE': 'Orca\n', 'legacy/x.ts': 'orca\n', 'src/a.ts': 'fine\n' })
+    const repo = makeRepo({ LICENSE: 'Orca\n', 'legacy/x.ts': 'orca\n', 'src/a.ts': 'fine\n' })
     expect(check(repo, { skipPaths: ['LICENSE', 'legacy/**'] }).status).toBe(0)
   })
 
