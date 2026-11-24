@@ -1,5 +1,4 @@
 import type { DeviceScope } from '../../shared/runtime-types'
-import type { RelayDeviceBinding } from './mobile-cloud-relay/relay-revoke-outbox'
 import type { DeviceEntry } from './device-registry'
 import { parseMobilePushRegistration } from '../../shared/mobile-push-contract'
 import { isDevicePublicKeyB64 } from '../../shared/device-key-proof'
@@ -19,38 +18,19 @@ export function validGrants(value: unknown, scope: DeviceScope): RuntimeDeviceGr
   return grants.length > 0 ? grants : undefined
 }
 
-export function validRelayBinding(
-  value: unknown,
-  deviceId: string
-): RelayDeviceBinding | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined
-  }
-  const binding = value as Partial<RelayDeviceBinding>
-  return binding.relayDeviceId === deviceId &&
-    typeof binding.relayHostId === 'string' &&
-    typeof binding.ownerIdentityKey === 'string'
-    ? {
-        relayHostId: binding.relayHostId,
-        relayDeviceId: binding.relayDeviceId,
-        ownerIdentityKey: binding.ownerIdentityKey,
-        ...(typeof binding.inviteExpiresAt === 'number' && Number.isFinite(binding.inviteExpiresAt)
-          ? { inviteExpiresAt: binding.inviteExpiresAt }
-          : {})
-      }
-    : undefined
-}
-
 export function normalizeLoadedDeviceRow(device: DeviceEntry): DeviceEntry {
+  // Why: rows imported from an Orca build can still carry hosted-relay fields; drop them.
+  const {
+    relayBinding: _relayBinding,
+    mobilePairingConnectionMode: _connectionMode,
+    ...row
+  } = device as DeviceEntry & { relayBinding?: unknown; mobilePairingConnectionMode?: unknown }
   return {
-    ...device,
+    ...row,
     // Why: older registries only existed for phone pairing. Treat missing
     // scope as mobile so legacy device tokens do not gain new CLI powers.
     scope: device.scope === 'runtime' ? 'runtime' : 'mobile',
     grants: validGrants(device.grants, device.scope === 'runtime' ? 'runtime' : 'mobile'),
-    relayBinding: validRelayBinding(device.relayBinding, device.deviceId),
-    mobilePairingConnectionMode:
-      device.mobilePairingConnectionMode === 'local-only' ? 'local-only' : 'automatic',
     // Why: registries written before this field existed only ever held network-reach grants (phones and
     // LAN links), so a missing value must keep binding every interface on reconnect.
     pairingReach: device.pairingReach === 'this-computer' ? 'this-computer' : 'network',

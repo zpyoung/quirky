@@ -24,8 +24,6 @@ function renderSection(
   const onRefreshNetworkInterfaces = vi.fn()
   const onGenerateQr = vi.fn()
   const props: React.ComponentProps<typeof MobilePairingSetupSection> = {
-    connectionMode: 'local-only',
-    connectionPathControl: <div data-testid="path-control">path</div>,
     networkInterfaces: [LAN, TAILNET],
     customAddresses: [],
     selectedAddress: TAILNET.address,
@@ -67,72 +65,19 @@ describe('MobilePairingSetupSection', () => {
     })
   })
 
-  it('shows connection, address, and generate in a compact flow', () => {
+  it('shows address and generate in a compact flow', () => {
     renderSection()
     expect(screen.getByText('Pair a phone')).toBeVisible()
-    expect(screen.getByText('Connection')).toBeVisible()
     expect(screen.getByText('This computer’s address')).toBeVisible()
-    expect(screen.getByTestId('path-control')).toBeVisible()
     expect(screen.getByRole('combobox')).toHaveTextContent('100.64.1.20 (tailscale0)')
     expect(screen.getByRole('button', { name: 'Generate QR code' })).toBeVisible()
     expect(screen.getByText(/must be able to reach this address/i)).toBeVisible()
   })
 
-  it('demotes this computer’s address to a disclosure when Orca Relay is selected', async () => {
-    const { user } = renderSection({
-      connectionMode: 'automatic',
-      selectedAddress: undefined
-    })
-    expect(screen.queryByText('This computer’s address')).toBeNull()
-    expect(screen.queryByRole('combobox')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Generate QR code' })).toBeEnabled()
-
-    // Relay still advertises a LAN endpoint, so the picker must stay reachable.
-    await user.click(screen.getByRole('button', { name: /Also use a faster local path/i }))
-    expect(screen.getByRole('combobox')).toBeVisible()
-    expect(screen.getByText(/faster than Relay/i)).toBeVisible()
-  })
-
-  it('opens the Relay address disclosure when a settings search targets it', () => {
-    renderSection({
-      connectionMode: 'automatic',
-      addressDisclosureForcedOpen: true
-    })
-    expect(screen.getByRole('combobox')).toBeVisible()
-    // Why: a trigger here could not collapse the pinned-open picker, so it would
-    // be a dead control advertising aria-expanded it does not own.
-    expect(screen.queryByRole('button', { name: /Also use a faster local path/i })).toBeNull()
-  })
-
-  it('never hides a custom address behind the Relay disclosure', () => {
-    const address = 'host.example:6768'
-    renderSection({
-      connectionMode: 'automatic',
-      customAddresses: [address],
-      selectedAddress: address,
-      selectedAddressIsCustom: true
-    })
-    expect(screen.getByRole('combobox')).toHaveTextContent(address)
-    expect(screen.queryByRole('button', { name: /Also use a faster local path/i })).toBeNull()
-  })
-
   it('disables generate on LAN when no advertise address is selected', () => {
-    renderSection({ connectionMode: 'local-only', selectedAddress: undefined })
+    renderSection({ selectedAddress: undefined })
     expect(screen.getByText('This computer’s address')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Generate QR code' })).toBeDisabled()
-  })
-
-  it('can move retry recovery into the persistent failure notice', () => {
-    renderSection({ showGenerateAction: false })
-    expect(screen.queryByRole('button', { name: 'Generate QR code' })).toBeNull()
-  })
-
-  it('disables generate when sign-in is required', () => {
-    // The sign-in explanation lives in the connection panel above, not here, so
-    // this section only gates the button rather than repeating the copy.
-    renderSection({ canGenerate: false })
-    expect(screen.getByRole('button', { name: 'Generate QR code' })).toBeDisabled()
-    expect(screen.queryByText(/Sign in above first/i)).toBeNull()
   })
 
   it('commits an OS interface picked from the list', async () => {

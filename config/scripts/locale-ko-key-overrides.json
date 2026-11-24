@@ -6215,9 +6215,6 @@
   "auto.components.settings.Settings.c6c01ac209": {
     "ko": "휴대폰에서 터미널과 에이전트를 제어하세요."
   },
-  "auto.components.settings.MobileRelayBetaNotice.notice": {
-    "ko": "Orca Relay는 베타 버전입니다."
-  },
   "auto.components.settings.SshPassphraseDialog.ce4fdf7914": {
     "ko": "다음 연결 대상에 사용할 SSH 키의 암호 문구를 입력하세요:"
   },

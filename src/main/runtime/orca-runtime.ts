@@ -42,7 +42,6 @@ import {
   installStructuredAgentAvailability,
   type StructuredAgentAvailabilityReader
 } from './structured-agent-availability'
-import { PairedServerRowsProducer } from './sidebar-inputs/paired-server-rows-producer'
 import { RepoIconDataUrls } from './sidebar-inputs/repo-icon-data-urls'
 import { WorkspaceRowsProducer } from './sidebar-inputs/workspace-rows-producer'
 import { getMainHttpClient } from '../network/http-client'
@@ -51,8 +50,6 @@ import { CollapseWriteOrder } from './workspace-view-collapse-writes'
 import { SidebarInputsFeed } from './sidebar-inputs/sidebar-inputs-feed'
 import { sidebarInputsFeedDomains } from './sidebar-inputs/sidebar-inputs-feed-domains'
 import { requireSwitchedOn } from './sidebar-inputs/require-switched-on'
-import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
-import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
 
 // Switch point: a window-fed build keeps no sidebar facts layer.
 const OrcaRuntimeSidebarBase: typeof OrcaRuntimeWithAgentTransitions = ORCA_SIDEBAR_INPUTS_IS_MAIN
@@ -65,17 +62,6 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
   get sidebarFacts() {
     return sidebarFactsRuntime(this)
   }
-  // Switch point. Idle until relay hosts attach; the fallback refresh runs while a window shows the sidebar or a phone reads the feed.
-  readonly pairedServerRows = ORCA_SIDEBAR_INPUTS_IS_MAIN
-    ? new PairedServerRowsProducer({
-        hasDemand: () =>
-          this.sidebarInputsFeed?.subscribed === true ||
-          (this.authoritativeWindowId !== null &&
-            this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID &&
-            this.store?.getUI?.().sidebarOpen !== false),
-        hostLabelOverrides: () => getHostDisplayLabelOverrides(this.getClientSettings())
-      })
-    : null
   // Switch point: the phone's icon source.
   readonly repoIconDataUrls = ORCA_SIDEBAR_INPUTS_IS_MAIN
     ? new RepoIconDataUrls({
@@ -109,7 +95,6 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
         () =>
           sidebarInputsFeedDomains({
             facts: requireSwitchedOn(this.sidebarFacts),
-            pairedServerRows: requireSwitchedOn(this.pairedServerRows),
             workspaceCreations: requireSwitchedOn(this.workspaceCreations),
             workspaceRows: requireSwitchedOn(this.workspaceRows),
             repoIcons: requireSwitchedOn(this.repoIconDataUrls),

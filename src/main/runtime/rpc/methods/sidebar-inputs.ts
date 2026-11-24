@@ -32,12 +32,6 @@ export const SIDEBAR_INPUT_METHODS = [
     handler: async (_params, { runtime }) => readRuntimeDesktopSidebarFacts(runtime.requireStore())
   }),
   defineMethod({
-    name: 'sidebarInputs.pairedServerRows',
-    permission: 'workspace',
-    params: null,
-    handler: async (_params, { runtime }) => requireSwitchedOn(runtime.pairedServerRows).snapshot()
-  }),
-  defineMethod({
     name: 'sidebarInputs.workspaceRows',
     permission: 'workspace',
     params: null,

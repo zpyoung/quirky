@@ -13,8 +13,6 @@ import type { ClaudeRuntimeAuthService } from '../claude-accounts/runtime-auth-s
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type { RateLimitService } from '../rate-limits/service'
 import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
-import type { DesktopRelayService } from '../runtime/mobile-cloud-relay/desktop-relay-service'
-import type { DesktopRelayServiceInstaller } from '../runtime/mobile-cloud-relay/desktop-relay-service-installer'
 import type { AgentAwakeService } from '../agent-awake-service'
 import type { CrashReportStore } from '../crash-reporting/crash-report-store'
 import type { AutomationService } from '../automations/service'
@@ -24,7 +22,6 @@ import type { PluginService } from '../plugins/plugin-service'
 import type { PluginMarketplaceService } from '../plugins/plugin-marketplace-service'
 import type { PluginMarketplaceInstaller } from '../plugins/plugin-marketplace-installer'
 import type { KeybindingService } from '../keybindings/keybinding-service'
-import type { RelayBrokerStatus } from '../runtime/mobile-cloud-relay/relay-session-broker-contract'
 import type { AgentBrowserBridge } from '../browser/agent-browser-bridge'
 import type { EmulatorBridge } from '../emulator/emulator-bridge'
 import type { GpuFallbackMarker, GpuFallbackEnvironment } from './gpu-fallback-marker'
@@ -84,11 +81,6 @@ export const mainProcessState = {
   rateLimits: null as RateLimitService | null,
   runtimeRpc: null as OrcaRuntimeRpcServer | null,
   serveReadinessPublisher: new ServeReadinessPublisher(),
-  desktopRelayService: null as DesktopRelayService | null,
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: widens the null slot to the installer assigned by main-process-relay-startup.
-  desktopRelayInstaller: null as DesktopRelayServiceInstaller | null,
-  desktopRelayStatus: 'offline' as RelayBrokerStatus,
-  desktopRelayCellUrl: undefined as string | undefined,
   pendingUnpairedDeviceAuthFailure: false,
   // Why: gates whether headless serve installs the offscreen browser backend (and advertises browser pane support).
   headlessBrowserDisplayAvailable: false,

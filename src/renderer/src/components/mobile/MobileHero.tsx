@@ -4,8 +4,6 @@ import { cn } from '../../lib/utils'
 import type { MobileNetworkInterface } from '../settings/mobile-network-interface-selection'
 import { AndroidLogo, IosBrandIcon } from './MobileBrandIcons'
 import { getChannelTagline, type InstallCopy, type IosChannel } from './mobile-platform-copy'
-import type { MobilePairingConnectionMode } from '../../../../shared/mobile-pairing-connection-mode'
-import type { MobileRelayMintFailure } from '../../../../shared/mobile-relay-mint-failure'
 import { MobileHeroPairingStep } from './MobileHeroPairingStep'
 import { MobileAndroidInstallHelp } from './MobileAndroidInstallHelp'
 export { HeroIntro } from './MobileHeroIntro'
@@ -30,15 +28,8 @@ type HeroFlowProps = {
   pairQrSize?: number | null
   pairingUrl: string | null
   pairingQrError: boolean
-  relayMintFailure: MobileRelayMintFailure | null
-  onUseLan: () => void
-  onRetryRelay: () => void
-  onCopyRelayDiagnostics: () => void
   pairLoading: boolean
-  connectionMode: MobilePairingConnectionMode
-  onConnectionModeChange: (mode: MobilePairingConnectionMode) => void
   onRegeneratePairing: () => void
-  canGeneratePairing: boolean
   onCopyPairingCode: () => void
   networkInterfaces: readonly MobileNetworkInterface[]
   customAddresses: readonly string[]
@@ -70,15 +61,8 @@ export function HeroFlow({
   pairQrSize = null,
   pairingUrl,
   pairingQrError,
-  relayMintFailure,
-  onUseLan,
-  onRetryRelay,
-  onCopyRelayDiagnostics,
   pairLoading,
-  connectionMode,
-  onConnectionModeChange,
   onRegeneratePairing,
-  canGeneratePairing,
   onCopyPairingCode,
   networkInterfaces,
   customAddresses,
@@ -233,15 +217,8 @@ export function HeroFlow({
             pairQrSize={pairQrSize}
             pairingUrl={pairingUrl}
             pairingQrError={pairingQrError}
-            relayMintFailure={relayMintFailure}
-            onUseLan={onUseLan}
-            onRetryRelay={onRetryRelay}
-            onCopyRelayDiagnostics={onCopyRelayDiagnostics}
             pairLoading={pairLoading}
-            connectionMode={connectionMode}
-            onConnectionModeChange={onConnectionModeChange}
             onRegeneratePairing={onRegeneratePairing}
-            canGeneratePairing={canGeneratePairing}
             onCopyPairingCode={onCopyPairingCode}
             networkInterfaces={networkInterfaces}
             customAddresses={customAddresses}

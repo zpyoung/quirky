@@ -102,7 +102,6 @@ const PUBLISHED_RUNTIME_CAPABILITIES = [
   'linear.issue-attribute-filter.v1',
   'managed-runtime.install.v1',
   'managed-runtime.remove.v1',
-  'mobile.desktop-relay.v1',
   'mobile.tasks.v1',
   'network.browserTunnel.executionHosts.v1',
   'network.browserTunnel.v1',

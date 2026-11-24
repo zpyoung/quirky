@@ -39,10 +39,10 @@ The mobile app is intentionally not a full editor — it's a remote control for 
 
 1. On desktop, open Orca's pairing flow from the account / status menu. Orca shows a one-time pairing code.
 1. On mobile, open the Orca companion app and choose **Pair**, then paste the code. (You can also follow a deep link from the desktop directly into the mobile pairing screen.)
-1. Prefer **Orca Relay** for pairing when it is available — sign-in is required for Relay only. The local network address picker is optional on Relay (expand it when you want a LAN fast path); LAN pairing still needs an address.
-1. The pairing exchange establishes a device token for that phone; keep desktop reachable on the path you chose.
+1. Pairing runs over your local network (same Wi‑Fi or Tailscale). Pick the address your phone can reach in the network address picker.
+1. The pairing exchange establishes a device token for that phone; keep the desktop reachable on that network.
 
-Closing the desktop app drops a direct/LAN session until you reopen it. Relay-backed pairing follows the desktop Relay connection — reopen desktop if the host goes offline.
+Closing the desktop app drops the session until you reopen it.
 
 ## Chat UI
 

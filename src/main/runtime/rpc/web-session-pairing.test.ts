@@ -7,14 +7,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { encodeDeviceProofMessage } from '../../../shared/device-key-proof'
 import { DeviceRegistry } from '../device-registry'
 import { EPHEMERAL_DEVICE_IDLE_MS } from '../ephemeral-device-rows'
-import { SimulatedMobileE2EEV2Peer } from '../mobile-cloud-relay/simulated-mobile-e2ee-v2-peer'
+import { SimulatedMobileE2EEV2Peer } from './simulated-mobile-e2ee-v2-peer'
 import { registerSocketDeviceKey } from '../runtime-rpc/runtime-rpc-device-key-registration'
 import { generateKeyPair } from '../../../shared/e2ee-crypto'
 import {
   MobileSocketWiring,
   type AuthenticatedMobileSocket,
-  type MobileSocketTransport,
-  type MobileSocketTransportMetadata
+  type MobileSocketTransport
 } from './mobile-socket-wiring'
 
 class FakeSocket {
@@ -41,9 +40,8 @@ class FakeTransport implements MobileSocketTransport {
 }
 
 const desktop = generateKeyPair()
-const RELAY_HOST_ID = 'AbCdEf0123_-xyZ9'
 
-function harness(relay?: (deviceId: string) => MobileSocketTransportMetadata) {
+function harness() {
   const registry = new DeviceRegistry(mkdtempSync(join(tmpdir(), 'orca-web-session-')))
   const transport = new FakeTransport()
   const ready: AuthenticatedMobileSocket[] = []
@@ -59,16 +57,11 @@ function harness(relay?: (deviceId: string) => MobileSocketTransportMetadata) {
     onClose: vi.fn(),
     onReady: (socket) => ready.push(socket)
   })
-  let relayDeviceId = ''
-  wiring.attachTransport(transport, () => (relay ? relay(relayDeviceId) : { transport: 'direct' }))
+  wiring.attachTransport(transport)
 
   function connect(auth: (transcriptHashB64: string) => Record<string, unknown>) {
     const ws = new FakeSocket()
-    const peer = new SimulatedMobileE2EEV2Peer(
-      nacl.box.keyPair(),
-      desktop.publicKey,
-      relay ? RELAY_HOST_ID : null
-    )
+    const peer = new SimulatedMobileE2EEV2Peer(nacl.box.keyPair(), desktop.publicKey, null)
     transport.receive(ws, JSON.stringify(peer.hello))
     expect(peer.acceptReady(JSON.parse(String(ws.sent[0])))).toBe(true)
     const transcriptHashB64 = peer.transcriptHashB64
@@ -82,13 +75,7 @@ function harness(relay?: (deviceId: string) => MobileSocketTransportMetadata) {
     const reply = ws.sent[1] ? JSON.parse(peer.openText(String(ws.sent[1]))!) : null
     return { ws, transcriptHashB64, reply, socket: ready.length > before ? ready.at(-1) : null }
   }
-  return {
-    registry,
-    wiring,
-    transport,
-    connect,
-    bindRelay: (deviceId: string) => (relayDeviceId = deviceId)
-  }
+  return { registry, wiring, transport, connect }
 }
 
 function sign(key: nacl.SignKeyPair, purpose: 'auth' | 'register', transcriptHashB64: string) {
@@ -106,23 +93,6 @@ describe('first pairing over a direct socket', () => {
       type: 'e2ee_authenticated'
     })
     expect(registry.getDevice(pending.deviceId)?.lastSeenAt).toBeGreaterThan(0)
-    expect(connect(() => ({ deviceToken: pending.token })).reply).toMatchObject({
-      type: 'e2ee_authenticated'
-    })
-  })
-})
-
-describe('relayed phones', () => {
-  it('pair over Relay', () => {
-    const { registry, connect, bindRelay } = harness((relayDeviceId) => ({
-      transport: 'relay',
-      relayHostId: RELAY_HOST_ID,
-      relayDeviceId,
-      basisConnId: 'conn',
-      credentialKind: 'invite'
-    }))
-    const pending = registry.getOrCreatePendingDevice('Phone', 'mobile')
-    bindRelay(pending.deviceId)
     expect(connect(() => ({ deviceToken: pending.token })).reply).toMatchObject({
       type: 'e2ee_authenticated'
     })

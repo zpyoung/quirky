@@ -13,18 +13,9 @@ import { MachineNameField } from './MachineNameField'
 import { MobilePairingQrSection } from './MobilePairingQrSection'
 import { MobilePairedDevicesSection } from './MobilePairedDevicesSection'
 import { MobileAutoRestoreFitSection } from './MobileAutoRestoreFitSection'
-import { MobilePairingConnectionOptions } from './MobilePairingConnectionOptions'
 import { MobilePairingSetupSection } from './MobilePairingSetupSection'
-import { MobileRelayMintFailureNotice } from '../mobile/mobile-relay-mint-failure-notice'
 import { translate } from '@/i18n/i18n'
-import {
-  canMintMobilePairingOffer,
-  type MobilePairingConnectionMode
-} from '../../../../shared/mobile-pairing-connection-mode'
-import type { MobileRelayMintFailure } from '../../../../shared/mobile-relay-mint-failure'
-import { useMobilePairingConnectionMode } from '../mobile/use-mobile-pairing-connection-mode'
 import { useMobilePairingAddressPreference } from '../mobile/use-mobile-pairing-address-preference'
-import { shouldOpenMobilePairingAddress } from './mobile-pane-search'
 export { getMobilePaneSearchEntries } from './mobile-pane-search'
 
 export function MobilePane(): React.JSX.Element {
@@ -34,7 +25,6 @@ export function MobilePane(): React.JSX.Element {
   const [qrSize, setQrSize] = useState<number | null>(null)
   const [pairingUrl, setPairingUrl] = useState<string | null>(null)
   const [qrError, setQrError] = useState(false)
-  const [relayMintFailure, setRelayMintFailure] = useState<MobileRelayMintFailure | null>(null)
   const [endpoint, setEndpoint] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [qrEnlarged, setQrEnlarged] = useState(false)
@@ -42,18 +32,12 @@ export function MobilePane(): React.JSX.Element {
   const [refreshingNetworkInterfaces, setRefreshingNetworkInterfaces] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [deviceCountAtQr, setDeviceCountAtQr] = useState<number | null>(null)
-  const signedIn = false
-  const settingsSearchQuery = useAppStore((state) => state.settingsSearchQuery)
-  const [connectionMode, setConnectionMode] = useMobilePairingConnectionMode()
   const [rotateNextQr, setRotateNextQr] = useState(false)
   const codeCopiedResetTimerRef = useRef<number | null>(null)
   // Why: monotonically bumped per pairing request so a late getPairingQR
-  // response cannot paint a stale QR after sign-out, a mode switch, or an
-  // address change invalidated the request that produced it.
+  // response cannot paint a stale QR after an address change invalidated the
+  // request that produced it.
   const pairingRequestIdRef = useRef(0)
-  // Tracks the mode we last acted on so the connectionMode effect can tell a
-  // cross-window preference sync apart from our own path change.
-  const handledModeRef = useRef(connectionMode)
   // Ref mirrors of QR-visible / loading so invalidatePairing stays stable and
   // cannot make loadNetworkInterfaces re-fetch on every generate.
   const qrDisplayedRef = useRef(false)
@@ -74,32 +58,27 @@ export function MobilePane(): React.JSX.Element {
     loadingRef.current = loading
   }, [loading])
 
-  // Why: an offer encodes a specific policy + endpoint. When the selection that
+  // Why: an offer encodes a specific endpoint. When the selection that
   // produced it changes, drop any displayed QR and invalidate the in-flight
   // request so a late response can't restore it; arm rotation so the next mint
   // issues a fresh credential rather than the discarded pending one.
-  const invalidatePairing = useCallback((opts: { armRotate?: boolean } = {}): void => {
+  const invalidatePairing = useCallback((): void => {
     pairingRequestIdRef.current += 1
     const hadPending = qrDisplayedRef.current || loadingRef.current
     setQrDataUrl(null)
     setQrSize(null)
     setPairingUrl(null)
     setQrError(false)
-    setRelayMintFailure(null)
     setEndpoint(null)
     // Why: a superseded in-flight generate no longer clears loading in its
     // finally (the epoch bump skips it), so drop the spinner here or Generate
-    // stays disabled forever after a mid-flight path/sign-out/address change.
+    // stays disabled forever after a mid-flight address change.
     loadingRef.current = false
     setLoading(false)
-    // armRotate:false for path changes — the main process rotates exactly once
-    // when the requested mode differs from the pending token's minted mode, so
-    // an extra renderer rotate would only race other windows off the new token.
-    if (hadPending && opts.armRotate !== false) {
+    if (hadPending) {
       setRotateNextQr(true)
     }
   }, [])
-  const invalidatePairingAddress = useCallback(() => invalidatePairing(), [invalidatePairing])
   const {
     selectedAddress,
     selectedAddressIsCustom,
@@ -110,7 +89,7 @@ export function MobilePane(): React.JSX.Element {
     selectAddressAfterRefresh
   } = useMobilePairingAddressPreference({
     networkInterfaces,
-    onSelectionInvalidated: invalidatePairingAddress
+    onSelectionInvalidated: invalidatePairing
   })
 
   const clearCodeCopiedResetTimer = useCallback((): void => {
@@ -156,30 +135,17 @@ export function MobilePane(): React.JSX.Element {
   )
 
   const generateQR = useCallback(
-    async (
-      opts: {
-        rotate?: boolean
-        connectionModeOverride?: MobilePairingConnectionMode
-      } = {}
-    ) => {
-      const preferredMode = opts.connectionModeOverride ?? connectionMode
-      // Why: refuse signed-out Anywhere rather than degrading to a local-only QR
-      // under the Relay label (canMint is the shared honesty gate).
-      if (!canMintMobilePairingOffer({ connectionMode: preferredMode, signedIn })) {
-        return
-      }
+    async (opts: { rotate?: boolean } = {}) => {
       const requestId = ++pairingRequestIdRef.current
       setLoading(true)
       setQrError(false)
       try {
         const result = await window.api.mobile.getPairingQR({
           ...(selectedAddress ? { address: selectedAddress } : {}),
-          connectionMode: preferredMode,
           ...(opts.rotate || rotateNextQr ? { rotate: true } : {})
         })
-        // Why: sign-out, a mode switch, or an address change bump the epoch.
-        // A response for a superseded request must not paint a QR that no
-        // longer matches the current selection.
+        // Why: an address change bumps the epoch. A response for a superseded
+        // request must not paint a QR that no longer matches the selection.
         if (requestId !== pairingRequestIdRef.current) {
           return
         }
@@ -190,7 +156,6 @@ export function MobilePane(): React.JSX.Element {
             setQrSize(result.qrSize)
             setPairingUrl(result.pairingUrl)
             setQrError(result.qrDataUrl === null)
-            setRelayMintFailure(null)
             setEndpoint(result.endpoint)
             setDeviceCountAtQr(getPairedMobileDevicesSnapshot().length)
             clearCodeCopiedResetTimer()
@@ -204,24 +169,18 @@ export function MobilePane(): React.JSX.Element {
           setPairingUrl(null)
           setQrError(false)
           setEndpoint(null)
-          if (result.reason === 'relay_mint_failed' && result.relayFailure) {
-            setRelayMintFailure(result.relayFailure)
-          } else {
-            setRelayMintFailure(null)
-            // Why: IPC now forwards reason/guidance for all unavailability paths;
-            // prefer that copy over a hard-coded WebSocket-only message.
-            toast.error(
-              result.guidance ??
-                translate(
-                  'auto.components.settings.MobilePane.cb9067c1c1',
-                  'WebSocket transport is not running'
-                )
-            )
-          }
+          // Why: IPC now forwards reason/guidance for all unavailability paths;
+          // prefer that copy over a hard-coded WebSocket-only message.
+          toast.error(
+            result.guidance ??
+              translate(
+                'auto.components.settings.MobilePane.cb9067c1c1',
+                'WebSocket transport is not running'
+              )
+          )
         }
       } catch {
         if (mountedRef.current && requestId === pairingRequestIdRef.current) {
-          setRelayMintFailure(null)
           toast.error(
             translate(
               'auto.components.settings.MobilePane.e3c427e020',
@@ -235,98 +194,8 @@ export function MobilePane(): React.JSX.Element {
         }
       }
     },
-    [
-      clearCodeCopiedResetTimer,
-      connectionMode,
-      loadDevices,
-      mountedRef,
-      rotateNextQr,
-      selectedAddress,
-      signedIn
-    ]
+    [clearCodeCopiedResetTimer, loadDevices, mountedRef, rotateNextQr, selectedAddress]
   )
-
-  const changeConnectionMode = useCallback(
-    (nextMode: MobilePairingConnectionMode) => {
-      if (nextMode === connectionMode) {
-        return
-      }
-      // Why: remember the path so reopening Settings keeps the user's choice
-      // instead of snapping back to the default.
-      handledModeRef.current = nextMode
-      setConnectionMode(nextMode)
-      void updateSettings({ mobilePairingConnectionMode: nextMode })
-      // Why: after a Relay mint failure, LAN should mint immediately — including
-      // when the renderer has not chosen an address yet (main picks the default).
-      const shouldRecoverWithLan = relayMintFailure != null && nextMode === 'local-only'
-      // A displayed or in-flight code encodes the old connection policy. The
-      // main process rotates on the mode mismatch, so don't arm a second rotate.
-      invalidatePairing({ armRotate: false })
-      // Why: switching to LAN after a Relay failure should mint immediately.
-      if (
-        shouldRecoverWithLan &&
-        canMintMobilePairingOffer({ connectionMode: nextMode, signedIn })
-      ) {
-        void generateQR({ rotate: false, connectionModeOverride: 'local-only' })
-      }
-    },
-    [
-      connectionMode,
-      generateQR,
-      invalidatePairing,
-      relayMintFailure,
-      signedIn,
-      updateSettings,
-      setConnectionMode
-    ]
-  )
-
-  const copyRelayDiagnostics = useCallback(async (): Promise<void> => {
-    if (relayMintFailure == null) {
-      return
-    }
-    try {
-      await window.api.ui.writeClipboardText(
-        JSON.stringify(
-          {
-            kind: 'mobile_pairing_relay_failure',
-            preferredConnectionMode: connectionMode,
-            failure: relayMintFailure,
-            selectedAddress: selectedAddress ?? null,
-            at: new Date().toISOString()
-          },
-          null,
-          2
-        )
-      )
-      if (mountedRef.current) {
-        toast.success(
-          translate('auto.components.settings.MobilePane.diagnosticsCopied', 'Diagnostics copied')
-        )
-      }
-    } catch {
-      if (mountedRef.current) {
-        toast.error(
-          translate(
-            'auto.components.settings.MobilePane.diagnosticsCopyFailed',
-            'Failed to copy diagnostics'
-          )
-        )
-      }
-    }
-  }, [connectionMode, mountedRef, relayMintFailure, selectedAddress])
-
-  // Why: another window can persist a different path; the shared hook syncs
-  // connectionMode here without routing through changeConnectionMode. Treat
-  // that external change like a user path change so a QR for the old policy
-  // can't linger. No updateSettings call here — avoids a cross-window loop.
-  useEffect(() => {
-    if (connectionMode === handledModeRef.current) {
-      return
-    }
-    handledModeRef.current = connectionMode
-    invalidatePairing({ armRotate: false })
-  }, [connectionMode, invalidatePairing])
 
   useEffect(() => {
     void loadNetworkInterfaces()
@@ -351,12 +220,6 @@ export function MobilePane(): React.JSX.Element {
       <MachineNameField id="mobile-machine-name" />
 
       <MobilePairingSetupSection
-        connectionMode={connectionMode}
-        canGenerate={canMintMobilePairingOffer({ connectionMode, signedIn })}
-        addressDisclosureForcedOpen={shouldOpenMobilePairingAddress(settingsSearchQuery)}
-        connectionPathControl={
-          <MobilePairingConnectionOptions value={connectionMode} onChange={changeConnectionMode} />
-        }
         networkInterfaces={networkInterfaces}
         customAddresses={customAddresses}
         selectedAddress={selectedAddress}
@@ -368,19 +231,8 @@ export function MobilePane(): React.JSX.Element {
         onRefreshNetworkInterfaces={() => void loadNetworkInterfaces({ notifyOnError: true })}
         loading={loading}
         hasQrCode={qrDataUrl != null}
-        showGenerateAction={relayMintFailure == null}
         onGenerateQr={() => void generateQR({ rotate: qrDataUrl != null })}
       />
-
-      {relayMintFailure != null && connectionMode === 'automatic' ? (
-        <MobileRelayMintFailureNotice
-          failure={relayMintFailure}
-          onUseLan={() => changeConnectionMode('local-only')}
-          onRetry={() => void generateQR({ rotate: true })}
-          onCopyDiagnostics={() => void copyRelayDiagnostics()}
-          busy={loading}
-        />
-      ) : null}
 
       <span className="sr-only" role="status" aria-live="polite">
         {pairingUrl != null && !loading

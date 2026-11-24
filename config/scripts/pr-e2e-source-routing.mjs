@@ -271,7 +271,6 @@ export const PR_E2E_SOURCE_ROUTES = [
     // Why: hand-kept routes missed #30130 and #30120; scoped to managed-host code to bound lane cost.
     id: 'ssh.orcad-remote-sources',
     specs: [
-      'tests/e2e/ssh-orcad-paired-phone-projects.spec.ts',
       'tests/e2e/ssh-orcad-pairing-repair.spec.ts',
       'tests/e2e/ssh-orcad-retained-upgrade-state.spec.ts',
       'tests/e2e/ssh-orcad-shared-home-machines.spec.ts',

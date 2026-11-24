@@ -10,9 +10,6 @@ import type { E2EEKeypair } from '../e2ee-keypair'
 import type { RuntimeHostDescriptor } from '../../../shared/runtime-host-descriptor'
 import type { UnpairedDeviceAuthThrottle } from '../rpc/unpaired-device-auth-throttle'
 import type { MobileSocketWiring } from '../rpc/mobile-socket-wiring'
-import type { MobileDesktopRelay } from '../mobile-desktop-relay/mobile-desktop-relay'
-import type { MobileRelayHostCatalog } from '../mobile-desktop-relay/mobile-relay-host-catalog'
-import { RelayRevokeOutbox } from '../mobile-cloud-relay/relay-revoke-outbox'
 import { RuntimeBinaryMessageRouter } from '../runtime-binary-message-router'
 import type { RuntimeMetadataOwnershipWatch } from '../runtime-metadata-ownership-watch'
 import { RUNTIME_METADATA_OWNERSHIP_POLL_MS } from '../runtime-metadata-ownership-watch'
@@ -24,8 +21,6 @@ import {
   SPECIALIZED_LONG_POLL_SHARE
 } from './runtime-rpc-long-poll'
 import type {
-  MobilePairingOffer,
-  MobileRelayPairingProvider,
   OrcaRuntimeRpcServerOptions,
   PairingOfferUnavailable
 } from './runtime-rpc-pairing-types'
@@ -59,7 +54,6 @@ export class RuntimeRpcState {
   protected readonly browserHostLongPollCap: number
   protected readonly browserHostLongPollCapPerDevice: number
   protected readonly specializedLongPollCap: number
-  protected readonly relayRevokeOutbox: RelayRevokeOutbox
   protected deviceRegistry: DeviceRegistry | null = null
   protected e2eeKeypair: E2EEKeypair | null = null
   protected hostDescriptor: RuntimeHostDescriptor | null = null
@@ -69,23 +63,8 @@ export class RuntimeRpcState {
   protected metadataOwnershipWatch: RuntimeMetadataOwnershipWatch | null = null
   protected mobileSocketWiring: MobileSocketWiring | null = null
   // Why: detaches the current WebSocketTransport from the session wiring so a pairing rebind can swap
-  // transports under the SAME wiring (see ensureMobileSocketWiring) instead of orphaning relay sockets.
+  // transports under the SAME wiring (see ensureMobileSocketWiring).
   protected detachWebSocketWiring: (() => void) | null = null
-  protected mobileRelayPairingProvider: MobileRelayPairingProvider | null = null
-  // Why nullable: launch sets both for every runtime process; in-process test servers may not.
-  protected mobileDesktopRelay: MobileDesktopRelay | null = null
-  protected mobileRelayHostCatalog: MobileRelayHostCatalog | null = null
-  protected detachPairedServerRows: (() => void) | null = null
-  // Why: lets an automatic mint install a provider whose launch-time construction failed.
-  protected mobileRelayPairingProviderInstaller: (() => Promise<unknown>) | null = null
-  protected mobileRelayPairingOfferQueue: Promise<void> = Promise.resolve()
-  protected mobileRelayPairingOfferInFlight: {
-    generation: number
-    address: string | null
-    rotate: boolean
-    request: Promise<MobilePairingOffer>
-  } | null = null
-  protected mobilePairingOfferGeneration = 0
   protected onUnpairedDeviceAuthFailure: (() => void) | null = null
   protected unpairedDeviceAuthThrottle: UnpairedDeviceAuthThrottle | null = null
   protected readonly binaryMessageRouter = new RuntimeBinaryMessageRouter()
@@ -142,7 +121,6 @@ export class RuntimeRpcState {
     )
     this.browserHostLongPollCapPerDevice = Math.max(1, Math.floor(this.browserHostLongPollCap / 2))
     this.specializedLongPollCap = Math.max(1, Math.floor(longPollCap * SPECIALIZED_LONG_POLL_SHARE))
-    this.relayRevokeOutbox = new RelayRevokeOutbox(userDataPath)
     this.runtime.configureNotificationDismissalStore(userDataPath)
   }
 

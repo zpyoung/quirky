@@ -1,8 +1,6 @@
 import type { DeviceScope } from '../../shared/runtime-types'
-import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-connection-mode'
 import type { MobilePushRegistration } from '../../shared/mobile-push-contract'
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
-import type { RelayDeviceBinding } from './mobile-cloud-relay/relay-revoke-outbox'
 import type { RuntimeDeviceGrant } from './rpc/rpc-method-permission'
 
 export type DeviceEntry = {
@@ -13,8 +11,6 @@ export type DeviceEntry = {
   scope: DeviceScope
   pairedAt: number
   lastSeenAt: number
-  relayBinding?: RelayDeviceBinding
-  mobilePairingConnectionMode?: MobilePairingConnectionMode
   // Why: STA-2370 — a grant minted for "This computer only" proves nothing about off-host reach when its
   // client connects, so the bind decision must be able to tell it apart from a LAN/phone grant.
   pairingReach?: RuntimePairingReach
@@ -87,15 +83,4 @@ export function isStillAuthenticated(
     // Why: a keyed socket must not survive its row turning back into (or being replaced by) a token row.
     (principal.deviceToken !== undefined || device.credentialKind === 'device-key')
   )
-}
-
-export function mobilePairingConnectionModeOf(
-  device: DeviceEntry | null
-): MobilePairingConnectionMode | null {
-  if (device?.scope !== 'mobile') {
-    return null
-  }
-  // Why: pairings created before this preference existed used automatic
-  // direct-first Relay fallback, so missing state must preserve that behavior.
-  return device.mobilePairingConnectionMode === 'local-only' ? 'local-only' : 'automatic'
 }

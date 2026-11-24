@@ -8,7 +8,6 @@ describe('sidebar inputs with the switch off', () => {
   it('builds no producer and registers no sidebarInputs method', () => {
     const runtime = new OrcaRuntimeService()
     expect(runtime.sidebarFacts).toBeNull()
-    expect(runtime.pairedServerRows).toBeNull()
     expect(runtime.repoIconDataUrls).toBeNull()
     expect(runtime.workspaceCreations).toBeNull()
     expect(runtime.collapseWriteOrder).toBeNull()

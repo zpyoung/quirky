@@ -21,7 +21,7 @@ const HEADER = [
   '# Prune after a fix: pnpm check:e2e-typecheck-ratchet --prune'
 ]
 
-// Only tests/ rows: errors tsc reports in imported cloud/ or mobile/ sources depend on whether
+// Only tests/ rows: errors tsc reports in imported mobile/ sources depend on whether
 // those workspaces are installed, which differs between CI jobs.
 const TEST_ERROR_ROW = /^(tests\/[^(\s]+)\(\d+,\d+\): error TS\d+:/
 

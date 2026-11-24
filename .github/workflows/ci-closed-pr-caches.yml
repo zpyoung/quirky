@@ -34,7 +34,6 @@ jobs:
               ['preflight-comparison', 'preflight-benchmark.yml'],
               ['zcode-transcript-contract', 'zcode-transcript-contract.yml'],
               ['docs-pr', 'docs.yml'],
-              ['cloud-verify-refs/pull', 'cloud-verify.yml', '/merge'],
               ['pnpm-verification-pilot', 'ci-pnpm-verification-pilot.yml'],
               ['pi-provider-runtime', 'pi-provider-runtime.yml'],
               ['coding-plan-contract', 'zcode-credential-contract.yml', '-credentials'],
@@ -62,8 +61,7 @@ jobs:
             }
             if (!await stillCurrent()) return
             for (const [prefix, workflow, suffix = ''] of targets) {
-              const group = prefix === 'cloud-verify-refs/pull'
-                ? `${prefix}/${pr.number}${suffix}` : `${prefix}-${pr.number}${suffix}`
+              const group = `${prefix}-${pr.number}${suffix}`
               let data
               try {
                 const response = await github.request(

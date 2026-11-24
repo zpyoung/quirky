@@ -1,23 +1,11 @@
 import { useCallback } from 'react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
-import {
-  canMintMobilePairingOffer,
-  type MobilePairingConnectionMode
-} from '../../../../shared/mobile-pairing-connection-mode'
-import type { MobileRelayMintFailure } from '../../../../shared/mobile-relay-mint-failure'
 
 type MutableRef<T> = { current: T }
 
-/**
- * Mints (or rotates) a pairing QR. Every caller must go through this path so
- * signed-out Anywhere is refused rather than silently degraded to a local-only
- * code under the Relay label. Anywhere mint failures surface relayFailure and
- * clear any QR.
- */
+/** Mints (or rotates) the LAN pairing QR. */
 export function useMobilePairingGeneration(params: {
-  connectionMode: MobilePairingConnectionMode
-  signedIn: boolean
   selectedAddress: string | undefined
   mountedRef: MutableRef<boolean>
   hasGeneratedRef: MutableRef<boolean>
@@ -27,17 +15,10 @@ export function useMobilePairingGeneration(params: {
   setPairingUrl: (value: string | null) => void
   setPairingQrError: (value: boolean) => void
   setPairLoading: (value: boolean) => void
-  setRelayMintFailure: (value: MobileRelayMintFailure | null) => void
 }): {
-  generatePairing: (
-    rotate: boolean,
-    addressOverride?: string,
-    connectionModeOverride?: MobilePairingConnectionMode
-  ) => Promise<void>
+  generatePairing: (rotate: boolean, addressOverride?: string) => Promise<void>
 } {
   const {
-    connectionMode,
-    signedIn,
     selectedAddress,
     mountedRef,
     hasGeneratedRef,
@@ -46,20 +27,11 @@ export function useMobilePairingGeneration(params: {
     setPairQrSize,
     setPairingUrl,
     setPairingQrError,
-    setPairLoading,
-    setRelayMintFailure
+    setPairLoading
   } = params
 
   const generatePairing = useCallback(
-    async (
-      rotate: boolean,
-      addressOverride?: string,
-      connectionModeOverride?: MobilePairingConnectionMode
-    ) => {
-      const preferredMode = connectionModeOverride ?? connectionMode
-      if (!canMintMobilePairingOffer({ connectionMode: preferredMode, signedIn })) {
-        return
-      }
+    async (rotate: boolean, addressOverride?: string) => {
       const requestId = ++pairingRequestIdRef.current
       hasGeneratedRef.current = true
       if (mountedRef.current) {
@@ -69,7 +41,6 @@ export function useMobilePairingGeneration(params: {
         const address = addressOverride ?? selectedAddress
         const result = await window.api.mobile.getPairingQR({
           ...(address ? { address } : {}),
-          connectionMode: preferredMode,
           ...(rotate ? { rotate: true } : {})
         })
         if (requestId !== pairingRequestIdRef.current) {
@@ -81,7 +52,6 @@ export function useMobilePairingGeneration(params: {
             setPairQrSize(result.qrSize)
             setPairingUrl(result.pairingUrl)
             setPairingQrError(result.qrDataUrl === null)
-            setRelayMintFailure(null)
           }
         } else {
           // Why: keep hasGenerated so step-2 auto-mint does not loop on failure.
@@ -90,20 +60,15 @@ export function useMobilePairingGeneration(params: {
             setPairQrSize(null)
             setPairingUrl(null)
             setPairingQrError(false)
-            if (result.reason === 'relay_mint_failed' && result.relayFailure) {
-              setRelayMintFailure(result.relayFailure)
-            } else {
-              setRelayMintFailure(null)
-              // Why: IPC now forwards reason/guidance for all unavailability paths;
-              // prefer that copy over a hard-coded WebSocket-only message.
-              toast.error(
-                result.guidance ??
-                  translate(
-                    'auto.components.mobile.MobilePage.b353e18de1',
-                    'WebSocket transport is not running'
-                  )
-              )
-            }
+            // Why: IPC now forwards reason/guidance for all unavailability paths;
+            // prefer that copy over a hard-coded WebSocket-only message.
+            toast.error(
+              result.guidance ??
+                translate(
+                  'auto.components.mobile.MobilePage.b353e18de1',
+                  'WebSocket transport is not running'
+                )
+            )
           }
         }
       } catch {
@@ -113,7 +78,6 @@ export function useMobilePairingGeneration(params: {
           setPairQrSize(null)
           setPairingUrl(null)
           setPairingQrError(false)
-          setRelayMintFailure(null)
           toast.error(
             translate(
               'auto.components.mobile.MobilePage.4c8bd11c1a',
@@ -128,7 +92,6 @@ export function useMobilePairingGeneration(params: {
       }
     },
     [
-      connectionMode,
       hasGeneratedRef,
       mountedRef,
       pairingRequestIdRef,
@@ -137,9 +100,7 @@ export function useMobilePairingGeneration(params: {
       setPairQrDataUrl,
       setPairQrSize,
       setPairingUrl,
-      setPairingQrError,
-      setRelayMintFailure,
-      signedIn
+      setPairingQrError
     ]
   )
 

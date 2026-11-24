@@ -92,7 +92,6 @@ export function attachMainWindowCoreServices(
         }),
       onBeforeRelaunch: async () => {
         state.isQuitting = true
-        state.desktopRelayService?.fenceAndCloseNow()
         await preserveAgentAuthBeforeRestart({ codexRuntimeHome, store })
       }
     },

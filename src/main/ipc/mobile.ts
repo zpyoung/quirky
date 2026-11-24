@@ -1,6 +1,5 @@
 import { app, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import type { RuntimeAccessGrant } from '../../shared/runtime-access-grants'
-import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-connection-mode'
 import { classifyRemotePairingHostname } from '../../shared/remote-pairing-address'
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
 import type { DeviceEntry } from '../runtime/device-registry'
@@ -13,7 +12,6 @@ import {
 } from '../runtime/pairing-network-interfaces'
 import { resolveAdvertisedPairingHostname } from '../runtime/pairing-endpoint'
 import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
-import type { MobileRelayStatusDetail } from '../../shared/mobile-relay-status'
 import { encodeMobilePairingQr, type MobilePairingQrResult } from '../runtime/mobile-pairing-qr'
 import { getWindowsDefaultRouteInterfaceNames } from '../runtime/windows-default-route-interfaces'
 import {
@@ -51,7 +49,6 @@ function toRuntimeAccessGrant(device: DeviceEntry): RuntimeAccessGrant {
 export type MobileHandlerDependencies = {
   firewallEnvironment?: WindowsMobileFirewallEnvironment
   openWindowsNetworkSettings?: () => Promise<void>
-  getRelayStatus?: () => MobileRelayStatusDetail
   consumePendingUnpairedDeviceAuthFailure?: (webContentsId: number) => boolean
   encodePairingQr?: (pairingUrl: string) => Promise<MobilePairingQrResult>
   getDefaultRouteInterfaceNames?: DefaultRouteInterfaceLookup
@@ -82,7 +79,6 @@ export function registerMobileHandlers(
       _event,
       args?: {
         address?: string
-        connectionMode?: MobilePairingConnectionMode
         rotate?: boolean
       }
     ) => {
@@ -90,11 +86,7 @@ export function registerMobileHandlers(
       // embed in the QR code. This supports overlay networks (Tailscale,
       // ZeroTier) where the default LAN IP isn't reachable from the phone.
       const ip = args?.address ?? (await getDefaultPairingAddress(getDefaultRouteInterfaceNames))
-      // Why: the local address is optional under Relay — the QR carries the relay invite, so a host
-      // with nothing auto-advertisable (only container bridges, or no interface at all) still pairs.
-      // The offer's endpoint then falls back to loopback, which is the phone's own device: the direct
-      // candidate loses the race by construction. LAN-only has no relay to fall back on, so it fails closed.
-      if (!ip && args?.connectionMode === 'local-only') {
+      if (!ip) {
         return {
           available: false as const,
           reason: 'invalid_advertised_endpoint',
@@ -112,18 +104,14 @@ export function registerMobileHandlers(
       // one so the new QR carries a different credential.
       const offer = await rpcServer.createMobilePairingOffer({
         address: ip,
-        connectionMode: args?.connectionMode,
         rotate: args?.rotate,
         name: `Mobile ${new Date().toLocaleDateString()}`
       })
       if (!offer.available) {
-        // Why: surface Relay mint failures (and other pairing unavailability)
-        // so the UI can refuse a silent LAN QR under the Relay label.
         return {
           available: false as const,
           reason: offer.reason,
-          guidance: offer.guidance,
-          ...(offer.relayFailure ? { relayFailure: offer.relayFailure } : {})
+          guidance: offer.guidance
         }
       }
 
@@ -135,12 +123,8 @@ export function registerMobileHandlers(
         qrSize: qr.ok ? qr.qrSize : null,
         ...(!qr.ok ? { qrError: qr.reason } : {}),
         pairingUrl: offer.pairingUrl,
-        // Why: with nothing advertised the offer's endpoint is the loopback fallback, which points at
-        // whichever device scans the QR — never this host. Report no endpoint so the UI omits it
-        // instead of printing an address the phone can't reach.
-        endpoint: ip ? offer.endpoint : null,
-        deviceId: offer.deviceId,
-        connectionMode: offer.connectionMode
+        endpoint: offer.endpoint,
+        deviceId: offer.deviceId
       }
     }
   )
@@ -286,11 +270,6 @@ export function registerMobileHandlers(
     await openSettings()
     return true
   })
-
-  ipcMain.handle(
-    'mobile:getRelayStatus',
-    (): MobileRelayStatusDetail => dependencies.getRelayStatus?.() ?? { status: 'offline' }
-  )
 
   ipcMain.handle('mobile:consumePendingUnpairedDeviceAuthFailure', (event) => {
     if (!isWindowRenderer(event)) {

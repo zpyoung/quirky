@@ -7543,12 +7543,9 @@
           "6436e56546": "用于手机配对的二维码",
           "1b1b70279a": "尚未配对任何设备。",
           "1592afcc7a": "尚未配对任何设备。使用 Orca 手机应用程序扫描二维码。",
-          "relayDegradedNotice": "无法连接 Relay — 此二维码仅在局域网或 Tailscale 内可用。请重新生成后再试。",
           "pairingQrError": "无法将此配对码呈现为二维码。请改为将其复制到 Orca Mobile。",
           "pairingCodeReady": "配对码已准备就绪",
           "copyPairingCode": "复制配对码",
-          "diagnosticsCopied": "已复制诊断信息",
-          "diagnosticsCopyFailed": "无法复制诊断信息",
           "5e2c7a1f84": "当您在手机上使用终端时，Orca 会将其缩小以适合您的手机屏幕。当您关闭应用程序或切换离开时，这可以控制它是保持手机大小（因此交互式 CLI 工具不会回流）还是将大小调整回桌面。您始终可以使用横幅上的“还原”或“全部还原”来手动调整大小。"
         },
         "MobileSettingsPane": {
@@ -11266,52 +11263,20 @@
           "567633ff50": "右键点击将剪贴板内容粘贴到终端。按住 Control 键点击以打开上下文菜单。",
           "c64497148a": "右键点击粘贴剪贴板内容。按住 Control 键点击打开上下文菜单。"
         },
-        "MobileRelayStatusSection": {
-          "registered": "已注册",
-          "connecting": "正在连接",
-          "reconnecting": "正在重新连接",
-          "offline": "离线",
-          "title": "Orca Relay",
-          "automatic": "手机配对后可从任何地方连接",
-          "signInPrompt": "在此桌面端登录以从任何地方连接",
-          "directStillAvailable": "局域网和 Tailscale 连接仍然可用。",
-          "directNeedsNoAccount": "无需账户即可使用局域网和 Tailscale 配对。",
-          "signIn": "登录",
-          "unavailable": "不可用",
-          "standby": "待机 — 无 Relay 设备"
-        },
-        "MobilePairingConnectionOptions": {
-          "unavailable": "不可用",
-          "localDescription": "手机必须连接此 Wi‑Fi 或通过 Tailscale。无需账号。",
-          "pathGroup": "手机访问此电脑的方式",
-          "anywhereTitle": "Orca Relay",
-          "relayUnavailable": "此版本不支持 Orca Relay。请使用局域网。",
-          "localTitle": "局域网"
-        },
         "MobilePairingSetupSection": {
           "title": "配对手机",
           "regenerate": "重新生成",
           "generate": "生成二维码",
           "refresh": "刷新网络接口",
           "overview": "生成二维码，然后在 Orca Mobile 的 Pair Desktop 中扫描。",
-          "step1Title": "连接方式",
           "step2Title": "此电脑的地址",
-          "step2LocalDescription": "手机必须能通过 Tailscale 或 Wi‑Fi 访问此地址。",
-          "step2RelayDescription": "可选。选择手机在附近（同一 Wi‑Fi 或 Tailscale）时使用的地址，通常比 Relay 更快。外出时仍走 Relay。",
-          "step2RelayDisclosure": "也可使用更快的本地连接"
+          "step2LocalDescription": "手机必须能通过 Tailscale 或 Wi‑Fi 访问此地址。"
         },
         "MachineNameField": {
           "label": "机器名称",
           "description": "其他设备和主机会看到“{{name}}”。留空则使用这台电脑自己的名称。",
           "pending": "其他设备和主机会看到此名称。留空则使用检测到的电脑名称。",
           "placeholder": "自动检测"
-        },
-        "MobileRelayBetaAvailability": {
-          "about": "关于 Orca Relay 测试版",
-          "beta": "测试版",
-          "availability": "可用平台：",
-          "testFlight": "TestFlight",
-          "androidApk": "Android APK"
         },
         "SkillUsageExampleDialog": {
           "copiedPrompt": "复制示例提示。",
@@ -11330,9 +11295,6 @@
           "terminalAriaLabel": "Linear 技能安装终端",
           "manageConnectionHint": "可在此查看已连接的 Linear 工作区和 API 密钥：",
           "manageConnectionLink": "集成"
-        },
-        "MobileRelayBetaNotice": {
-          "notice": "Orca Relay 目前处于测试阶段。"
         },
         "EditorFontFamilySetting": {
           "title": "编辑器字体",
@@ -14311,13 +14273,7 @@
             "preview": "预览版",
             "stable": "稳定版"
           },
-          "relayDegradedNotice": "无法连接 Relay — 此二维码仅在局域网或 Tailscale 内可用。",
           "pairingQrError": "无法将此配对码呈现为二维码。请改为将其复制到 Orca Mobile。",
-          "directAddressDisclosure": "也可使用更快的本地连接",
-          "directAddressHint": "可选。选择手机在附近（同一 Wi‑Fi 或 Tailscale）时使用的地址，通常比 Relay 更快。外出时仍走 Relay。",
-          "noRelayCode": "没有可用的配对码",
-          "noPairingCode": "没有可用的配对码",
-          "qrSignInRequired": "登录以创建中继配对码",
           "qrRenderFailed": "无法呈现二维码 — 复制下面的代码",
           "qrGeneratePrompt": "生成配对码以继续",
           "pairingCodeReady": "配对码已准备就绪",
@@ -14339,9 +14295,7 @@
           "4e1eb5d55c": "撤销设备失败",
           "255372e6e8": "设备已撤销",
           "1b4509a8a1": "配对的",
-          "c5909374cf": "简介",
-          "diagnosticsCopied": "已复制诊断信息",
-          "diagnosticsCopyFailed": "无法复制诊断信息"
+          "c5909374cf": "简介"
         },
         "MobilePageToolbar": {
           "ad2284a9e2": "关闭 · Esc",
@@ -14474,24 +14428,7 @@
           "repair-unverified": "无法验证 Windows 防火墙访问权限",
           "blocked-title": "Windows 可能正在阻止 Orca Mobile",
           "blocked-description": "现有的入站阻止规则可能会覆盖配对例外。修复将移除此 Orca 应用的冲突 TCP 规则，然后在专用网络上允许端口 {{port}}。",
-          "repair": "修复防火墙访问权限",
-          "relay-note": "配对仍可通过 Orca Relay 进行 — 允许后只是额外获得更快的本地连接。"
-        },
-        "MobileRelayMintFailureNotice": {
-          "retryingTitle": "正在重试 Orca 中继...",
-          "unavailableTitle": "Orca Relay 在此桌面上不可用。",
-          "title": "无法创建中继配对代码。",
-          "retryingBody": "创建新的配对代码。通过远程连接，这可能需要一些时间。",
-          "unavailableBody": "使用 LAN 通过 Tailscale 或相同的 Wi-Fi 进行配对。",
-          "body": "重试，或使用 LAN 通过 Tailscale 或相同的 Wi-Fi 进行配对。",
-          "useLan": "使用局域网",
-          "retrying": "正在重试...",
-          "retry": "重试中继",
-          "copyDiagnostics": "复制诊断",
-          "reconnectTitle": "您的 Orca 帐户会话已过期。",
-          "reconnectBody": "再次登录以使用 Orca Relay，或使用 LAN 通过 Tailscale 或同一 Wi-Fi 进行配对。",
-          "notEntitledTitle": "此 Orca 账户不包含 Orca Relay。",
-          "rateLimitedBody": "Orca Relay 正忙。请等待一分钟再重试，或使用 LAN 通过 Tailscale 或同一 Wi‑Fi 配对。"
+          "repair": "修复防火墙访问权限"
         }
       },
       "gitlab": {

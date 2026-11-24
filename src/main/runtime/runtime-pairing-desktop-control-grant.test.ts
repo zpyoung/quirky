@@ -63,20 +63,20 @@ describe('desktop control for paired runtime clients', () => {
 })
 
 describe('pairing and push administration for paired runtime clients', () => {
-  it.each<[string, unknown]>([
-    ['pairing.provisionRelay', {}],
-    ['notifications.registerPush', { token: 't', platform: 'ios' }]
-  ])('refuses %s without reaching its service', async (method, params) => {
-    const userDataPath = tempDir()
-    const runtime = new OrcaRuntimeService()
-    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
-    server['deviceRegistry'] = new DeviceRegistry(userDataPath)
-    const device = server['deviceRegistry']!.addDevice('laptop', 'runtime')
-    const registerPush = vi.spyOn(runtime, 'registerMobilePushDevice')
-    const reply = await dispatchOverWebSocket(server, device.token, method, params)
-    expect(errorCode(reply)).toBe('forbidden')
-    expect(registerPush).not.toHaveBeenCalled()
-  })
+  it.each<[string, unknown]>([['notifications.registerPush', { token: 't', platform: 'ios' }]])(
+    'refuses %s without reaching its service',
+    async (method, params) => {
+      const userDataPath = tempDir()
+      const runtime = new OrcaRuntimeService()
+      const server = new OrcaRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
+      server['deviceRegistry'] = new DeviceRegistry(userDataPath)
+      const device = server['deviceRegistry']!.addDevice('laptop', 'runtime')
+      const registerPush = vi.spyOn(runtime, 'registerMobilePushDevice')
+      const reply = await dispatchOverWebSocket(server, device.token, method, params)
+      expect(errorCode(reply)).toBe('forbidden')
+      expect(registerPush).not.toHaveBeenCalled()
+    }
+  )
 })
 
 describe('pairing-time grants on the device registry', () => {

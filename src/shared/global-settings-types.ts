@@ -463,9 +463,6 @@ export type GlobalSettings = GlobalSettingsBase & {
    *  `null` (default) holds phone size indefinitely; a finite value schedules restore.
    *  Clamped on read to [5_000ms, 60min]. See docs/mobile-fit-hold.md. */
   mobileAutoRestoreFitMs: number | null
-  /** Preferred mobile pairing path for new QR codes. Missing/'automatic' = Anywhere (Relay + local);
-   *  explicit 'local-only' = same-network only. */
-  mobilePairingConnectionMode?: 'automatic' | 'local-only'
   /** Explicit custom address restored when generating future mobile pairing codes. */
   mobilePairingCustomAddress?: string | null
   /** Saved custom addresses available in both mobile pairing pickers. */

@@ -31,11 +31,6 @@ import {
 } from '../fork-heimdall/api'
 import { LoopCreateInputSchema } from '../fork-loops/loop-types'
 import { HostAccountLaunchEnvParams } from '../host-account-launch-env'
-import {
-  PairingGetEndpointsParamsSchema,
-  PairingProvisionRelayParamsSchema
-} from '../mobile-relay-credential-contract'
-import { MobileRelayHostWorktreesParamsSchema } from '../mobile-relay-hosts-contract'
 import { MobileWebBundleChunkParamsSchema } from '../mobile-web-bundle/bundle-rpc-contract'
 import { OrcadMigrationBlobChunkRequestSchema } from '../orcad-migration/orcad-migration-blob-transfer'
 import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration/orcad-migration-scrollback'
@@ -1128,8 +1123,6 @@ export const RPC_PARAMS_BY_METHOD = {
   'managedServer.update': ManagedServerUpdate,
   'markdown.readTab': ActivateTab,
   'markdown.saveTab': SaveMarkdownTab,
-  'mobileRelay.hosts.list': null,
-  'mobileRelay.hosts.worktrees': MobileRelayHostWorktreesParamsSchema,
   'mobileRelay.projectSections': null,
   'mobileWeb.bundle.chunk': MobileWebBundleChunkParamsSchema,
   'mobileWeb.bundle.manifest': null,
@@ -1195,8 +1188,6 @@ export const RPC_PARAMS_BY_METHOD = {
   'orchestration.workerStop': WorkerDispatchParamsOfOrchestrationWorkerStopParams,
   'orchestration.workerTerminalUserInput': OrchestrationWorkerTerminalUserInputParams,
   'pairing.delegatedMobileDevice.sync': DelegatedMobileDeviceSyncParamsSchema,
-  'pairing.getEndpoints': PairingGetEndpointsParamsSchema,
-  'pairing.provisionRelay': PairingProvisionRelayParamsSchema,
   'pairing.registerDeviceKey': RegisterDeviceKeyParamsSchema,
   'plugins.consent': pluginConsentRequestSchema,
   'plugins.invokeCommand': PluginInvokeCommandParams,
@@ -1273,7 +1264,6 @@ export const RPC_PARAMS_BY_METHOD = {
   'settings.updateTerminalQuickCommands': TerminalQuickCommandsUpdate,
   'sidebarInputs.activityFacts': null,
   'sidebarInputs.desktopFacts': null,
-  'sidebarInputs.pairedServerRows': null,
   'sidebarInputs.read': SidebarInputsReadParams,
   'sidebarInputs.repoIcons': RepoIconDataUrlsParams,
   'sidebarInputs.reportView': ClientWorkspaceViewParams,

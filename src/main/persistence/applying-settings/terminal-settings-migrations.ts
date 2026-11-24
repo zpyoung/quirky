@@ -67,6 +67,8 @@ type RetiredGlobalSettings = {
   opencodeGoApiKey?: unknown
   experimentalStructuredNativeChat?: unknown
   openAgentTabsInChatByDefault?: unknown
+  // Hosted relay is gone; pairing is LAN-only.
+  mobilePairingConnectionMode?: unknown
 }
 
 export function stripRetiredGlobalSettings(
@@ -81,6 +83,7 @@ export function stripRetiredGlobalSettings(
     opencodeGoApiKey: _legacyOpenCodeGoApiKey,
     experimentalStructuredNativeChat: _legacyStructuredNativeChat,
     openAgentTabsInChatByDefault: _legacyChatDefaultView,
+    mobilePairingConnectionMode: _retiredPairingConnectionMode,
     ...rest
   } = (settings ?? {}) as Partial<GlobalSettings> & RetiredGlobalSettings
   void _legacySetupScriptLaunchMode
@@ -91,6 +94,7 @@ export function stripRetiredGlobalSettings(
   void _legacyOpenCodeGoApiKey
   void _legacyStructuredNativeChat
   void _legacyChatDefaultView
+  void _retiredPairingConnectionMode
   return rest
 }
 

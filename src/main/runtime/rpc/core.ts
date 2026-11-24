@@ -3,17 +3,7 @@ import { ZodError, type ZodType } from 'zod'
 import type { TerminalStreamFrame } from '../../../shared/terminal-stream-protocol'
 import type { OrcaRuntimeService, OrchestrationCompatibilityCallerAuthority } from '../orca-runtime'
 import type { StructuredAgentCliSourceEvidence } from '../../native-chat/structured-agent-cli-source'
-import type {
-  DeviceCredentialInstalled,
-  PairingGetEndpointsParams,
-  PairingGetEndpointsResult,
-  PairingProvisionRelayParams
-} from '../../../shared/mobile-relay-credential-contract'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
-import type {
-  MobileRelayHostsListResult,
-  MobileRelayHostWorktreesResult
-} from '../../../shared/mobile-relay-hosts-contract'
 import type {
   DelegatedPhone,
   DelegatedMobileDeviceSyncResult
@@ -31,11 +21,6 @@ import type {
 // Why: bound to the authenticated socket by the transport, so a caller can only re-key itself.
 export type DeviceSelfRpcContext = {
   registerDeviceKey(params: RegisterDeviceKeyParams): RegisterDeviceKeyResult
-}
-
-export type PairingRpcContext = {
-  getEndpoints(params: PairingGetEndpointsParams): Promise<PairingGetEndpointsResult>
-  provisionRelay(params: PairingProvisionRelayParams): Promise<DeviceCredentialInstalled>
 }
 
 export type RpcEnvelopeMeta = {
@@ -139,13 +124,7 @@ export type RpcContext = {
   authenticatedCallerFingerprint?: string
   /** Authenticated paired device credential; never sourced from request params. */
   authenticatedCredential?: string
-  pairing?: PairingRpcContext
   deviceSelf?: DeviceSelfRpcContext
-  // Why: set only on a desktop that relays; it lists the configured servers it shows.
-  mobileRelayHosts?: {
-    list(): MobileRelayHostsListResult
-    worktrees(hostId: string): Promise<MobileRelayHostWorktreesResult>
-  }
   // Why: set only for an authenticated runtime-scope device and bound to it, so it manages only its own phones.
   delegatedMobileDevices?: {
     sync(phones: readonly DelegatedPhone[]): DelegatedMobileDeviceSyncResult

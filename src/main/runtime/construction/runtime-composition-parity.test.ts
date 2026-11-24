@@ -89,11 +89,6 @@ const DECLARED_HOST_DIFFERENCES: readonly DeclaredDifference[] = [
     reason: 'orcad pins its bind host instead, so exposure never widens itself.'
   },
   {
-    wiring: 'rpc.setMobileDesktopRelayHosts',
-    missingOn: 'orcad',
-    reason: 'The mobile desktop relay is hosted by the desktop.'
-  },
-  {
     wiring: 'rpc.setOnUnpairedDeviceAuthFailure',
     missingOn: 'orcad',
     reason: 'It notifies a desktop window.'

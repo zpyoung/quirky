@@ -1,7 +1,6 @@
 import { translate } from '@/i18n/i18n'
 import { translateSearchKeyword } from './settings-search-keywords'
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
-import { matchesSettingsSearch, normalizeSettingsSearchQuery } from './settings-search'
 import { getMachineNameSearchEntries } from './machine-name-search'
 
 const getNetworkInterfaceSearchEntries = createLocalizedCatalog(() => [
@@ -44,14 +43,6 @@ const getNetworkInterfaceSearchEntries = createLocalizedCatalog(() => [
     ]
   }
 ])
-
-/** Reveal the Relay address disclosure when a search targets the picker. */
-export function shouldOpenMobilePairingAddress(searchQuery: string): boolean {
-  return (
-    normalizeSettingsSearchQuery(searchQuery) !== '' &&
-    matchesSettingsSearch(searchQuery, getNetworkInterfaceSearchEntries())
-  )
-}
 
 export const getMobilePaneSearchEntries = createLocalizedCatalog(() => [
   {

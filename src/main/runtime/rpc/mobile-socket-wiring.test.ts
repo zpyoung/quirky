@@ -11,11 +11,7 @@ import { sealMobileE2EEV2Frame } from '../../../shared/mobile-e2ee-v2-framing'
 import type { DeviceRegistry } from '../device-registry'
 import { deriveSharedKey, encrypt, generateKeyPair } from '../../../shared/e2ee-crypto'
 import { deriveMobileE2EEV2KeySchedule } from '../../../shared/mobile-e2ee-v2-node-key-schedule'
-import {
-  MobileSocketWiring,
-  type MobileSocketTransport,
-  type MobileSocketTransportMetadata
-} from './mobile-socket-wiring'
+import { MobileSocketWiring, type MobileSocketTransport } from './mobile-socket-wiring'
 
 class FakeSocket {
   readonly OPEN = 1
@@ -381,87 +377,12 @@ describe('MobileSocketWiring', () => {
     expect(ws.close).toHaveBeenCalledWith(4001, 'Unauthorized')
   })
 
-  it('rejects a relay socket whose immutable relayDeviceId differs from E2EE identity', () => {
-    const desktop = nacl.box.keyPair.fromSecretKey(new Uint8Array(32).fill(1))
-    const phone = nacl.box.keyPair.fromSecretKey(new Uint8Array(32).fill(2))
-    const ws = new FakeSocket()
-    const transport = new FakeTransport()
-    const metadata: MobileSocketTransportMetadata = {
-      transport: 'relay',
-      relayHostId: 'AbCdEf0123_-xyZ9',
-      relayDeviceId: 'outer-device',
-      basisConnId: 'connection-1',
-      credentialKind: 'invite'
-    }
-    const wiring = new MobileSocketWiring({
-      deviceRegistry: registryFor('e2ee-device', 'valid-token'),
-      e2eeKeypair: {
-        publicKey: desktop.publicKey,
-        secretKey: desktop.secretKey,
-        publicKeyB64: Buffer.from(desktop.publicKey).toString('base64')
-      },
-      onText: vi.fn(),
-      onBinary: vi.fn(),
-      onClose: vi.fn()
-    })
-    wiring.attachTransport(transport, () => metadata)
-    const hello: MobileE2EEV2Hello = {
-      type: 'e2ee_hello',
-      v: 2,
-      clientPublicKeyB64: Buffer.from(phone.publicKey).toString('base64'),
-      clientNonceB64: Buffer.from(new Uint8Array(32).fill(3)).toString('base64'),
-      capabilities: { framing: [2], payloadKinds: ['text', 'binary'] },
-      context: {
-        protocol: 'orca-mobile-e2ee',
-        initiator: 'mobile',
-        responder: 'desktop',
-        transport: 'relay',
-        relayHostId: metadata.relayHostId
-      }
-    }
-    transport.receive(ws, JSON.stringify(hello))
-    const ready = JSON.parse(ws.sent[0]!.toString()) as MobileE2EEV2Ready
-    const handshake = validateMobileE2EEV2Handshake(hello, ready)!
-    const schedule = deriveMobileE2EEV2KeySchedule({
-      sharedSecret: deriveSharedKey(phone.secretKey, desktop.publicKey),
-      transcript: encodeMobileE2EEV2Transcript(handshake),
-      clientNonce: handshake.clientNonce,
-      desktopNonce: handshake.desktopNonce
-    })
-    const auth = sealMobileE2EEV2Frame({
-      payload: new TextEncoder().encode(
-        JSON.stringify({
-          type: 'e2ee_auth',
-          v: 2,
-          transcriptHashB64: Buffer.from(schedule.transcriptHash).toString('base64'),
-          deviceToken: 'valid-token'
-        })
-      ),
-      key: schedule.mobileToDesktopKey,
-      sessionId: schedule.sessionId,
-      direction: 'mobile-to-desktop',
-      payloadKind: 'text',
-      counter: 0n
-    })
-    transport.receive(ws, Buffer.from(auth).toString('base64'))
-
-    expect(transport.setClientId).not.toHaveBeenCalled()
-    expect(ws.close).toHaveBeenCalledWith(4001, 'Unauthorized')
-  })
-
   it('keeps post-auth v2 capability-shaped frames on the RPC path', () => {
     const desktop = nacl.box.keyPair.fromSecretKey(new Uint8Array(32).fill(1))
     const phone = nacl.box.keyPair.fromSecretKey(new Uint8Array(32).fill(2))
     const ws = new FakeSocket()
     const transport = new FakeTransport()
     const onText = vi.fn()
-    const metadata: MobileSocketTransportMetadata = {
-      transport: 'relay',
-      relayHostId: 'AbCdEf0123_-xyZ9',
-      relayDeviceId: 'device-1',
-      basisConnId: 'connection-1',
-      credentialKind: 'resume'
-    }
     const wiring = new MobileSocketWiring({
       deviceRegistry: registryFor('device-1', 'valid-token'),
       e2eeKeypair: {
@@ -473,7 +394,7 @@ describe('MobileSocketWiring', () => {
       onBinary: vi.fn(),
       onClose: vi.fn()
     })
-    wiring.attachTransport(transport, () => metadata)
+    wiring.attachTransport(transport)
     const hello: MobileE2EEV2Hello = {
       type: 'e2ee_hello',
       v: 2,
@@ -484,8 +405,7 @@ describe('MobileSocketWiring', () => {
         protocol: 'orca-mobile-e2ee',
         initiator: 'mobile',
         responder: 'desktop',
-        transport: 'relay',
-        relayHostId: metadata.relayHostId
+        transport: 'direct'
       }
     }
     transport.receive(ws, JSON.stringify(hello))

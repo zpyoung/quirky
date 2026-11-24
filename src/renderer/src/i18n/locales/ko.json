@@ -7543,12 +7543,9 @@
           "6436e56546": "모바일 페어링을 위한 QR 코드",
           "1b1b70279a": "아직 페어링된 기기가 없습니다.",
           "1592afcc7a": "아직 페어링된 기기가 없습니다. Orca 모바일 앱으로 QR 코드를 스캔하세요.",
-          "relayDegradedNotice": "Relay에 연결할 수 없습니다 — 이 코드는 LAN 또는 Tailscale에서만 작동합니다. 다시 생성해 보세요.",
           "pairingQrError": "이 페어링 코드를 QR 코드로 표시할 수 없습니다. 대신 Orca Mobile에 복사하세요.",
           "pairingCodeReady": "페어링 코드 준비됨",
           "copyPairingCode": "페어링 코드 복사",
-          "diagnosticsCopied": "진단이 복사되었습니다.",
-          "diagnosticsCopyFailed": "진단을 복사하지 못했습니다.",
           "5e2c7a1f84": "휴대폰에서 터미널을 사용하는 동안 Orca는 휴대폰 화면에 맞게 터미널을 축소합니다. 앱을 닫거나 다른 앱으로 전환할 때, 휴대폰 화면 크기를 유지할지(대화형 CLI 도구의 레이아웃 재배치 방지) 아니면 데스크톱 크기로 다시 조정할지 제어합니다. 배너에서 언제든지 '복원' 또는 '모두 복원'을 사용해 수동으로 크기를 조정할 수 있습니다."
         },
         "MobileSettingsPane": {
@@ -11266,52 +11263,20 @@
           "567633ff50": "우클릭하면 클립보드 내용을 터미널에 붙여넣습니다. 컨텍스트 메뉴를 열려면 Control 클릭하세요.",
           "c64497148a": "우클릭하면 클립보드를 붙여넣습니다. Control 클릭으로 컨텍스트 메뉴를 엽니다."
         },
-        "MobileRelayStatusSection": {
-          "registered": "Registered",
-          "connecting": "Connecting",
-          "reconnecting": "Reconnecting",
-          "offline": "Offline",
-          "title": "Orca Relay",
-          "automatic": "휴대폰이 페어링되면 어디서나 연결",
-          "signInPrompt": "어디서나 연결하려면 이 데스크톱에서 로그인하세요",
-          "directStillAvailable": "LAN 및 Tailscale 연결은 계속 사용할 수 있습니다.",
-          "directNeedsNoAccount": "LAN 및 Tailscale 페어링은 계정 없이도 계속 작동합니다.",
-          "signIn": "Sign in",
-          "unavailable": "Unavailable",
-          "standby": "대기 중 — 릴레이 기기 없음"
-        },
-        "MobilePairingConnectionOptions": {
-          "unavailable": "사용할 수 없음",
-          "localDescription": "휴대폰이 이 Wi‑Fi에 있거나 Tailscale로 연결되어 있어야 합니다. 계정이 필요하지 않습니다.",
-          "pathGroup": "휴대폰이 이 컴퓨터에 연결되는 방식",
-          "anywhereTitle": "Orca Relay",
-          "relayUnavailable": "이 빌드에서는 Orca Relay를 사용할 수 없습니다. LAN을 사용하세요.",
-          "localTitle": "LAN"
-        },
         "MobilePairingSetupSection": {
           "title": "휴대폰 페어링",
           "regenerate": "다시 생성",
           "generate": "QR 코드 생성",
           "refresh": "네트워크 인터페이스 새로 고침",
           "overview": "QR 코드를 생성한 후 Orca Mobile의 Pair Desktop에서 스캔하세요.",
-          "step1Title": "연결 방식",
           "step2Title": "이 컴퓨터의 주소",
-          "step2LocalDescription": "휴대폰이 Tailscale 또는 Wi‑Fi를 통해 이 주소에 접근할 수 있어야 합니다.",
-          "step2RelayDescription": "선택 사항. 근처에 있을 때(같은 Wi‑Fi 또는 Tailscale) 휴대폰이 사용할 주소를 고르세요. 보통 Relay보다 빠릅니다. 외부에 있을 때는 여전히 Relay를 사용합니다.",
-          "step2RelayDisclosure": "더 빠른 로컬 경로도 사용"
+          "step2LocalDescription": "휴대폰이 Tailscale 또는 Wi‑Fi를 통해 이 주소에 접근할 수 있어야 합니다."
         },
         "MachineNameField": {
           "label": "머신 이름",
           "description": "다른 장치와 호스트에는 “{{name}}”(으)로 표시됩니다. 비워 두면 컴퓨터 자체의 이름을 사용합니다.",
           "pending": "다른 장치와 호스트에는 이 이름이 표시됩니다. 비워 두면 감지된 컴퓨터 이름을 사용합니다.",
           "placeholder": "자동으로 감지됨"
-        },
-        "MobileRelayBetaAvailability": {
-          "about": "Orca Relay 베타 정보",
-          "beta": "베타",
-          "availability": "이용 가능:",
-          "testFlight": "TestFlight",
-          "androidApk": "Android APK"
         },
         "SkillUsageExampleDialog": {
           "copiedPrompt": "예시 프롬프트를 복사했습니다.",
@@ -11330,9 +11295,6 @@
           "terminalAriaLabel": "Linear 스킬 설치 터미널",
           "manageConnectionHint": "연결된 Linear 워크스페이스와 API 키는 다음에서 확인할 수 있습니다.",
           "manageConnectionLink": "연동"
-        },
-        "MobileRelayBetaNotice": {
-          "notice": "Orca Relay는 베타 버전입니다."
         },
         "EditorFontFamilySetting": {
           "title": "편집기 글꼴",
@@ -14311,13 +14273,7 @@
             "preview": "미리 보기",
             "stable": "안정 버전"
           },
-          "relayDegradedNotice": "Relay에 연결할 수 없습니다 — 이 코드는 LAN 또는 Tailscale에서만 작동합니다.",
           "pairingQrError": "이 페어링 코드를 QR 코드로 표시할 수 없습니다. 대신 Orca Mobile에 복사하세요.",
-          "directAddressDisclosure": "더 빠른 로컬 경로도 사용",
-          "directAddressHint": "선택 사항. 근처에 있을 때(같은 Wi‑Fi 또는 Tailscale) 휴대폰이 사용할 주소를 고르세요. 보통 Relay보다 빠릅니다. 외부에 있을 때는 여전히 Relay를 사용합니다.",
-          "noRelayCode": "사용 가능한 페어링 코드가 없습니다.",
-          "noPairingCode": "사용 가능한 페어링 코드가 없습니다.",
-          "qrSignInRequired": "Relay 페어링 코드를 생성하려면 로그인하세요.",
           "qrRenderFailed": "QR을 렌더링할 수 없습니다. 아래 코드를 복사하세요.",
           "qrGeneratePrompt": "계속하려면 페어링 코드를 생성하세요.",
           "pairingCodeReady": "페어링 코드 준비됨",
@@ -14339,9 +14295,7 @@
           "4e1eb5d55c": "기기를 취소하지 못했습니다.",
           "255372e6e8": "기기가 취소되었습니다.",
           "1b4509a8a1": "페어링됨",
-          "c5909374cf": "소개",
-          "diagnosticsCopied": "진단이 복사되었습니다.",
-          "diagnosticsCopyFailed": "진단을 복사하지 못했습니다."
+          "c5909374cf": "소개"
         },
         "MobilePageToolbar": {
           "ad2284a9e2": "닫기 · Esc",
@@ -14474,24 +14428,7 @@
           "repair-unverified": "Windows 방화벽 액세스를 확인할 수 없습니다",
           "blocked-title": "Windows가 Orca Mobile을 차단하고 있을 수 있습니다",
           "blocked-description": "기존 인바운드 차단 규칙이 페어링 예외보다 우선할 수 있습니다. 복구를 실행하면 이 Orca 앱의 충돌하는 TCP 규칙을 제거한 다음 개인 네트워크에서 포트 {{port}}을(를) 허용합니다.",
-          "repair": "방화벽 액세스 복구",
-          "relay-note": "페어링은 Orca Relay를 통해 계속 작동합니다. 허용하면 더 빠른 로컬 연결이 추가될 뿐입니다."
-        },
-        "MobileRelayMintFailureNotice": {
-          "retryingTitle": "Orca 릴레이를 다시 시도하는 중…",
-          "unavailableTitle": "이 데스크탑에서는 Orca Relay를 사용할 수 없습니다.",
-          "title": "Relay 페어링 코드를 생성할 수 없습니다.",
-          "retryingBody": "새로운 페어링 코드를 생성합니다. 원격 연결에서는 잠시 시간이 걸릴 수 있습니다.",
-          "unavailableBody": "Tailscale 또는 동일한 Wi-Fi를 통해 페어링하려면 LAN을 사용하세요.",
-          "body": "다시 시도하거나 LAN을 사용하여 Tailscale 또는 동일한 Wi-Fi를 통해 페어링하세요.",
-          "useLan": "LAN 사용",
-          "retrying": "재시도 중…",
-          "retry": "릴레이 재시도",
-          "copyDiagnostics": "진단 복사",
-          "reconnectTitle": "Orca 계정 세션이 만료되었습니다.",
-          "reconnectBody": "Orca Relay를 사용하려면 다시 로그인하거나 LAN을 사용하여 Tailscale 또는 동일한 Wi-Fi를 통해 페어링하세요.",
-          "notEntitledTitle": "이 Orca 계정에는 Orca Relay가 포함되어 있지 않습니다.",
-          "rateLimitedBody": "Orca Relay가 사용 중입니다. 1분 정도 기다렸다가 다시 시도하거나, LAN을 사용해 Tailscale 또는 동일한 Wi‑Fi로 페어링하세요."
+          "repair": "방화벽 액세스 복구"
         }
       },
       "gitlab": {
