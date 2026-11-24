@@ -24,11 +24,8 @@ export function useSourceControlCreatePrIntentProbes({
   getCreatePrIntentOperationTarget,
   getHostedReviewCreationEligibility,
   isFolder,
-  linkedAzureDevOpsPR,
-  linkedBitbucketPR,
   linkedGitHubPR,
   linkedGitLabMR,
-  linkedGiteaPR,
   setGitBranchCompareResult,
   setGitStatus,
   setHostedReviewCreationState,
@@ -42,11 +39,8 @@ export function useSourceControlCreatePrIntentProbes({
   getCreatePrIntentOperationTarget: SourceControlCreatePrIntentTarget['getCreatePrIntentOperationTarget']
   getHostedReviewCreationEligibility: SourceControlStoreActions['getHostedReviewCreationEligibility']
   isFolder: boolean
-  linkedAzureDevOpsPR: SourceControlLinkedReviews['linkedAzureDevOpsPR']
-  linkedBitbucketPR: SourceControlLinkedReviews['linkedBitbucketPR']
   linkedGitHubPR: SourceControlLinkedReviews['linkedGitHubPR']
   linkedGitLabMR: SourceControlLinkedReviews['linkedGitLabMR']
-  linkedGiteaPR: SourceControlLinkedReviews['linkedGiteaPR']
   setGitBranchCompareResult: SourceControlStoreActions['setGitBranchCompareResult']
   setGitStatus: SourceControlStoreActions['setGitStatus']
   setHostedReviewCreationState: SourceControlHostedReviewState['setHostedReviewCreationState']
@@ -104,10 +98,7 @@ export function useSourceControlCreatePrIntentProbes({
           behind: upstreamStatus?.behind,
           linkedGitHubPR,
           fallbackGitHubPR: fallbackGitHubPRNumber,
-          linkedGitLabMR,
-          linkedBitbucketPR,
-          linkedAzureDevOpsPR,
-          linkedGiteaPR
+          linkedGitLabMR
         })
       } catch (error) {
         console.warn('[SourceControl] Create PR intent eligibility failed', error)
@@ -139,9 +130,6 @@ export function useSourceControlCreatePrIntentProbes({
       activeRepo,
       fallbackGitHubPRNumber,
       getHostedReviewCreationEligibility,
-      linkedAzureDevOpsPR,
-      linkedBitbucketPR,
-      linkedGiteaPR,
       linkedGitHubPR,
       linkedGitLabMR,
       setHostedReviewCreationState

@@ -17,9 +17,6 @@ export function useWorktreeCardLifecycleEffects({
   hostedReviewCacheKey,
   cachedBranchFallbackGitHubPRNumber,
   linkedGitLabMR,
-  linkedBitbucketPR,
-  linkedAzureDevOpsPR,
-  linkedGiteaPR,
   branch,
   fetchHostedReviewForBranch,
   shouldRefreshHostedReview,
@@ -39,9 +36,6 @@ export function useWorktreeCardLifecycleEffects({
     | 'hostedReviewCacheKey'
     | 'cachedBranchFallbackGitHubPRNumber'
     | 'linkedGitLabMR'
-    | 'linkedBitbucketPR'
-    | 'linkedAzureDevOpsPR'
-    | 'linkedGiteaPR'
     | 'branch'
     | 'issueCacheKey'
     | 'linearSourceContext'
@@ -83,9 +77,6 @@ export function useWorktreeCardLifecycleEffects({
         : {}),
       currentHeadOid: hostedReviewExactKey ? null : (worktree.head ?? null),
       linkedGitLabMR,
-      linkedBitbucketPR,
-      linkedAzureDevOpsPR,
-      linkedGiteaPR,
       staleWhileRevalidate: true
     })
   }, [
@@ -99,9 +90,6 @@ export function useWorktreeCardLifecycleEffects({
     worktree.head,
     cachedBranchFallbackGitHubPRNumber,
     linkedGitLabMR,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR,
     fetchHostedReviewForBranch,
     branch,
     hostedReviewCacheKey,

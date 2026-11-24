@@ -317,33 +317,6 @@ describe('WorktreeCard linked PR display', () => {
     expect(markup).not.toContain('Branch')
   })
 
-  it('shows branch-discovered hosted review providers without linked worktree metadata', async () => {
-    settings = { experimentalNewWorktreeCardStyle: true }
-    hostedReviewCache = {
-      'local::repo-1::feature/local-branch': {
-        data: makeHostedReview({
-          provider: 'bitbucket',
-          number: 789,
-          title: 'Bitbucket branch PR',
-          url: 'https://bitbucket.org/acme/orca/pull-requests/789'
-        }),
-        fetchedAt: Date.now()
-      }
-    }
-    const { default: WorktreeCard } = await import('./WorktreeCard')
-
-    const markup = renderWorktreeCardMarkup(
-      <WorktreeCard
-        worktree={makeWorktree({ linkedPR: null })}
-        repo={makeRepo()}
-        isActive={false}
-      />
-    )
-
-    expect(markup).toContain('PR checks: Passing')
-    expect(markup).not.toContain('Linked PR #789')
-  })
-
   it('keeps the stored branch title by default when a hosted review title is available', async () => {
     hostedReviewCache = {
       'local::repo-1::feature/local-branch': {

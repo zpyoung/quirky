@@ -12,9 +12,6 @@ const {
   execFileAsyncMock,
   hydrateShellPathMock,
   mergePathSegmentsMock,
-  getBitbucketAuthStatusMock,
-  getAzureDevOpsAuthStatusMock,
-  getGiteaAuthStatusMock,
   detectCommandsInInstallDirsMock,
   mergePersistedWindowsPathAsyncMock,
   mergePersistedWindowsPathMock
@@ -24,9 +21,6 @@ const {
   execFileAsyncMock: vi.fn(),
   hydrateShellPathMock: vi.fn(),
   mergePathSegmentsMock: vi.fn(),
-  getBitbucketAuthStatusMock: vi.fn(),
-  getAzureDevOpsAuthStatusMock: vi.fn(),
-  getGiteaAuthStatusMock: vi.fn(),
   detectCommandsInInstallDirsMock: vi.fn(),
   mergePersistedWindowsPathAsyncMock: vi.fn(),
   mergePersistedWindowsPathMock: vi.fn()
@@ -45,12 +39,6 @@ vi.mock('../startup/hydrate-shell-path', () => ({
   hydrateShellPath: hydrateShellPathMock,
   mergePathSegments: mergePathSegmentsMock
 }))
-
-vi.mock('../bitbucket/client', () => ({ getBitbucketAuthStatus: getBitbucketAuthStatusMock }))
-vi.mock('../azure-devops/client', () => ({
-  getAzureDevOpsAuthStatus: getAzureDevOpsAuthStatusMock
-}))
-vi.mock('../gitea/client', () => ({ getGiteaAuthStatus: getGiteaAuthStatusMock }))
 
 // Isolate the subprocess-spawn assertion from the fs-based install-dir fallback.
 vi.mock('../../shared/local-agent-install-dir-detection', () => ({

@@ -35,9 +35,6 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
     isCurrentAsyncResult,
     isFolder,
     isGitLabReviewContext,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
-    linkedGiteaPR,
     linkedGitLabMR,
     linkedPR,
     ownerTarget,
@@ -178,10 +175,7 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
           admissionTier: 'interactive',
           linkedGitHubPR: linkedPR,
           fallbackGitHubPR: fallbackGitHubPRNumber,
-          linkedGitLabMR,
-          linkedBitbucketPR,
-          linkedAzureDevOpsPR,
-          linkedGiteaPR
+          linkedGitLabMR
         })
         if (!isCurrentRequest()) {
           return
@@ -234,10 +228,7 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
         admissionTier: 'interactive',
         linkedGitHubPR: linkedPR,
         fallbackGitHubPR: refreshedPR?.number ?? fallbackGitHubPRNumber,
-        linkedGitLabMR,
-        linkedBitbucketPR,
-        linkedAzureDevOpsPR,
-        linkedGiteaPR
+        linkedGitLabMR
       })
       if (!isCurrentRequest()) {
         return
@@ -367,9 +358,6 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
     linkedPR,
     fallbackGitHubPRNumber,
     fetchGitLabDetails,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
-    linkedGiteaPR,
     linkedGitLabMR,
     isFolder,
     isGitLabReviewContext,

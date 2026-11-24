@@ -109,12 +109,7 @@ function computeActiveChecksStatus(state: ActiveChecksStatusState): CheckStatus 
   if (hostedReview && hostedReview.provider !== 'github') {
     return hostedReview.status
   }
-  if (
-    (activeWorktree.linkedGitLabMR ?? null) !== null ||
-    (activeWorktree.linkedBitbucketPR ?? null) !== null ||
-    (activeWorktree.linkedAzureDevOpsPR ?? null) !== null ||
-    (activeWorktree.linkedGiteaPR ?? null) !== null
-  ) {
+  if ((activeWorktree.linkedGitLabMR ?? null) !== null) {
     return null
   }
   const branchPR = state.prCache[prCacheKey]?.data ?? null

@@ -118,10 +118,7 @@ describe('parent PR checks refresh', () => {
       id: 'repo-1::/linked',
       displayName: 'Z linked',
       linkedPR: 7,
-      linkedGitLabMR: 9,
-      linkedBitbucketPR: 10,
-      linkedAzureDevOpsPR: 11,
-      linkedGiteaPR: 12
+      linkedGitLabMR: 9
     })
     const candidates = getParentPrChecksRefreshCandidates({
       worktrees: [unlinked, linked],
@@ -146,9 +143,6 @@ describe('parent PR checks refresh', () => {
         repoId: 'repo-1',
         linkedGitHubPR: 7,
         linkedGitLabMR: 9,
-        linkedBitbucketPR: 10,
-        linkedAzureDevOpsPR: 11,
-        linkedGiteaPR: 12,
         currentHeadOid: 'abc',
         staleWhileRevalidate: true
       }

@@ -353,10 +353,7 @@ describe('workspace attachments', () => {
         linkedItems: [mr],
         linkedItemsSelectionChanged: true,
         linkedPR: null,
-        linkedGitLabMR: null,
-        linkedBitbucketPR: null,
-        linkedAzureDevOpsPR: null,
-        linkedGiteaPR: null
+        linkedGitLabMR: null
       }
     )
     expect(result.linkedItems).toEqual([mr])

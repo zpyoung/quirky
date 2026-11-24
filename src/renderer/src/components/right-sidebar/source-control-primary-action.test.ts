@@ -578,29 +578,4 @@ describe('resolvePrimaryAction', () => {
       disabled: false
     })
   })
-
-  it.each(['azure-devops', 'gitea'] as const)(
-    'returns Create PR when a clean tracked %s branch is eligible for review creation',
-    (provider) => {
-      const result = resolvePrimaryAction(
-        inputs({
-          upstreamStatus: upstreamInSync,
-          hostedReviewCreation: {
-            provider,
-            review: null,
-            canCreate: true,
-            blockedReason: null,
-            nextAction: null,
-            reviewLookupOutcome: 'not_found'
-          }
-        })
-      )
-      expect(result).toEqual({
-        kind: 'create_pr',
-        label: 'Create PR',
-        title: 'Create a pull request for this branch',
-        disabled: false
-      })
-    }
-  )
 })

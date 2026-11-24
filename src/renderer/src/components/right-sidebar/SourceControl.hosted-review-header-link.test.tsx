@@ -93,22 +93,4 @@ describe('HostedReviewHeaderLink', () => {
     expect(onOpenHostedReviewInChecks).toHaveBeenCalledTimes(1)
     expect(openHttpLinkMock).not.toHaveBeenCalled()
   })
-
-  it('keeps other provider reviews as external hosted-review links', () => {
-    const markup = renderToStaticMarkup(
-      <HostedReviewHeaderLink
-        review={makeReview({
-          provider: 'bitbucket',
-          number: 31,
-          url: 'https://bitbucket.org/acme/widgets/pull-requests/31'
-        })}
-        onOpenHostedReviewInChecks={vi.fn()}
-      />
-    )
-
-    expect(markup).toContain('<a')
-    expect(markup).toContain('href="https://bitbucket.org/acme/widgets/pull-requests/31"')
-    expect(markup).toContain('target="_blank"')
-    expect(markup).toContain('PR #31')
-  })
 })

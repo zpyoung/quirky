@@ -46,9 +46,6 @@ export function useChecksPanelReviewState(model: ChecksPanelReviewStateInput) {
     hostedReview,
     hostedReviewCreationSnapshot,
     isFolder,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
-    linkedGiteaPR,
     linkedGitLabMR,
     linkedPR,
     linkedReviewNumber,
@@ -132,10 +129,7 @@ export function useChecksPanelReviewState(model: ChecksPanelReviewStateInput) {
               : null,
           linkedGitHubPR: linkedPR,
           fallbackGitHubPR: fallbackGitHubPRNumber,
-          linkedGitLabMR,
-          linkedBitbucketPR,
-          linkedAzureDevOpsPR,
-          linkedGiteaPR
+          linkedGitLabMR
         })
       : ''
   const gitStatusInputs = readChecksPanelGitStatusSnapshot(gitStatusSnapshot, panelContextKey)
@@ -180,11 +174,7 @@ export function useChecksPanelReviewState(model: ChecksPanelReviewStateInput) {
     hostedReviewCreation?.provider
   )
   // Only GitHub runs the gh refresh coordinator; re-derive GitHub-ness from linked reviews because resolveHostedReviewCreationProvider defaults null→'github' (can't tell unknown from GitHub), staying GitHub-optimistic pre-eligibility.
-  const hasNonGitHubLinkedReview =
-    activeWorktree?.linkedGitLabMR != null ||
-    activeWorktree?.linkedBitbucketPR != null ||
-    activeWorktree?.linkedAzureDevOpsPR != null ||
-    activeWorktree?.linkedGiteaPR != null
+  const hasNonGitHubLinkedReview = activeWorktree?.linkedGitLabMR != null
   const isGitHubReviewContext = hostedReviewCreation
     ? hostedReviewCreation.provider === 'github'
     : !hasNonGitHubLinkedReview

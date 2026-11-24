@@ -89,9 +89,6 @@ export async function executeWorktreeCreation(
         creationId,
         preparedRequest.linkedLinearIssueWorkspaceId,
         preparedRequest.linkedLinearIssueOrganizationUrlKey,
-        preparedRequest.linkedBitbucketPR,
-        preparedRequest.linkedAzureDevOpsPR,
-        preparedRequest.linkedGiteaPR,
         preparedRequest.compareBaseRef,
         {
           setupOnly: preparedRequest.setupOnly,

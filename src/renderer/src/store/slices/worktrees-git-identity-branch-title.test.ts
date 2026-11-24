@@ -98,9 +98,6 @@ describe('updateWorktreeGitIdentity', () => {
       branch: 'refs/heads/stack/one',
       linkedPR: 101,
       linkedGitLabMR: 102,
-      linkedBitbucketPR: 103,
-      linkedAzureDevOpsPR: 104,
-      linkedGiteaPR: 105,
       pushTarget: { remoteName: 'fork', branchName: 'old/review-head' }
     })
 
@@ -114,9 +111,6 @@ describe('updateWorktreeGitIdentity', () => {
       branch: 'refs/heads/stack/two',
       linkedPR: null,
       linkedGitLabMR: null,
-      linkedBitbucketPR: null,
-      linkedAzureDevOpsPR: null,
-      linkedGiteaPR: null,
       pushTarget: undefined
     })
   })

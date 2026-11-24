@@ -34,8 +34,7 @@ describe('preflight RPC methods', () => {
     const status = {
       git: { installed: true },
       gh: { installed: true, authenticated: true },
-      glab: { installed: false, authenticated: false },
-      bitbucket: { configured: false, authenticated: false, account: null }
+      glab: { installed: false, authenticated: false }
     }
     runPreflightCheckMock.mockResolvedValueOnce(status)
     const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService

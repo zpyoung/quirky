@@ -248,10 +248,7 @@ export const createHostedReviewSlice: StateCreator<AppState, [], [], HostedRevie
                   // Why: fallback PR hints come from this branch's PR cache; preserve that provenance separately from request identity.
                   ...(review?.provider === 'github' &&
                   options?.linkedGitHubPR == null &&
-                  options?.linkedGitLabMR == null &&
-                  options?.linkedBitbucketPR == null &&
-                  options?.linkedAzureDevOpsPR == null &&
-                  options?.linkedGiteaPR == null
+                  options?.linkedGitLabMR == null
                     ? { branchLookupGitHubPRNumber: review.number }
                     : {})
                 })

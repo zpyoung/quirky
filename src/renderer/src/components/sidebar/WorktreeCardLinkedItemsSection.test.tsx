@@ -201,7 +201,7 @@ describe('workspace linked references in hover details', () => {
           ...workspace,
           id: 'folder:docs',
           linkedPR: null,
-          linkedItems: [{ provider: 'gitea', type: 'pr', number: 7 }]
+          linkedItems: [{ provider: 'github', type: 'pr', number: 7 }]
         }}
         onManageLinks={onManage}
         issue={null}

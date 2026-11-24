@@ -39,10 +39,7 @@ describe('hosted review RPC methods', () => {
       branch: 'feature/windows',
       currentHeadOid: null,
       linkedGitHubPR: 12,
-      linkedGitLabMR: null,
-      linkedBitbucketPR: null,
-      linkedAzureDevOpsPR: null,
-      linkedGiteaPR: null
+      linkedGitLabMR: null
     })
     expect(response).toMatchObject({
       ok: true,
@@ -134,10 +131,7 @@ describe('hosted review RPC methods', () => {
       ahead: 0,
       behind: 0,
       linkedGitHubPR: null,
-      linkedGitLabMR: null,
-      linkedBitbucketPR: null,
-      linkedAzureDevOpsPR: null,
-      linkedGiteaPR: null
+      linkedGitLabMR: null
     })
     expect(response).toMatchObject({
       ok: true,

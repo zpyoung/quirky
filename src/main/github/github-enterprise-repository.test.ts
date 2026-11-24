@@ -267,7 +267,7 @@ describe('getEnterpriseGitHubRepoSlug', () => {
     expect(ghExecFileAsyncMock).not.toHaveBeenCalled()
   })
 
-  it('declines a custom host the user is not gh-authenticated to (leaves it for Gitea)', async () => {
+  it('declines a custom host the user is not gh-authenticated to', async () => {
     mockOriginRemote('https://gitea.example.com/team/orca.git')
     mockHostNotAuthenticated()
 

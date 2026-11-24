@@ -10,32 +10,11 @@ export type PreflightMocks = {
   runWslProcessMock?: Mock
   hydrateShellPathMock: Mock
   mergePathSegmentsMock: Mock
-  getBitbucketAuthStatusMock: Mock
-  getAzureDevOpsAuthStatusMock: Mock
-  getGiteaAuthStatusMock: Mock
   resolveCliCommandsMock: Mock
   isCommandOnLocalPathMock: Mock
   listLocalCommandPathsMock: Mock
   mergePersistedWindowsPathAsyncMock: Mock
   mergePersistedWindowsPathMock: Mock
-}
-
-export const defaultBitbucketStatus = { configured: false, authenticated: false, account: null }
-
-export const defaultAzureDevOpsStatus = {
-  configured: false,
-  authenticated: false,
-  account: null,
-  baseUrl: null,
-  tokenConfigured: false
-}
-
-export const defaultGiteaStatus = {
-  configured: false,
-  authenticated: false,
-  account: null,
-  baseUrl: null,
-  tokenConfigured: false
 }
 
 /** Shared per-test reset: mock defaults, cleared cache, darwin platform, fresh handler map. */
@@ -46,9 +25,6 @@ export function resetPreflightMocks(mocks: PreflightMocks, handlers: HandlerMap)
     runWslProcessMock,
     hydrateShellPathMock,
     mergePathSegmentsMock,
-    getBitbucketAuthStatusMock,
-    getAzureDevOpsAuthStatusMock,
-    getGiteaAuthStatusMock,
     resolveCliCommandsMock,
     isCommandOnLocalPathMock,
     listLocalCommandPathsMock,
@@ -67,9 +43,6 @@ export function resetPreflightMocks(mocks: PreflightMocks, handlers: HandlerMap)
   // still assert on the command names they were written against.
   listLocalCommandPathsMock.mockReset()
   listLocalCommandPathsMock.mockResolvedValue([])
-  getBitbucketAuthStatusMock.mockReset()
-  getAzureDevOpsAuthStatusMock.mockReset()
-  getGiteaAuthStatusMock.mockReset()
   mergePersistedWindowsPathAsyncMock.mockReset()
   mergePersistedWindowsPathAsyncMock.mockResolvedValue(undefined)
   mergePersistedWindowsPathMock.mockReset()
@@ -95,9 +68,6 @@ export function resetPreflightMocks(mocks: PreflightMocks, handlers: HandlerMap)
       return false
     }
   })
-  getBitbucketAuthStatusMock.mockResolvedValue(defaultBitbucketStatus)
-  getAzureDevOpsAuthStatusMock.mockResolvedValue(defaultAzureDevOpsStatus)
-  getGiteaAuthStatusMock.mockResolvedValue(defaultGiteaStatus)
   _resetPreflightCache()
   Object.defineProperty(process, 'platform', {
     configurable: true,

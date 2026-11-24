@@ -213,9 +213,7 @@ describe('OnboardingFlow', () => {
     expect(html).not.toContain(
       '<h3 class="text-[15px] font-semibold leading-tight text-foreground">Linear</h3>'
     )
-    expect(html).toContain(
-      'Linear, GitLab, Bitbucket, Azure DevOps, Gitea, and Jira live in Settings'
-    )
+    expect(html).toContain('Linear, GitLab, and Jira live in Settings')
   })
 
   it('exposes an accessible onboarding dialog', () => {

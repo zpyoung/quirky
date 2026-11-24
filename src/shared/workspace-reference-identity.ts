@@ -5,23 +5,19 @@ import type { WorkspaceAttachment } from './worktree/types'
 
 export type WorkspaceReferenceQuery =
   | { kind: 'url'; identity: string }
-  // Self-hosted /owner/repo/issues/N cannot prove GitHub vs Gitea, so match type+host+path only.
+  // Self-hosted /owner/repo/issues/N cannot prove the provider, so match type+host+path only.
   | { kind: 'issue-url'; route: string }
   | { kind: 'issue-key'; identifier: string }
 
 const HOST_PROVIDERS: Readonly<Record<string, WorkspaceAttachment['provider']>> = {
   'github.com': 'github',
   'gitlab.com': 'gitlab',
-  'linear.app': 'linear',
-  'codeberg.org': 'gitea',
-  'bitbucket.org': 'bitbucket',
-  'dev.azure.com': 'azure-devops'
+  'linear.app': 'linear'
 }
 
 const CASE_INSENSITIVE_PATH_PROVIDERS: ReadonlySet<WorkspaceAttachment['provider']> = new Set([
   'github',
-  'gitlab',
-  'gitea'
+  'gitlab'
 ])
 
 function referenceUrl(input: string): URL {
@@ -91,7 +87,7 @@ function parseReferenceRoute(
       url: url.href
     }
   }
-  // Git hosts (and Bitbucket Server /repos/ file views) also serve /browse/KEY-1 paths.
+  // Git hosts also serve /browse/KEY-1 paths.
   const jira =
     (!providerHint || providerHint === 'jira') && !url.pathname.includes('/repos/')
       ? parseJiraIssueUrl(url.href)
@@ -117,34 +113,11 @@ function parseReferenceRoute(
       gitlab[3]
     )
   }
-  const azure = /^(\/.+\/_git\/[^/]+)\/pullrequest\/(\d+)(?:\/.*)?$/.exec(url.pathname)
-  if (azure) {
-    return numberedReference(url, 'azure-devops', 'pr', `${azure[1]}/pullrequest`, azure[2])
-  }
-  const bitbucket = /^(\/.+)\/pull-requests\/(\d+)(?:\/.*)?$/.exec(url.pathname)
-  if (
-    bitbucket &&
-    (url.hostname === 'bitbucket.org' ||
-      /\/projects\/[^/]+\/repos\/[^/]+$/.test(bitbucket[1]) ||
-      providerHint === 'bitbucket')
-  ) {
-    return numberedReference(url, 'bitbucket', 'pr', `${bitbucket[1]}/pull-requests`, bitbucket[2])
-  }
   const git = /^(\/[^/]+\/[^/]+)\/(pull|pulls|issues)\/(\d+)(?:\/.*)?$/.exec(url.pathname)
   if (git && url.hostname !== 'linear.app' && url.hostname !== 'gitlab.com') {
-    const provider =
-      url.hostname === 'github.com' || git[2] === 'pull'
-        ? 'github'
-        : url.hostname === 'codeberg.org' || git[2] === 'pulls'
-          ? 'gitea'
-          : url.hostname === 'bitbucket.org'
-            ? 'bitbucket'
-            : providerHint
-    if (provider === 'github' || provider === 'gitea' || provider === 'bitbucket') {
-      if (
-        (git[2] === 'pulls' && provider !== 'gitea') ||
-        (git[2] === 'pull' && provider !== 'github')
-      ) {
+    const provider = url.hostname === 'github.com' || git[2] === 'pull' ? 'github' : providerHint
+    if (provider === 'github') {
+      if (git[2] === 'pulls') {
         throw new Error('The reference URL does not match its provider.')
       }
       return numberedReference(
@@ -278,10 +251,7 @@ export function matchesWorkspaceReferenceQuery(
     return getWorkspaceReferenceIdentity(item) === query.identity
   }
   if (query.kind === 'issue-url') {
-    return (
-      (item.provider === 'github' || item.provider === 'gitea') &&
-      referenceRoute(item) === query.route
-    )
+    return item.provider === 'github' && referenceRoute(item) === query.route
   }
   return (
     item.type === 'issue' &&

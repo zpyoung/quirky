@@ -24,10 +24,7 @@ export const HOSTED_REVIEW_METHODS = [
         ...(params.force === true ? { force: true } : {}),
         linkedGitHubPR: params.linkedGitHubPR ?? null,
         ...(fallbackGitHubPR !== null ? { fallbackGitHubPR } : {}),
-        linkedGitLabMR: params.linkedGitLabMR ?? null,
-        linkedBitbucketPR: params.linkedBitbucketPR ?? null,
-        linkedAzureDevOpsPR: params.linkedAzureDevOpsPR ?? null,
-        linkedGiteaPR: params.linkedGiteaPR ?? null
+        linkedGitLabMR: params.linkedGitLabMR ?? null
       })
     }
   }),
@@ -49,10 +46,7 @@ export const HOSTED_REVIEW_METHODS = [
         behind: params.behind,
         linkedGitHubPR: params.linkedGitHubPR ?? null,
         ...(fallbackGitHubPR !== null ? { fallbackGitHubPR } : {}),
-        linkedGitLabMR: params.linkedGitLabMR ?? null,
-        linkedBitbucketPR: params.linkedBitbucketPR ?? null,
-        linkedAzureDevOpsPR: params.linkedAzureDevOpsPR ?? null,
-        linkedGiteaPR: params.linkedGiteaPR ?? null
+        linkedGitLabMR: params.linkedGitLabMR ?? null
       })
     }
   }),

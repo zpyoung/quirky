@@ -18,15 +18,7 @@ export type ChecksPanelCreatedReviewInput = Pick<
   | 'setRightSidebarTab'
   | 'updateWorktreeMeta'
 > &
-  Pick<
-    ChecksPanelContextState,
-    | 'fallbackGitHubPRNumber'
-    | 'linkedAzureDevOpsPR'
-    | 'linkedBitbucketPR'
-    | 'linkedGiteaPR'
-    | 'linkedGitLabMR'
-    | 'linkedPR'
-  > &
+  Pick<ChecksPanelContextState, 'fallbackGitHubPRNumber' | 'linkedGitLabMR' | 'linkedPR'> &
   Pick<ChecksPanelPollingState, 'fetchGitLabDetails'> &
   Pick<ChecksPanelCheckAndReviewActionsState, 'refreshLinkedGitHubPullRequest'>
 
@@ -38,9 +30,6 @@ export function useChecksPanelCreatedReview(model: ChecksPanelCreatedReviewInput
     fallbackGitHubPRNumber,
     fetchGitLabDetails,
     fetchHostedReviewForBranch,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
-    linkedGiteaPR,
     linkedGitLabMR,
     linkedPR,
     refreshLinkedGitHubPullRequest,
@@ -75,9 +64,6 @@ export function useChecksPanelCreatedReview(model: ChecksPanelCreatedReviewInput
           linkedGitHubPR: linkedPR,
           fallbackGitHubPR: fallbackGitHubPRNumber,
           linkedGitLabMR,
-          linkedBitbucketPR,
-          linkedAzureDevOpsPR,
-          linkedGiteaPR,
           ...createdLink.lookup
         }
         if (result.provider === 'gitlab') {
@@ -119,9 +105,6 @@ export function useChecksPanelCreatedReview(model: ChecksPanelCreatedReviewInput
       fallbackGitHubPRNumber,
       fetchGitLabDetails,
       fetchHostedReviewForBranch,
-      linkedAzureDevOpsPR,
-      linkedBitbucketPR,
-      linkedGiteaPR,
       linkedGitLabMR,
       linkedPR,
       refreshLinkedGitHubPullRequest,

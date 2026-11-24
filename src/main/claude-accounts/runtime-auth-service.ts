@@ -37,7 +37,7 @@ export class ClaudeRuntimeAuthService {
     _target?: ClaudeAccountSelectionTarget
   ): Promise<ClaudeRuntimeAuthPreparation> {
     try {
-      return await this.router.preparation()
+      return this.router.preparation()
     } catch (error) {
       // Why not thrown: one usage cycle polls every provider, so one account must not stop it.
       return {

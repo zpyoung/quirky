@@ -4,7 +4,6 @@ import {
   addWorktreeMock,
   getBranchConflictKindMock,
   getPRForBranchMock,
-  getHostedReviewForBranchMock,
   computeWorktreePathMock,
   gitExecFileAsyncMock
 } from './worktrees-test-module-mocks'
@@ -395,111 +394,6 @@ describe('registerWorktreeHandlers', () => {
         baseRef: 'refs/remotes/origin/main',
         linkedGitLabMR: 7
       })
-    )
-  })
-
-  it('allows a selected Bitbucket PR branch override to match its remote push target', async () => {
-    getBranchConflictKindMock.mockImplementation(async (_repoPath: string, branch: string) =>
-      branch === 'feature/bitbucket' ? 'remote' : null
-    )
-    listWorktreesMock.mockResolvedValue([
-      {
-        path: '/workspace/bitbucket-title',
-        head: 'abc123',
-        branch: 'refs/heads/feature/bitbucket',
-        isBare: false,
-        isMainWorktree: false
-      }
-    ])
-    store.setWorktreeMeta.mockImplementation((_target: HostWorktreeTarget, meta) => meta)
-    getHostedReviewForBranchMock.mockResolvedValueOnce({
-      provider: 'bitbucket',
-      number: 11,
-      title: 'Bitbucket PR',
-      state: 'open',
-      url: 'https://bitbucket.org/team/repo/pull-requests/11',
-      status: 'success',
-      updatedAt: '2026-05-21T00:00:00Z',
-      mergeable: 'UNKNOWN'
-    })
-
-    await handlers['worktrees:create'](null, {
-      repoId: 'repo-1',
-      name: 'bitbucket-title',
-      baseBranch: 'abc123',
-      branchNameOverride: 'feature/bitbucket',
-      linkedBitbucketPR: 11,
-      pushTarget: { remoteName: 'origin', branchName: 'feature/bitbucket' }
-    })
-
-    expect(addWorktreeMock).toHaveBeenCalledWith(
-      '/workspace/repo',
-      '/workspace/bitbucket-title',
-      'feature/bitbucket',
-      'abc123',
-      false,
-      false,
-      {}
-    )
-    expect(store.setWorktreeMeta).toHaveBeenCalledWith(
-      hostWorktreeTarget({ id: 'repo-1::/workspace/bitbucket-title', hostId: 'local' }),
-      expect.objectContaining({ linkedBitbucketPR: 11 })
-    )
-    expect(getHostedReviewForBranchMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        repoPath: '/workspace/repo',
-        branch: 'feature/bitbucket',
-        linkedBitbucketPR: 11
-      })
-    )
-    expect(getPRForBranchMock).not.toHaveBeenCalled()
-  })
-
-  it('suffixes a selected Bitbucket PR branch when the existing PR is different', async () => {
-    getBranchConflictKindMock.mockImplementation(async (_repoPath: string, branch: string) =>
-      branch === 'feature/bitbucket' ? 'remote' : null
-    )
-    listWorktreesMock.mockResolvedValue([
-      {
-        path: '/workspace/bitbucket-title-2',
-        head: 'abc123',
-        branch: 'refs/heads/feature/bitbucket-2',
-        isBare: false,
-        isMainWorktree: false
-      }
-    ])
-    getHostedReviewForBranchMock.mockResolvedValueOnce({
-      provider: 'bitbucket',
-      number: 12,
-      title: 'Different Bitbucket PR',
-      state: 'open',
-      url: 'https://bitbucket.org/team/repo/pull-requests/12',
-      status: 'success',
-      updatedAt: '2026-05-21T00:00:00Z',
-      mergeable: 'UNKNOWN'
-    })
-
-    await handlers['worktrees:create'](null, {
-      repoId: 'repo-1',
-      name: 'bitbucket-title',
-      baseBranch: 'abc123',
-      branchNameOverride: 'feature/bitbucket',
-      linkedBitbucketPR: 11,
-      pushTarget: { remoteName: 'origin', branchName: 'feature/bitbucket' }
-    })
-
-    expect(addWorktreeMock).toHaveBeenCalledWith(
-      '/workspace/repo',
-      '/workspace/bitbucket-title-2',
-      'feature/bitbucket-2',
-      'abc123',
-      false,
-      false,
-      {}
-    )
-    expect(store.setWorktreeMeta).toHaveBeenCalledWith(
-      hostWorktreeTarget({ id: 'repo-1::/workspace/bitbucket-title-2', hostId: 'local' }),
-      expect.objectContaining({ linkedBitbucketPR: 11 })
     )
   })
 

@@ -194,9 +194,6 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
       undefined,
       item.linearWorkspaceId,
       item.linearOrganizationUrlKey,
-      undefined,
-      undefined,
-      undefined,
       resolvedCompareBaseRef,
       { executionHostId: repoOwnerHostId }
     )

@@ -84,22 +84,7 @@ test.describe('Feature tour modal', () => {
         preflightStatus: {
           git: { installed: true },
           gh: { installed: true, authenticated: false },
-          glab: { installed: false, authenticated: false },
-          bitbucket: { configured: false, authenticated: false, account: null },
-          azureDevOps: {
-            configured: false,
-            authenticated: false,
-            account: null,
-            baseUrl: null,
-            tokenConfigured: false
-          },
-          gitea: {
-            configured: false,
-            authenticated: false,
-            account: null,
-            baseUrl: null,
-            tokenConfigured: false
-          }
+          glab: { installed: false, authenticated: false }
         },
         preflightStatusChecked: true,
         preflightStatusLoading: false,
@@ -194,22 +179,7 @@ test.describe('Feature tour modal', () => {
       {
         git: { installed: true },
         gh: { installed: true, authenticated: true },
-        glab: { installed: false, authenticated: false },
-        bitbucket: { configured: false, authenticated: false, account: null },
-        azureDevOps: {
-          configured: false,
-          authenticated: false,
-          account: null,
-          baseUrl: null,
-          tokenConfigured: false
-        },
-        gitea: {
-          configured: false,
-          authenticated: false,
-          account: null,
-          baseUrl: null,
-          tokenConfigured: false
-        }
+        glab: { installed: false, authenticated: false }
       }
     )
     await orcaPage.evaluate(async () => {

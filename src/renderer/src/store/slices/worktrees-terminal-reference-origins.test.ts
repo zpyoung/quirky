@@ -151,9 +151,6 @@ describe('terminal reference evidence', () => {
           {
             ...workspace,
             linkedGitLabMR: null,
-            linkedBitbucketPR: null,
-            linkedAzureDevOpsPR: null,
-            linkedGiteaPR: null,
             linkedItems: [
               ...getWorkspaceAttachments(workspace),
               {

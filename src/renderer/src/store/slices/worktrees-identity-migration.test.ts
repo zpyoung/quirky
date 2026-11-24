@@ -258,9 +258,6 @@ describe('migrateWorktreeIdentity', () => {
         updates: {
           linkedPR: null,
           linkedGitLabMR: null,
-          linkedBitbucketPR: null,
-          linkedAzureDevOpsPR: null,
-          linkedGiteaPR: null,
           pushTarget: undefined
         }
       })
@@ -397,9 +394,6 @@ describe('migrateWorktreeIdentity', () => {
         updates: {
           linkedPR: null,
           linkedGitLabMR: null,
-          linkedBitbucketPR: null,
-          linkedAzureDevOpsPR: null,
-          linkedGiteaPR: null,
           pushTarget: undefined
         }
       })
@@ -455,9 +449,6 @@ describe('migrateWorktreeIdentity', () => {
         updates: {
           linkedPR: null,
           linkedGitLabMR: null,
-          linkedBitbucketPR: null,
-          linkedAzureDevOpsPR: null,
-          linkedGiteaPR: null,
           pushTarget: undefined
         }
       })

@@ -121,20 +121,8 @@ export function useWorktreeCardReviewDetails({
     hostedReviewEntry !== undefined ? hostedReviewEntry.data : undefined
   const linkedGitHubPR = worktree.linkedPR ?? null
   const linkedGitLabMR = worktree.linkedGitLabMR ?? null
-  const linkedBitbucketPR = worktree.linkedBitbucketPR ?? null
-  const linkedAzureDevOpsPR = worktree.linkedAzureDevOpsPR ?? null
-  const linkedGiteaPR = worktree.linkedGiteaPR ?? null
-  const hasNonGitHubLinkedReview =
-    linkedGitLabMR !== null ||
-    linkedBitbucketPR !== null ||
-    linkedAzureDevOpsPR !== null ||
-    linkedGiteaPR !== null
-  const hasLinkedReview =
-    linkedGitHubPR !== null ||
-    linkedGitLabMR !== null ||
-    linkedBitbucketPR !== null ||
-    linkedAzureDevOpsPR !== null ||
-    linkedGiteaPR !== null
+  const hasNonGitHubLinkedReview = linkedGitLabMR !== null
+  const hasLinkedReview = linkedGitHubPR !== null || linkedGitLabMR !== null
   // Why: a newer hosted-review miss trusts the merged-PR cache only when the stored head proves it still describes the current commit.
   const cachedBranchPR = prCacheEntry?.data
   const cachedBranchPRFetchedAt = prCacheEntry?.fetchedAt
@@ -178,22 +166,14 @@ export function useWorktreeCardReviewDetails({
     !isCachedMergedBranchPRCurrentForWorktree(hostedReview, worktree)
       ? null
       : hostedReviewEntry?.branchLookupGitHubPRNumber
-  const prDisplay = getWorktreeCardPrDisplay(
-    cachedBranchReview,
-    linkedGitHubPR,
-    linkedGitLabMR,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR,
-    {
-      reviewHintKey:
-        (useCachedBranchReview || cachedMergedBranchPRMatchesCurrentHead) && !hasLinkedReview
-          ? ''
-          : hostedReviewEntry?.linkedReviewHintKey,
-      branchLookupGitHubPRNumber,
-      suppressedGitHubPR: worktree.suppressedGitHubPR ?? null
-    }
-  )
+  const prDisplay = getWorktreeCardPrDisplay(cachedBranchReview, linkedGitHubPR, linkedGitLabMR, {
+    reviewHintKey:
+      (useCachedBranchReview || cachedMergedBranchPRMatchesCurrentHead) && !hasLinkedReview
+        ? ''
+        : hostedReviewEntry?.linkedReviewHintKey,
+    branchLookupGitHubPRNumber,
+    suppressedGitHubPR: worktree.suppressedGitHubPR ?? null
+  })
 
   return {
     detachedHeadDisplay,
@@ -214,9 +194,6 @@ export function useWorktreeCardReviewDetails({
     linearWorkspaceId,
     linkedGitHubPR,
     linkedGitLabMR,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR,
     cachedBranchFallbackGitHubPRNumber,
     prDisplay
   }

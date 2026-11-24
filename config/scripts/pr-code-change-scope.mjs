@@ -110,7 +110,6 @@ const CODEX_INDEX_HEAL_CONTRACT_PREFIXES = [
   'src/main/codex/codex-session-backfill',
   'src/main/codex/codex-session-index-heal-state',
   'src/main/codex-cli/command',
-  'src/main/win32-utils',
   'src/shared/node-cli-command-resolution',
   'src/shared/windows-batch-spawn'
 ]
@@ -277,7 +276,6 @@ const MANAGED_HOOK_PREFIXES = [
   'config/scripts/packaged-process-host-fixture',
   'src/packages/process-host/',
   'config/scripts/build-wsl-guest',
-  'src/wsl-guest/',
   'src/shared/agent-hook',
   'src/main/agent-hooks/'
 ]

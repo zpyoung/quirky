@@ -34,16 +34,11 @@ describe('hosted remote URLs', () => {
     })
   })
 
-  it('parses nested GitLab and Bitbucket remotes', () => {
+  it('parses nested GitLab remotes', () => {
     expect(parseHostedRemote('git@gitlab.com:group/sub/repo.git')).toEqual({
       host: 'gitlab.com',
       path: 'group/sub/repo',
       provider: 'gitlab'
-    })
-    expect(parseHostedRemote('https://bitbucket.org/team/repo.git')).toEqual({
-      host: 'bitbucket.org',
-      path: 'team/repo',
-      provider: 'bitbucket'
     })
   })
 
@@ -57,10 +52,6 @@ describe('hosted remote URLs', () => {
     ).toBe('https://gitlab.com/group/sub/repo/-/blob/feature%2Fx/src/a.ts#L9')
 
     expect(
-      buildHostedRemoteFileUrl('git@bitbucket.org:team/repo.git', 'src/a.ts', 'feature/x', 7)
-    ).toBe('https://bitbucket.org/team/repo/src/feature%2Fx/src/a.ts#a.ts-7')
-
-    expect(
       buildHostedRemoteFileUrl(
         'ssh://git@ssh.github.com:443/Org/Repo.git',
         'src/a.ts',
@@ -70,12 +61,6 @@ describe('hosted remote URLs', () => {
     ).toBe('https://github.com/Org/Repo/blob/feature%2Fx/src/a.ts#L5')
   })
 
-  it('builds Bitbucket line fragments from the target file name', () => {
-    expect(
-      buildHostedRemoteFileUrl('https://bitbucket.org/team/repo.git', 'src/a file.ts', 'main', 29)
-    ).toBe('https://bitbucket.org/team/repo/src/main/src/a%20file.ts#a%20file.ts-29')
-  })
-
   it('builds commit URLs per provider from ssh and https remotes', () => {
     const sha = '0123456789abcdef0123456789abcdef01234567'
     expect(buildHostedRemoteCommitUrl('git@github.com:Org/Repo.git', sha)).toBe(
@@ -83,9 +68,6 @@ describe('hosted remote URLs', () => {
     )
     expect(buildHostedRemoteCommitUrl('https://gitlab.com/group/sub/repo.git', sha)).toBe(
       `https://gitlab.com/group/sub/repo/-/commit/${sha}`
-    )
-    expect(buildHostedRemoteCommitUrl('git@bitbucket.org:team/repo.git', sha)).toBe(
-      `https://bitbucket.org/team/repo/commits/${sha}`
     )
   })
 

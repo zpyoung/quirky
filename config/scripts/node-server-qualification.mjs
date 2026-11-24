@@ -23,15 +23,13 @@ const CROSS_HOST_PREFIXES = [
   'src/main/node-runtime/',
   'src/main/orcad/orcad-artifact-materializer.ts',
   'src/main/orcad/orcad-host-unavailable.ts',
-  'src/main/providers/',
-  'src/wsl-guest/'
+  'src/main/providers/'
 ]
 const PLATFORM_PREFIXES = [
   'src/main/persistence/',
   'src/main/sqlite/',
   'src/main/orcad/',
   'src/main/daemon/',
-  'src/main/wsl/',
   'src/packages/process-host/'
 ]
 

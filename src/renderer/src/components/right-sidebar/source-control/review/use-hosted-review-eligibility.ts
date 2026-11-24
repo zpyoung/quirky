@@ -28,11 +28,8 @@ export function useSourceControlHostedReviewEligibility({
   isCreatePrIntentInFlight,
   isCreatingPr,
   isFolder,
-  linkedAzureDevOpsPR,
-  linkedBitbucketPR,
   linkedGitHubPR,
   linkedGitLabMR,
-  linkedGiteaPR,
   prGenerating,
   provisionalHostedReviewProvider,
   remoteStatus,
@@ -55,11 +52,8 @@ export function useSourceControlHostedReviewEligibility({
   isCreatePrIntentInFlight: boolean
   isCreatingPr: boolean
   isFolder: boolean
-  linkedAzureDevOpsPR: SourceControlLinkedReviews['linkedAzureDevOpsPR']
-  linkedBitbucketPR: SourceControlLinkedReviews['linkedBitbucketPR']
   linkedGitHubPR: SourceControlLinkedReviews['linkedGitHubPR']
   linkedGitLabMR: SourceControlLinkedReviews['linkedGitLabMR']
-  linkedGiteaPR: SourceControlLinkedReviews['linkedGiteaPR']
   prGenerating: boolean
   provisionalHostedReviewProvider: SourceControlHostedReviewProviderHint['provisionalHostedReviewProvider']
   remoteStatus: SourceControlWorktreeContext['remoteStatus']
@@ -116,10 +110,7 @@ export function useSourceControlHostedReviewEligibility({
       behind: remoteStatus?.behind,
       linkedGitHubPR,
       fallbackGitHubPR: fallbackGitHubPRNumber,
-      linkedGitLabMR,
-      linkedBitbucketPR,
-      linkedAzureDevOpsPR,
-      linkedGiteaPR
+      linkedGitLabMR
     })
       .then((result) => {
         if (!stale) {
@@ -189,9 +180,6 @@ export function useSourceControlHostedReviewEligibility({
     linkedGitHubPR,
     fallbackGitHubPRNumber,
     linkedGitLabMR,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR,
     prGenerating,
     remoteStatus?.ahead,
     remoteStatus?.behind,

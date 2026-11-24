@@ -13,10 +13,7 @@ import type {
 
 export const HOSTED_REVIEW_LINK_KEYS: readonly HostedReviewLinkKey[] = [
   'linkedPR',
-  'linkedGitLabMR',
-  'linkedBitbucketPR',
-  'linkedAzureDevOpsPR',
-  'linkedGiteaPR'
+  'linkedGitLabMR'
 ]
 
 export const CLEARED_HOSTED_REVIEW_LINK_UPDATES: Pick<
@@ -25,9 +22,6 @@ export const CLEARED_HOSTED_REVIEW_LINK_UPDATES: Pick<
 > = {
   linkedPR: null,
   linkedGitLabMR: null,
-  linkedBitbucketPR: null,
-  linkedAzureDevOpsPR: null,
-  linkedGiteaPR: null,
   pushTarget: undefined
 }
 
@@ -164,9 +158,6 @@ export function getHostedReviewLinkUpdates(
   return {
     linkedPR: worktree.linkedPR ?? null,
     linkedGitLabMR: worktree.linkedGitLabMR ?? null,
-    linkedBitbucketPR: worktree.linkedBitbucketPR ?? null,
-    linkedAzureDevOpsPR: worktree.linkedAzureDevOpsPR ?? null,
-    linkedGiteaPR: worktree.linkedGiteaPR ?? null,
     pushTarget: worktree.pushTarget
   }
 }

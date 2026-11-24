@@ -153,10 +153,7 @@ export function useChecksPanelReviewLinkActions(
           repoId: repo.id,
           repoOwnerExecutionHostId: activeWorktree.hostId,
           linkedGitHubPR: null,
-          linkedGitLabMR: nextMR,
-          linkedBitbucketPR: null,
-          linkedAzureDevOpsPR: null,
-          linkedGiteaPR: null
+          linkedGitLabMR: nextMR
         })
       }
     })

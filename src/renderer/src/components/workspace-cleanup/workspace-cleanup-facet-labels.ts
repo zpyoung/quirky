@@ -92,19 +92,13 @@ export function getWorkspaceCleanupReviewStateLabel(state: WorkspaceCleanupRevie
   }
 }
 
-/** Provider-general: GitLab MRs and Azure DevOps PRs are first-class here. */
+/** Provider-general: GitLab MRs are first-class here. */
 export function getWorkspaceCleanupReviewProviderLabel(provider: HostedReviewProvider): string {
   switch (provider) {
     case 'github':
       return 'GitHub'
     case 'gitlab':
       return 'GitLab'
-    case 'bitbucket':
-      return 'Bitbucket'
-    case 'azure-devops':
-      return 'Azure DevOps'
-    case 'gitea':
-      return 'Gitea'
     case 'unsupported':
       return translate('components.workspace.cleanup.browse.review.otherProvider', 'Other')
   }

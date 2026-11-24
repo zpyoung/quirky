@@ -105,10 +105,7 @@ describe('hosted review slice', () => {
       branch: 'feature/gitlab',
       currentHeadOid: null,
       linkedGitHubPR: null,
-      linkedGitLabMR: 5,
-      linkedBitbucketPR: null,
-      linkedAzureDevOpsPR: null,
-      linkedGiteaPR: null
+      linkedGitLabMR: 5
     })
   })
 
@@ -604,10 +601,7 @@ describe('hosted review slice', () => {
       force: true,
       repoId: 'repo-id',
       linkedGitHubPR: null,
-      linkedGitLabMR: 33,
-      linkedBitbucketPR: null,
-      linkedAzureDevOpsPR: null,
-      linkedGiteaPR: null
+      linkedGitLabMR: 33
     })
   })
 

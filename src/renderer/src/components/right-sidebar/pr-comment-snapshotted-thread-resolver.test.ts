@@ -94,7 +94,7 @@ describe('buildSnapshottedThreadResolver', () => {
     const onResolveFailed = vi.fn()
     const resolve = buildSnapshottedThreadResolver(
       deps({
-        provider: 'bitbucket',
+        provider: 'unsupported',
         githubResolveTarget: undefined,
         resolveReviewThread,
         resolveGitLabDiscussion,

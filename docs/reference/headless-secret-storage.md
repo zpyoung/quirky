@@ -1,6 +1,6 @@
 # How the headless server stores credentials
 
-The desktop app seals saved credentials (Linear, Jira, Bitbucket, API keys) with Electron's
+The desktop app seals saved credentials (Linear, Jira, API keys) with Electron's
 `safeStorage`, which uses the OS keychain. The headless server (`orcad`, the managed SSH server)
 has no Electron, so it seals them itself, on the machine it runs on
 (`src/main/orcad/orcad-secret-store.ts`).

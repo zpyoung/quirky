@@ -11,8 +11,12 @@ const BASELINE_PATH = 'config/path-literal-baseline.txt'
 const SCAN_ROOTS = ['config', '.github', 'tests']
 const SOURCE_ROOTS = 'main|renderer|shared|cli|preload|packages|types|wsl-guest'
 const RESOLVED_EXTENSIONS = ['.ts', '.tsx', '.js', '.mjs', '.cjs', '/index.ts']
-// Generated timings; a stale row only skews shard balance and is rewritten by its generator.
-const EXCLUDED_FILES = new Set(['config/scripts/ci-shard-timings.json'])
+// Generated timings skew only shard balance when stale; the rename allowlist names paths the rename
+// must skip whether or not they exist yet.
+const EXCLUDED_FILES = new Set([
+  'config/scripts/ci-shard-timings.json',
+  'config/rename-allowlist.json'
+])
 const GATE_MANIFEST = 'config/reliability-gates.jsonc'
 // Command strings in manifests and scripts name paths unquoted; in code only quoted literals count.
 const UNQUOTED_ALLOWED = /\.(?:jsonc?|ya?ml|sh|ps1)$/

@@ -92,7 +92,7 @@ export type WorkspaceCleanupGitFilterState = {
 export type WorkspaceCleanupReviewFilterState = {
   presence: WorkspaceCleanupPresence
   states: WorkspaceCleanupReviewState[]
-  /** Provider-general: github/gitlab/bitbucket/azure-devops/gitea all land here. */
+  /** Provider-general: github/gitlab land here. */
   providers: HostedReviewProvider[]
 }
 

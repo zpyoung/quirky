@@ -42,9 +42,6 @@ export function useSourceControlLinkedReviews({
   const linkedGitHubPR = activeWorktree?.linkedPR ?? null
   const fallbackGitHubPRNumber = linkedGitHubPR == null ? (activePrFromQueue?.number ?? null) : null
   const linkedGitLabMR = activeWorktree?.linkedGitLabMR ?? null
-  const linkedBitbucketPR = activeWorktree?.linkedBitbucketPR ?? null
-  const linkedAzureDevOpsPR = activeWorktree?.linkedAzureDevOpsPR ?? null
-  const linkedGiteaPR = activeWorktree?.linkedGiteaPR ?? null
   const manualReviewUrl = useMemo(
     () =>
       buildSourceControlManualReviewUrlFromContext({
@@ -53,9 +50,6 @@ export function useSourceControlLinkedReviews({
         linkedGitHubPR,
         fallbackGitHubPRNumber,
         linkedGitLabMR,
-        linkedBitbucketPR,
-        linkedAzureDevOpsPR,
-        linkedGiteaPR,
         baseRef: compareBaseRef,
         branchName,
         repoRemoteName: activeRepo?.gitRemoteIdentity?.remoteName ?? null,
@@ -72,21 +66,15 @@ export function useSourceControlLinkedReviews({
       fallbackGitHubPRNumber,
       hostedReview?.provider,
       hostedReviewCreation?.provider,
-      linkedAzureDevOpsPR,
-      linkedBitbucketPR,
       linkedGitHubPR,
       linkedGitLabMR,
-      linkedGiteaPR,
       remoteStatus?.upstreamName
     ]
   )
   const hasHostedReviewLink = hasPositiveHostedReviewNumberLink({
     linkedGitHubPR,
     fallbackGitHubPR: fallbackGitHubPRNumber,
-    linkedGitLabMR,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR
+    linkedGitLabMR
   })
   // Why: SSH-backed (connectionId) repos never fetch hostedReview, so skip the loading state or it would permanently block Publish Branch.
   const isHostedReviewStateLoading =
@@ -133,11 +121,8 @@ export function useSourceControlLinkedReviews({
     hasResolvableReviewPushTargetLink,
     hostedReviewStateForActions,
     isHostedReviewStateLoading,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
     linkedGitHubPR,
     linkedGitLabMR,
-    linkedGiteaPR,
     manualReviewUrl,
     remoteStatusForActions
   }

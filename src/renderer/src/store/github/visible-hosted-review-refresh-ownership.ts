@@ -37,12 +37,7 @@ export function hasNonGitHubReview(
   worktree: Worktree,
   candidate: GitHubPRRefreshCandidate
 ): boolean {
-  if (
-    worktree.linkedGitLabMR != null ||
-    worktree.linkedBitbucketPR != null ||
-    worktree.linkedAzureDevOpsPR != null ||
-    worktree.linkedGiteaPR != null
-  ) {
+  if (worktree.linkedGitLabMR != null) {
     return true
   }
   const key = getHostedReviewCacheKey(

@@ -1,8 +1,8 @@
-import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
-import { recordSubprocessSpawn } from '../diagnostics/main-thread-churn-probe'
+import { spawnProcess } from '@orca/process-host'
+import type { ChildProcessHandle, ProcessSpec } from '@orca/process-host/process-spec'
 import { bundledRipgrepCommand } from './bundled-ripgrep-path'
 
-export type BundledRipgrepSpawnOptions = SpawnOptions & {
+export type BundledRipgrepSpawnOptions = Pick<ProcessSpec, 'cwd' | 'stdio' | 'env'> & {
   cwd: string
   wslDistro?: string
   wslDistroForOutput?: string
@@ -15,15 +15,12 @@ export type BundledRipgrepSpawnOptions = SpawnOptions & {
 export function spawnBundledRipgrep(
   args: string[],
   options: BundledRipgrepSpawnOptions
-): ChildProcess {
-  const {
-    wslDistro: _wslDistro,
-    wslDistroForOutput: _wslDistroForOutput,
-    ...spawnOptions
-  } = options
-  const command = bundledRipgrepCommand()
-  const spawnStartedAt = performance.now()
-  const child = spawn(command, args, { ...spawnOptions, windowsHide: true })
-  recordSubprocessSpawn(command, args, performance.now() - spawnStartedAt)
-  return child
+): ChildProcessHandle {
+  return spawnProcess({
+    program: bundledRipgrepCommand(),
+    args,
+    cwd: options.cwd,
+    env: options.env,
+    stdio: options.stdio
+  })
 }

@@ -82,9 +82,6 @@ export function folderWorkspaceToWorktree(folderWorkspace: FolderWorkspace): Wor
       selectedTask?.provider === 'gitlab' && selectedTask.type === 'issue'
         ? selectedTask.number
         : null,
-    linkedBitbucketPR: null,
-    linkedAzureDevOpsPR: null,
-    linkedGiteaPR: null,
     linkedWorkItem: linkedTask,
     ...(folderWorkspace.linkedItems !== undefined
       ? { linkedItems: folderWorkspace.linkedItems }

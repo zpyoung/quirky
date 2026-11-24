@@ -129,12 +129,11 @@ const cases: { name: string; item: Partial<WorkspaceAttachment>; expected: strin
     expected: 'actual/repo'
   },
   {
-    name: 'Bitbucket scope excludes query secrets',
+    name: 'URL scope excludes query secrets',
     item: {
-      provider: 'bitbucket',
-      url: 'https://bitbucket.org/Team/Repo/pull-requests/7?token=secret'
+      url: 'https://git.example.com/Team/Repo/pull-requests/7?token=secret'
     },
-    expected: 'bitbucket.org/Team/Repo'
+    expected: 'git.example.com/Team/Repo'
   },
   {
     name: 'Jira rejects embedded credentials',

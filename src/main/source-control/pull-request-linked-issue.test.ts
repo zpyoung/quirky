@@ -74,16 +74,4 @@ describe('loadPullRequestLinkedIssue', () => {
       })
     ).resolves.toMatchObject({ title: 'Cached title', description: '' })
   })
-
-  it('does not attach another provider issue to a Bitbucket PR', async () => {
-    await expect(
-      loadPullRequestLinkedIssue({
-        meta: { linkedIssue: 12, linkedGitLabIssue: 34 },
-        provider: 'bitbucket',
-        repoPath: '/repo'
-      })
-    ).resolves.toBeNull()
-    expect(mocks.getGitHubIssue).not.toHaveBeenCalled()
-    expect(mocks.getGitLabIssue).not.toHaveBeenCalled()
-  })
 })

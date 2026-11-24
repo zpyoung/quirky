@@ -527,7 +527,6 @@ describe('buildParentPrChecksProjection', () => {
     const repo = makeRepo()
     const worktree = makeWorktree({
       id: 'repo-1::/feature',
-      linkedBitbucketPR: null,
       head: 'new-head'
     })
     const hostedKey = getHostedReviewCacheKey(repo.path, 'feature', settings, repo.id)
@@ -539,9 +538,9 @@ describe('buildParentPrChecksProjection', () => {
         hostedReviewCache: {
           [hostedKey]: {
             data: makeReview({
-              provider: 'bitbucket',
+              provider: 'gitlab',
               number: 77,
-              title: 'Stale merged Bitbucket PR',
+              title: 'Stale merged GitLab MR',
               state: 'merged',
               headSha: 'merged-head'
             }),
@@ -593,8 +592,7 @@ describe('buildParentPrChecksProjection', () => {
   it('does not use linked-hint hosted-review cache after a non-GitHub link is removed', () => {
     const repo = makeRepo()
     const worktree = makeWorktree({
-      id: 'repo-1::/feature',
-      linkedBitbucketPR: null
+      id: 'repo-1::/feature'
     })
     const hostedKey = getHostedReviewCacheKey(repo.path, 'feature', settings, repo.id)
 
@@ -605,12 +603,12 @@ describe('buildParentPrChecksProjection', () => {
         hostedReviewCache: {
           [hostedKey]: {
             data: makeReview({
-              provider: 'bitbucket',
+              provider: 'gitlab',
               number: 77,
-              title: 'Removed linked Bitbucket PR'
+              title: 'Removed linked GitLab MR'
             }),
             fetchedAt: 2,
-            linkedReviewHintKey: 'bitbucket:77'
+            linkedReviewHintKey: 'gitlab:77'
           }
         }
       }).rows[0]

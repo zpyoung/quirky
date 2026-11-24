@@ -214,9 +214,6 @@ describe('worktree remote runtime mutations', () => {
       repoOwnerExecutionHostId: 'local',
       linkedGitHubPR: null,
       linkedGitLabMR: 42,
-      linkedBitbucketPR: null,
-      linkedAzureDevOpsPR: null,
-      linkedGiteaPR: null,
       force: true
     })
 

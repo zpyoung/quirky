@@ -8,14 +8,12 @@ Hosted code review is a first-class part of the worktree. Orca links worktrees t
 
 Connect the provider your repository uses from [Settings → Integrations](/docs/settings). GitHub has the deepest Actions and issue support; GitLab merge requests and issues use the same worktree review flow.
 
-Bitbucket Cloud connects in-app from the same pane — **Connect** with **Email & API token** or an **Access token**. Orca verifies the credential before saving and can create pull requests from Source Control. Bitbucket Cloud has no draft PRs, so the composer hides the Draft toggle. `ORCA_BITBUCKET_*` environment variables still win over a saved credential. Azure DevOps and Gitea pull requests appear in the worktree sidebar and the Checks panel alongside GitHub, GitLab, and Bitbucket — the worktree creation flow checks them for remote conflicts before pushing.
-
 ## Reviews
 
 - Open a hosted review from the Source Control panel once a worktree has been pushed — confirm the base branch, title, description, and draft state before creating it.
 - Source Control keeps the current branch visible in the branch context row while you create or open a hosted review, so the Create PR action never replaces the branch label.
 - Linked reviews show up in the sidebar with status so you can tell whether the branch is still open, merged, or closed.
-- The branch context row shows a compact **Open review page in browser** link when Orca has a URL for the linked PR / MR — one click jumps to the review on GitHub, GitLab, Bitbucket, Azure DevOps, or Gitea without opening the internal PR view.
+- The branch context row shows a compact **Open review page in browser** link when Orca has a URL for the linked PR / MR — one click jumps to the review on GitHub or GitLab without opening the internal PR view.
 - For GitHub pull requests, use the PR actions menu in the sidebar to copy the review link, close the review, or reopen it after confirming the state change.
 - GitHub checks, reviews, and comments open inline in a PR tab; GitLab merge requests and issues open in the same review surface.
 - For GitLab pipelines, the **Checks** side panel includes bridge and child pipeline jobs (not only top-level jobs). Expanding a job loads that job's trace (log) when available — same place GitHub check details open — so failed jobs are not a dead-end "no inline details" stub.
@@ -30,7 +28,7 @@ For open GitHub PRs, the PR view's merge button offers **Enable auto-merge** so 
 
 ### Stacked pull requests
 
-When you create a GitHub pull request whose selected base already has an open PR, the composer offers **Stack this PR above #N**. Checking it creates a GitHub Stack (or extends the parent's existing stack) and changes the submit label to **Create PR in stack** (or **Create draft PR in stack** / **Push & Create PR in stack**). A small preview shows the parent PR and the new branch. The option is GitHub-only and appears only when the executing host supports stacked creation. GitLab merge requests and Bitbucket pull requests stay single-PR create.
+When you create a GitHub pull request whose selected base already has an open PR, the composer offers **Stack this PR above #N**. Checking it creates a GitHub Stack (or extends the parent's existing stack) and changes the submit label to **Create PR in stack** (or **Create draft PR in stack** / **Push & Create PR in stack**). A small preview shows the parent PR and the new branch. The option is GitHub-only and appears only when the executing host supports stacked creation. GitLab merge requests stay single-PR create.
 
 When GitHub registers a pull request as part of a **stack**, the PR sidebar shows a collapsible **Stack #N** map: your position in the stack, stack size, and the stack base branch. Expand it to see the ordered layers with status (open, draft, checks pending/failed, review needed, conflicts, merged, closed). Click a layer to open that PR in Orca.
 

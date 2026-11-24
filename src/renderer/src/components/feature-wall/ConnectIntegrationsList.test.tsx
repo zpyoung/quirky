@@ -56,26 +56,7 @@ function makePreflightStatus(overrides: Partial<PreflightStatus> = {}): Prefligh
   const status: PreflightStatus = {
     git: { installed: true },
     gh: { installed: true, authenticated: false },
-    glab: { installed: true, authenticated: false },
-    bitbucket: {
-      configured: false,
-      authenticated: false,
-      account: null
-    },
-    azureDevOps: {
-      configured: false,
-      authenticated: false,
-      account: null,
-      baseUrl: null,
-      tokenConfigured: false
-    },
-    gitea: {
-      configured: false,
-      authenticated: false,
-      account: null,
-      baseUrl: null,
-      tokenConfigured: false
-    }
+    glab: { installed: true, authenticated: false }
   }
   return { ...status, ...overrides }
 }
@@ -139,7 +120,7 @@ describe('ConnectIntegrationsList', () => {
 
     const { markup } = await renderConnectIntegrationsList()
 
-    for (const provider of ['GitHub', 'GitLab', 'Bitbucket', 'Azure DevOps', 'Gitea']) {
+    for (const provider of ['GitHub', 'GitLab']) {
       expect(markup).toContain(provider)
     }
     expect(markup).toContain('gh auth login')
@@ -185,24 +166,6 @@ describe('ConnectIntegrationsList', () => {
     // for teams that plan work in a dedicated tracker.
     expect(markup).toContain('Add Linear access')
     expect(markup).toContain('Connect Jira')
-  })
-
-  it('offers GitHub and GitLab as task sources when review came from a non-task provider', async () => {
-    // Bitbucket satisfies review but cannot serve tasks, so step 2 must still
-    // offer the code hosts as connectable task sources alongside the trackers.
-    installStore(
-      makePreflightStatus({
-        bitbucket: { configured: true, authenticated: true, account: 'acme' }
-      })
-    )
-
-    const { markup } = await renderConnectIntegrationsList()
-
-    expect(markup).toContain('issues also work as tasks.')
-    expect(markup).toContain('gh auth login')
-    expect(markup).toContain('glab auth login')
-    expect(markup).toContain('Linear')
-    expect(markup).toContain('Jira')
   })
 
   it('lists the code host alongside a connected tracker in the task summary', async () => {

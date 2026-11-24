@@ -26,11 +26,8 @@ export function useSourceControlHostedReviewCreated({
   fallbackGitHubPRNumber,
   fetchHostedReviewForBranch,
   fetchPRForBranch,
-  linkedAzureDevOpsPR,
-  linkedBitbucketPR,
   linkedGitHubPR,
   linkedGitLabMR,
-  linkedGiteaPR,
   refreshActiveGitStatusAfterMutation,
   setRightSidebarOpen,
   setRightSidebarTab,
@@ -42,11 +39,8 @@ export function useSourceControlHostedReviewCreated({
   fallbackGitHubPRNumber: SourceControlLinkedReviews['fallbackGitHubPRNumber']
   fetchHostedReviewForBranch: SourceControlStoreActions['fetchHostedReviewForBranch']
   fetchPRForBranch: SourceControlStoreActions['fetchPRForBranch']
-  linkedAzureDevOpsPR: SourceControlLinkedReviews['linkedAzureDevOpsPR']
-  linkedBitbucketPR: SourceControlLinkedReviews['linkedBitbucketPR']
   linkedGitHubPR: SourceControlLinkedReviews['linkedGitHubPR']
   linkedGitLabMR: SourceControlLinkedReviews['linkedGitLabMR']
-  linkedGiteaPR: SourceControlLinkedReviews['linkedGiteaPR']
   refreshActiveGitStatusAfterMutation: SourceControlStatusRefresh['refreshActiveGitStatusAfterMutation']
   setRightSidebarOpen: SourceControlStoreActions['setRightSidebarOpen']
   setRightSidebarTab: SourceControlStoreActions['setRightSidebarTab']
@@ -78,9 +72,6 @@ export function useSourceControlHostedReviewCreated({
           linkedGitHubPR,
           fallbackGitHubPR: fallbackGitHubPRNumber,
           linkedGitLabMR,
-          linkedBitbucketPR,
-          linkedAzureDevOpsPR,
-          linkedGiteaPR,
           ...createdLink.lookup
         }
         if (result.provider === 'gitlab') {
@@ -140,9 +131,6 @@ export function useSourceControlHostedReviewCreated({
       fallbackGitHubPRNumber,
       fetchHostedReviewForBranch,
       fetchPRForBranch,
-      linkedAzureDevOpsPR,
-      linkedBitbucketPR,
-      linkedGiteaPR,
       linkedGitHubPR,
       linkedGitLabMR,
       setRightSidebarOpen,

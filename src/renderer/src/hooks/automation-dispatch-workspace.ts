@@ -208,9 +208,6 @@ export async function prepareAutomationDispatchWorkspace(args: {
           undefined,
           undefined,
           undefined,
-          undefined,
-          undefined,
-          undefined,
           {
             // Why: only a captured host; with none, a project two hosts publish refuses, never guesses.
             executionHostId: parseExecutionHostId(automation.runContext?.hostId)?.id,

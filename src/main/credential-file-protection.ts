@@ -7,7 +7,7 @@ import {
 /**
  * How the credential file at `path` is protected, or null when there is nothing there.
  *
- * Why every unenveloped store shares this: speech, Linear, Jira and Bitbucket all write
+ * Why every unenveloped store shares this: speech, Linear and Jira all write
  * either `safeStorage` ciphertext or the bare token with nothing on disk to distinguish
  * them, so each would otherwise grow its own sniff — and a reporter that disagrees with
  * the reader about the same bytes is worse than no reporter.

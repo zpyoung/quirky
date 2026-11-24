@@ -4,7 +4,6 @@ import { openHttpLink } from '@/lib/http-link-routing'
 import { formatCreateError } from '../create-pull-request-review-copy'
 import { stripBaseRef } from '../create-pull-request-base-ref-normalization'
 import { normalizeHostedReviewHeadRef } from '../../../../../shared/hosted-review-refs'
-import { hostedReviewProviderSupportsDraft } from '../../../../../shared/hosted-review'
 import type { ChecksPanelReviewState } from './use-checks-panel-review-state'
 import type { ChecksPanelControllerState } from './use-checks-panel-controller-state'
 import type { ChecksPanelComposerState } from './use-checks-panel-composer-state'
@@ -162,7 +161,7 @@ export function useChecksPanelCreateReview(model: ChecksPanelCreateReviewInput) 
           head: normalizeHostedReviewHeadRef(branch),
           title,
           body: fields.body,
-          draft: fields.draft && hostedReviewProviderSupportsDraft(hostedReviewCreateProvider),
+          draft: fields.draft,
           worktreePath,
           useTemplate: prCreationDefaults.useTemplate
         }

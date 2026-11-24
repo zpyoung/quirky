@@ -107,16 +107,10 @@ export function getVisibleHostedReviewRefreshTargets(
     const prEntry = state.prCache[candidate.cacheKey]
     const hints = {
       linkedGitHubPR: worktree.linkedPR,
-      linkedGitLabMR: worktree.linkedGitLabMR,
-      linkedBitbucketPR: worktree.linkedBitbucketPR,
-      linkedAzureDevOpsPR: worktree.linkedAzureDevOpsPR,
-      linkedGiteaPR: worktree.linkedGiteaPR
+      linkedGitLabMR: worktree.linkedGitLabMR
     }
     const nonGitHub =
       hints.linkedGitLabMR != null ||
-      hints.linkedBitbucketPR != null ||
-      hints.linkedAzureDevOpsPR != null ||
-      hints.linkedGiteaPR != null ||
       (hostedEntry?.data != null && hostedEntry.data.provider !== 'github')
     // The legacy GitHub action still resolves bare IDs; never pass it another owner's candidate.
     if (

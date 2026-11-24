@@ -25,9 +25,6 @@ export type SourceControlManualReviewContext = ManualReviewUrlInput & {
   linkedGitHubPR?: number | null
   fallbackGitHubPRNumber?: number | null
   linkedGitLabMR?: number | null
-  linkedBitbucketPR?: number | null
-  linkedAzureDevOpsPR?: number | null
-  linkedGiteaPR?: number | null
 }
 
 export function resolveSourceControlManualReviewProvider(input: {
@@ -36,24 +33,15 @@ export function resolveSourceControlManualReviewProvider(input: {
   linkedGitHubPR?: number | null
   fallbackGitHubPRNumber?: number | null
   linkedGitLabMR?: number | null
-  linkedBitbucketPR?: number | null
-  linkedAzureDevOpsPR?: number | null
-  linkedGiteaPR?: number | null
 }): HostedReviewProvider | null {
   return (
     input.hostedReviewProvider ??
     input.hostedReviewCreationProvider ??
     (input.linkedGitLabMR != null
       ? 'gitlab'
-      : input.linkedBitbucketPR != null
-        ? 'bitbucket'
-        : input.linkedAzureDevOpsPR != null
-          ? 'azure-devops'
-          : input.linkedGiteaPR != null
-            ? 'gitea'
-            : input.linkedGitHubPR != null || input.fallbackGitHubPRNumber != null
-              ? 'github'
-              : null)
+      : input.linkedGitHubPR != null || input.fallbackGitHubPRNumber != null
+        ? 'github'
+        : null)
   )
 }
 
@@ -66,9 +54,6 @@ export function buildSourceControlManualReviewUrlFromContext(
     linkedGitHubPR,
     fallbackGitHubPRNumber,
     linkedGitLabMR,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR,
     ...urlInput
   } = input
   return buildSourceControlManualReviewUrl({
@@ -78,10 +63,7 @@ export function buildSourceControlManualReviewUrlFromContext(
       hostedReviewCreationProvider,
       linkedGitHubPR,
       fallbackGitHubPRNumber,
-      linkedGitLabMR,
-      linkedBitbucketPR,
-      linkedAzureDevOpsPR,
-      linkedGiteaPR
+      linkedGitLabMR
     })
   })
 }
@@ -99,7 +81,7 @@ function appendQuery(url: string, values: Record<string, string>): string {
   return `${url}?${search.toString()}`
 }
 
-// GitHub/Gitea compare refs keep '/' (slashed branch names like feature/foo) and
+// GitHub compare refs keep '/' (slashed branch names like feature/foo) and
 // ':' (the owner:branch fork qualifier) literal; percent-encoding those separators
 // makes GitHub fail to resolve the branch. Only the segments between them are encoded.
 function encodeCompareRef(ref: string): string {
@@ -178,17 +160,5 @@ export function buildSourceControlManualReviewUrl(input: ManualReviewUrlInput): 
         'merge_request[source_branch]': headBranch,
         'merge_request[target_branch]': baseBranch
       })
-    case 'bitbucket':
-      return appendQuery(`${baseRepo.webBaseUrl}/pull-requests/new`, {
-        source: headBranch,
-        dest: baseBranch
-      })
-    case 'azure-devops':
-      return appendQuery(`${baseRepo.webBaseUrl}/pullrequestcreate`, {
-        sourceRef: `refs/heads/${headBranch}`,
-        targetRef: `refs/heads/${baseBranch}`
-      })
-    case 'gitea':
-      return `${baseRepo.webBaseUrl}/compare/${encodeCompareRef(baseBranch)}...${encodeCompareRef(headBranch)}`
   }
 }

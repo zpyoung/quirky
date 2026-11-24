@@ -8,12 +8,7 @@ import type { Worktree } from '../../../../../../shared/worktree/types'
 
 type SourceControlSuppressionWorktree = Pick<
   Worktree,
-  | 'linkedPR'
-  | 'linkedGitLabMR'
-  | 'linkedBitbucketPR'
-  | 'linkedAzureDevOpsPR'
-  | 'linkedGiteaPR'
-  | 'suppressedGitHubPR'
+  'linkedPR' | 'linkedGitLabMR' | 'suppressedGitHubPR'
 >
 
 export type SourceControlSuppressedGitHubPRState = {
@@ -46,9 +41,6 @@ export function resolveSourceControlSuppressedGitHubPRState({
     provider !== 'github' ||
     worktree.linkedPR !== null ||
     worktree.linkedGitLabMR !== null ||
-    worktree.linkedBitbucketPR !== null ||
-    worktree.linkedAzureDevOpsPR !== null ||
-    worktree.linkedGiteaPR !== null ||
     !isPositiveHostedReviewNumber(worktree.suppressedGitHubPR)
   ) {
     return null

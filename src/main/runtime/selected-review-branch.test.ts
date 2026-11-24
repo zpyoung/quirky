@@ -22,17 +22,6 @@ const PROVIDER_CASES: {
     expected: { provider: 'gitlab', number: 12 }
   },
   {
-    label: 'bitbucket',
-    input: { linkedBitbucketPR: 3 },
-    expected: { provider: 'bitbucket', number: 3 }
-  },
-  {
-    label: 'azure devops',
-    input: { linkedAzureDevOpsPR: 44 },
-    expected: { provider: 'azure-devops', number: 44 }
-  },
-  { label: 'gitea', input: { linkedGiteaPR: 9 }, expected: { provider: 'gitea', number: 9 } },
-  {
     label: 'zero is a real number',
     input: { linkedPR: 0 },
     expected: { provider: 'github', number: 0 }
@@ -46,11 +35,6 @@ const PROVIDER_CASES: {
     label: 'github wins over gitlab when both are set',
     input: { linkedPR: 1, linkedGitLabMR: 2 },
     expected: { provider: 'github', number: 1 }
-  },
-  {
-    label: 'gitlab wins over bitbucket when both are set',
-    input: { linkedGitLabMR: 2, linkedBitbucketPR: 3 },
-    expected: { provider: 'gitlab', number: 2 }
   }
 ]
 
@@ -151,10 +135,7 @@ describe('getSelectedReviewLookupHints', () => {
   it('normalizes every absent hint to null', () => {
     expect(getSelectedReviewLookupHints({})).toEqual({
       linkedGitHubPR: null,
-      linkedGitLabMR: null,
-      linkedBitbucketPR: null,
-      linkedAzureDevOpsPR: null,
-      linkedGiteaPR: null
+      linkedGitLabMR: null
     })
   })
 
@@ -162,17 +143,11 @@ describe('getSelectedReviewLookupHints', () => {
     expect(
       getSelectedReviewLookupHints({
         linkedPR: 7,
-        linkedGitLabMR: 12,
-        linkedBitbucketPR: 3,
-        linkedAzureDevOpsPR: 44,
-        linkedGiteaPR: 9
+        linkedGitLabMR: 12
       })
     ).toEqual({
       linkedGitHubPR: 7,
-      linkedGitLabMR: 12,
-      linkedBitbucketPR: 3,
-      linkedAzureDevOpsPR: 44,
-      linkedGiteaPR: 9
+      linkedGitLabMR: 12
     })
   })
 

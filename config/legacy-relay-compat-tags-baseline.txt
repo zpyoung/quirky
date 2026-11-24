@@ -9,6 +9,7 @@ src/main/ipc/ssh/ssh-host-server-on-connect-wiring.test.ts
 src/main/ipc/ssh/ssh-host-server-on-connect-wiring.ts
 src/main/ipc/ssh/ssh-session-teardown.ts
 src/main/ipc/ssh/ssh.ts
+src/main/managed-server/lifecycle/orcad-runtime-conversion.test.ts
 src/main/runtime/orchestration/terminal-authority/verify-orchestration-compatibility-caller.ts
 src/main/runtime/runtime-terminal-contracts.ts
 src/main/ssh/orcad-migration-delta-move.test.ts
@@ -17,7 +18,6 @@ src/main/ssh/orcad-migration-repository-link.test.ts
 src/main/ssh/orcad-migration-terminal-gate-host-wide.test.ts
 src/main/ssh/orcad-migration-terminal-gate.test.ts
 src/main/ssh/orcad-migration-terminal-gate.ts
-src/main/managed-server/lifecycle/orcad-runtime-conversion.test.ts
 src/main/ssh/ssh-host-server-on-connect.test.ts
 src/main/ssh/ssh-host-server-on-connect.ts
 src/main/ssh/targets/ssh-target-orcad-preflight.ts
@@ -32,7 +32,6 @@ src/renderer/src/runtime/web-runtime-session-legacy-relay-bridged-activation.tes
 src/renderer/src/store/terminals/legacy-relay-bridged-tab-close.ts
 src/shared/legacy-relay-bridge-contract.ts
 src/shared/ssh-types.ts
-src/shared/telemetry-ssh-host-server-event-schemas.ts
 tests/e2e/cross-version-wire/legacy-relay-bridge.unit.test.ts
 tests/e2e/cross-version-wire/released-relay-daemon.ts
 tests/e2e/cross-version-wire/released-relay-transport.ts

@@ -124,7 +124,7 @@ describe('worktree remote runtime mutations', () => {
     seedRepoHost(store, 'runtime:env-1')
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'nautilus']
-    args[24] = { nameWasGenerated: true }
+    args[21] = { nameWasGenerated: true }
 
     await createWorktree(...args)
 
@@ -176,7 +176,7 @@ describe('worktree remote runtime mutations', () => {
     }
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'jira-link']
-    args[24] = { linkedWorkItem, linkedTaskSourceContext }
+    args[21] = { linkedWorkItem, linkedTaskSourceContext }
 
     await createWorktree(...args)
 
@@ -206,7 +206,7 @@ describe('worktree remote runtime mutations', () => {
     seedRepoHost(store, 'runtime:env-1')
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'jira-link']
-    args[24] = {
+    args[21] = {
       linkedWorkItem: {
         provider: 'jira',
         type: 'issue',
@@ -312,7 +312,7 @@ describe('worktree remote runtime mutations', () => {
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'task-draft', undefined, 'inherit']
     args[9] = 'codex'
-    args[24] = { startupDraft: 'https://github.com/stablyai/orca/issues/12' }
+    args[21] = { startupDraft: 'https://github.com/stablyai/orca/issues/12' }
 
     await createWorktree(...args)
 

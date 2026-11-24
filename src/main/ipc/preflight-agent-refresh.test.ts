@@ -8,9 +8,6 @@ const {
   execFileAsyncMock,
   hydrateShellPathMock,
   mergePathSegmentsMock,
-  getBitbucketAuthStatusMock,
-  getAzureDevOpsAuthStatusMock,
-  getGiteaAuthStatusMock,
   resolveCliCommandsMock,
   isCommandOnLocalPathMock,
   listLocalCommandPathsMock,
@@ -22,9 +19,6 @@ const {
   execFileAsyncMock: vi.fn(),
   hydrateShellPathMock: vi.fn(),
   mergePathSegmentsMock: vi.fn(),
-  getBitbucketAuthStatusMock: vi.fn(),
-  getAzureDevOpsAuthStatusMock: vi.fn(),
-  getGiteaAuthStatusMock: vi.fn(),
   resolveCliCommandsMock: vi.fn(),
   isCommandOnLocalPathMock: vi.fn(),
   listLocalCommandPathsMock: vi.fn(),
@@ -79,18 +73,6 @@ vi.mock('../pty/windows-environment-path', () => ({
   mergePersistedWindowsPath: mergePersistedWindowsPathMock
 }))
 
-vi.mock('../bitbucket/client', () => ({
-  getBitbucketAuthStatus: getBitbucketAuthStatusMock
-}))
-
-vi.mock('../azure-devops/client', () => ({
-  getAzureDevOpsAuthStatus: getAzureDevOpsAuthStatusMock
-}))
-
-vi.mock('../gitea/client', () => ({
-  getGiteaAuthStatus: getGiteaAuthStatusMock
-}))
-
 import { registerPreflightHandlers } from './preflight'
 import { resetPreflightMocks, type HandlerMap } from './preflight-test-harness'
 
@@ -107,9 +89,6 @@ describe('preflight', () => {
         execFileAsyncMock,
         hydrateShellPathMock,
         mergePathSegmentsMock,
-        getBitbucketAuthStatusMock,
-        getAzureDevOpsAuthStatusMock,
-        getGiteaAuthStatusMock,
         resolveCliCommandsMock,
         isCommandOnLocalPathMock,
         listLocalCommandPathsMock,
@@ -125,58 +104,6 @@ describe('preflight', () => {
       configurable: true,
       value: originalPlatform
     })
-  })
-
-  it('does not hydrate the host PATH when refreshing agents for a resolved WSL runtime', async () => {
-    Object.defineProperty(process, 'platform', {
-      configurable: true,
-      value: 'win32'
-    })
-    runWslProcessMock.mockImplementation(async ({ script }: { script: string }) => {
-      if (script.includes("'claude'")) {
-        return {
-          environmentResolved: true,
-          code: 0,
-          stdout: '__ORCA_AGENT_PATH__claude\t/home/test/.local/bin/claude\n',
-          stderr: '',
-          timedOut: false
-        }
-      }
-      throw new Error('not found')
-    })
-
-    registerPreflightHandlers()
-
-    const result = (await handlers['preflight:refreshAgents'](undefined, {
-      projectRuntime: {
-        status: 'resolved',
-        runtime: {
-          kind: 'wsl',
-          hostPlatform: 'wsl',
-          projectId: 'project-1',
-          distro: 'Ubuntu',
-          reason: 'project-override',
-          cacheKey: 'project-1:wsl:Ubuntu'
-        }
-      }
-    })) as {
-      agents: string[]
-      addedPathSegments: string[]
-      shellHydrationOk: boolean
-      pathSource: string
-      pathFailureReason: string
-    }
-
-    expect(result).toEqual({
-      agents: ['claude'],
-      addedPathSegments: [],
-      shellHydrationOk: true,
-      pathSource: 'sync_seed_only',
-      pathFailureReason: 'none'
-    })
-    expect(hydrateShellPathMock).not.toHaveBeenCalled()
-    expect(mergePathSegmentsMock).not.toHaveBeenCalled()
-    expect(resolveProfileLoadingShell).not.toHaveBeenCalled()
   })
 
   it('refreshes via preflight:refreshAgents by re-hydrating PATH before re-detecting', async () => {

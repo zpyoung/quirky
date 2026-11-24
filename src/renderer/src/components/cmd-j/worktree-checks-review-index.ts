@@ -65,10 +65,7 @@ export function buildWorktreeChecksReviewIndex({
       pr,
       linkedPR: worktree.linkedPR ?? null,
       suppressedGitHubPR: worktree.suppressedGitHubPR ?? null,
-      linkedGitLabMR: worktree.linkedGitLabMR ?? null,
-      linkedBitbucketPR: worktree.linkedBitbucketPR ?? null,
-      linkedAzureDevOpsPR: worktree.linkedAzureDevOpsPR ?? null,
-      linkedGiteaPR: worktree.linkedGiteaPR ?? null
+      linkedGitLabMR: worktree.linkedGitLabMR ?? null
     })
     if (review) {
       // Why: persisted IDs can be identical across execution hosts; the search
@@ -76,10 +73,7 @@ export function buildWorktreeChecksReviewIndex({
       reviews.set(worktree, review)
     } else if (
       (pr && isGitHubPRSuppressed(worktree, pr.number)) ||
-      worktree.linkedGitLabMR != null ||
-      worktree.linkedBitbucketPR != null ||
-      worktree.linkedAzureDevOpsPR != null ||
-      worktree.linkedGiteaPR != null
+      worktree.linkedGitLabMR != null
     ) {
       // Why: an empty Checks selection caused by suppression or a non-GitHub
       // link is authoritative; omission lets Cmd+J fall back to stale GitHub data.

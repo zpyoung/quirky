@@ -48,7 +48,7 @@ export function isPlausibleHostedLogin(value: string): boolean {
 const MAX_BRANCH_SAFE_LOGIN_LENGTH = 255
 
 /**
- * Provider-agnostic branch-safe token: GitLab/Bitbucket/self-hosted logins may
+ * Provider-agnostic branch-safe token: GitLab/self-hosted logins may
  * carry `_`/`.` and run longer than GitHub's 39-char limit, so the strict
  * GitHub rule must not gate explicitly configured usernames.
  */
@@ -282,7 +282,7 @@ async function localRepoHasEffectiveGitHubRemote(repoPath: string): Promise<bool
  * Async replacement for the old sync `getGitUsername`: explicit config keys
  * first, then the `gh` login — but only for repos whose effective remote is
  * GitHub, since a GitHub account name would be the wrong branch prefix for
- * GitLab/Bitbucket/self-hosted repos. Never rejects; unknown resolves to
+ * GitLab/self-hosted repos. Never rejects; unknown resolves to
  * { username: '', authoritative: false }.
  */
 export async function resolveLocalGitUsernameDetailed(

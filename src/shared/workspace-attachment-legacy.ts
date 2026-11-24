@@ -6,10 +6,7 @@ export const WORKSPACE_ATTACHMENT_NUMBER_SLOTS = [
   ['linkedIssue', 'github', 'issue'],
   ['linkedPR', 'github', 'pr'],
   ['linkedGitLabMR', 'gitlab', 'mr'],
-  ['linkedGitLabIssue', 'gitlab', 'issue'],
-  ['linkedBitbucketPR', 'bitbucket', 'pr'],
-  ['linkedAzureDevOpsPR', 'azure-devops', 'pr'],
-  ['linkedGiteaPR', 'gitea', 'pr']
+  ['linkedGitLabIssue', 'gitlab', 'issue']
 ] as const
 
 export const WORKSPACE_ATTACHMENT_LEGACY_FIELDS = [

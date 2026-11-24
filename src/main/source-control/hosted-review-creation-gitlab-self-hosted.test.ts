@@ -4,18 +4,12 @@ const {
   gitExecFileAsyncMock,
   glabExecFileAsyncMock,
   ghExecFileAsyncMock,
-  getAzureDevOpsRepoSlugMock,
-  getBitbucketRepoSlugMock,
-  getGiteaRepoSlugMock,
   getHostedReviewForBranchMock,
   getRepoSlugMock
 } = vi.hoisted(() => ({
   gitExecFileAsyncMock: vi.fn(),
   glabExecFileAsyncMock: vi.fn(),
   ghExecFileAsyncMock: vi.fn(),
-  getAzureDevOpsRepoSlugMock: vi.fn(),
-  getBitbucketRepoSlugMock: vi.fn(),
-  getGiteaRepoSlugMock: vi.fn(),
   getHostedReviewForBranchMock: vi.fn(),
   getRepoSlugMock: vi.fn()
 }))
@@ -33,24 +27,6 @@ vi.mock('../github/client', () => ({
   getPRForBranch: vi.fn()
 }))
 
-vi.mock('../bitbucket/client', () => ({
-  getBitbucketRepoSlug: getBitbucketRepoSlugMock,
-  getBitbucketPullRequestForBranch: vi.fn(),
-  getBitbucketPullRequest: vi.fn()
-}))
-
-vi.mock('../azure-devops/client', () => ({
-  getAzureDevOpsRepoSlug: getAzureDevOpsRepoSlugMock,
-  getAzureDevOpsPullRequestForBranch: vi.fn(),
-  getAzureDevOpsPullRequest: vi.fn()
-}))
-
-vi.mock('../gitea/client', () => ({
-  getGiteaRepoSlug: getGiteaRepoSlugMock,
-  getGiteaPullRequestForBranch: vi.fn(),
-  getGiteaPullRequest: vi.fn()
-}))
-
 vi.mock('./hosted-review', () => ({
   getHostedReviewForBranch: getHostedReviewForBranchMock
 }))
@@ -65,9 +41,6 @@ function resetMocks(): void {
     gitExecFileAsyncMock,
     glabExecFileAsyncMock,
     ghExecFileAsyncMock,
-    getAzureDevOpsRepoSlugMock,
-    getBitbucketRepoSlugMock,
-    getGiteaRepoSlugMock,
     getHostedReviewForBranchMock,
     getRepoSlugMock
   ]) {
@@ -79,9 +52,6 @@ function resetMocks(): void {
 
 function mockNonGitLabProviders(): void {
   getRepoSlugMock.mockResolvedValue(null)
-  getBitbucketRepoSlugMock.mockResolvedValue(null)
-  getAzureDevOpsRepoSlugMock.mockResolvedValue(null)
-  getGiteaRepoSlugMock.mockResolvedValue(null)
 }
 
 describe('GitLab self-hosted hosted review creation eligibility', () => {
@@ -193,13 +163,6 @@ gitlab.internal
 
   it('recovers provider detection after auth diagnostics discover a rejected host', async () => {
     let selfHostedAuthenticated = false
-    getGiteaRepoSlugMock.mockResolvedValue({
-      host: 'gitlab.example.com',
-      owner: 'team',
-      repo: 'orca',
-      apiBaseUrl: 'https://gitlab.example.com/api/v1',
-      webBaseUrl: 'https://gitlab.example.com'
-    })
     gitExecFileAsyncMock.mockResolvedValue({
       stdout: 'https://gitlab.example.com/team/orca.git\n',
       stderr: ''
@@ -236,8 +199,7 @@ gitlab.internal
       behind: 0
     }
     await expect(getHostedReviewCreationEligibility(eligibilityInput)).resolves.toMatchObject({
-      provider: 'gitea',
-      blockedReason: 'auth_required'
+      provider: 'unsupported'
     })
 
     selfHostedAuthenticated = true

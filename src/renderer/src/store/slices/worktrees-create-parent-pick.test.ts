@@ -55,7 +55,7 @@ describe('createWorktree composer parent pick', () => {
   ) {
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'feature', 'origin/main']
-    args[24] = { parentWorktreeId }
+    args[21] = { parentWorktreeId }
     return createWorktree(...args)
   }
 
@@ -256,7 +256,7 @@ describe('createWorktree parent pick on a remote runtime', () => {
   function createOnRemote(store: ReturnType<typeof createTestStore>) {
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = [REMOTE_REPO, 'feature', 'origin/main']
-    args[24] = { parentWorktreeId: PARENT_ID }
+    args[21] = { parentWorktreeId: PARENT_ID }
     return createWorktree(...args)
   }
 

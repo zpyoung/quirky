@@ -169,9 +169,6 @@ export const WORKTREE_METHODS = [
         linkedLinearIssueOrganizationUrlKey: params.linkedLinearIssueOrganizationUrlKey,
         linkedGitLabMR: params.linkedGitLabMR,
         linkedGitLabIssue: params.linkedGitLabIssue,
-        linkedBitbucketPR: params.linkedBitbucketPR,
-        linkedAzureDevOpsPR: params.linkedAzureDevOpsPR,
-        linkedGiteaPR: params.linkedGiteaPR,
         linkedWorkItem: params.linkedWorkItem,
         linkedItems: params.linkedItems,
         ...(params.linkedItemsBase !== undefined

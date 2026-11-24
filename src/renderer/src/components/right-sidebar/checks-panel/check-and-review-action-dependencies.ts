@@ -5,15 +5,7 @@ import type { ChecksPanelReviewState } from './use-checks-panel-review-state'
 
 export type ChecksPanelCheckAndReviewActionsInput = Pick<
   ChecksPanelContextState,
-  | 'activeReview'
-  | 'linkedAzureDevOpsPR'
-  | 'linkedBitbucketPR'
-  | 'linkedGiteaPR'
-  | 'linkedGitLabMR'
-  | 'linkedPR'
-  | 'suppressedGitHubPR'
-  | 'pr'
-  | 'prCacheKey'
+  'activeReview' | 'linkedGitLabMR' | 'linkedPR' | 'suppressedGitHubPR' | 'pr' | 'prCacheKey'
 > &
   Pick<
     ChecksPanelControllerState,

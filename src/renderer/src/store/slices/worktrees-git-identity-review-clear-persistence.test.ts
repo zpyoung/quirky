@@ -60,9 +60,6 @@ describe('updateWorktreeGitIdentity', () => {
       updates: {
         linkedPR: null,
         linkedGitLabMR: null,
-        linkedBitbucketPR: null,
-        linkedAzureDevOpsPR: null,
-        linkedGiteaPR: null,
         pushTarget: undefined
       }
     })
@@ -82,13 +79,7 @@ describe('updateWorktreeGitIdentity', () => {
       resolveClearPersist = resolve
     })
     mockApi.worktrees.updateMeta.mockImplementation(async ({ updates }) => {
-      if (
-        updates.linkedPR === null &&
-        updates.linkedGitLabMR === null &&
-        updates.linkedBitbucketPR === null &&
-        updates.linkedAzureDevOpsPR === null &&
-        updates.linkedGiteaPR === null
-      ) {
+      if (updates.linkedPR === null && updates.linkedGitLabMR === null) {
         await clearPersisted
       }
     })
@@ -108,9 +99,6 @@ describe('updateWorktreeGitIdentity', () => {
         updates: {
           linkedPR: null,
           linkedGitLabMR: 202,
-          linkedBitbucketPR: null,
-          linkedAzureDevOpsPR: null,
-          linkedGiteaPR: null,
           pushTarget: undefined
         }
       })
@@ -156,9 +144,6 @@ describe('updateWorktreeGitIdentity', () => {
         updates: {
           linkedPR: null,
           linkedGitLabMR: null,
-          linkedBitbucketPR: null,
-          linkedAzureDevOpsPR: null,
-          linkedGiteaPR: null,
           pushTarget: nextPushTarget
         }
       })
@@ -208,9 +193,6 @@ describe('updateWorktreeGitIdentity', () => {
       updates: {
         linkedPR: null,
         linkedGitLabMR: null,
-        linkedBitbucketPR: null,
-        linkedAzureDevOpsPR: null,
-        linkedGiteaPR: null,
         pushTarget: undefined
       }
     })
@@ -269,9 +251,6 @@ describe('updateWorktreeGitIdentity', () => {
       updates: {
         linkedPR: null,
         linkedGitLabMR: null,
-        linkedBitbucketPR: null,
-        linkedAzureDevOpsPR: null,
-        linkedGiteaPR: null,
         pushTarget: undefined
       }
     })
@@ -318,9 +297,6 @@ describe('updateWorktreeGitIdentity', () => {
       updates: {
         linkedPR: null,
         linkedGitLabMR: null,
-        linkedBitbucketPR: null,
-        linkedAzureDevOpsPR: null,
-        linkedGiteaPR: null,
         pushTarget: undefined
       }
     })
@@ -358,9 +334,6 @@ describe('updateWorktreeGitIdentity', () => {
         updates: {
           linkedPR: null,
           linkedGitLabMR: null,
-          linkedBitbucketPR: null,
-          linkedAzureDevOpsPR: null,
-          linkedGiteaPR: null,
           pushTarget: undefined
         }
       })

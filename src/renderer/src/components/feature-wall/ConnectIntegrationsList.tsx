@@ -1,8 +1,5 @@
 import { Fragment, useState } from 'react'
 import {
-  AzureDevOpsIntegrationCard,
-  BitbucketIntegrationCard,
-  GiteaIntegrationCard,
   GitHubIntegrationCard,
   GitLabIntegrationCard
 } from '@/components/settings/source-control-integration-cards'
@@ -124,9 +121,6 @@ export function ConnectIntegrationsList(): React.JSX.Element {
           <IntegrationCardGroup>
             <GitHubIntegrationCard />
             <GitLabIntegrationCard />
-            <BitbucketIntegrationCard />
-            <AzureDevOpsIntegrationCard />
-            <GiteaIntegrationCard />
           </IntegrationCardGroup>
         </IntegrationStep>
 

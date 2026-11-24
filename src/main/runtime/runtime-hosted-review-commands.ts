@@ -110,9 +110,6 @@ export class RuntimeHostedReviewCommands {
     linkedGitHubPR?: number | null
     fallbackGitHubPR?: number | null
     linkedGitLabMR?: number | null
-    linkedBitbucketPR?: number | null
-    linkedAzureDevOpsPR?: number | null
-    linkedGiteaPR?: number | null
   }): Promise<HostedReviewInfo | null> {
     const repo = await this.deps.resolveRepo(args.repoSelector)
     const executionOptions = this.deps.getExecutionOptions(repo, args.admissionTier ?? 'background')
@@ -126,9 +123,6 @@ export class RuntimeHostedReviewCommands {
       linkedGitHubPR: args.linkedGitHubPR ?? null,
       fallbackGitHubPR: args.linkedGitHubPR == null ? (args.fallbackGitHubPR ?? null) : null,
       linkedGitLabMR: args.linkedGitLabMR ?? null,
-      linkedBitbucketPR: args.linkedBitbucketPR ?? null,
-      linkedAzureDevOpsPR: args.linkedAzureDevOpsPR ?? null,
-      linkedGiteaPR: args.linkedGiteaPR ?? null,
       ...executionOptions
     })
     if (review?.provider === 'github') {
@@ -154,9 +148,6 @@ export class RuntimeHostedReviewCommands {
       linkedGitHubPR: args.linkedGitHubPR ?? null,
       fallbackGitHubPR: args.linkedGitHubPR == null ? (args.fallbackGitHubPR ?? null) : null,
       linkedGitLabMR: args.linkedGitLabMR ?? null,
-      linkedBitbucketPR: args.linkedBitbucketPR ?? null,
-      linkedAzureDevOpsPR: args.linkedAzureDevOpsPR ?? null,
-      linkedGiteaPR: args.linkedGiteaPR ?? null,
       ...executionOptions
     })
   }
