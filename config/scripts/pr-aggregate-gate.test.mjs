@@ -39,7 +39,7 @@ describe('explicit PR aggregate result', () => {
     const forkJobs = Object.keys(aggregateWorkflow.jobs).filter((job) => /fork/i.test(job))
     expect(forkJobs).toEqual([])
     expect(aggregateJob.needs.filter((job) => /fork/i.test(job))).toEqual([])
-    expect(Object.keys(aggregateShell.env).filter((name) => /^FORK/.test(name))).toEqual([])
+    expect(Object.keys(aggregateShell.env).filter((name) => name.startsWith('FORK'))).toEqual([])
   })
 
   it('runs for code, docs, reused and mixed plans after every dependency outcome', () => {

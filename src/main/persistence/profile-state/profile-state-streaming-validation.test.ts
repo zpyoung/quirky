@@ -28,6 +28,39 @@ function fixture(source = '{"automationRuns":[{"id":"a"},{"id":"b"}],"last":null
   return db
 }
 
+const rowidAliases = ['rowid', '_rowid_', 'oid']
+
+/** SQLite 3.54+ rejects ADD COLUMN for a rowid alias, but CREATE TABLE still accepts one. */
+function addRowidAliasColumns(db: ReturnType<typeof openProfileStateDatabase>['db']): void {
+  try {
+    for (const alias of rowidAliases) {
+      db.exec(`ALTER TABLE profile_state_automation_runs ADD COLUMN ${alias} TEXT DEFAULT 'shadow'`)
+    }
+    return
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('cannot add rowid alias')) {
+      throw error
+    }
+  }
+  const columns = 'run_id, ordinal, payload, content_hash, revision, updated_at'
+  const shadows = rowidAliases.map((alias) => `${alias} TEXT DEFAULT 'shadow'`).join(', ')
+  db.exec(`
+    CREATE TABLE profile_state_automation_runs_shadowed (
+      run_id TEXT PRIMARY KEY NOT NULL,
+      ordinal INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      ${shadows}
+    );
+    INSERT INTO profile_state_automation_runs_shadowed (${columns})
+      SELECT ${columns} FROM profile_state_automation_runs ORDER BY rowid;
+    DROP TABLE profile_state_automation_runs;
+    ALTER TABLE profile_state_automation_runs_shadowed RENAME TO profile_state_automation_runs;
+  `)
+}
+
 const readers = [
   readProfileStateSnapshot,
   readProfileStateParsedSnapshot,
@@ -55,9 +88,7 @@ describe('complete streaming profile validation', () => {
   it('accepts extra columns that shadow every SQLite rowid alias', () => {
     const db = fixture()
     const before = readProfileStateSnapshot(db)
-    db.exec("ALTER TABLE profile_state_automation_runs ADD COLUMN rowid TEXT DEFAULT 'shadow'")
-    db.exec("ALTER TABLE profile_state_automation_runs ADD COLUMN _rowid_ TEXT DEFAULT 'shadow'")
-    db.exec("ALTER TABLE profile_state_automation_runs ADD COLUMN oid TEXT DEFAULT 'shadow'")
+    addRowidAliasColumns(db)
     verifyProfileStateSchema(db, 'stream-test')
     expect(readProfileStateSnapshot(db)).toEqual(before)
     expect(readProfileStateParsedSnapshot(db).state).toEqual(JSON.parse(before.json))
