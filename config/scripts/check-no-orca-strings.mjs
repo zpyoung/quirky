@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 /**
- * CI guard: fails when a tracked text file still says `orca` (any case).
+ * CI guard: fails when a tracked text file still says `orca`, `Orca` or
+ * `ORCA` (which also covers `orcad`, `Orcad` and `ORCAD`). These are the only
+ * case variants the rename mapping rewrites, so mixed-case runs inside other
+ * words (`errorCategory`, `optionsOrCallback`) are not the brand and pass.
  *
  *   node config/scripts/check-no-orca-strings.mjs [--root <dir>] [--allowlist <file>]
  *
@@ -75,7 +78,7 @@ function findViolations(options) {
     }
     const credits = creditsByPath.get(path) ?? []
     text.split('\n').forEach((line, index) => {
-      if (!/orca/i.test(stripKeepTokens(line, allowlist.keepTokens))) {
+      if (!/orca|Orca|ORCA/.test(stripKeepTokens(line, allowlist.keepTokens))) {
         return
       }
       if (credits.some((match) => line.includes(match))) {

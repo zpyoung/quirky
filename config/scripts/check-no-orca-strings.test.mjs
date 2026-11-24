@@ -54,7 +54,7 @@ describe('check-no-orca-strings.mjs', () => {
     expect(check(repo).status).toBe(0)
   })
 
-  it('prints file:line: text and exits 1 for each case-insensitive match', () => {
+  it('prints file:line: text and exits 1 for each exact-case match', () => {
     const repo = makeRepo({
       'src/a.ts': 'ok\nconst x = "Orca"\n',
       'docs/b.md': 'a\nb\nthe ORCA app\n'
@@ -63,6 +63,32 @@ describe('check-no-orca-strings.mjs', () => {
     expect(status).toBe(1)
     expect(stdout).toContain('src/a.ts:2: const x = "Orca"')
     expect(stdout).toContain('docs/b.md:3: the ORCA app')
+  })
+
+  it('does not flag mixed-case runs inside other words', () => {
+    const repo = makeRepo({
+      'src/a.ts':
+        'errorCategory optionsOrCallback NSURLErrorCancelled directorCapacity selectorCalls\n'
+    })
+    expect(check(repo).status).toBe(0)
+  })
+
+  it('flags only the exact-case brand variants', () => {
+    const repo = makeRepo({
+      'a.ts': 'Orca\n',
+      'b.ts': 'orca\n',
+      'c.ts': 'ORCA_X\n',
+      'd.ts': 'orcad\n',
+      'e.ts': 'errorCategory\n',
+      'f.ts': 'optionsOrCallback\n'
+    })
+    const { status, stdout } = check(repo)
+    expect(status).toBe(1)
+    for (const file of ['a.ts', 'b.ts', 'c.ts', 'd.ts']) {
+      expect(stdout).toContain(`${file}:1:`)
+    }
+    expect(stdout).not.toContain('e.ts')
+    expect(stdout).not.toContain('f.ts')
   })
 
   it('honours skipPaths', () => {

@@ -141,7 +141,7 @@ describe('check-ipc-channel-parity.mjs', () => {
     expect(json.mainSendWithoutRenderer).toEqual(['a:pushedNobodyListens'])
   })
 
-  it('compares against an orca baseline after --map-orca-to-quirky', () => {
+  it('compares against an orca baseline after --apply-rename-mapping', () => {
     const repo = makeRepo({
       'src/preload/index.ts': `
         ipcRenderer.invoke('quirky:noHandler')
@@ -158,7 +158,7 @@ describe('check-ipc-channel-parity.mjs', () => {
       })
     )
     expect(parity(repo, ['--baseline', baseline]).status).toBe(1)
-    expect(parity(repo, ['--baseline', baseline, '--map-orca-to-quirky']).status).toBe(0)
+    expect(parity(repo, ['--baseline', baseline, '--apply-rename-mapping']).status).toBe(0)
   })
 
   it('exits 2 on bad arguments and an unreadable baseline', () => {

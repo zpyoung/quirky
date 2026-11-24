@@ -11,6 +11,7 @@
     "config/scripts/rename-to-quirky/**",
     "config/scripts/check-no-orca-strings.mjs",
     "config/scripts/check-no-orca-strings.test.mjs",
+    "config/scripts/check-ipc-channel-parity.test.mjs",
     "pnpm-lock.yaml",
     "mobile/pnpm-lock.yaml"
   ],

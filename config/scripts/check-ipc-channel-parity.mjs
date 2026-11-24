@@ -8,7 +8,7 @@
  *                           listens to
  *
  *   node config/scripts/check-ipc-channel-parity.mjs [--root <dir>] [--json]
- *        [--baseline <file>] [--map-orca-to-quirky]
+ *        [--baseline <file>] [--apply-rename-mapping]
  *
  * A channel argument is a string literal (backticks without `${`), or a name
  * resolved through consts named `*_CHANNEL` / `*_CHANNELS` (string, object or
@@ -17,7 +17,7 @@
  *
  * Without --baseline: prints both sets (JSON with --json) and exits 0. With
  * --baseline <file> (same JSON shape): lists only mismatches absent from the
- * baseline and exits 1 if there are any. --map-orca-to-quirky renames the
+ * baseline and exits 1 if there are any. --apply-rename-mapping renames the
  * baseline's channel names with the generic mapping first.
  *
  * Exit codes: 0 ok, 1 new mismatches against the baseline, 2 bad arguments.
@@ -48,13 +48,13 @@ const KIND_BY_CALL = {
 }
 
 function parseArgs(argv) {
-  const options = { root: REPO_ROOT, json: false, baseline: null, mapOrcaToQuirky: false }
+  const options = { root: REPO_ROOT, json: false, baseline: null, applyRenameMapping: false }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--json') {
       options.json = true
-    } else if (arg === '--map-orca-to-quirky') {
-      options.mapOrcaToQuirky = true
+    } else if (arg === '--apply-rename-mapping') {
+      options.applyRenameMapping = true
     } else if (arg === '--root' || arg === '--baseline') {
       const value = argv[++i]
       if (value === undefined || value.startsWith('--')) {
@@ -243,7 +243,7 @@ function main() {
     const current = collectChannels(options.root)
     result = current
     if (options.baseline) {
-      const baseline = loadBaseline(options.baseline, options.mapOrcaToQuirky)
+      const baseline = loadBaseline(options.baseline, options.applyRenameMapping)
       result = Object.fromEntries(
         SET_NAMES.map((name) => [name, current[name].filter((channel) => !baseline[name].has(channel))])
       )
