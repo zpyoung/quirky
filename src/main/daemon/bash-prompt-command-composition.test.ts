@@ -380,6 +380,8 @@ PROMPT_COMMAND='printf "PROMPT_REMATCH:<%s>\\n" "\${BASH_REMATCH[1]-unset}"'
 
   itWithBash('hides legacy dispatcher commands from a chained DEBUG trap', () => {
     const profile = [
+      // distro prompt hooks (systemd's OSC 3008 on newer Ubuntu) would otherwise consume the arm below
+      'unset PROMPT_COMMAND',
       '__bp_preexec() { [[ -n "${__bp_armed:-}" ]] || return; __bp_armed=""; printf \'PROMPT_PREEXEC:<%s>\\n\' "$BASH_COMMAND"; }',
       "trap '__bp_preexec' DEBUG",
       '__bp_arm() { __bp_armed=1; }',

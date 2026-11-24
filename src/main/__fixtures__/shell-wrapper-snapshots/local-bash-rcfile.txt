@@ -236,6 +236,9 @@ __orca_osc133_preexec() {
   __orca_run_user_debug_trap
   [[ -z "${__orca_in_prompt_command:-}" ]] || return 0
   [[ -z "${__orca_in_command:-}" ]] || return 0
+  # functrace runs this trap inside systemd's PS0 subshell, where a C would repeat the real command's
+  case "$BASH_COMMAND" in __systemd_osc_context_*) return 0 ;; esac
+  case "${FUNCNAME[1]:-}" in __systemd_osc_context_*) return 0 ;; esac
   # Why: bash DEBUG fires for every simple command, including PROMPT_COMMAND
   # bodies and chained traps can call us repeatedly for one command.
   printf "\033]133;C\007"

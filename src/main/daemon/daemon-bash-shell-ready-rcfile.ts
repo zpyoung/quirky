@@ -109,6 +109,9 @@ __orca_osc133_preexec() {
   # emit C only on the first fire (the __orca_in_command gate), and never for a
   # prompt-time hook — ours or bash-preexec's __bp_* helpers.
   [[ -z "\${__orca_in_command:-}" ]] || return 0
+  # functrace runs this trap inside systemd's PS0 subshell, where a C would repeat the real command's
+  case "$BASH_COMMAND" in __systemd_osc_context_*) return 0 ;; esac
+  case "\${FUNCNAME[1]:-}" in __systemd_osc_context_*) return 0 ;; esac
   printf "\\033]133;C\\007"
   __orca_in_command=1
 }
