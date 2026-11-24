@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -29,6 +29,28 @@ function rename(repo, { allowlist = {}, args = [] } = {}) {
     report = JSON.parse(readFileSync(reportFile, 'utf8'))
   } catch {}
   return { status: result.status, stdout: result.stdout, stderr: result.stderr, report }
+}
+
+function snapshot(repo) {
+  const out = {}
+  const walk = (dir, rel = '') => {
+    for (const name of readdirSync(join(dir)).sort()) {
+      const abs = join(dir, name)
+      const path = rel ? `${rel}/${name}` : name
+      if (path === '.git') {
+        continue
+      }
+      if (statSync(abs).isDirectory()) {
+        out[`${path}/`] = 'dir'
+        walk(abs, path)
+      } else {
+        out[path] = readFileSync(abs).toString('base64')
+      }
+    }
+  }
+  walk(repo.root)
+  out['.git/index'] = readFileSync(join(repo.root, '.git/index')).toString('base64')
+  return out
 }
 
 afterEach(() => {
@@ -106,18 +128,27 @@ describe('applyMapping', () => {
     expect(applyMapping('zpyoung/orca', { keepTokens: ['stablyai/orca'] }).text).toBe('zpyoung/quirky')
   })
 
-  it('moves the websocket ports only in the two pinned files', () => {
-    const port = 'const P = 6768; const D = 6769'
-    expect(
-      applyMapping(port, { relPath: 'src/main/runtime/runtime-rpc/runtime-rpc-pairing-types.ts' }).text
-    ).toBe('const P = 6778; const D = 6779')
-    expect(applyMapping(port, { relPath: 'src/main/runtime/rpc/ws-fallback-port-store.ts' }).text).toBe(
-      'const P = 6778; const D = 6779'
+  it('moves only the two websocket port declarations, each in its own file', () => {
+    const pairing = 'src/main/runtime/runtime-rpc/runtime-rpc-pairing-types.ts'
+    const store = 'src/main/runtime/rpc/ws-fallback-port-store.ts'
+    const source = [
+      'export const DEFAULT_WS_PORT = 6768',
+      'const DEV_PINNED_WS_PORT: number = 6769',
+      'const other = 6768',
+      'const mine = 6769 // ws://::1:6768',
+      'if (port === 6768 || DEFAULT_WS_PORT === 6768) {}',
+      ''
+    ].join('\n')
+    expect(applyMapping(source, { relPath: pairing }).text).toBe(
+      source.replace('DEFAULT_WS_PORT = 6768', 'DEFAULT_WS_PORT = 6778')
     )
-    expect(applyMapping(port, { relPath: 'src/other.ts' }).text).toBe(port)
-    expect(
-      applyMapping('x = 16768', { relPath: 'src/main/runtime/rpc/ws-fallback-port-store.ts' }).text
-    ).toBe('x = 16768')
+    expect(applyMapping(source, { relPath: store }).text).toBe(
+      source.replace('number = 6769', 'number = 6779')
+    )
+    expect(applyMapping(source, { relPath: 'src/other.ts' }).text).toBe(source)
+    expect(applyMapping('const DEFAULT_WS_PORT = 16768', { relPath: pairing }).text).toBe(
+      'const DEFAULT_WS_PORT = 16768'
+    )
   })
 
   it('reports suspicious matches with their line and still maps them', () => {
@@ -146,6 +177,22 @@ describe('planPathMoves', () => {
   it('flags a target that already exists', () => {
     const plan = planPathMoves(['a/orca.txt'], mapPath, (p) => p === 'a/quirky.txt')
     expect(plan.collisions).toEqual([{ from: 'a/orca.txt', to: 'a/quirky.txt', reason: 'target exists' }])
+  })
+
+  it('flags a target whose parent directory is an existing file', () => {
+    const plan = planPathMoves(['a/orca/x.txt'], mapPath, (p) => (p === 'a/quirky' ? 'file' : null))
+    expect(plan.collisions).toEqual([{ from: 'a/orca/x.txt', to: 'a/quirky/x.txt', reason: 'parent a/quirky is a file' }])
+  })
+
+  it('accepts a target whose parent directory exists', () => {
+    const plan = planPathMoves(['a/orca/x.txt'], mapPath, (p) => (p === 'a/quirky' ? 'dir' : null))
+    expect(plan.collisions).toEqual([])
+  })
+
+  it('flags a file target that another move needs as a directory, in either order', () => {
+    const map = (p) => p.replace(/^orca/, 'quirky')
+    expect(planPathMoves(['orca', 'orca/x.txt'], map, () => false).collisions).toHaveLength(1)
+    expect(planPathMoves(['orca/x.txt', 'orca'], map, () => false).collisions).toHaveLength(1)
   })
 })
 
@@ -183,15 +230,14 @@ describe('rename.mjs', () => {
     )
   })
 
-  it('moves the pinned websocket ports in their two files', () => {
+  it('moves the pinned websocket ports only at their declarations', () => {
+    const store = 'src/main/runtime/rpc/ws-fallback-port-store.ts'
     const repo = makeRepo({
-      'src/main/runtime/rpc/ws-fallback-port-store.ts': 'const DEV_PINNED_WS_PORT = 6769\n',
+      [store]: 'const DEV_PINNED_WS_PORT = 6769\nconst fallback = 6769\n',
       'src/main/other.ts': 'const p = 6769\n'
     })
     rename(repo)
-    expect(repo.read('src/main/runtime/rpc/ws-fallback-port-store.ts')).toBe(
-      'const DEV_PINNED_WS_PORT = 6779\n'
-    )
+    expect(repo.read(store)).toBe('const DEV_PINNED_WS_PORT = 6779\nconst fallback = 6769\n')
     expect(repo.read('src/main/other.ts')).toBe('const p = 6769\n')
   })
 
@@ -247,6 +293,43 @@ describe('rename.mjs', () => {
     expect(stderr).toContain('a/quirky.txt')
     expect(repo.read('a/orca.txt')).toBe('orca\n')
     expect(repo.read('a/quirky.txt')).toBe('already here\n')
+  })
+
+  it('exits 1 and leaves the tree byte-identical when a file sits where a directory must go', () => {
+    const repo = makeRepo({ 'a/orca/x.txt': 'orca\n', 'b/orca.txt': 'orca\n', 'c.txt': 'orca\n' })
+    writeFileSync(join(repo.root, 'a/quirky'), 'a file in the way\n')
+    mkdirSync(join(repo.root, 'b/quirky.txt'))
+    writeFileSync(join(repo.root, 'b/quirky.txt/inner'), 'a directory in the way\n')
+    const before = snapshot(repo)
+    const { status, stderr } = rename(repo)
+    expect(status).toBe(1)
+    expect(stderr).toContain('a/quirky/x.txt')
+    expect(stderr).toContain('b/quirky.txt')
+    expect(snapshot(repo)).toEqual(before)
+  })
+
+  it('exits 1 and leaves the tree byte-identical when a planned move collides', () => {
+    const repo = makeRepo({
+      'src/edited.ts': 'orca\n',
+      'a/orca.txt': 'orca\n',
+      'a/quirky.txt': 'already here\n'
+    })
+    const before = snapshot(repo)
+    expect(rename(repo).status).toBe(1)
+    expect(snapshot(repo)).toEqual(before)
+  })
+
+  it('moves paths before editing content and prints the restore command when a write fails', () => {
+    const repo = makeRepo({ 'src/orca/a.ts': 'orca\n', 'src/ok.ts': 'orca\n' })
+    chmodSync(join(repo.root, 'src/orca/a.ts'), 0o444)
+    const { status, stderr } = rename(repo)
+    expect(status).toBe(1)
+    expect(stderr).toContain('git -C')
+    expect(stderr).toContain('reset --hard')
+    expect(stderr).toContain('clean -fd')
+    expect(stderr).toContain(repo.root)
+    expect(repo.exists('src/quirky/a.ts')).toBe(true)
+    expect(repo.exists('src/orca/a.ts')).toBe(false)
   })
 
   it('never edits binary files but still moves them', () => {

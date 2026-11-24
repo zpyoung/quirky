@@ -1,7 +1,8 @@
 /**
  * The Orca to Quirky mapping table and the text transform built on it.
  * applyMapping(text, { relPath, keepTokens }) runs, in order: the package.json
- * homepage rule, keepToken protection, explicit identity mappings, then the
+ * homepage rule, keepToken protection, explicit identity mappings (including
+ * the two websocket port declarations, each in its own file only), then the
  * generic case-preserving mapping (longest first). It returns the new text, the
  * number of replacements, how many keepTokens it shielded, and the lines where
  * `orca` sat inside a word (see isBoundaryMatch).
@@ -18,11 +19,6 @@ const GENERIC_MAP = {
 
 const GENERIC_PATTERN = /orcad|Orcad|ORCAD|orca|Orca|ORCA/g
 
-const PORT_FILES = [
-  'src/main/runtime/runtime-rpc/runtime-rpc-pairing-types.ts',
-  'src/main/runtime/rpc/ws-fallback-port-store.ts'
-]
-
 const HOMEPAGE_PATTERN = /("homepage"\s*:\s*"[^"]*?)github\.com\/stablyai\/orca"/g
 
 const EXPLICIT_RULES = [
@@ -30,8 +26,16 @@ const EXPLICIT_RULES = [
   { pattern: /com\.stablyai\.orca/g, to: 'com.zpyoung.quirky' },
   { pattern: /com\.stably\.orca/g, to: 'com.zpyoung.quirky' },
   { pattern: /zpyoung\/orca/g, to: 'zpyoung/quirky' },
-  { pattern: /(?<![0-9])6768(?![0-9])/g, to: '6778', onlyIn: PORT_FILES },
-  { pattern: /(?<![0-9])6769(?![0-9])/g, to: '6779', onlyIn: PORT_FILES }
+  {
+    pattern: /(\bconst\s+DEFAULT_WS_PORT\s*(?::[^=\n]+)?=\s*)6768(?![0-9A-Za-z_.])/g,
+    to: (_match, head) => `${head}6778`,
+    onlyIn: 'src/main/runtime/runtime-rpc/runtime-rpc-pairing-types.ts'
+  },
+  {
+    pattern: /(\bconst\s+DEV_PINNED_WS_PORT\s*(?::[^=\n]+)?=\s*)6769(?![0-9A-Za-z_.])/g,
+    to: (_match, head) => `${head}6779`,
+    onlyIn: 'src/main/runtime/rpc/ws-fallback-port-store.ts'
+  }
 ]
 
 const isLetter = (char) => char !== undefined && /\p{L}/u.test(char)
@@ -99,12 +103,12 @@ export function applyMapping(text, { relPath = '', keepTokens = [] } = {}) {
   out = protectedText.out
 
   for (const rule of EXPLICIT_RULES) {
-    if (rule.onlyIn && !rule.onlyIn.includes(relPath)) {
+    if (rule.onlyIn && rule.onlyIn !== relPath) {
       continue
     }
-    out = out.replace(rule.pattern, () => {
+    out = out.replace(rule.pattern, (...args) => {
       count++
-      return rule.to
+      return typeof rule.to === 'function' ? rule.to(...args) : rule.to
     })
   }
 

@@ -14,7 +14,12 @@
  * suspiciousMatches, skippedByAllowlist }) to --report, else to stdout. With
  * --dry-run nothing on disk changes.
  *
- * Exit codes: 0 success, 1 path collision, 2 bad arguments or allowlist.
+ * Everything is planned in memory first; a collision exits 1 before anything on
+ * disk changes. Path moves are applied before content edits, and a failure
+ * part-way prints the command that restores the tree and exits 1.
+ *
+ * Exit codes: 0 success, 1 path collision or failure part-way, 2 bad arguments
+ * or allowlist.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readdirSync, rmdirSync, writeFileSync } from 'node:fs'
@@ -112,7 +117,7 @@ function run(options) {
     if (result.text === text) {
       continue
     }
-    edits.push({ abs, text: result.text })
+    edits.push({ path, text: result.text })
     matchesByFile[path] = result.count
     for (const { line, text: lineText } of result.suspicious) {
       suspiciousMatches.push({ file: path, line, text: lineText })
@@ -121,11 +126,16 @@ function run(options) {
 
   const mapPath = (path) => applyMapping(path, { keepTokens }).text
   const trackedSet = new Set(tracked)
-  const plan = planPathMoves(
-    candidates,
-    mapPath,
-    (to) => trackedSet.has(to) || pathExists(join(root, to))
-  )
+  const plan = planPathMoves(candidates, mapPath, (path) => {
+    if (trackedSet.has(path)) {
+      return 'file'
+    }
+    try {
+      return lstatSync(join(root, path)).isDirectory() ? 'dir' : 'file'
+    } catch {
+      return null
+    }
+  })
   for (const { from } of plan.moves) {
     for (const { line, text } of applyMapping(from, { keepTokens }).suspicious) {
       suspiciousMatches.push({ file: from, line: line - 1, text })
@@ -148,13 +158,21 @@ function run(options) {
   }
 
   if (!options.dryRun) {
-    for (const edit of edits) {
-      writeFileSync(edit.abs, edit.text)
-    }
-    for (const { from, to } of plan.moves) {
-      mkdirSync(dirname(join(root, to)), { recursive: true })
-      execFileSync('git', ['-C', root, 'mv', '--', from, to], { stdio: ['ignore', 'ignore', 'pipe'] })
-      removeEmptyParents(root, dirname(from))
+    const movedTo = new Map(plan.moves.map(({ from, to }) => [from, to]))
+    try {
+      for (const { from, to } of plan.moves) {
+        mkdirSync(dirname(join(root, to)), { recursive: true })
+        execFileSync('git', ['-C', root, 'mv', '--', from, to], { stdio: ['ignore', 'ignore', 'pipe'] })
+        removeEmptyParents(root, dirname(from))
+      }
+      for (const edit of edits) {
+        writeFileSync(join(root, movedTo.get(edit.path) ?? edit.path), edit.text)
+      }
+    } catch (error) {
+      const quoted = `'${root.replaceAll("'", `'\\''`)}'`
+      console.error(`rename failed part-way: ${error.stderr?.toString().trim() || error.message}`)
+      console.error(`restore the tree with: git -C ${quoted} reset --hard && git -C ${quoted} clean -fd`)
+      return { report, exitCode: 1 }
     }
   }
   return { report, exitCode: 0 }
