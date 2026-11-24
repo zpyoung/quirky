@@ -220,10 +220,9 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
     }
   }
 
-  // Why: one MobileSocketWiring per server session. Direct WS and cloud relay both attach to it, and
-  // DesktopRelayService captures it once at construction, so a loopback→wide pairing rebind must swap the
-  // transport under the SAME wiring — replacing the wiring would strand relay sockets (lost connection IDs,
-  // binary handling, and revocation targeting) on a dead object.
+  // Why: one MobileSocketWiring per server session, so a loopback→wide pairing rebind swaps the
+  // transport under the SAME wiring instead of stranding connection IDs, binary handling, and
+  // revocation targeting on a dead object.
   protected ensureMobileSocketWiring(
     deviceRegistry: DeviceRegistry,
     e2eeKeypair: E2EEKeypair
@@ -256,13 +255,11 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
         this.handleWebSocketBinaryMessage(bytes, socket.ws)
       },
       onReady: (socket) => {
-        // Why: first authenticated mobile/remote client (direct WS and
-        // cloud relay both attach here) starts path-candidate tracking.
+        // Why: first authenticated mobile/remote client starts path-candidate tracking.
         // Activation is a local-host concern: candidate buffers live on the
         // buffer-owning host's runtime, so a remote runtime proxy may
         // legitimately lack this method (its own server activates it).
         this.runtime.activateRecentPtyPathCandidateTracking?.()
-        this.mobileRelayPairingProvider?.onDemandStateChanged?.()
         if (socket.clientCapabilities.includes(AGENT_LAUNCH_RUNTIME_CAPABILITY)) {
           this.runtime.noteAgentLaunchClientReady?.()
         }
@@ -287,7 +284,6 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
           return
         }
         this.abortWebSocketDispatches(socket.ws)
-        this.mobileDesktopRelay?.closePhoneConnection(socket.connectionId)
         // Why: subscriptions and binary streams are socket-scoped, but disconnect state is device-scoped across transports.
         this.runtime.cleanupSubscriptionsForConnection(socket.connectionId)
         this.runtime.cancelMobileDictationForConnection(socket.connectionId)

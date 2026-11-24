@@ -45,7 +45,7 @@ describe('every RPC method declares a known permission', () => {
     expect(permissionOf('settings.getAgentLaunch')).toBe('workspace')
     expect(permissionOf('settings.mutateAgentLaunch')).toBe('settings-write')
     expect(permissionOf('skills.delete')).toBe('skills-admin')
-    expect(permissionOf('pairing.provisionRelay')).toBe('pairing-admin')
+    expect(permissionOf('notifications.registerPush')).toBe('pairing-admin')
     expect(permissionOf('ssh.connect')).toBe('host-admin')
     expect(permissionOf('network.browserTunnel')).toBe('host-admin')
   })
@@ -74,7 +74,7 @@ describe('paired runtime clients', () => {
     }
   )
 
-  it.each(['pairing.provisionRelay', 'pairing.getEndpoints', 'notifications.registerPush'])(
+  it.each(['notifications.registerPush'])(
     'are refused pairing and push administration: %s',
     async (method) => {
       const response = await dispatchAs(PAIRED, method, {})

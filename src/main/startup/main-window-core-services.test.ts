@@ -38,7 +38,6 @@ const {
       pluginService: null,
       pluginMarketplaceService: null,
       pluginMarketplaceInstaller: null,
-      desktopRelayService: null,
       isServeMode: false,
       localPtyStartupReady: Promise.resolve(),
       localPtyProviderStartupReady: Promise.resolve()

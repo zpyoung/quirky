@@ -7698,12 +7698,9 @@
           "6436e56546": "QR code pour l'appairage mobile",
           "1b1b70279a": "Aucun appareil appairé pour le moment.",
           "1592afcc7a": "Aucun appareil appairé pour le moment. Scannez le QR code avec l'app mobile Orca.",
-          "relayDegradedNotice": "Le relais est injoignable — ce code ne fonctionne que sur votre LAN ou via Tailscale. Régénérez-le pour réessayer.",
           "pairingQrError": "Ce code d'appairage n'a pas pu être rendu sous forme de QR code. Copiez-le plutôt dans Orca Mobile.",
           "pairingCodeReady": "Code d'appairage prêt",
           "copyPairingCode": "Copier le code d'appairage",
-          "diagnosticsCopied": "Diagnostics copiés",
-          "diagnosticsCopyFailed": "Échec de la copie des diagnostics",
           "5e2c7a1f84": "Lorsque vous utilisez un terminal sur votre téléphone, Orca le réduit pour l'adapter à l'écran de votre téléphone. Lorsque vous fermez l'application ou si vous la quittez, cela contrôle si elle reste à la taille du téléphone (afin que les outils CLI interactifs ne soient pas redistribués) ou si elle est redimensionnée sur votre bureau. Vous pouvez toujours utiliser Restaurer ou Tout restaurer sur la bannière pour la redimensionner manuellement."
         },
         "MobileSettingsPane": {
@@ -11352,52 +11349,20 @@
           "567633ff50": "Le clic droit colle le presse-papiers dans le terminal. Control-clic pour ouvrir le menu contextuel.",
           "c64497148a": "Le clic droit colle le presse-papiers. Control-clic ouvre le menu contextuel."
         },
-        "MobileRelayStatusSection": {
-          "registered": "Enregistré",
-          "connecting": "Connexion",
-          "reconnecting": "Reconnexion",
-          "offline": "Hors ligne",
-          "title": "Orca Relay",
-          "automatic": "Connexion depuis n'importe où quand un téléphone est jumelé",
-          "signInPrompt": "Connectez-vous sur cet ordinateur pour accéder depuis n'importe où",
-          "directStillAvailable": "Les connexions LAN et Tailscale restent disponibles.",
-          "directNeedsNoAccount": "Le jumelage LAN et Tailscale fonctionne toujours sans compte.",
-          "signIn": "Se connecter",
-          "unavailable": "Indisponible",
-          "standby": "Veille — aucun appareil via Relay"
-        },
-        "MobilePairingConnectionOptions": {
-          "unavailable": "Indisponible",
-          "pathGroup": "Comment le téléphone joint cet ordinateur",
-          "anywhereTitle": "Orca Relay",
-          "relayUnavailable": "Orca Relay n'est pas disponible dans ce build. Utilisez le LAN.",
-          "localTitle": "LAN",
-          "localDescription": "Le téléphone doit être sur ce Wi‑Fi ou connecté via Tailscale. Aucun compte requis."
-        },
         "MobilePairingSetupSection": {
           "title": "Jumeler un téléphone",
           "overview": "Générez un QR code, puis scannez-le dans Orca Mobile sous Jumeler le bureau.",
-          "step1Title": "Connexion",
           "step2Title": "Adresse de cet ordinateur",
           "step2LocalDescription": "Le téléphone doit pouvoir joindre cette adresse via Tailscale ou le Wi‑Fi.",
           "regenerate": "Régénérer le QR code",
           "generate": "Générer le QR code",
-          "refresh": "Actualiser les interfaces réseau",
-          "step2RelayDescription": "Facultatif. Choisissez l'adresse Wi‑Fi ou Tailscale que votre téléphone utilisera à proximité — généralement plus rapide que Relay. Relay reste fonctionnel quand vous êtes loin.",
-          "step2RelayDisclosure": "Utiliser aussi un chemin local plus rapide"
+          "refresh": "Actualiser les interfaces réseau"
         },
         "MachineNameField": {
           "label": "Nom de la machine",
           "description": "Les autres appareils et hôtes voient « {{name}} ». Laissez vide pour utiliser le nom de l’ordinateur.",
           "pending": "Les autres appareils et hôtes voient ce nom. Laissez vide pour utiliser le nom d’ordinateur détecté.",
           "placeholder": "Détecté automatiquement"
-        },
-        "MobileRelayBetaAvailability": {
-          "about": "À propos de la bêta d'Orca Relay",
-          "beta": "Beta",
-          "availability": "Disponible sur",
-          "testFlight": "TestFlight",
-          "androidApk": "APK Android"
         },
         "SkillUsageExampleDialog": {
           "copiedPrompt": "Prompt d'exemple copié.",
@@ -11416,9 +11381,6 @@
           "terminalAriaLabel": "Terminal d'installation de la skill Linear",
           "manageConnectionHint": "Consultez les espaces de travail Linear connectés et les clés d'API dans",
           "manageConnectionLink": "Intégrations"
-        },
-        "MobileRelayBetaNotice": {
-          "notice": "Orca Relay est en bêta."
         },
         "EditorFontFamilySetting": {
           "title": "Police de l'éditeur",
@@ -14419,19 +14381,13 @@
             "preview": "Aperçu",
             "stable": "Stable"
           },
-          "relayDegradedNotice": "Relay injoignable — ce code ne fonctionne que sur votre LAN ou Tailscale.",
           "pairingQrError": "Ce code d'appairage n'a pas pu être rendu sous forme de QR code. Copiez-le plutôt dans Orca Mobile.",
-          "noRelayCode": "Aucun code d'appairage disponible",
-          "noPairingCode": "Aucun code d'appairage disponible",
-          "qrSignInRequired": "Connectez-vous pour créer un code d'appairage Relay",
           "qrRenderFailed": "Impossible d'afficher le code QR — copiez le code ci-dessous",
           "qrGeneratePrompt": "Générez un code d'appairage pour continuer",
           "pairingCodeReady": "Code d'appairage prêt",
           "pairThisMac": "Appairez ce Mac.",
           "pairThisPc": "Appairez ce PC.",
           "pairThisComputer": "Appairez cet ordinateur.",
-          "directAddressDisclosure": "Utiliser aussi un chemin local plus rapide",
-          "directAddressHint": "Facultatif. Choisissez l'adresse Wi‑Fi ou Tailscale que votre téléphone utilisera à proximité — généralement plus rapide que Relay. Relay reste fonctionnel quand vous êtes loin.",
           "androidHelp": {
             "guide": "Guide d'installation"
           }
@@ -14447,9 +14403,7 @@
           "4e1eb5d55c": "Échec de la révocation de l'appareil",
           "255372e6e8": "Appareil révoqué",
           "1b4509a8a1": "appairé",
-          "c5909374cf": "intro",
-          "diagnosticsCopied": "Diagnostics copiés",
-          "diagnosticsCopyFailed": "Échec de la copie des diagnostics"
+          "c5909374cf": "intro"
         },
         "MobilePageToolbar": {
           "ad2284a9e2": "Fermer · Esc",
@@ -14582,24 +14536,7 @@
           "repair-unverified": "Impossible de vérifier l'accès au Pare-feu Windows",
           "blocked-title": "Windows bloque peut-être Orca Mobile",
           "blocked-description": "Une règle entrante de blocage existante peut prendre le pas sur l'exception d'appairage. La réparation supprime les règles TCP conflictuelles de cette application Orca, puis autorise le port {{port}} sur les réseaux privés.",
-          "repair": "Réparer l'accès pare-feu",
-          "relay-note": "L'appairage fonctionne toujours via Orca Relay — cette autorisation ajoute seulement la connexion locale, plus rapide."
-        },
-        "MobileRelayMintFailureNotice": {
-          "retryingTitle": "Nouvelle tentative via Orca Relay…",
-          "unavailableTitle": "Orca Relay n'est pas disponible sur ce poste de bureau.",
-          "title": "Impossible de créer un code d'appairage Relay.",
-          "retryingBody": "Création d'un nouveau code d'appairage. Cela peut prendre un moment via une connexion distante.",
-          "unavailableBody": "Utilisez le LAN pour appairer via Tailscale ou le même Wi-Fi.",
-          "body": "Réessayez, ou utilisez le LAN pour appairer via Tailscale ou le même Wi-Fi.",
-          "useLan": "Utiliser le LAN",
-          "retrying": "Nouvelle tentative…",
-          "retry": "Réessayer Relay",
-          "copyDiagnostics": "Copier les diagnostics",
-          "reconnectTitle": "La session de votre compte Orca a expiré.",
-          "reconnectBody": "Connectez-vous à nouveau pour utiliser Orca Relay, ou utilisez le réseau local pour effectuer le couplage via Tailscale ou le même Wi‑Fi.",
-          "notEntitledTitle": "Orca Relay n'est pas inclus avec ce compte Orca.",
-          "rateLimitedBody": "Orca Relay est occupé. Attendez une minute et réessayez, ou utilisez le LAN pour appairer via Tailscale ou le même Wi‑Fi."
+          "repair": "Réparer l'accès pare-feu"
         }
       },
       "gitlab": {

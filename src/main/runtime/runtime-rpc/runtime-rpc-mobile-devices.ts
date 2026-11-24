@@ -1,8 +1,4 @@
 import type {
-  RelayDeviceBinding,
-  RelayRevokeOutboxItem
-} from '../mobile-cloud-relay/relay-revoke-outbox'
-import type {
   DelegatedPhone,
   DelegatedMobileDeviceSyncResult
 } from '../../../shared/delegated-mobile-device-contract'
@@ -11,11 +7,7 @@ import { RuntimeRpcRequestAdmission } from './runtime-rpc-request-admission'
 // Why: below dispatch so a caller-bound RPC context can revoke and mint mobile devices.
 export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
   async revokeMobileDevice(deviceId: string): Promise<boolean> {
-    const revoked = this.revokeMobileDeviceNow(deviceId)
-    if (revoked) {
-      this.mobileDesktopRelay?.phonesChanged()
-    }
-    return revoked
+    return this.revokeMobileDeviceNow(deviceId)
   }
 
   private revokeMobileDeviceNow(deviceId: string): boolean {
@@ -23,15 +15,9 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
     if (device?.scope !== 'mobile') {
       return false
     }
-    if (device.relayBinding) {
-      if (!this.queueRelayDeviceRevoke(device.relayBinding)) {
-        return false
-      }
-    }
     if (!this.deviceRegistry?.removeDevice(deviceId)) {
       return false
     }
-    this.mobileRelayPairingProvider?.onDemandStateChanged?.()
     this.runtime.forgetClientNavigationState(deviceId)
     this.mobileSocketWiring?.terminateDeviceConnections(deviceId)
     return true
@@ -82,21 +68,5 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
         token: device.token
       }))
     }
-  }
-
-  protected queueRelayDeviceRevoke(binding: RelayDeviceBinding): boolean {
-    let item: RelayRevokeOutboxItem
-    try {
-      item = this.relayRevokeOutbox.enqueue(binding)
-    } catch (error) {
-      console.error('[runtime] Failed to persist Relay device cleanup:', error)
-      return false
-    }
-    try {
-      this.mobileRelayPairingProvider?.onDeviceRevokeQueued(item)
-    } catch (error) {
-      console.warn('[runtime] Failed to notify Relay cleanup worker:', error)
-    }
-    return true
   }
 }

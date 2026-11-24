@@ -70,8 +70,7 @@ describe('OrcaRuntimeRpcServer WebSocket bind host (STA-2370)', () => {
       expect(wsTransportOf(server)?.resolvedHost).toBe('127.0.0.1')
 
       const offer = await server.createMobilePairingOffer({
-        address: '100.64.1.20',
-        connectionMode: 'local-only'
+        address: '100.64.1.20'
       })
       expect(offer.available).toBe(true)
 
@@ -330,8 +329,7 @@ describe('OrcaRuntimeRpcServer WebSocket bind host (STA-2370)', () => {
       expect(wsTransportOf(server)?.resolvedHost).toBe('127.0.0.1')
 
       const offer = await server.createMobilePairingOffer({
-        address: '100.64.1.20',
-        connectionMode: 'local-only'
+        address: '100.64.1.20'
       })
       expect(offer.available).toBe(true)
       expect(wsTransportOf(server)?.resolvedHost).toBe('0.0.0.0')
@@ -413,8 +411,7 @@ describe('OrcaRuntimeRpcServer WebSocket bind host (STA-2370)', () => {
       })
 
       const offer = await server.createMobilePairingOffer({
-        address: '100.64.1.20',
-        connectionMode: 'local-only'
+        address: '100.64.1.20'
       })
       // Why: a failed widen must NOT advertise a LAN endpoint with no LAN listener behind it — the offer is
       // reported unavailable (STA-2370). A revert that swallows the widen failure would return available:true.
@@ -465,8 +462,7 @@ describe('OrcaRuntimeRpcServer WebSocket bind host (STA-2370)', () => {
       })
 
       const offer = await server.createMobilePairingOffer({
-        address: '100.64.1.20',
-        connectionMode: 'local-only'
+        address: '100.64.1.20'
       })
       expect(injected).toBe(true)
       // Why: only metadata persistence failed; the wide bind succeeded, so pairing is available and the wide
@@ -606,8 +602,7 @@ describe('OrcaRuntimeRpcServer WebSocket bind host (STA-2370)', () => {
       // A paired client can reach this RPC. Without the pin's refusal it would rebind the
       // listener to every interface, undoing the operator's bind policy from the outside.
       const offer = await server.createMobilePairingOffer({
-        address: '100.64.1.20',
-        connectionMode: 'local-only'
+        address: '100.64.1.20'
       })
       expect(offer.available).toBe(false)
       if (!offer.available) {

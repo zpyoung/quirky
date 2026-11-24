@@ -65,9 +65,6 @@ export function planDeviceKeyFork(
     scope: legacy.scope,
     ...(legacy.grants ? { grants: [...legacy.grants] } : {}),
     pairingReach: legacy.pairingReach,
-    ...(legacy.mobilePairingConnectionMode
-      ? { mobilePairingConnectionMode: legacy.mobilePairingConnectionMode }
-      : {}),
     credentialKind: 'device-key',
     devicePublicKeyB64,
     forkedFrom: legacy.deviceId,

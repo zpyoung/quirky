@@ -1,8 +1,5 @@
 import { ipcRenderer } from 'electron'
-import type { MobileRelayStatusDetail } from '../../shared/mobile-relay-status'
-import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-connection-mode'
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
-import type { MobileRelayMintFailure } from '../../shared/mobile-relay-mint-failure'
 import type { PreloadApi } from '../api-types'
 
 export const mobileApi = {
@@ -12,14 +9,12 @@ export const mobileApi = {
 
   getPairingQR: (args?: {
     address?: string
-    connectionMode?: MobilePairingConnectionMode
     rotate?: boolean
   }): Promise<
     | {
         available: false
         reason?: string
         guidance?: string
-        relayFailure?: MobileRelayMintFailure
       }
     | {
         available: true
@@ -28,10 +23,8 @@ export const mobileApi = {
         qrSize: number | null
         qrError?: 'encoding_failed'
         pairingUrl: string
-        /** Null when no direct address was advertised — the QR pairs over Relay alone. */
-        endpoint: string | null
+        endpoint: string
         deviceId: string
-        connectionMode: MobilePairingConnectionMode
       }
   > => ipcRenderer.invoke('mobile:getPairingQR', args),
 
@@ -73,16 +66,6 @@ export const mobileApi = {
 
   isWebSocketReady: (): Promise<{ ready: boolean; endpoint: string | null }> =>
     ipcRenderer.invoke('mobile:isWebSocketReady'),
-
-  getRelayStatus: (): Promise<MobileRelayStatusDetail> =>
-    ipcRenderer.invoke('mobile:getRelayStatus'),
-
-  onRelayStatusChanged: (callback: (detail: MobileRelayStatusDetail) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, detail: MobileRelayStatusDetail) =>
-      callback(detail)
-    ipcRenderer.on('mobile:relayStatusChanged', listener)
-    return () => ipcRenderer.removeListener('mobile:relayStatusChanged', listener)
-  },
 
   consumePendingUnpairedDeviceAuthFailure: (): Promise<boolean> =>
     ipcRenderer.invoke('mobile:consumePendingUnpairedDeviceAuthFailure'),

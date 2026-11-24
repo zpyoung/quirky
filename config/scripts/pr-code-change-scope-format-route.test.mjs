@@ -18,7 +18,6 @@ it.each(['README.md', '.github/ISSUE_TEMPLATE/bug.yml', '.github/workflows/mobil
 )
 
 it('leaves paths the formatter ignores out of static analysis', () => {
-  expect(classifyPrJobs(['cloud/apps/relay/README.md']).static_analysis).toBe(false)
   expect(classifyPrJobs(['docs/assets/logo.png']).static_analysis).toBe(false)
 })
 

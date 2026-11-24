@@ -2,20 +2,6 @@ import type { OrcaRuntimeService } from '../orca-runtime'
 import type { RpcAnyMethodDeclaration } from '../rpc/core'
 import type { DeviceRegistry } from '../device-registry'
 import type { E2EEKeypair } from '../e2ee-keypair'
-import type { MobileSocketTransportMetadata } from '../rpc/mobile-socket-wiring'
-import type { PairingRelay } from '../../../shared/mobile-relay-pairing-offer'
-import type { MobilePairingConnectionMode } from '../../../shared/mobile-pairing-connection-mode'
-import type { MobileRelayMintFailure } from '../../../shared/mobile-relay-mint-failure'
-import type {
-  DeviceCredentialInstalled,
-  PairingGetEndpointsParams,
-  PairingGetEndpointsResult,
-  PairingProvisionRelayParams
-} from '../../../shared/mobile-relay-credential-contract'
-import type {
-  RelayDeviceBinding,
-  RelayRevokeOutboxItem
-} from '../mobile-cloud-relay/relay-revoke-outbox'
 
 export const DEFAULT_WS_PORT = 6768
 
@@ -69,15 +55,12 @@ export type PairingOfferUnavailableReason =
   | 'device_registry_unavailable'
   | 'e2ee_key_unavailable'
   | 'invalid_advertised_endpoint'
-  | 'relay_mint_failed'
   | 'network_exposure_failed'
 
 export type PairingOfferUnavailable = {
   available: false
   reason: PairingOfferUnavailableReason
   guidance: string
-  /** Present when an Anywhere mint refused to silently fall back to LAN-only. */
-  relayFailure?: MobileRelayMintFailure
 }
 
 export type MobilePairingOfferAvailable = {
@@ -86,8 +69,6 @@ export type MobilePairingOfferAvailable = {
   endpoint: string
   deviceId: string
   webClientUrl: string | null
-  /** Mode the offer actually encodes. */
-  connectionMode: MobilePairingConnectionMode
 }
 
 export type MobilePairingOffer = PairingOfferUnavailable | MobilePairingOfferAvailable
@@ -107,28 +88,6 @@ export const DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE =
   'The pairing registry is unavailable. Verify that the Orca data directory is writable.'
 export const E2EE_KEY_UNAVAILABLE_GUIDANCE =
   'The E2EE identity is unavailable. Verify that the Orca data directory is writable.'
-
-export type MobileRelayPairingProvider = {
-  createPairingRelay(
-    relayDeviceId: string
-  ): Promise<{ relay: PairingRelay; binding: RelayDeviceBinding }>
-  onDeviceRevokeQueued(item: RelayRevokeOutboxItem): void
-  onDemandStateChanged?(): void
-  getEndpoints(
-    context: MobilePairingConnectionContext,
-    params: PairingGetEndpointsParams
-  ): Promise<PairingGetEndpointsResult>
-  provisionRelay(
-    context: MobilePairingConnectionContext,
-    params: PairingProvisionRelayParams
-  ): Promise<DeviceCredentialInstalled>
-}
-
-export type MobilePairingConnectionContext = Readonly<{
-  deviceId: string
-  connectionId: string
-  transport: MobileSocketTransportMetadata
-}>
 
 // Why: keepalive frames count as socket activity, resetting both idle timers so long-polls outlive the 30s/60s idle caps. See §3.1.
 

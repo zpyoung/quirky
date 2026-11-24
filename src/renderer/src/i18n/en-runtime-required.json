@@ -637,8 +637,7 @@
           "79d2f480da": "Network interface to advertise",
           "7af266b80d": "Install QR code",
           "bb0074ce11": "Pairing QR code",
-          "ca85e595a7": "No interfaces found",
-          "relayDegradedNotice": "Relay couldn’t be reached — this code only works on your LAN or Tailscale."
+          "ca85e595a7": "No interfaces found"
         },
         "MobilePage": {
           "1b4509a8a1": "paired",
@@ -657,7 +656,6 @@
           "open-settings": "Open network settings",
           "public-description": "Change this trusted Wi-Fi network to Private before allowing Orca Mobile connections.",
           "public-title": "Windows marks this network as public",
-          "relay-note": "Pairing still works over Orca Relay — allowing this only adds the faster local connection.",
           "repair": "Repair firewall access",
           "repair-failed": "Could not update the Windows Firewall rules",
           "repair-success": "Windows Firewall now allows Orca Mobile on private networks",
@@ -1440,30 +1438,6 @@
           "a9db5d771d": "Refresh network interfaces",
           "c541f67790": "Generate QR Code",
           "d536b5e20d": "Choose which network address to advertise in the QR code. Use your LAN address for same-network pairing, or an overlay network address (Tailscale, ZeroTier) for cross-network access."
-        },
-        "MobilePane": {
-          "relayDegradedNotice": "Relay couldn’t be reached — this code only works on your LAN or Tailscale. Regenerate to try again."
-        },
-        "MobileRelayBetaAvailability": {
-          "about": "About the Orca Relay beta",
-          "androidApk": "Android APK",
-          "availability": "Available on",
-          "beta": "Beta",
-          "testFlight": "TestFlight"
-        },
-        "MobileRelayStatusSection": {
-          "automatic": "Connect from anywhere when a phone is paired",
-          "connecting": "Connecting",
-          "directNeedsNoAccount": "LAN and Tailscale pairing still work without an account.",
-          "directStillAvailable": "LAN and Tailscale connections remain available.",
-          "offline": "Offline",
-          "reconnecting": "Reconnecting",
-          "registered": "Registered",
-          "signIn": "Sign in",
-          "signInPrompt": "Sign in on this desktop to connect from anywhere",
-          "standby": "Standby — no relay devices",
-          "title": "Orca Relay",
-          "unavailable": "Unavailable"
         },
         "MobileSettingsPane": {
           "9a3c280e49": "GitHub Releases",

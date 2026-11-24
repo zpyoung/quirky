@@ -2,7 +2,6 @@ import { defineMethod } from '../core'
 import { MOBILE_PROJECT_SECTIONS_METHOD } from '../../../../shared/mobile-project-sections-contract'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 import { readMobileProjectSections } from '../../mobile-project-sections-snapshot'
-import { requireSwitchedOn } from '../../sidebar-inputs/require-switched-on'
 import { readSidebarProjectCatalog } from '../../sidebar-inputs/sidebar-project-catalog'
 
 export const MOBILE_PROJECT_SECTIONS_METHODS = [
@@ -14,10 +13,7 @@ export const MOBILE_PROJECT_SECTIONS_METHODS = [
     handler: (_params, { runtime }) =>
       ORCA_SIDEBAR_INPUTS_IS_MAIN
         ? {
-            catalog: readSidebarProjectCatalog(
-              runtime.requireStore(),
-              requireSwitchedOn(runtime.pairedServerRows).catalogs()
-            )
+            catalog: readSidebarProjectCatalog(runtime.requireStore(), [])
           }
         : readMobileProjectSections()
   })

@@ -11,15 +11,7 @@ import type { RpcBinarySender } from './rpc-binary-sender'
 
 type MobileSocketPayload = string | Uint8Array<ArrayBufferLike>
 
-export type MobileSocketTransportMetadata =
-  | { transport: 'direct' }
-  | {
-      transport: 'relay'
-      relayHostId: string
-      relayDeviceId: string
-      basisConnId: string
-      credentialKind: 'invite' | 'resume'
-    }
+export type MobileSocketTransportMetadata = { transport: 'direct' }
 
 export type MobileSocketTransport = {
   onMessage(
@@ -179,38 +171,16 @@ export class MobileSocketWiring {
       this.connectionIds.set(ws, connectionId)
       channel = new E2EEChannel(ws, {
         serverSecretKey: this.e2eeKeypair.secretKey,
-        transportContext:
-          metadata.transport === 'relay'
-            ? { transport: 'relay', relayHostId: metadata.relayHostId }
-            : { transport: 'direct' },
-        requireV2: metadata.transport === 'relay',
+        transportContext: { transport: 'direct' },
         outboundMemoryBudget: this.outboundMemoryBudget,
         resolveAuthenticatedDevice: (token) => {
           const device = this.deviceRegistry.validateToken(token)
-          if (!device) {
-            return null
-          }
-          // Why: outer relay authorization cannot choose the local Orca
-          // identity; E2EE must resolve the same device before readiness.
-          if (metadata.transport === 'relay' && metadata.relayDeviceId !== device.deviceId) {
-            return null
-          }
-          return toAuthenticatedDevice(device)
+          return device ? toAuthenticatedDevice(device) : null
         },
         resolveAuthenticatedDeviceKey: (deviceId) => {
           const lookup = this.deviceRegistry.lookupDeviceKey(deviceId)
           if (lookup.kind !== 'found') {
             return lookup
-          }
-          // Why: same relay binding rule as token auth — the outer relay cannot pick the identity.
-          // A fork keeps its token row's Relay binding (the key proof names the installation).
-          // Never "unknown": the device exists, and that verdict would make the client delete its key.
-          if (
-            metadata.transport === 'relay' &&
-            metadata.relayDeviceId !== lookup.device.deviceId &&
-            metadata.relayDeviceId !== lookup.device.forkedFrom
-          ) {
-            return { kind: 'refused' }
           }
           return {
             kind: 'found',

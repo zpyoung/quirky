@@ -7553,12 +7553,9 @@
           "6436e56546": "Código QR para emparejamiento móvil",
           "1b1b70279a": "Aún no hay dispositivos emparejados.",
           "1592afcc7a": "Aún no hay dispositivos emparejados. Escanea el código QR con la aplicación móvil de Orca.",
-          "relayDegradedNotice": "No se pudo contactar con Relay: este código solo funciona en tu LAN o Tailscale. Genera uno nuevo e inténtalo de nuevo.",
           "pairingQrError": "Este código de emparejamiento no se pudo representar como código QR. Cópialo en Orca Mobile.",
           "pairingCodeReady": "Código de emparejamiento listo",
           "copyPairingCode": "Copiar código de emparejamiento",
-          "diagnosticsCopied": "Diagnóstico copiado",
-          "diagnosticsCopyFailed": "No se pudieron copiar los diagnósticos",
           "5e2c7a1f84": "Mientras usas un terminal en tu teléfono, Orca lo reduce para que se ajuste a la pantalla de tu teléfono. Cuando cierra la aplicación o la abandona, esto controla si permanece en el tamaño del teléfono (para que las herramientas CLI interactivas no vuelvan a fluir) o cambia de tamaño a su escritorio. Siempre puedes usar Restaurar o Restaurar todo en el banner para cambiar el tamaño manualmente."
         },
         "MobileSettingsPane": {
@@ -11261,52 +11258,20 @@
           "567633ff50": "Right-click pastes the clipboard into the terminal. Control-click to open the context menu.",
           "c64497148a": "Right-click pastes the clipboard. Control-click opens the context menu."
         },
-        "MobileRelayStatusSection": {
-          "registered": "Registered",
-          "connecting": "Connecting",
-          "reconnecting": "Reconnecting",
-          "offline": "Offline",
-          "title": "Orca Relay",
-          "automatic": "Connect from anywhere when a phone is paired",
-          "signInPrompt": "Sign in on this desktop to connect from anywhere",
-          "directStillAvailable": "LAN and Tailscale connections remain available.",
-          "directNeedsNoAccount": "LAN and Tailscale pairing still work without an account.",
-          "signIn": "Sign in",
-          "unavailable": "Unavailable",
-          "standby": "Standby — no relay devices"
-        },
-        "MobilePairingConnectionOptions": {
-          "unavailable": "No disponible",
-          "localDescription": "El teléfono debe estar en esta Wi‑Fi o conectado por Tailscale. No se necesita cuenta.",
-          "pathGroup": "Cómo llega el teléfono a este ordenador",
-          "anywhereTitle": "Orca Relay",
-          "relayUnavailable": "Orca Relay no está disponible en esta compilación. Usa LAN.",
-          "localTitle": "LAN"
-        },
         "MobilePairingSetupSection": {
           "title": "Vincular un teléfono",
           "regenerate": "Regenerar",
           "generate": "Generar código QR",
           "refresh": "Actualizar interfaces de red",
           "overview": "Genera un código QR, luego escanéalo en Orca Mobile en Pair Desktop.",
-          "step1Title": "Método de conexión",
           "step2Title": "Dirección de este ordenador",
-          "step2LocalDescription": "El teléfono debe poder alcanzar esta dirección por Tailscale o Wi‑Fi.",
-          "step2RelayDescription": "Opcional. Elige la dirección Wi‑Fi o Tailscale que el teléfono usará cuando esté cerca — suele ser más rápido que Relay. Relay sigue funcionando cuando estás fuera.",
-          "step2RelayDisclosure": "También usar una ruta local más rápida"
+          "step2LocalDescription": "El teléfono debe poder alcanzar esta dirección por Tailscale o Wi‑Fi."
         },
         "MachineNameField": {
           "label": "Nombre del equipo",
           "description": "Otros dispositivos y hosts ven “{{name}}”. Déjalo en blanco para usar el nombre propio del equipo.",
           "pending": "Otros dispositivos y hosts ven este nombre. Déjalo en blanco para usar el nombre detectado del equipo.",
           "placeholder": "Detectado automáticamente"
-        },
-        "MobileRelayBetaAvailability": {
-          "about": "Acerca de la beta de Orca Relay",
-          "beta": "Beta",
-          "availability": "Disponible en",
-          "testFlight": "TestFlight",
-          "androidApk": "APK de Android"
         },
         "SkillUsageExampleDialog": {
           "copiedPrompt": "Prompt de ejemplo copiado.",
@@ -11325,9 +11290,6 @@
           "terminalAriaLabel": "Terminal de instalación de la habilidad de Linear",
           "manageConnectionHint": "Revisa los espacios de trabajo de Linear conectados y las claves de API en",
           "manageConnectionLink": "Integraciones"
-        },
-        "MobileRelayBetaNotice": {
-          "notice": "Orca Relay is in beta."
         },
         "EditorFontFamilySetting": {
           "title": "Fuente del editor",
@@ -14306,14 +14268,8 @@
             "preview": "Vista previa",
             "stable": "Estable"
           },
-          "relayDegradedNotice": "No se pudo contactar con Relay: este código solo funciona en tu LAN o Tailscale.",
           "pairingQrError": "Este código de emparejamiento no se pudo representar como código QR. Cópialo en Orca Mobile.",
-          "directAddressDisclosure": "También usar una ruta local más rápida",
-          "directAddressHint": "Opcional. Elige la dirección Wi‑Fi o Tailscale que el teléfono usará cuando esté cerca — suele ser más rápido que Relay. Relay sigue funcionando cuando estás fuera.",
           "pairingCodeReady": "Código de emparejamiento listo",
-          "noRelayCode": "No hay código de emparejamiento disponible",
-          "noPairingCode": "No hay código de emparejamiento disponible",
-          "qrSignInRequired": "Inicia sesión para crear un código de emparejamiento de Relay",
           "qrRenderFailed": "No se pudo generar el código QR; copia el código de abajo",
           "qrGeneratePrompt": "Genera un código de emparejamiento para continuar",
           "pairThisMac": "Empareja este Mac.",
@@ -14334,9 +14290,7 @@
           "4e1eb5d55c": "No se pudo revocar el dispositivo",
           "255372e6e8": "Dispositivo revocado",
           "1b4509a8a1": "emparejado",
-          "c5909374cf": "introducción",
-          "diagnosticsCopied": "Diagnóstico copiado",
-          "diagnosticsCopyFailed": "No se pudieron copiar los diagnósticos"
+          "c5909374cf": "introducción"
         },
         "MobilePageToolbar": {
           "ad2284a9e2": "Cerrar · Esc",
@@ -14469,24 +14423,7 @@
           "repair-unverified": "Windows Firewall access could not be verified",
           "blocked-title": "Windows may be blocking Orca Mobile",
           "blocked-description": "An existing inbound Block rule can override the pairing exception. Repair removes conflicting TCP rules for this Orca app, then allows port {{port}} on Private networks.",
-          "repair": "Repair firewall access",
-          "relay-note": "El emparejamiento sigue funcionando por Orca Relay: permitirlo solo añade la conexión local más rápida."
-        },
-        "MobileRelayMintFailureNotice": {
-          "retrying": "Reintentando…",
-          "copyDiagnostics": "Copiar diagnóstico",
-          "retryingTitle": "Reintentando Orca Relay…",
-          "unavailableTitle": "Orca Relay no está disponible en este escritorio.",
-          "title": "No se pudo crear un código de emparejamiento de Relay.",
-          "retryingBody": "Creando un nuevo código de emparejamiento. Esto puede tardar un momento en una conexión remota.",
-          "unavailableBody": "Usa LAN para emparejar mediante Tailscale o la misma red Wi‑Fi.",
-          "body": "Reintenta, o usa LAN para emparejar mediante Tailscale o la misma red Wi‑Fi.",
-          "useLan": "Usar LAN",
-          "retry": "Reintentar Relay",
-          "reconnectTitle": "Tu sesión de la cuenta de Orca ha caducado.",
-          "reconnectBody": "Inicia sesión de nuevo para usar Orca Relay, o usa LAN para emparejar mediante Tailscale o la misma red Wi‑Fi.",
-          "notEntitledTitle": "Orca Relay no está incluido en esta cuenta de Orca.",
-          "rateLimitedBody": "Orca Relay está ocupado. Espera un minuto y vuelve a intentarlo, o usa LAN para emparejar por Tailscale o la misma Wi‑Fi."
+          "repair": "Repair firewall access"
         }
       },
       "gitlab": {

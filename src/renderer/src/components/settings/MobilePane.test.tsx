@@ -11,7 +11,6 @@ import {
   _resetPairedMobileDevicesCacheForTests,
   type PairedMobileDevice
 } from '../mobile/paired-mobile-devices'
-import type { MobilePairingConnectionMode } from '../../../../shared/mobile-pairing-connection-mode'
 
 type PairedDevice = PairedMobileDevice
 
@@ -25,7 +24,6 @@ type StoreState = {
   settingsSearchQuery: string
   settings: {
     mobileAutoRestoreFitMs: number | null
-    mobilePairingConnectionMode?: MobilePairingConnectionMode
     mobilePairingCustomAddress?: string | null
     mobilePairingCustomAddresses?: string[]
   }
@@ -65,14 +63,10 @@ vi.mock('sonner', () => ({
 }))
 vi.mock('./mobile-pairing-device-polling', () => ({ useMobilePairingDevicePolling: vi.fn() }))
 
-// Stub the child sections so the test targets MobilePane's own connection-mode
-// safety wiring (effective mode, canGenerate gate, persistence) in isolation.
+// Stub the child sections so the test targets MobilePane's own pairing wiring in isolation.
 vi.mock('./MobilePairingSetupSection', () => ({
   MobilePairingSetupSection: (props: {
-    connectionMode: MobilePairingConnectionMode
-    canGenerate?: boolean
     loading: boolean
-    connectionPathControl: React.ReactNode
     networkInterfaces: { name: string; address: string }[]
     customAddresses: readonly string[]
     selectedAddress: string | undefined
@@ -85,21 +79,14 @@ vi.mock('./MobilePairingSetupSection', () => ({
     onGenerateQr: () => void
   }) => (
     <div>
-      <span data-testid="mode">{props.connectionMode}</span>
-      <span data-testid="can-generate">{String(props.canGenerate)}</span>
       <span data-testid="loading">{String(props.loading)}</span>
       <span data-testid="selected-address">{props.selectedAddress ?? 'none'}</span>
       <span data-testid="selected-address-is-custom">{String(props.selectedAddressIsCustom)}</span>
       <span data-testid="custom-addresses">{props.customAddresses.join(',')}</span>
       <span data-testid="refreshing-addresses">{String(props.refreshingNetworkInterfaces)}</span>
-      {props.connectionPathControl}
-      {/* Mirror the real Generate gate (loading/canGenerate) so a stuck
-          loading flag surfaces as a disabled control the tests can catch. */}
-      <button
-        type="button"
-        onClick={props.onGenerateQr}
-        disabled={props.loading || props.canGenerate === false}
-      >
+      {/* Mirror the real Generate gate so a stuck loading flag surfaces as a
+          disabled control the tests can catch. */}
+      <button type="button" onClick={props.onGenerateQr} disabled={props.loading}>
         Generate
       </button>
       <button type="button" onClick={() => props.onCustomAddressSelect('100.126.117.25:6768')}>
@@ -117,20 +104,6 @@ vi.mock('./MobilePairingSetupSection', () => ({
       </button>
       <button type="button" onClick={props.onRefreshNetworkInterfaces}>
         refresh-addresses
-      </button>
-    </div>
-  )
-}))
-vi.mock('./MobilePairingConnectionOptions', () => ({
-  MobilePairingConnectionOptions: (props: {
-    onChange: (mode: MobilePairingConnectionMode) => void
-  }) => (
-    <div>
-      <button type="button" onClick={() => props.onChange('automatic')}>
-        choose-anywhere
-      </button>
-      <button type="button" onClick={() => props.onChange('local-only')}>
-        choose-local
       </button>
     </div>
   )
@@ -156,14 +129,12 @@ vi.mock('./MobilePairedDevicesSection', () => ({
 }))
 vi.mock('./MobileAutoRestoreFitSection', () => ({ MobileAutoRestoreFitSection: () => <div /> }))
 vi.mock('../mobile/WindowsFirewallNotice', () => ({
-  WindowsFirewallNotice: (props: { usingRelay?: boolean }) => (
-    <div data-testid="firewall-notice">{String(props.usingRelay)}</div>
-  )
+  WindowsFirewallNotice: () => <div data-testid="firewall-notice" />
 }))
 
 import { MobilePane } from './MobilePane'
 
-describe('MobilePane pairing connection mode', () => {
+describe('MobilePane pairing', () => {
   const getPairingQR = mocks.getPairingQR
   const updateSettings = mocks.updateSettings
 
@@ -175,8 +146,7 @@ describe('MobilePane pairing connection mode', () => {
       available: true,
       qrDataUrl: 'data:image/png;base64,qr',
       pairingUrl: 'orca://pair',
-      endpoint: 'ws://host',
-      connectionMode: 'local-only'
+      endpoint: 'ws://host'
     })
     mocks.listDevices.mockReset().mockResolvedValue({ devices: [] })
     mocks.listNetworkInterfaces.mockReset().mockResolvedValue({ interfaces: [] })
@@ -208,26 +178,13 @@ describe('MobilePane pairing connection mode', () => {
     document.body.innerHTML = ''
   })
 
-  it('starts on LAN and gates Generate once Relay is chosen', async () => {
-    const user = userEvent.setup()
-    render(<MobilePane />)
-    expect(screen.getByTestId('mode')).toHaveTextContent('local-only')
-    await user.click(screen.getByRole('button', { name: 'choose-anywhere' }))
-    // Why: signed-out Relay is gated off; no local-only QR is minted under its label.
-    expect(screen.getByTestId('can-generate')).toHaveTextContent('false')
-    expect(screen.getByRole('button', { name: 'Generate' })).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'Generate' }))
-    await waitFor(() => expect(getPairingQR).not.toHaveBeenCalled())
-  })
-
   it('keeps the copy fallback when QR encoding fails', async () => {
     getPairingQR.mockResolvedValue({
       available: true,
       qrDataUrl: null,
       qrError: 'encoding_failed',
       pairingUrl: 'orca://pair?code=copy-fallback',
-      endpoint: 'wss://host.example/large',
-      connectionMode: 'local-only'
+      endpoint: 'wss://host.example/large'
     })
     const user = userEvent.setup()
     render(<MobilePane />)
@@ -237,15 +194,6 @@ describe('MobilePane pairing connection mode', () => {
     await waitFor(() => expect(screen.getByTestId('qr-error')).toHaveTextContent('true'))
     expect(screen.getByTestId('qr')).toHaveTextContent('none')
     expect(screen.getByTestId('pairing-url')).toHaveTextContent('copy-fallback')
-  })
-
-  it('restores a saved local-only preference without user interaction', () => {
-    mocks.holder.state.settings = {
-      mobileAutoRestoreFitMs: null,
-      mobilePairingConnectionMode: 'local-only'
-    }
-    render(<MobilePane />)
-    expect(screen.getByTestId('mode')).toHaveTextContent('local-only')
   })
 
   it('restores a saved custom address for future pairing codes', async () => {
@@ -265,8 +213,7 @@ describe('MobilePane pairing connection mode', () => {
     await user.click(screen.getByRole('button', { name: 'Generate' }))
     await waitFor(() =>
       expect(getPairingQR).toHaveBeenCalledWith({
-        address: '100.126.117.25:6768',
-        connectionMode: 'local-only'
+        address: '100.126.117.25:6768'
       })
     )
   })

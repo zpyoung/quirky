@@ -8,15 +8,12 @@ import {
 } from '../persistence'
 import { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { registerMobileHandlers } from '../ipc/mobile'
-import { createRuntimeEnvironmentMobileRelayHosts } from '../ipc/runtime-environments/runtime-environment-mobile-relay-hosts'
 import { getLocalPtyProvider } from '../ipc/pty/provider/registry'
 import { registerHeadlessPtyRuntime } from '../ipc/pty/register-headless-runtime'
 import { LocalPtyProvider } from '../providers/local-pty-provider'
 import { publishHeadlessRuntimeGraph } from '../runtime/headless-runtime-graph'
 import { OffscreenBrowserBackend } from '../browser/offscreen-browser-backend'
 import { browserManager } from '../browser/browser-manager'
-import { getDesktopRelayStatus } from './main-process-relay-status'
-import { startDesktopRelayService } from './main-process-relay-startup'
 import { getServeOptions, getBundledWebClientRoot, printServeReady } from './main-process-serve'
 import {
   bindTerminalRuntimeStartupServices,
@@ -97,9 +94,7 @@ function installRuntimeRpc(
     webClientRoot: getBundledWebClientRoot()
   })
   state.runtimeRpc = runtimeRpc
-  runtimeRpc.setMobileDesktopRelayHosts(createRuntimeEnvironmentMobileRelayHosts())
   registerMobileHandlers(runtimeRpc, {
-    getRelayStatus: getDesktopRelayStatus,
     consumePendingUnpairedDeviceAuthFailure: (webContentsId) => {
       if (
         !state.mainWindow ||
@@ -130,7 +125,7 @@ async function launchServeMode(
   serveOptions: NonNullable<ReturnType<typeof getServeOptions>>
 ): Promise<void> {
   // Why here: headless serve has no window to unblock, so keep the persisted proxy strictly
-  // ahead of every fetcher this phase can reach (relay, CLI install, RPC clients).
+  // ahead of every fetcher this phase can reach (CLI install, RPC clients).
   await state.initialProxyApplicationReady
   // Why: headless PTYs must not start on the fallback provider, then get swept when an activated renderer registers desktop lifecycle handlers.
   await state.localPtyStartupReady
@@ -221,9 +216,6 @@ async function launchDesktopMode(
       showRuntimeRpcStartupFailureDialog(win, runtimeRpcStartResult.error)
     )
   }
-  // Why before the proxy await: a mint in that window must wait for the installer, not fail
-  // provider_missing; the installer itself holds its first request until the proxy lands.
-  startDesktopRelayService(runtimeRpc)
   // Why after the window and not before it: the default-session request guard already holds every
   // fetcher until the persisted proxy lands, so this only has to keep the launch phase itself
   // ordered ahead of the push gateway — it must not gate the renderer.

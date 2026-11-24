@@ -105,14 +105,13 @@ export async function createRuntimeDesktopPairingOffer(
   })
 }
 
-/** The phone QR a desktop shows in Settings, minted LAN-only so no Relay is involved. */
+/** The phone QR a desktop shows in Settings, minted over LAN. */
 export async function createDesktopMobilePairingOffer(
   desktopPage: Page
 ): Promise<RuntimeDesktopPairingOffer> {
   return desktopPage.evaluate(async () => {
     const offer = await window.api.mobile.getPairingQR({
-      address: '127.0.0.1',
-      connectionMode: 'local-only'
+      address: '127.0.0.1'
     })
     if (!offer.available) {
       throw new Error(`Desktop did not mint a mobile pairing offer: ${JSON.stringify(offer)}`)

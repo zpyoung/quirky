@@ -68,7 +68,12 @@ describe('device principal', () => {
         ...legacyRow({ deviceId: 'device-3', token: 't3' }),
         credentialRevision: -1,
         callerFingerprint: 7
-      }
+      },
+      {
+        ...legacyRow({ deviceId: 'device-4', token: 't4' }),
+        relayBinding: { relayHostId: 'host', relayDeviceId: 'device-4', ownerIdentityKey: 'owner' },
+        mobilePairingConnectionMode: 'automatic'
+      } as DeviceEntry
     ])
     expect(registry.getDevice('device-1')).not.toHaveProperty(
       'credentialRevision',
@@ -80,6 +85,8 @@ describe('device principal', () => {
     })
     expect(registry.getDevice('device-3')?.credentialRevision).toBeUndefined()
     expect(registry.getDevice('device-3')?.callerFingerprint).toBeUndefined()
+    expect(registry.getDevice('device-4')).not.toHaveProperty('relayBinding')
+    expect(registry.getDevice('device-4')).not.toHaveProperty('mobilePairingConnectionMode')
 
     registry.updateLastSeen('device-2')
     const saved: unknown = JSON.parse(readFileSync(path, 'utf-8'))

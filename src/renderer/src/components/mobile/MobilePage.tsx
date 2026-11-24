@@ -9,16 +9,9 @@ import { translate } from '@/i18n/i18n'
 import { useMobilePageEscape } from './use-mobile-page-escape'
 import { MobilePageContent } from './MobilePageContent'
 import { useMobileInstallQr } from './use-mobile-install-qr'
-import {
-  canMintMobilePairingOffer,
-  type MobilePairingConnectionMode
-} from '../../../../shared/mobile-pairing-connection-mode'
-import { useMobilePairingConnectionMode } from './use-mobile-pairing-connection-mode'
 import { useMobilePairingGeneration } from './use-mobile-pairing-generation'
-import { useMobilePairingQrInvalidation } from './use-mobile-pairing-qr-invalidation'
 import { useMobileInstallActions } from './use-mobile-install-actions'
 import { useMobilePagePairedDevices } from './use-mobile-page-paired-devices'
-import type { MobileRelayMintFailure } from '../../../../shared/mobile-relay-mint-failure'
 import {
   type MobilePairingAddressChange,
   useMobilePairingAddressPreference
@@ -36,10 +29,7 @@ export default function MobilePage(): React.JSX.Element {
   const [pairQrSize, setPairQrSize] = useState<number | null>(null)
   const [pairingUrl, setPairingUrl] = useState<string | null>(null)
   const [pairingQrError, setPairingQrError] = useState(false)
-  const [relayMintFailure, setRelayMintFailure] = useState<MobileRelayMintFailure | null>(null)
   const [pairLoading, setPairLoading] = useState(false)
-  const signedIn = false
-  const [connectionMode, setConnectionMode] = useMobilePairingConnectionMode()
   const [networkInterfaces, setNetworkInterfaces] = useState<MobileNetworkInterface[]>([])
   const pairingAddressChangeRef = useRef<(change: MobilePairingAddressChange) => void>(() => {})
   const notifyPairingAddressChange = useCallback(
@@ -89,8 +79,6 @@ export default function MobilePage(): React.JSX.Element {
   )
 
   const { generatePairing } = useMobilePairingGeneration({
-    connectionMode,
-    signedIn,
     selectedAddress,
     mountedRef,
     hasGeneratedRef,
@@ -99,20 +87,16 @@ export default function MobilePage(): React.JSX.Element {
     setPairQrSize,
     setPairingUrl,
     setPairingQrError,
-    setPairLoading,
-    setRelayMintFailure
+    setPairLoading
   })
   useLayoutEffect(() => {
     pairingAddressChangeRef.current = ({ address, source }) => {
-      const pairingContext = { connectionMode, signedIn }
       if (source === 'user') {
-        if (canMintMobilePairingOffer(pairingContext)) {
-          void generatePairing(true, address ?? '')
-        }
+        void generatePairing(true, address ?? '')
         return
       }
       if (source === 'refresh') {
-        if (hasGeneratedRef.current && canMintMobilePairingOffer(pairingContext)) {
+        if (hasGeneratedRef.current) {
           void generatePairing(true, address)
         }
         return
@@ -124,73 +108,12 @@ export default function MobilePage(): React.JSX.Element {
       setPairQrSize(null)
       setPairingUrl(null)
       setPairingQrError(false)
-      setRelayMintFailure(null)
       setPairLoading(false)
-      if (shouldRegenerate && canMintMobilePairingOffer(pairingContext)) {
+      if (shouldRegenerate) {
         void generatePairing(true, address ?? '')
       }
     }
-  }, [connectionMode, generatePairing, pairLoading, signedIn])
-
-  const handleConnectionModeChange = useCallback(
-    (nextMode: MobilePairingConnectionMode): void => {
-      if (nextMode === connectionMode) {
-        return
-      }
-      // Why: persist the pick and update local state. The QR invalidation +
-      // rotate-regenerate is handled centrally by useMobilePairingQrInvalidation
-      // (below), which also covers cross-window preference syncs.
-      setRelayMintFailure(null)
-      setConnectionMode(nextMode)
-      void updateSettings({ mobilePairingConnectionMode: nextMode })
-    },
-    [connectionMode, updateSettings, setConnectionMode]
-  )
-
-  const copyRelayDiagnostics = useCallback(async (): Promise<void> => {
-    if (relayMintFailure == null) {
-      return
-    }
-    // Why: users share this payload — the selected address would leak a LAN/Tailscale IP or hostname.
-    const payload = {
-      kind: 'mobile_pairing_relay_failure',
-      preferredConnectionMode: connectionMode,
-      failure: relayMintFailure,
-      at: new Date().toISOString()
-    }
-    try {
-      await window.api.ui.writeClipboardText(JSON.stringify(payload, null, 2))
-      if (mountedRef.current) {
-        toast.success(
-          translate('auto.components.mobile.MobilePage.diagnosticsCopied', 'Diagnostics copied')
-        )
-      }
-    } catch {
-      if (mountedRef.current) {
-        toast.error(
-          translate(
-            'auto.components.mobile.MobilePage.diagnosticsCopyFailed',
-            'Failed to copy diagnostics'
-          )
-        )
-      }
-    }
-  }, [connectionMode, mountedRef, relayMintFailure])
-
-  useMobilePairingQrInvalidation({
-    connectionMode,
-    signedIn,
-    pairLoading,
-    hasGeneratedRef,
-    pairingRequestIdRef,
-    setPairQrDataUrl,
-    setPairQrSize,
-    setPairingUrl,
-    setPairingQrError,
-    setPairLoading,
-    setRelayMintFailure,
-    regenerate: (mode, opts) => void generatePairing(opts.rotate, undefined, mode)
-  })
+  }, [generatePairing, pairLoading])
 
   const loadNetworkInterfaces = useCallback(async () => {
     const requestId = ++networkInterfacesRequestIdRef.current
@@ -228,20 +151,14 @@ export default function MobilePage(): React.JSX.Element {
     void loadNetworkInterfaces()
   }, [stage, loadNetworkInterfaces])
 
-  const beforeCustomAddressChange = useCallback(
-    async (address: string): Promise<boolean> => {
-      if (!canMintMobilePairingOffer({ connectionMode, signedIn })) {
-        return true
-      }
-      try {
-        const result = await window.api.mobile.getPairingQR({ address, connectionMode })
-        return result.available && result.qrDataUrl !== null
-      } catch {
-        return false
-      }
-    },
-    [connectionMode, signedIn]
-  )
+  const beforeCustomAddressChange = useCallback(async (address: string): Promise<boolean> => {
+    try {
+      const result = await window.api.mobile.getPairingQR({ address })
+      return result.available && result.qrDataUrl !== null
+    } catch {
+      return false
+    }
+  }, [])
 
   const copyPairingCode = useCallback(async () => {
     if (!pairingUrl) {
@@ -267,15 +184,8 @@ export default function MobilePage(): React.JSX.Element {
   // Why: when Step 2 first becomes visible, mint a pairing offer so the
   // user sees a real QR immediately. Subsequent visits keep the existing
   // token unless they hit Regenerate.
-  const canGenerate = canMintMobilePairingOffer({ connectionMode, signedIn })
   useEffect(() => {
     if (stage !== 'flow' || stepIdx !== 1 || hasGeneratedRef.current) {
-      return
-    }
-    // Why: signed-out Anywhere cannot serve Relay; auto-minting here would show a
-    // scannable local-only QR under the Relay label. Wait for sign-in or a switch
-    // to LAN (both flip canGenerate and re-run this effect) instead.
-    if (!canGenerate) {
       return
     }
     // Why: entering Step 2 also starts this visit's address lookup, and minting
@@ -286,7 +196,7 @@ export default function MobilePage(): React.JSX.Element {
       return
     }
     void generatePairing(false)
-  }, [stage, stepIdx, canGenerate, generatePairing, pairingAddressSettled])
+  }, [stage, stepIdx, generatePairing, pairingAddressSettled])
 
   // Why: entering the flow must mint a fresh pairing token — clear stale QR
   // state so we never flash an expired code from a previous session.
@@ -299,7 +209,6 @@ export default function MobilePage(): React.JSX.Element {
     setPairQrSize(null)
     setPairingUrl(null)
     setPairingQrError(false)
-    setRelayMintFailure(null)
   }
 
   const enterFlow = (): void => {
@@ -337,11 +246,8 @@ export default function MobilePage(): React.JSX.Element {
 
   // Why: while the deferred first mint waits on the address, Step 2 would
   // otherwise read "Generate a pairing code to continue" — a prompt for work it
-  // is already about to do on the user's behalf. Kept separate from pairLoading:
-  // that one feeds the invalidation hook's shouldRegenerate, so folding this into
-  // it would let a mode switch mint before the address settles.
-  const awaitingPairingAddress =
-    stage === 'flow' && stepIdx === 1 && canGenerate && !pairingAddressSettled
+  // is already about to do on the user's behalf.
+  const awaitingPairingAddress = stage === 'flow' && stepIdx === 1 && !pairingAddressSettled
 
   return (
     <MobilePageContent
@@ -351,7 +257,6 @@ export default function MobilePage(): React.JSX.Element {
       devices={devices}
       enterFlow={enterFlow}
       generatePairing={(rotate) => void generatePairing(rotate)}
-      canGeneratePairing={canGenerate}
       handleAddressChange={handleAddressChange}
       customAddresses={customAddresses}
       selectedAddressIsCustom={selectedAddressIsCustom}
@@ -369,18 +274,10 @@ export default function MobilePage(): React.JSX.Element {
       openInstallUrl={openInstallUrl}
       pairAnotherDevice={pairAnotherDevice}
       pairLoading={pairLoading || awaitingPairingAddress}
-      connectionMode={connectionMode}
-      handleConnectionModeChange={handleConnectionModeChange}
       pairQrDataUrl={pairQrDataUrl}
       pairQrSize={pairQrSize}
       pairingUrl={pairingUrl}
       pairingQrError={pairingQrError}
-      relayMintFailure={
-        connectionMode === 'automatic' && pairQrDataUrl == null ? relayMintFailure : null
-      }
-      onUseLan={() => handleConnectionModeChange('local-only')}
-      onRetryRelay={() => void generatePairing(true)}
-      onCopyRelayDiagnostics={() => void copyRelayDiagnostics()}
       platform={platform}
       refreshingNetworkInterfaces={refreshingNetworkInterfaces}
       revokeDevice={(id) => void revokeDevice(id)}

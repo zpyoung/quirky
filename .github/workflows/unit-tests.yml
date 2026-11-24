@@ -199,7 +199,6 @@ jobs:
           node-version: ${{ matrix.node }}
           cache-dependency-path: |
             pnpm-lock.yaml
-            cloud/pnpm-lock.yaml
 
       - name: Resolve Chrome for the browser provider
         id: browser_executable
@@ -222,22 +221,3 @@ jobs:
         run: |
           pnpm exec vitest run --config config/vitest.config.ts \
             src/main/orcad/external-chromium-browser-process.integration.test.ts
-
-      # These two tests import the cloud relay workspace directly. Keeping them in one job
-      # avoids installing and building the same workspace once per unit-test shard.
-      - name: Install relay integration dependencies
-        id: relay_dependencies
-        if: ${{ !cancelled() && steps.root_dependencies.outcome == 'success' }}
-        working-directory: cloud
-        run: |
-          pnpm --filter '@orca-cloud/relay...' install --frozen-lockfile --ignore-scripts
-          pnpm --filter '@orca-cloud/relay^...' build
-
-      - name: Test relay integration contracts
-        if: ${{ !cancelled() && steps.relay_dependencies.outcome == 'success' }}
-        env:
-          ORCA_BACKGROUND_LAUNCH: '1'
-        run: >-
-          pnpm exec vitest run --config config/vitest.config.ts
-          tests/e2e/relay-region-compatibility.unit.test.ts
-          tests/e2e/relay-region-correction.unit.test.ts

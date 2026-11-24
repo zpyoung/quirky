@@ -95,8 +95,7 @@ describe('registerMobileHandlers', () => {
       available: true,
       pairingUrl: 'orca://pair#lan',
       endpoint: 'ws://192.168.50.238:6768',
-      deviceId: 'mobile-lan',
-      connectionMode: 'automatic'
+      deviceId: 'mobile-lan'
     })
 
     registerMobileHandlers({ createMobilePairingOffer } as never)
@@ -182,8 +181,7 @@ describe('registerMobileHandlers', () => {
       available: true,
       pairingUrl: 'orca://pair#external-switch',
       endpoint: 'ws://192.168.50.24:6768',
-      deviceId: 'mobile-external-switch',
-      connectionMode: 'automatic'
+      deviceId: 'mobile-external-switch'
     })
 
     registerMobileHandlers({ createMobilePairingOffer } as never)
@@ -232,45 +230,9 @@ describe('registerMobileHandlers', () => {
     })
   })
 
-  it('never auto-advertises a bridge: a bridge-only host pairs over Relay with no address', async () => {
-    // Why: a bridge address the phone provably cannot reach must not become the default, and Relay
-    // needs no local address — so the QR ships without a direct path instead of an unreachable one.
-    networkInterfacesMock.mockReturnValue({
-      docker0: [{ family: 'IPv4', internal: false, address: '172.17.0.1' }],
-      'vEthernet (WSL)': [{ family: 'IPv4', internal: false, address: '172.28.80.1' }]
-    })
-    const createMobilePairingOffer = vi.fn().mockResolvedValue({
-      available: true,
-      pairingUrl: 'orca://pair#relay',
-      endpoint: 'ws://127.0.0.1:6768',
-      deviceId: 'mobile-bridge-only',
-      connectionMode: 'automatic'
-    })
-
-    registerMobileHandlers({ createMobilePairingOffer } as never)
-
-    await expect(handlers.get('mobile:getPairingQR')?.(null, {})).resolves.toMatchObject({
-      available: true,
-      connectionMode: 'automatic',
-      // Why: the offer's loopback fallback points at the scanning phone, not this host — reporting it
-      // would print a direct endpoint under the QR that nothing can dial.
-      endpoint: null
-    })
-    expect(createMobilePairingOffer).toHaveBeenCalledWith(
-      expect.objectContaining({ address: null })
-    )
-    // The bridges stay pickable, just never automatically.
-    await expect(handlers.get('mobile:listNetworkInterfaces')?.()).resolves.toEqual({
-      interfaces: [
-        { name: 'docker0', address: '172.17.0.1' },
-        { name: 'vEthernet (WSL)', address: '172.28.80.1' }
-      ]
-    })
-  })
-
-  it('refuses a LAN-only QR on a bridge-only host instead of advertising the bridge', async () => {
-    // Why: LAN has no Relay to fall back on, so a dead direct endpoint is worse than saying so —
-    // the guidance points at the picker, where the bridge is still selectable on purpose.
+  it('refuses a QR on a bridge-only host instead of advertising the bridge', async () => {
+    // Why: a dead direct endpoint is worse than saying so — the guidance points at the picker,
+    // where the bridge is still selectable on purpose.
     networkInterfacesMock.mockReturnValue({
       docker0: [{ family: 'IPv4', internal: false, address: '172.17.0.1' }]
     })
@@ -278,9 +240,7 @@ describe('registerMobileHandlers', () => {
 
     registerMobileHandlers({ createMobilePairingOffer } as never)
 
-    await expect(
-      handlers.get('mobile:getPairingQR')?.(null, { connectionMode: 'local-only' })
-    ).resolves.toMatchObject({
+    await expect(handlers.get('mobile:getPairingQR')?.(null, {})).resolves.toMatchObject({
       available: false,
       reason: 'invalid_advertised_endpoint'
     })
@@ -298,14 +258,12 @@ describe('registerMobileHandlers', () => {
       available: true,
       pairingUrl: 'orca://pair#bridge',
       endpoint: 'ws://172.17.0.1:6768',
-      deviceId: 'mobile-bridge-pick',
-      connectionMode: 'local-only'
+      deviceId: 'mobile-bridge-pick'
     })
 
     registerMobileHandlers({ createMobilePairingOffer } as never)
     await handlers.get('mobile:getPairingQR')?.(null, {
-      address: '172.17.0.1',
-      connectionMode: 'local-only'
+      address: '172.17.0.1'
     })
 
     expect(createMobilePairingOffer).toHaveBeenCalledWith(
@@ -337,8 +295,7 @@ describe('registerMobileHandlers', () => {
       available: true,
       pairingUrl: 'orca://pair#mobile',
       endpoint: 'ws://100.102.47.57:6768',
-      deviceId: 'mobile-1',
-      connectionMode: 'automatic'
+      deviceId: 'mobile-1'
     })
     const rpcServer = { createMobilePairingOffer }
 
@@ -349,62 +306,14 @@ describe('registerMobileHandlers', () => {
       qrSize: 58,
       pairingUrl: 'orca://pair#mobile',
       endpoint: 'ws://100.102.47.57:6768',
-      deviceId: 'mobile-1',
-      connectionMode: 'automatic'
+      deviceId: 'mobile-1'
     })
 
     expect(createMobilePairingOffer).toHaveBeenCalledWith({
       address: '100.102.47.57',
-      connectionMode: undefined,
       rotate: undefined,
       name: expect.stringMatching(/^Mobile /)
     })
-  })
-
-  it('forwards structured Relay mint failures to the renderer', async () => {
-    networkInterfacesMock.mockReturnValue({
-      en0: [{ family: 'IPv4', internal: false, address: '192.168.1.24' }]
-    })
-    const relayFailure = {
-      code: 'relay_mint_failed',
-      stage: 'create_pairing_relay',
-      message: 'Relay pairing invite request failed'
-    }
-    const createMobilePairingOffer = vi.fn().mockResolvedValue({
-      available: false,
-      reason: 'relay_mint_failed',
-      guidance: 'Use LAN or retry Relay.',
-      relayFailure
-    })
-
-    registerMobileHandlers({ createMobilePairingOffer } as never)
-
-    await expect(handlers.get('mobile:getPairingQR')?.(null, {})).resolves.toEqual({
-      available: false,
-      reason: 'relay_mint_failed',
-      guidance: 'Use LAN or retry Relay.',
-      relayFailure
-    })
-  })
-
-  it('forwards an explicit local-only pairing choice', async () => {
-    networkInterfacesMock.mockReturnValue({
-      en0: [{ family: 'IPv4', internal: false, address: '192.168.1.24' }]
-    })
-    const createMobilePairingOffer = vi.fn().mockResolvedValue({
-      available: true,
-      pairingUrl: 'orca://pair#local',
-      endpoint: 'ws://192.168.1.24:6768',
-      deviceId: 'mobile-local',
-      connectionMode: 'local-only'
-    })
-
-    registerMobileHandlers({ createMobilePairingOffer } as never)
-    await handlers.get('mobile:getPairingQR')?.(null, { connectionMode: 'local-only' })
-
-    expect(createMobilePairingOffer).toHaveBeenCalledWith(
-      expect.objectContaining({ connectionMode: 'local-only' })
-    )
   })
 
   it('preserves a copyable pairing URL when QR encoding fails', async () => {
@@ -412,8 +321,7 @@ describe('registerMobileHandlers', () => {
       available: true,
       pairingUrl: 'orca://pair?code=copy-me',
       endpoint: 'wss://pair.example/oversized',
-      deviceId: 'mobile-large',
-      connectionMode: 'local-only'
+      deviceId: 'mobile-large'
     })
 
     registerMobileHandlers({ createMobilePairingOffer } as never, {
@@ -429,8 +337,7 @@ describe('registerMobileHandlers', () => {
       qrError: 'encoding_failed',
       pairingUrl: 'orca://pair?code=copy-me',
       endpoint: 'wss://pair.example/oversized',
-      deviceId: 'mobile-large',
-      connectionMode: 'local-only'
+      deviceId: 'mobile-large'
     })
   })
 
@@ -740,29 +647,6 @@ describe('registerMobileHandlers', () => {
       handlers.get('mobile:revokeDevice')?.(null, { deviceId: 'mobile-1' })
     ).resolves.toEqual({ revoked: true })
     expect(revokeMobileDevice).toHaveBeenCalledWith('mobile-1')
-  })
-
-  it('reports the current relay broker status without exposing a toggle', () => {
-    registerMobileHandlers({} as never, { getRelayStatus: () => ({ status: 'registered' }) })
-
-    expect(handlers.get('mobile:getRelayStatus')?.()).toEqual({ status: 'registered' })
-  })
-
-  it('reports the assigned relay cell alongside the status', () => {
-    registerMobileHandlers({} as never, {
-      getRelayStatus: () => ({ status: 'registered', cellUrl: 'https://c27.relay.example.com' })
-    })
-
-    expect(handlers.get('mobile:getRelayStatus')?.()).toEqual({
-      status: 'registered',
-      cellUrl: 'https://c27.relay.example.com'
-    })
-  })
-
-  it('falls back to offline with no cell when no relay status provider is wired', () => {
-    registerMobileHandlers({} as never, {})
-
-    expect(handlers.get('mobile:getRelayStatus')?.()).toEqual({ status: 'offline' })
   })
 
   it('consumes a pending auth-failure notification only from a window renderer', () => {

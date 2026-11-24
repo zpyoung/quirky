@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest'
 import { OrcaRuntimeRpcServer } from './runtime-rpc'
 import { DeviceRegistry } from './device-registry'
 import { createMobileRpcSurfaceRuntime } from './runtime-rpc-mobile-method-allowlist-fixtures'
-import { MOBILE_RPC_METHOD_ALLOWLIST } from './runtime-rpc/runtime-rpc-mobile-method-allowlist'
 
 /**
  * What a phone is told when this desktop has never heard of the method it called.
@@ -15,8 +14,8 @@ import { MOBILE_RPC_METHOD_ALLOWLIST } from './runtime-rpc/runtime-rpc-mobile-me
  * A method an older desktop predates is missing from both, and the phone is told `forbidden`.
  *
  * That distinction is the whole skew contract for a phone probing a method to decide whether the
- * desktop can serve it (`pairing.provisionRelay`, `pairing.getEndpoints`). Keying the "too old,
- * stay on LAN" fallback on `method_not_found` alone never fires against a genuinely old desktop.
+ * desktop can serve it. Keying a "too old" fallback on `method_not_found` alone never fires
+ * against a genuinely old desktop.
  * See docs/reference/remote-wire-compatibility.md — a scope refusal is not a missing method.
  */
 /** The RPC error code a reply carries, or undefined when the reply names no error. */
@@ -61,13 +60,5 @@ describe('an unknown method reaching a mobile-scoped device', () => {
     const reply = await dispatchAs('runtime', 'pairing.methodThisBuildHasNeverHeardOf')
     expect(reply.ok).toBe(false)
     expect(errorCode(reply)).toBe('method_not_found')
-  })
-
-  // Why this build's own allowlist and not an older one: a desktop that serves the pairing probes
-  // allowlists them, so `forbidden` on either can only come from a build that predates them. That
-  // is what makes the phone's fallback a skew contract rather than a local error path.
-  it('allowlists both pairing probes, so forbidden on one can only mean an older desktop', () => {
-    expect(MOBILE_RPC_METHOD_ALLOWLIST.has('pairing.getEndpoints')).toBe(true)
-    expect(MOBILE_RPC_METHOD_ALLOWLIST.has('pairing.provisionRelay')).toBe(true)
   })
 })

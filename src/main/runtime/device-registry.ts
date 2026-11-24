@@ -12,8 +12,6 @@ import { planDeviceKeyFork } from './device-key-fork'
 import { planIdleEphemeralPrune, withoutEphemeralRows } from './ephemeral-device-rows'
 import { quarantineCorruptRegistry } from './device-registry-corruption'
 import { readDeviceRegistryFile } from './device-registry-file-read'
-import type { RelayDeviceBinding } from './mobile-cloud-relay/relay-revoke-outbox'
-import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-connection-mode'
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
 import type { DelegatedPhone } from '../../shared/delegated-mobile-device-contract'
 import {
@@ -24,7 +22,6 @@ import type { RuntimeDeviceGrant } from './rpc/rpc-method-permission'
 import { validGrants } from './device-registry-row-validation'
 import {
   isPendingTokenRow,
-  mobilePairingConnectionModeOf,
   isStillAuthenticated,
   type AuthenticatedPrincipalBinding,
   lookupDeviceKeyRow,
@@ -190,13 +187,6 @@ export class DeviceRegistry {
     )
   }
 
-  setRelayBinding(deviceId: string, binding: RelayDeviceBinding): boolean {
-    return (
-      binding.relayDeviceId === deviceId &&
-      this.replaceRow(deviceId, (device) => ({ ...device, relayBinding: binding }))
-    )
-  }
-
   /** Passing null clears the registration (unregister, or a token the gateway reported dead). */
   setPushRegistration(deviceId: string, registration: MobilePushRegistration | null): boolean {
     return (
@@ -206,17 +196,6 @@ export class DeviceRegistry {
         return registration ? { ...rest, pushRegistration: registration } : rest
       })
     )
-  }
-
-  setMobilePairingConnectionMode(deviceId: string, mode: MobilePairingConnectionMode): boolean {
-    return (
-      this.getDevice(deviceId)?.scope === 'mobile' &&
-      this.replaceRow(deviceId, (device) => ({ ...device, mobilePairingConnectionMode: mode }))
-    )
-  }
-
-  getMobilePairingConnectionMode(deviceId: string): MobilePairingConnectionMode | null {
-    return mobilePairingConnectionModeOf(this.getDevice(deviceId))
   }
 
   listDevices(): readonly DeviceEntry[] {

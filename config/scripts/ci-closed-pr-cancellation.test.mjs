@@ -87,7 +87,6 @@ it('looks up exact PR groups without branch or head-SHA inference', async () => 
     'preflight-comparison-123',
     'zcode-transcript-contract-123',
     'docs-pr-123',
-    'cloud-verify-refs/pull/123/merge',
     'pnpm-verification-pilot-123',
     'pi-provider-runtime-123',
     'coding-plan-contract-123-credentials',

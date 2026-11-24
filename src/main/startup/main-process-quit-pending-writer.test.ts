@@ -197,7 +197,7 @@ it.each([
         closeNotificationDismissals,
         flushPaneGrids: () => null
       },
-      runtimeRpc: { setMobileRelayPairingProvider: idle(), stop: vi.fn(() => rpcStop.promise) }
+      runtimeRpc: { stop: vi.fn(() => rpcStop.promise) }
     })
     expect(stopStructuredAgentSessionRuntime).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(0)

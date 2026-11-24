@@ -60,6 +60,16 @@ describe('retired managed servers experiment', () => {
   })
 })
 
+describe('retired hosted relay pairing mode', () => {
+  it('drops the stored connection mode, since pairing is LAN-only', () => {
+    expect('mobilePairingConnectionMode' in normalizeLegacyProfile({})).toBe(false)
+    expect(
+      'mobilePairingConnectionMode' in
+        normalizeLegacyProfile({ mobilePairingConnectionMode: 'automatic' })
+    ).toBe(false)
+  })
+})
+
 describe('retired chat default selectors', () => {
   it('keeps Chat UI on while dropping both older keys from a saved profile', () => {
     const normalized = normalizeLegacyProfile({

@@ -7,14 +7,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { encodeDeviceProofMessage, type DeviceProofPurpose } from '../../../shared/device-key-proof'
 import { DeviceRegistry } from '../device-registry'
 import { DEVICE_REGISTRY_FILENAME } from '../mobile-pairing-files'
-import { SimulatedMobileE2EEV2Peer } from '../mobile-cloud-relay/simulated-mobile-e2ee-v2-peer'
+import { SimulatedMobileE2EEV2Peer } from './simulated-mobile-e2ee-v2-peer'
 import { registerSocketDeviceKey } from '../runtime-rpc/runtime-rpc-device-key-registration'
 import { generateKeyPair } from '../../../shared/e2ee-crypto'
 import {
   MobileSocketWiring,
   type AuthenticatedMobileSocket,
-  type MobileSocketTransport,
-  type MobileSocketTransportMetadata
+  type MobileSocketTransport
 } from './mobile-socket-wiring'
 
 class FakeSocket {
@@ -47,7 +46,7 @@ function sign(key: nacl.SignKeyPair, purpose: DeviceProofPurpose, transcriptHash
   return Buffer.from(nacl.sign.detached(message, key.secretKey)).toString('base64')
 }
 
-function harness(registry: DeviceRegistry, metadata?: MobileSocketTransportMetadata) {
+function harness(registry: DeviceRegistry) {
   const transport = new FakeTransport()
   const ready: AuthenticatedMobileSocket[] = []
   const wiring = new MobileSocketWiring({
@@ -62,16 +61,12 @@ function harness(registry: DeviceRegistry, metadata?: MobileSocketTransportMetad
     onClose: vi.fn(),
     onReady: (socket) => ready.push(socket)
   })
-  wiring.attachTransport(transport, () => metadata ?? { transport: 'direct' })
+  wiring.attachTransport(transport)
 
   /** Opens a direct v2 socket and sends `auth(transcriptHashB64)`; returns the decoded verdict. */
   function connect(auth: (transcriptHashB64: string) => Record<string, unknown>) {
     const ws = new FakeSocket()
-    const peer = new SimulatedMobileE2EEV2Peer(
-      nacl.box.keyPair(),
-      desktop.publicKey,
-      metadata?.transport === 'relay' ? metadata.relayHostId : null
-    )
+    const peer = new SimulatedMobileE2EEV2Peer(nacl.box.keyPair(), desktop.publicKey, null)
     transport.receive(ws, JSON.stringify(peer.hello))
     expect(peer.acceptReady(JSON.parse(String(ws.sent[0])))).toBe(true)
     const transcriptHashB64 = peer.transcriptHashB64
@@ -174,36 +169,6 @@ describe('device-key authentication (host)', () => {
       deviceToken: legacy.token
     }))
     expect(mixed.reply).toEqual({ type: 'e2ee_error', error: { code: 'bad_auth' } })
-  })
-
-  it("accepts a fork over its token row's Relay binding and refuses other bindings without a revocation verdict", () => {
-    const registry = freshRegistry()
-    const legacy = registry.addDevice('Phone', 'mobile')
-    const stranger = registry.addDevice('Other phone', 'mobile')
-    const key = nacl.sign.keyPair()
-    const forked = registry.forkDeviceKey(
-      legacy.deviceId,
-      Buffer.from(key.publicKey).toString('base64'),
-      'Phone'
-    )
-    const relay = (relayDeviceId: string): MobileSocketTransportMetadata => ({
-      transport: 'relay',
-      relayHostId: 'AbCdEf0123_-xyZ9',
-      relayDeviceId,
-      basisConnId: 'basis',
-      credentialKind: 'resume'
-    })
-    const keyAuth = (hash: string) => ({
-      deviceId: forked.deviceId,
-      deviceProofB64: sign(key, 'auth', hash)
-    })
-    expect(harness(registry, relay(legacy.deviceId)).connect(keyAuth).reply).toMatchObject({
-      type: 'e2ee_authenticated'
-    })
-    expect(harness(registry, relay(stranger.deviceId)).connect(keyAuth).reply).toEqual({
-      type: 'e2ee_error',
-      error: { code: 'unauthorized' }
-    })
   })
 
   it('answers registry_unavailable, never device_revoked, after loading a corrupt registry', () => {

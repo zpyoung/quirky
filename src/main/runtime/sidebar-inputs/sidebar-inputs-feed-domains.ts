@@ -6,16 +6,12 @@ import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import type { DesktopSidebarFacts } from '../../../shared/sidebar-list/desktop-sidebar-facts'
 import type { RuntimeStore } from '../runtime-store-contract'
 import type { OrcaRuntimeWithSidebarTemporal } from './orca-runtime-sidebar-temporal'
-import type { PairedServerRowsProducer } from './paired-server-rows-producer'
 import type { WorkspaceCreationRegistry } from './workspace-creation-registry'
 import type { WorkspaceRowsProducer } from './workspace-rows-producer'
 import type { RepoIconDataUrls } from './repo-icon-data-urls'
 import type { SidebarInputsFeedDomain } from './sidebar-inputs-feed'
 import { readDesktopSidebarFacts } from './desktop-sidebar-facts'
 import { readSidebarProjectCatalog } from './sidebar-project-catalog'
-import { buildPairedServerReviewFacts } from '../../../shared/sidebar-list/workspace-review-facts'
-import { buildPairedServerActivityFacts } from '../../../shared/sidebar-list/paired-server-activity-facts'
-import { parseExecutionHostId } from '../../../shared/execution-host'
 
 /** This host's store and connection registries, read the way sidebarInputs.desktopFacts reads them. */
 export function readRuntimeDesktopSidebarFacts(store: RuntimeStore): DesktopSidebarFacts {
@@ -37,7 +33,6 @@ const CATALOG_EVENTS = new Set<RuntimeClientEvent['type']>([
 
 export type SidebarInputsFeedSources = {
   facts: OrcaRuntimeWithSidebarTemporal
-  pairedServerRows: PairedServerRowsProducer
   workspaceCreations: WorkspaceCreationRegistry
   workspaceRows: WorkspaceRowsProducer
   repoIcons: Pick<RepoIconDataUrls, 'idsByRepo'>
@@ -52,7 +47,7 @@ export type SidebarInputsFeedSources = {
 export function sidebarInputsFeedDomains(
   sources: SidebarInputsFeedSources
 ): SidebarInputsFeedDomain[] {
-  const { facts, pairedServerRows, workspaceCreations, workspaceRows } = sources
+  const { facts, workspaceCreations, workspaceRows } = sources
   const watchCatalog = (changed: () => void): (() => void) =>
     sources.onClientEvent(
       (event) => {
@@ -72,27 +67,8 @@ export function sidebarInputsFeedDomains(
   return [
     {
       name: 'activity',
-      read: () => ({
-        // A paired server's rows too; this host's own rows win an id both list.
-        ...buildPairedServerActivityFacts(
-          pairedServerRows.snapshot().servers,
-          (hostId) => sources.store()?.getWorkspaceSession?.(hostId) ?? null
-        ),
-        ...facts.getWorkspaceActivityFacts().facts
-      }),
-      watch: (changed) => {
-        const detaches = [
-          facts.workspaceActivityFacts.revision.onChange(changed),
-          pairedServerRows.revision.onChange(changed),
-          // This desktop's saved session for a paired server holds its browser and chat tabs there.
-          sources.store()?.onWorkspaceSessionWritten?.((hostId) => {
-            if (hostId === null || parseExecutionHostId(hostId)?.kind === 'runtime') {
-              changed()
-            }
-          })
-        ]
-        return () => detaches.forEach((detach) => detach?.())
-      }
+      read: () => facts.getWorkspaceActivityFacts().facts,
+      watch: (changed) => facts.workspaceActivityFacts.revision.onChange(changed)
     },
     {
       name: 'temporal',
@@ -114,26 +90,13 @@ export function sidebarInputsFeedDomains(
     },
     {
       name: 'pairedServerHosts',
-      read: () =>
-        Object.fromEntries(
-          pairedServerRows
-            .snapshot()
-            .servers.map(({ hostId, freshness, host }) => [hostId, { freshness, host }])
-        ),
-      watch: (changed) => pairedServerRows.revision.onChange(changed)
+      read: () => ({}),
+      watch: () => () => {}
     },
     {
       name: 'pairedServerRows',
-      read: () =>
-        Object.fromEntries(
-          pairedServerRows
-            .snapshot()
-            // Activity goes out in its own domain, so a terminal count does not resend the row.
-            .servers.flatMap(({ rows }) =>
-              rows.map(({ activity: _activity, ...row }) => [row.key, row])
-            )
-        ),
-      watch: (changed) => pairedServerRows.revision.onChange(changed)
+      read: () => ({}),
+      watch: () => () => {}
     },
     {
       name: 'desktop',
@@ -154,11 +117,10 @@ export function sidebarInputsFeedDomains(
     {
       // Each field its own entity, so a reader holds the catalog only once it is whole.
       name: 'projectCatalog',
-      read: () => readSidebarProjectCatalog(requireStore(), pairedServerRows.catalogs()),
+      read: () => readSidebarProjectCatalog(requireStore(), []),
       watch: (changed) => {
         const detaches = [
           watchCatalog(changed),
-          pairedServerRows.revision.onChange(changed),
           // Manual repo order and project order live in the UI state.
           sources.store()?.onUIChanged?.(changed),
           // Catalog writes are full saves, and some (a project rename) announce no event.
@@ -179,14 +141,7 @@ export function sidebarInputsFeedDomains(
     },
     {
       name: 'review',
-      read: async () => ({
-        // A paired server's rows by the window's cache too; this host's own rows win an id both list.
-        ...buildPairedServerReviewFacts(
-          pairedServerRows.snapshot().servers,
-          requireStore().getGitHubCache().pr
-        ),
-        ...(await facts.getWorkspaceReviewFacts()).facts
-      }),
+      read: async () => (await facts.getWorkspaceReviewFacts()).facts,
       // The window's PR cache saves announce no change.
       watch: watchCatalog,
       rereadOnRead: true

@@ -342,12 +342,12 @@
     "sherpa-onnx-darwin-x64": "1.12.37"
   },
   "lint-staged": {
-    "{*.{ts,tsx,js,jsx,mjs,mts,cts},!(cloud)/**/*.{ts,tsx,js,jsx,mjs,mts,cts}}": [
+    "*.{ts,tsx,js,jsx,mjs,mts,cts}": [
       "oxlint",
       "oxlint --config config/oxlint-react-doctor.json",
       "oxfmt --write --no-error-on-unmatched-pattern"
     ],
-    "{*.{json,css,md,mdx,yml,yaml},!(cloud)/**/*.{json,css,md,mdx,yml,yaml}}": [
+    "*.{json,css,md,mdx,yml,yaml}": [
       "oxfmt --write --no-error-on-unmatched-pattern"
     ]
   },
