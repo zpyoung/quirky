@@ -2536,3 +2536,362 @@ describe('expanding a visual and pointing at it', () => {
     expect(byLabel('Your message')!.textContent).toBe('◈ Auth flow › Daemon why this hop?')
   })
 })
+
+const tagged = (owner: string, item: ChatItem): ChatItem => ({ ...item, agent: owner }) as ChatItem
+const agentItem = (id: string, over: Record<string, unknown> = {}): ChatItem =>
+  ({ kind: 'agent', id, name: id, task: `task of ${id}`, state: 'working', startedAt: Date.now(), steps: 'full', ...over }) as ChatItem
+const agentMsg = (seq: number, id: string, over: Record<string, unknown> = {}) => msg(seq, agentItem(id, over), { at: Date.now() })
+const taggedMsg = (seq: number, owner: string, item: ChatItem) => msg(seq, tagged(owner, item), { at: Date.now() })
+const kinds = (turn: { blocks: { kind: string }[] }) => turn.blocks.map((block) => block.kind)
+const markers = (turn: ReturnType<typeof groupTurns>[number]) =>
+  turn.blocks.flatMap((block) => (block.kind === 'agent-marker' ? [`${block.phase}:${block.agent}`] : block.kind === 'agent-fold' ? [`fold-${block.phase}:${block.agents.length}`] : []))
+
+describe('agent grouping', () => {
+  test('the main turn hides everything a subagent tagged, streaming prose included', () => {
+    const [turn] = groupTurns([
+      user(1, 'go'),
+      agentMsg(2, 'a'),
+      taggedMsg(3, 'a', { kind: 'activity', callId: 'c', tool: 'Read', summary: 'Read x', state: 'done' }),
+      taggedMsg(4, 'a', { kind: 'prose', text: 'agent words', streaming: true }),
+      taggedMsg(5, 'a', { kind: 'tests', callId: 't', command: 'bun test', state: 'done' }),
+      prose(6, 'main words')
+    ])
+    expect(kinds(turn!)).toEqual(['agent-marker', 'prose'])
+    expect(turn!.blocks[1]).toMatchObject({ text: 'main words' })
+  })
+
+  test('an agent transcript shows its own items and its children as spawn markers', () => {
+    const items = [
+      user(1, 'go'),
+      agentMsg(2, 'a'),
+      taggedMsg(3, 'a', { kind: 'activity', callId: 'c', tool: 'Read', summary: 'Read x', state: 'done' }),
+      msg(4, tagged('a', agentItem('b')), { at: Date.now() }),
+      taggedMsg(5, 'b', { kind: 'activity', callId: 'd', tool: 'Read', summary: 'Read y', state: 'done' }),
+      taggedMsg(6, 'a', { kind: 'prose', text: 'report' })
+    ]
+    const [turn] = groupTurns(items, { owner: 'a' })
+    expect(kinds(turn!)).toEqual(['activity', 'agent-marker', 'prose'])
+    expect(markers(turn!)).toEqual(['spawn:b'])
+    expect(groupTurns(items).flatMap((t) => t.blocks.map((block) => block.kind))).toEqual(['agent-marker'])
+  })
+
+  test('a spawn marker shows where the agent first appears and a return marker on its first ended snapshot only', () => {
+    const [turn] = groupTurns([user(1, 'go'), agentMsg(2, 'a'), agentMsg(3, 'a', { summary: 'busy' }), prose(4, 'meanwhile'), agentMsg(5, 'a', { state: 'done', report: 'ok' }), agentMsg(6, 'a', { state: 'done', report: 'ok again' })])
+    expect(markers(turn!)).toEqual(['spawn:a', 'return:a'])
+    expect(kinds(turn!)).toEqual(['agent-marker', 'prose', 'agent-marker'])
+  })
+
+  test('a return that arrives after the turn ended joins the turn that holds the spawn marker', () => {
+    const turns = groupTurns([user(1, 'go'), agentMsg(2, 'a', { background: true }), end(3, 'done'), user(4, 'next'), prose(5, 'sure'), agentMsg(6, 'a', { state: 'done' })])
+    expect(turns.map(markers)).toEqual([['spawn:a', 'return:a'], []])
+    expect(turns[0]!.end).toEqual({ state: 'done' })
+  })
+
+  test('a failed or stopped snapshot is a return too, and a first snapshot already ended gets both markers', () => {
+    expect(markers(groupTurns([user(1, 'go'), agentMsg(2, 'a'), agentMsg(3, 'a', { state: 'failed', error: 'boom' })])[0]!)).toEqual(['spawn:a', 'return:a'])
+    expect(markers(groupTurns([user(1, 'go'), agentMsg(2, 'a', { state: 'stopped' })])[0]!)).toEqual(['spawn:a', 'return:a'])
+  })
+
+  test('four or more consecutive markers of one phase fold; three stay separate', () => {
+    const spawns = (count: number) => Array.from({ length: count }, (_, index) => agentMsg(2 + index, `a${index}`))
+    expect(markers(groupTurns([user(1, 'go'), ...spawns(3)])[0]!)).toEqual(['spawn:a0', 'spawn:a1', 'spawn:a2'])
+    const [turn] = groupTurns([user(1, 'go'), ...spawns(12)])
+    expect(markers(turn!)).toEqual(['fold-spawn:12'])
+    const folded = turn!.blocks[0]
+    expect(folded).toMatchObject({ kind: 'agent-fold', phase: 'spawn', seq: 2 })
+    const returns = Array.from({ length: 4 }, (_, index) => agentMsg(20 + index, `a${index}`, { state: 'done' }))
+    expect(markers(groupTurns([user(1, 'go'), ...spawns(4), ...returns])[0]!)).toEqual(['fold-spawn:4', 'fold-return:4'])
+  })
+
+  test('a refused spawn draws only its spawn marker', () => {
+    const [turn] = groupTurns([user(1, 'go'), agentMsg(2, 'a', { state: 'failed', refused: 'Concurrent subagent limit reached' }), agentMsg(3, 'a', { state: 'failed', refused: 'Concurrent subagent limit reached' })])
+    expect(markers(turn!)).toEqual(['spawn:a'])
+  })
+
+  test('a spawn refused after a working snapshot draws only its spawn marker', () => {
+    const [turn] = groupTurns([user(1, 'go'), agentMsg(2, 'a'), agentMsg(3, 'a', { state: 'failed', refused: 'Concurrent subagent limit reached' })])
+    expect(markers(turn!)).toEqual(['spawn:a'])
+  })
+
+  test('a tagged user item stays in its owner\'s transcript and never opens a main turn', () => {
+    const items = [user(1, 'go'), agentMsg(2, 'a'), taggedMsg(3, 'a', { kind: 'user', text: 'agent prompt' }), taggedMsg(4, 'a', { kind: 'prose', text: 'agent words' })]
+    const main = groupTurns(items)
+    expect(main).toHaveLength(1)
+    expect(main[0]!.user).toMatchObject({ text: 'go' })
+    const own = groupTurns(items, { owner: 'a' })
+    expect(own.map((turn) => turn.user?.text)).toEqual(['agent prompt'])
+    expect(groupTurns(items, { owner: 'b' })).toEqual([])
+    expect(groupTurns([user(1, 'go'), prose(2, 'main words')], { owner: 'a' })).toEqual([])
+  })
+
+  test('an ask stays in the main turn whoever asked, and never shows in the asker\'s transcript', () => {
+    const items = [user(1, 'go'), agentMsg(2, 'a'), msg(3, { kind: 'ask', askId: 'k', variant: 'approval', from: 'a' }, { at: Date.now() })]
+    expect(kinds(groupTurns(items)[0]!)).toEqual(['agent-marker', 'ask'])
+    expect(groupTurns(items, { owner: 'a' }).flatMap(kinds)).toEqual([])
+  })
+
+  test('existing activity folding is unchanged around tagged items', () => {
+    const [turn] = groupTurns([user(1, 'go'), act1(2, 'c1', 'Read', 'Read a'), taggedMsg(3, 'a', { kind: 'activity', callId: 'x', tool: 'Read', summary: 'Read z', state: 'done' }), act1(4, 'c2', 'Grep', 'Grep b')])
+    const [block] = turn!.blocks
+    expect(turn!.blocks).toHaveLength(1)
+    expect(block!.kind === 'activity' && summarizeActivity(block!.calls)).toContain('Read 1 file')
+  })
+})
+
+describe('agents in the chat', () => {
+  const SUB: AgentCapabilities = { ...CLAUDE, subagents: 'full', stopAgent: OK }
+  const turnText = () => byLabel('Turn 1')!.textContent ?? ''
+  const rows = () => [...host!.querySelectorAll<HTMLElement>('[data-agent-row]')]
+  const rowOf = (id: string) => host!.querySelector<HTMLElement>(`[data-agent-row="${id}"]`)!
+  const dock = () => host!.querySelector<HTMLElement>('[data-dock]')
+  const hover = (element: Element) => act(async () => void element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })))
+  const panelCollapsed = () => host!.querySelector('[data-collapsed="true"]') !== null
+  const collapsePanel = () => click(host!.querySelector('button[aria-label="Collapse visual panel"]'))
+  const three = [
+    user(1, 'Where do auth tokens refresh?'),
+    agentMsg(2, 'Explore', { task: 'Find where auth tokens refresh', model: 'haiku', tokens: 18_200 }),
+    agentMsg(3, 'test-runner', { task: 'Run the auth tests' }),
+    agentMsg(4, 'reviewer', { task: 'Review the change', background: true }),
+    taggedMsg(5, 'Explore', { kind: 'activity', callId: 'c1', tool: 'Grep', summary: 'Grep "refresh(" src/', state: 'running' })
+  ]
+
+  test('the turn shows spawn markers and never the agents\' own activity', async () => {
+    await mountChat({ messages: three, capabilities: SUB })
+    expect(turnText()).toContain('Spawned Explore · Find where auth tokens refresh')
+    expect(turnText()).toContain('Spawned reviewer in background · Review the change')
+    expect(turnText()).not.toContain('Grep "refresh("')
+  })
+
+  test('a finished agent leaves a return marker with its report, and a failed one reads failed', async () => {
+    await mountChat({
+      messages: [
+        user(1, 'go'),
+        agentMsg(2, 'Explore'),
+        agentMsg(3, 'test-runner'),
+        agentMsg(4, 'Explore', { state: 'done', report: 'Found 3 refresh handlers\nmore detail' }),
+        agentMsg(5, 'test-runner', { state: 'failed', error: '2 of 41 tests failed' })
+      ],
+      capabilities: SUB
+    })
+    expect(turnText()).toContain('Explore returned · Found 3 refresh handlers')
+    expect(turnText()).not.toContain('more detail')
+    expect(turnText()).toContain('test-runner failed · 2 of 41 tests failed')
+  })
+
+  test('a refused spawn shows its refusal in red and adds no row', async () => {
+    await mountChat({ messages: [user(1, 'go'), agentMsg(2, 'ghost', { state: 'failed', refused: 'Concurrent subagent limit reached' })], capabilities: SUB })
+    expect(turnText()).toContain('Concurrent subagent limit reached')
+    expect(rows()).toHaveLength(0)
+    expect(dock()).toBeNull()
+  })
+
+  test('twelve agents fold into one line with live counts that expands to the markers', async () => {
+    const twelve = Array.from({ length: 12 }, (_, index) => agentMsg(2 + index, `audit ${index}`))
+    const later = [0, 1, 2].map((index) => agentMsg(20 + index, `audit ${index}`, { state: 'done' })).concat([3, 4].map((index) => agentMsg(30 + index, `audit ${index}`, { state: 'needs-you' })))
+    await mountChat({ messages: [user(1, 'audit'), ...twelve, ...later], capabilities: SUB })
+    expect(turnText()).toContain('Spawned 12 agents · 9 running · 2 need you · 3 done')
+    expect(turnText()).not.toContain('Spawned audit 0')
+    const fold = host!.querySelector<HTMLElement>('[data-marker="spawn-fold"]')!
+    await click(fold)
+    expect(turnText()).toContain('Spawned audit 0 · task of audit 0')
+  })
+
+  describe('the dock', () => {
+    test('says how many agents run, in green, and is hidden when none do', async () => {
+      await mountChat({ messages: three, capabilities: SUB })
+      expect(dock()!.textContent).toContain('3 agents')
+      expect(dock()!.querySelector('.ui-status-dot')!.classList.contains('ui-status-dot--working')).toBe(true)
+      await push(agentMsg(6, 'Explore', { state: 'done' }))
+      await push(agentMsg(7, 'test-runner', { state: 'done' }))
+      expect(dock()!.textContent).toContain('1 agent')
+      await push(agentMsg(8, 'reviewer', { state: 'done' }))
+      expect(dock()).toBeNull()
+    })
+
+    test('counts nested agents in brackets, adds needs-you, quiet and failed, and turns amber', async () => {
+      const old = T0
+      await mountChat({
+        messages: [
+          user(1, 'go'),
+          agentMsg(2, 'vault'),
+          msg(3, tagged('vault', agentItem('trace', { state: 'needs-you' })), { at: Date.now() }),
+          msg(4, tagged('vault', agentItem('check')), { at: Date.now() }),
+          msg(5, agentItem('slow', { startedAt: old }), { at: old }),
+          agentMsg(6, 'bad', { state: 'failed' })
+        ],
+        capabilities: SUB
+      })
+      expect(dock()!.textContent).toContain('2 agents (+2) · 1 needs you · 1 quiet · 1 failed')
+      expect(dock()!.querySelector('.ui-status-dot')!.classList.contains('ui-status-dot--needs-you')).toBe(true)
+    })
+
+    test('a click opens the card on the agent that needs you, else the first running one', async () => {
+      await mountChat({ messages: [...three, agentMsg(6, 'test-runner', { state: 'needs-you' })], capabilities: SUB })
+      await collapsePanel()
+      expect(panelCollapsed()).toBe(true)
+      await click(dock())
+      expect(panelCollapsed()).toBe(false)
+      expect(byLabel('test-runner transcript')).not.toBeNull()
+      expect(byLabel('Explore transcript')).toBeNull()
+    })
+  })
+
+  describe('the Agents card', () => {
+    test('the tab counts every agent and the panel expands from a marker click with that agent selected', async () => {
+      await mountChat({ messages: three, capabilities: SUB })
+      expect(host!.textContent).toContain('Agents 3')
+      await collapsePanel()
+      await click(host!.querySelector('[data-marker="spawn"][data-agent="reviewer"]'))
+      expect(panelCollapsed()).toBe(false)
+      expect(byLabel('reviewer transcript')).not.toBeNull()
+      expect(host!.querySelector('h3')!.textContent).toBe('Visuals')
+    })
+
+    test('Running lists agents needing you first, then quiet, then working, with Done below', async () => {
+      await mountChat({
+        messages: [
+          user(1, 'go'),
+          agentMsg(2, 'w'),
+          msg(3, agentItem('q', { startedAt: T0 }), { at: T0 }),
+          agentMsg(4, 'n', { state: 'needs-you' }),
+          agentMsg(5, 'd', { state: 'done' })
+        ],
+        capabilities: SUB
+      })
+      expect(rows().map((row) => row.getAttribute('data-agent-row'))).toEqual(['n', 'q', 'w', 'd'])
+      expect(byLabel('Agents list')!.textContent).toContain('Running · 3')
+      expect(rowOf('q').textContent).toContain('quiet')
+      expect(rowOf('n').textContent).toContain('needs you')
+    })
+
+    test('Done collapses once it holds more than three', async () => {
+      const done = (count: number) => Array.from({ length: count }, (_, index) => agentMsg(2 + index, `finished ${index}`, { state: 'done', report: `result ${index}` }))
+      await mountChat({ messages: [user(1, 'go'), ...done(3)], capabilities: SUB })
+      expect(rows()).toHaveLength(3)
+      expect(byLabel('Agents list')!.textContent).toContain('Done · 3')
+    })
+
+    test('Done stays closed at four until its heading opens it', async () => {
+      const done = (count: number) => Array.from({ length: count }, (_, index) => agentMsg(2 + index, `finished ${index}`, { state: 'done', report: `result ${index}` }))
+      await mountChat({ messages: [user(1, 'go'), ...done(4)], capabilities: SUB })
+      expect(rows()).toHaveLength(0)
+      const toggle = buttonNamed('Done · 4 ▸')!
+      await click(toggle)
+      expect(rows()).toHaveLength(4)
+    })
+
+    test('a nested agent is indented under its parent and the parent says a child needs you', async () => {
+      await mountChat({
+        messages: [user(1, 'go'), agentMsg(2, 'vault'), msg(3, tagged('vault', agentItem('trace', { state: 'needs-you' })), { at: Date.now() })],
+        capabilities: SUB
+      })
+      expect(rows().map((row) => row.getAttribute('data-agent-row'))).toEqual(['vault', 'trace'])
+      expect(rowOf('vault').textContent).toContain('child needs you')
+      expect(rowOf('trace').textContent).not.toContain('child needs you')
+      expect([rowOf('vault'), rowOf('trace')].map((row) => row.getAttribute('data-depth'))).toEqual(['0', '1'])
+    })
+
+    test('the selected transcript shows the header, the folded prompt, its own items and its children\'s markers', async () => {
+      await mountChat({
+        messages: [
+          user(1, 'go'),
+          agentMsg(2, 'Explore', { task: 'Find refresh', model: 'haiku', tokens: 18_200, prompt: 'Find refresh. Do not edit.', startedAt: Date.now() - 42_000 }),
+          msg(3, tagged('Explore', agentItem('grep-helper', { task: 'Find mocks' })), { at: Date.now() }),
+          taggedMsg(4, 'Explore', { kind: 'activity', callId: 'c1', tool: 'Read', summary: 'Read session.ts', state: 'done' }),
+          taggedMsg(5, 'Explore', { kind: 'prose', text: 'Found 3 handlers' }),
+          taggedMsg(6, 'grep-helper', { kind: 'activity', callId: 'c2', tool: 'Grep', summary: 'Grep mocks', state: 'done' })
+        ],
+        capabilities: SUB
+      })
+      await click(rowOf('Explore').querySelector('button'))
+      const card = byLabel('Explore transcript')!
+      expect(card.textContent).toContain('Find refresh')
+      expect(card.textContent).toContain('haiku')
+      expect(card.textContent).toContain('18.2k tokens')
+      expect(card.querySelector('details')!.textContent).toContain('Prompt it was given')
+      expect(card.querySelector('details')!.textContent).toContain('Do not edit.')
+      expect(card.textContent).toContain('Read 1 file')
+      expect(card.textContent).toContain('Found 3 handlers')
+      expect(card.textContent).toContain('Spawned grep-helper · Find mocks')
+      expect(card.textContent).not.toContain('Grep mocks')
+      await click(card.querySelector('[data-marker="spawn"]'))
+      expect(byLabel('grep-helper transcript')!.textContent).toContain('from Explore')
+    })
+
+    test('a running agent ends with its live line and a finished one with its report', async () => {
+      await mountChat({ messages: [user(1, 'go'), agentMsg(2, 'a', { summary: 'Tracing where tokens refresh' }), agentMsg(3, 'b', { state: 'done', report: 'All clear.' })], capabilities: SUB })
+      expect(byLabel('a transcript')!.textContent).toContain('Tracing where tokens refresh')
+      await click(rowOf('b').querySelector('button'))
+      expect(byLabel('b transcript')!.textContent).toContain('All clear.')
+    })
+
+    test('a finished agent keeps its report below interim prose, unless the prose already is the report', async () => {
+      await mountChat({
+        messages: [
+          user(1, 'go'),
+          agentMsg(2, 'a', { state: 'done', report: 'Final answer.' }),
+          taggedMsg(3, 'a', { kind: 'prose', text: 'Looking around.' }),
+          agentMsg(4, 'b', { state: 'done', report: 'Same text.' }),
+          taggedMsg(5, 'b', { kind: 'prose', text: 'Same text.\n' })
+        ],
+        capabilities: SUB
+      })
+      await click(rowOf('a').querySelector('button'))
+      expect(byLabel('a transcript')!.textContent).toContain('Looking around.')
+      expect(byLabel('a transcript')!.textContent).toContain('Final answer.')
+      await click(rowOf('b').querySelector('button'))
+      expect(byLabel('b transcript')!.textContent!.match(/Same text\./g)).toHaveLength(1)
+    })
+
+    test('an agent that reports no steps gets the note', async () => {
+      await mountChat({ messages: [user(1, 'go'), agentMsg(2, 'pi-sub', { steps: 'none' })], capabilities: { ...PI, subagents: 'states', stopAgent: { ok: false, reason: 'pi can\'t stop one subagent' } } })
+      expect(byLabel('pi-sub transcript')!.textContent).toContain('This agent doesn\'t report its subagents\' steps')
+    })
+
+    test('Stop in the header and on row hover calls stopAgent for that agent', async () => {
+      await mountChat({ messages: three, capabilities: SUB, handlers: { 'quirky.structured/stopAgent': () => ({}) } })
+      await click(rowOf('Explore').querySelector('button'))
+      const headerStop = [...byLabel('Explore transcript')!.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Stop')!
+      await click(headerStop)
+      expect(fake.callsTo('quirky.structured/stopAgent').map((call) => call.params)).toEqual([{ session: 'chat', agent: 'Explore' }])
+      expect(rowOf('reviewer').querySelector('[aria-label="Stop reviewer"]')).toBeNull()
+      await hover(rowOf('reviewer'))
+      await click(rowOf('reviewer').querySelector('[aria-label="Stop reviewer"]'))
+      expect(fake.callsTo('quirky.structured/stopAgent').at(-1)!.params).toEqual({ session: 'chat', agent: 'reviewer' })
+    })
+
+    test('Stop is disabled with the reason when the agent cannot stop one subagent', async () => {
+      await mountChat({ messages: three, capabilities: { ...PI, subagents: 'states', stopAgent: { ok: false, reason: 'pi can\'t stop one subagent' } } })
+      const headerStop = [...byLabel('Explore transcript')!.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Stop')!
+      expect(headerStop.disabled).toBe(true)
+      expect(headerStop.getAttribute('title')).toBe('pi can\'t stop one subagent')
+      await click(headerStop)
+      expect(fake.callsTo('quirky.structured/stopAgent')).toHaveLength(0)
+    })
+
+    test('a stopped agent says who stopped it and a cut-off one says so', async () => {
+      await mountChat({ messages: [user(1, 'go'), agentMsg(2, 'a', { state: 'stopped' }), agentMsg(3, 'b', { state: 'stopped', cutOff: true })], capabilities: SUB })
+      expect(rowOf('a').textContent).toContain('Stopped by you')
+      expect(rowOf('b').textContent).toContain('Cut off when Quirky quit')
+      expect(host!.querySelector('[data-dock]')).toBeNull()
+    })
+  })
+
+  describe('asks from agents', () => {
+    const ask = msg(6, { kind: 'ask', askId: 'ask-9', variant: 'approval', from: 'test-runner' }, { at: Date.now() })
+
+    test('the ask stays in the main turn with an Open link that selects the asking agent', async () => {
+      await mountChat({ messages: [...three, ask], capabilities: SUB })
+      expect(fake.mounted.filter((mount) => mount.viewId === 'view:quirky.ask/card').map((mount) => mount.input)).toEqual([{ askId: 'ask-9' }])
+      await collapsePanel()
+      await click(buttonNamed('Open test-runner'))
+      expect(panelCollapsed()).toBe(false)
+      expect(byLabel('test-runner transcript')).not.toBeNull()
+    })
+
+    test('an ask with no agent has no Open link', async () => {
+      await mountChat({ messages: [user(1, 'go'), msg(2, { kind: 'ask', askId: 'plain', variant: 'question' })], capabilities: SUB })
+      expect([...host!.querySelectorAll('button')].some((button) => button.textContent?.startsWith('Open '))).toBe(false)
+    })
+  })
+})

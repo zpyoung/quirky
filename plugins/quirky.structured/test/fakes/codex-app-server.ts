@@ -23,9 +23,30 @@ type FixtureTurnScript = {
   notifications?: FixtureNotification[]
   serverRequests?: FixtureServerRequest[]
   interrupt?: 'success' | 'error' | 'timeout'
+  /**
+   * Fails `turn/interrupt` for the scripted child threads only, so the parent's own interrupt still succeeds.
+   * `error-once` fails just the first child interrupt.
+   */
+  childInterrupt?: 'error' | 'error-once'
   hold?: boolean
 }
+/**
+ * A scripted sub-agent thread, started when the parent's scripted turn starts (needs `turnScript`).
+ * `announce: false` skips its `thread/started`, for a thread the runner sees without an announcement.
+ * Notifications and server requests default their params to this thread and its turn.
+ */
+type FixtureChildThread = {
+  id: string
+  parentThreadId?: string
+  agentNickname?: string
+  agentRole?: string
+  turnId?: string
+  announce?: boolean
+  notifications?: FixtureNotification[]
+  serverRequests?: FixtureServerRequest[]
+}
 type CodexAppServerOptions = {
+  childThreads?: FixtureChildThread[]
   heldPrefix?: string
   uniqueThreads?: boolean
   rateLimitsUpdated?: Record<string, unknown>
@@ -86,7 +107,9 @@ const rateLimitsRead = ${JSON.stringify(options?.rateLimitsRead ?? null)}
 const skills = ${JSON.stringify(options?.skills ?? [])}
 const configRead = JSON.parse(${JSON.stringify(JSON.stringify(options?.configRead ?? null))})
 const turnScript = ${JSON.stringify(options?.turnScript ?? null)}
+const childThreads = ${JSON.stringify(options?.childThreads ?? [])}
 const threadNotifications = ${JSON.stringify(options?.threadNotifications ?? [])}
+let childInterruptFailed = false
 const replyDelayMs = ${JSON.stringify(options?.replyDelayMs ?? {})}
 let input = ''
 let nextTurn = 1
@@ -170,7 +193,25 @@ function emitThreadNotifications(threadId) {
     for (const event of threadNotifications) notify(event.method, event.params ?? { threadId })
   }, 100)
 }
+function startChildThreads(threadId) {
+  for (const child of childThreads) {
+    const turnId = child.turnId ?? 'child-turn-1'
+    if (child.announce !== false) {
+      notify('thread/started', { thread: { id: child.id, parentThreadId: child.parentThreadId ?? threadId, agentNickname: child.agentNickname ?? null, agentRole: child.agentRole ?? null } })
+    }
+    notify('turn/started', { threadId: child.id, turn: { id: turnId, status: 'inProgress', items: [] } })
+    for (const event of child.notifications ?? []) notify(event.method, event.params ?? { threadId: child.id, turnId })
+    const requests = child.serverRequests ?? []
+    for (let index = 0; index < requests.length; index++) {
+      const request = requests[index]
+      const id = request.id ?? 'child-' + child.id + '-' + (index + 1)
+      scriptedRequests.set(id, child.id)
+      serverRequest({ id, method: request.method, params: request.params ?? { threadId: child.id, turnId } })
+    }
+  }
+}
 function runTurnScript(threadId, state) {
+  startChildThreads(threadId)
   for (const event of turnScript.notifications ?? []) notify(event.method, event.params ?? { threadId, turnId: state.turn.id })
   const requests = turnScript.serverRequests ?? []
   state.scriptedRequestsRemaining = requests.length
@@ -317,6 +358,15 @@ function receive(message) {
       }
       case 'turn/interrupt':
         if (turnScript?.interrupt === 'timeout') return
+        if (turnScript?.childInterrupt === 'error-once' && !childInterruptFailed && childThreads.some((child) => child.id === message.params.threadId)) {
+          childInterruptFailed = true
+          send({ id: message.id, error: { code: -32001, message: 'scripted child interrupt failure' } })
+          return
+        }
+        if (turnScript?.childInterrupt === 'error' && childThreads.some((child) => child.id === message.params.threadId)) {
+          send({ id: message.id, error: { code: -32001, message: 'scripted child interrupt failure' } })
+          return
+        }
         if (turnScript?.interrupt === 'error') {
           send({ id: message.id, error: { code: -32001, message: 'scripted interrupt failure' } })
           return

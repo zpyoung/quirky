@@ -3,8 +3,10 @@ import { existsSync, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import type {
   AgentCommand,
+  AgentKey,
   AskEnvelope,
   AskSpec,
+  ChatItem,
   MethodHandler,
   ModeItem,
   PlanItem,
@@ -239,6 +241,12 @@ export function activate(context: PluginContext): void {
   const store = context.openStore(journalMigrations(context.home))
   const journal = new Journal(store)
   const queue = new MessageQueue(store)
+  for (const { sessionId, item } of journal.liveAgents()) {
+    const at = Date.now()
+    const stopped: ChatItem = { ...item, state: 'stopped', cutOff: true, endedAt: at }
+    const message = journal.append({ sessionId, role: 'tool', text: `Agent ${item.name}: stopped`, item: stopped, at })
+    context.emit('message', { message })
+  }
   const live = new Map<string, LiveSession>()
   const pendingAsks = new Map<string, Set<string>>()
   const askWaits = new Map<string, Set<Promise<AskEnvelope>>>()
@@ -339,6 +347,15 @@ export function activate(context: PluginContext): void {
       return parseVisualLevel(context.getSetting('default-visual-level')) ?? 'visual-first'
     } catch {
       return 'visual-first'
+    }
+  }
+
+  /** The `agent-summaries` setting; anything but `latest-tool` means the agent's own AI-written summary. */
+  const agentSummaries = (): 'ai' | 'latest-tool' => {
+    try {
+      return context.getSetting('agent-summaries') === 'latest-tool' ? 'latest-tool' : 'ai'
+    } catch {
+      return 'ai'
     }
   }
 
@@ -619,7 +636,7 @@ export function activate(context: PluginContext): void {
   const createAsk = async (
     spec: AskSpec,
     sessionId: string,
-    options?: { nativeQuestion?: boolean; silent?: boolean; onAsk?: (askId: string) => void }
+    options?: { nativeQuestion?: boolean; silent?: boolean; onAsk?: (askId: string) => void; from?: AgentKey }
   ): Promise<AskEnvelope> => {
     const entry = live.get(sessionId)
     if (!askOwnerIsActive(sessionId, entry)) throw new Error('structured session is not active')
@@ -666,7 +683,7 @@ export function activate(context: PluginContext): void {
           sessionId,
           role: 'system',
           text: variant === 'question' ? 'Question for you' : 'Approval needed',
-          item: { kind: 'ask', askId, variant }
+          item: { kind: 'ask', askId, variant, ...(options?.from === undefined ? {} : { from: options.from }) }
         })
       }
       options?.onAsk?.(askId)
@@ -797,6 +814,7 @@ export function activate(context: PluginContext): void {
     setStatus,
     createAsk,
     cancelAsk,
+    agentSummaries,
     reportCommands(sessionId, commands) {
       const seen = new Set<string>()
       const unique = commands.filter((command) => {
@@ -1888,9 +1906,11 @@ export function activate(context: PluginContext): void {
     const own = journal.usage(session.id)
     let conversation: UsageTotals | null = null
     let turns = 0
+    let subagentTokens = 0
     const seen = new Set<string>()
     for (let current: Session | null = session; current !== null && !seen.has(current.id); ) {
       seen.add(current.id)
+      for (const agent of journal.agentItems(current.id)) subagentTokens += agent.tokens ?? 0
       const summary = journal.usage(current.id)
       if (summary) {
         conversation = addTotals(conversation ?? emptyTotals(), summary.own)
@@ -1903,7 +1923,7 @@ export function activate(context: PluginContext): void {
         current = null
       }
     }
-    const result: UsageResult = { own: own?.own ?? null, conversation, turns, cache: own?.cache ?? null }
+    const result: UsageResult = { own: own?.own ?? null, conversation, turns, cache: own?.cache ?? null, subagentTokens }
     return result
   }
 
@@ -2157,6 +2177,25 @@ export function activate(context: PluginContext): void {
     return { ok: true }
   }
 
+  /** Stops one subagent and its live descendants through the session's runner, leaving the turn running. */
+  const stopAgent: MethodHandler = async (params) => {
+    const unsupported = Object.keys(params).find((key) => key !== 'session' && key !== 'agent')
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured stopAgent does not support ${unsupported}`)
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    if (typeof params.agent !== 'string' || params.agent === '') throw context.error('invalid-params', 'agent must be a non-empty string')
+    const session = await requireStructured(params.session)
+    ensureActive()
+    await startTasks.get(session.id)
+    const entry = live.get(session.id)
+    const runner = runnerBySession.get(session.id)
+    if (!entry || !runner || entry.stopping || entry.status === 'exited') {
+      throw context.error('conflict', 'structured session is not active')
+    }
+    if (!runner.stopAgent) throw context.error('conflict', "This agent can't stop a single subagent.")
+    await runner.stopAgent(session.id, params.agent)
+    return {}
+  }
+
   const stopOwned: MethodHandler = async (params, caller) => {
     if (caller.role !== 'plugin') throw context.error('invalid-params', 'scoped connection cleanup requires an authenticated plugin')
     const key = resourceKey(params.key)
@@ -2217,6 +2256,7 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/settings', currentSettings)
   context.provide('method:quirky.structured/stop', stop)
   context.provide('method:quirky.structured/interrupt', interrupt)
+  context.provide('method:quirky.structured/stopAgent', stopAgent)
   context.provide('method:quirky.structured/usage', usage)
   context.provide('method:quirky.structured/stopOwned', stopOwned)
 

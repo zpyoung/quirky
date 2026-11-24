@@ -1,4 +1,5 @@
-import type { CallState, ChatItem, StructuredRole, UsageTotals } from '@quirky/protocol'
+import type { AgentKey, CallState, ChatItem, StructuredRole, UsageTotals } from '@quirky/protocol'
+import { UNATTRIBUTED, type AgentRegistry } from './agents'
 
 /** One journal entry a normalizer derives from an agent event: the legacy role, text and raw data plus the typed item. */
 export type ItemEntry = { role: StructuredRole; text: string; data: unknown; item: ChatItem }
@@ -123,12 +124,20 @@ export class CallTracker {
     }
   }
 
-  /** Closes every open call in `state` and returns the closing items. */
-  settle(state: Exclude<CallState, 'running'>): CallItem[] {
-    const closing = [...this.open.values()].map((item) => ({ ...item, state }) as CallItem)
-    for (const item of closing) this.closed.add(item.callId)
-    this.open.clear()
-    this.tools.clear()
+  /**
+   * Closes every open call in `state` and returns the closing items. A call whose `agent` tag satisfies
+   * `keep` stays open, so a parent turn's end leaves a live subagent's calls running.
+   */
+  settle(state: Exclude<CallState, 'running'>, keep?: (agent: AgentKey | undefined) => boolean): CallItem[] {
+    const closing: CallItem[] = []
+    for (const [callId, item] of this.open) {
+      if (keep?.(item.agent)) continue
+      closing.push({ ...item, state } as CallItem)
+      this.open.delete(callId)
+      this.closed.add(callId)
+      this.tools.delete(callId)
+    }
+    if (keep === undefined) this.tools.clear()
     this.skills.clear()
     return closing
   }
@@ -162,8 +171,8 @@ export function stderrLines(text: string): string[] {
 }
 
 /** Entries that close every call still running, in the order the calls were opened. */
-export function closingEntries(tracker: CallTracker, state: Exclude<CallState, 'running'>): ItemEntry[] {
-  return tracker.settle(state).map((item) => ({ role: 'tool', text: callText(item), data: { closed: state }, item }))
+export function closingEntries(tracker: CallTracker, state: Exclude<CallState, 'running'>, keep?: (agent: AgentKey | undefined) => boolean): ItemEntry[] {
+  return tracker.settle(state, keep).map((item) => ({ role: 'tool', text: callText(item), data: { closed: state }, item }))
 }
 
 function callText(item: CallItem): string {
@@ -277,13 +286,59 @@ function resultSummary(msg: any): string {
 }
 
 /**
+ * The subagents of one Claude run: the shared registry plus the ids the SDK uses for the same agent in
+ * different messages. `summaries` is the `agent-summaries` setting read when the session started.
+ */
+export class ClaudeAgents {
+  /** task_id of a `local_agent` task to the id of the spawn that started it. */
+  private readonly tasks = new Map<string, AgentKey>()
+  /** AgentOutput.agentId to spawn id. */
+  private readonly agentIds = new Map<string, AgentKey>()
+  private readonly started = new Set<AgentKey>()
+
+  constructor(
+    readonly registry: AgentRegistry,
+    readonly summaries: 'ai' | 'latest-tool' = 'ai'
+  ) {}
+
+  /** Records that the task `taskId` is the spawn `spawnId`, and that the spawn has really started. */
+  noteTask(taskId: string, spawnId: AgentKey): void {
+    this.tasks.set(taskId, spawnId)
+    this.started.add(spawnId)
+  }
+
+  noteAgentId(agentId: string, spawnId: AgentKey): void {
+    this.agentIds.set(agentId, spawnId)
+  }
+
+  hasStarted(spawnId: AgentKey): boolean {
+    return this.started.has(spawnId)
+  }
+
+  /** The agent a task id, an AgentOutput agentId or a spawn id belongs to, or undefined when none is known. */
+  ownerOf(id: string | undefined): AgentKey | undefined {
+    if (id === undefined || id === '') return undefined
+    return this.tasks.get(id) ?? this.agentIds.get(id) ?? (this.registry.has(id) ? id : undefined)
+  }
+}
+
+const withAgent = (item: ChatItem, agent: AgentKey | undefined): ChatItem => (agent === undefined ? item : { ...item, agent })
+
+/**
  * Normalizes one Claude Agent SDK message into journal entries; a tool call opens one running
  * entry and closes with a second sharing its `callId`. Never throws: anything unrecognized
  * becomes a `status` item.
+ *
+ * With `agents`, an `Agent` or `Task` tool call becomes an `agent` item, task events update it, and
+ * every entry produced inside a subagent is tagged with that agent (an unknown one with `unattributed`,
+ * whose spawn entry comes first). Without it the message is normalized as for a run with no subagents.
  */
-export function claudeEntries(msg: any, calls: CallTracker): ItemEntry[] {
+export function claudeEntries(msg: any, calls: CallTracker, agents?: ClaudeAgents): ItemEntry[] {
   try {
-    return claudeEntriesUnchecked(msg, calls)
+    const resolved = agents ? agents.registry.resolve(agentKeyOf(msg)) : { agent: undefined, entries: [] as ItemEntry[] }
+    const produced = claudeEntriesUnchecked(msg, calls, agents, resolved.agent)
+    const tagged = produced.map((entry) => (resolved.agent === undefined || entry.item.kind === 'agent' ? entry : { ...entry, item: withAgent(entry.item, resolved.agent) }))
+    return [...resolved.entries, ...tagged]
   } catch {
     return [{ role: 'system', text: String(msg?.type ?? 'event'), data: msg, item: statusItem(String(msg?.type ?? 'event')) }]
   }
@@ -305,7 +360,7 @@ function syntheticEntry(msg: any, calls: CallTracker): ItemEntry {
   return { role: 'system', text, data: msg, item: statusItem('Claude added context') }
 }
 
-function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
+function claudeEntriesUnchecked(msg: any, calls: CallTracker, agents: ClaudeAgents | undefined, agent: AgentKey | undefined): ItemEntry[] {
   switch (msg?.type) {
     case 'assistant': {
       calls.takeSkill(agentKeyOf(msg))
@@ -326,6 +381,22 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
           calls.remember(callId, name, input)
           continue
         }
+        if (agents && AGENT_TOOLS.has(name)) {
+          const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined)
+          entries.push(
+            agents.registry.spawn({
+              id: callId,
+              ...(agent === undefined ? {} : { parent: agent }),
+              name: text(input.subagent_type) ?? text(input.name) ?? 'agent',
+              task: text(input.description) ?? '',
+              ...(text(input.prompt) === undefined ? {} : { prompt: text(input.prompt) }),
+              ...(text(input.model) === undefined ? {} : { model: text(input.model) }),
+              ...(typeof input.run_in_background === 'boolean' ? { background: input.run_in_background } : {}),
+              steps: 'full'
+            })
+          )
+          continue
+        }
         if (name === 'TodoWrite') {
           const todos = Array.isArray(input.todos) ? input.todos : []
           const steps = todos.flatMap((todo) => {
@@ -339,7 +410,7 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
           continue
         }
         calls.remember(callId, name, input)
-        const item = claudeToolItem(callId, name, input, 'running')
+        const item = withAgent(claudeToolItem(callId, name, input, 'running'), agent)
         calls.track(item)
         entries.push({ role: 'tool', text, data: block, item })
       }
@@ -348,7 +419,10 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
     case 'user': {
       const content = msg.message?.content
       if (Array.isArray(content) && content.some((block: any) => block?.type === 'tool_result')) {
-        return content
+        const isSpawn = (block: any) => agents !== undefined && block?.type === 'tool_result' && agents.registry.has(String(block.tool_use_id ?? '')) && String(block.tool_use_id) !== UNATTRIBUTED
+        const spawnResults = agents ? content.filter(isSpawn).flatMap((block: any) => agentResultEntries(agents, block, msg.tool_use_result)) : []
+        const callResults = content
+          .filter((block: any) => !isSpawn(block))
           .filter(
             (block: any) =>
               block?.type === 'tool_result' &&
@@ -364,11 +438,12 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
               calls.track({ kind: 'activity', callId, tool: 'TodoWrite', summary: '', state })
               return { role: 'tool', text: output, data: msg, item: statusItem(`TodoWrite ${state}`) }
             }
-            const item = claudeToolItem(callId, known?.name ?? 'tool', known?.input ?? {}, state, output)
+            const item = withAgent(claudeToolItem(callId, known?.name ?? 'tool', known?.input ?? {}, state, output), agent)
             calls.track(item)
             if (known?.name === 'Skill' && state === 'done' && item.kind === 'activity') calls.rememberSkill(agentKeyOf(msg), item)
             return { role: 'tool', text: output, data: msg, item }
           })
+        return [...spawnResults, ...callResults]
       }
       if (msg.isSynthetic === true) return [syntheticEntry(msg, calls)]
       const text = blockText(content)
@@ -376,6 +451,10 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
       return [{ role: 'user', text, data: msg, item: userItem(text) }]
     }
     case 'system': {
+      if (agents) {
+        const taskEntries = claudeTaskEntries(msg, agents)
+        if (taskEntries !== null) return taskEntries
+      }
       if (msg.subtype === 'status' && typeof msg.permissionMode === 'string' && msg.status == null && msg.compact_result == null) return []
       const text = msg.subtype === 'init' ? `session started${msg.model ? ` (${msg.model})` : ''}` : `system: ${msg.subtype ?? 'event'}`
       return [{ role: 'system', text, data: msg, item: statusItem(text) }]
@@ -394,6 +473,99 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
       return [{ role: 'system', text, data: msg, item: statusItem(text) }]
     }
   }
+}
+
+const AGENT_TOOLS = new Set(['Agent', 'Task'])
+
+const firstText = (content: unknown): string | undefined => {
+  if (!Array.isArray(content)) return undefined
+  for (const part of content) if (part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string') return part.text
+  return undefined
+}
+
+const nonEmpty = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined)
+
+/** What the result of an `Agent` tool call says about the agent it spawned. */
+function agentResultEntries(agents: ClaudeAgents, block: any, structured: unknown): ItemEntry[] {
+  const id = String(block.tool_use_id)
+  const { registry } = agents
+  const output = blockText(block.content)
+  const result = record(structured)
+  const status = result?.status
+  const agentId = nonEmpty(result?.agentId)
+  if (agentId !== undefined) agents.noteAgentId(agentId, id)
+  const entry = (item: ItemEntry | null): ItemEntry[] => (item === null ? [] : [item])
+  if (block.is_error === true) {
+    return agents.hasStarted(id) ? entry(registry.end(id, 'failed', { error: output })) : entry(registry.end(id, 'failed', { refused: output }))
+  }
+  if (status === 'async_launched') return entry(registry.update(id, { background: true }))
+  if (status === 'completed' || (result === null && registry.get(id)?.background !== true)) {
+    const report = firstText(result?.content) ?? output
+    const tokens = typeof result?.totalTokens === 'number' ? result.totalTokens : undefined
+    return entry(registry.end(id, 'done', { report, ...(tokens === undefined ? {} : { tokens }) }))
+  }
+  return []
+}
+
+/**
+ * Journal entries for a `system` task message about a subagent, or null when the message is not about
+ * one so the caller keeps its ordinary status line.
+ */
+function claudeTaskEntries(msg: any, agents: ClaudeAgents): ItemEntry[] | null {
+  const subtype = msg.subtype
+  if (subtype !== 'task_started' && subtype !== 'task_progress' && subtype !== 'task_notification' && subtype !== 'task_updated') return null
+  const { registry } = agents
+  const taskId = nonEmpty(msg.task_id)
+  const toolUseId = nonEmpty(msg.tool_use_id)
+  const known = (taskId === undefined ? undefined : agents.ownerOf(taskId)) ?? (toolUseId !== undefined && registry.has(toolUseId) ? toolUseId : undefined)
+  const entries: ItemEntry[] = []
+  let id = known
+  if (subtype === 'task_started') {
+    if (id === undefined && msg.task_type !== 'local_agent') return null
+    if (id === undefined) {
+      id = toolUseId ?? taskId ?? 'agent'
+      entries.push(
+        registry.spawn({
+          id,
+          name: nonEmpty(msg.subagent_type) ?? 'agent',
+          task: nonEmpty(msg.description) ?? '',
+          ...(nonEmpty(msg.prompt) === undefined ? {} : { prompt: msg.prompt }),
+          steps: 'full'
+        })
+      )
+    }
+    if (taskId !== undefined) agents.noteTask(taskId, id)
+    const current = registry.get(id)
+    const update = registry.update(id, {
+      ...(taskId === undefined ? {} : { nativeId: taskId }),
+      ...(typeof msg.is_backgrounded === 'boolean' ? { background: msg.is_backgrounded } : {}),
+      ...(current?.prompt === undefined && nonEmpty(msg.prompt) !== undefined ? { prompt: msg.prompt } : {})
+    })
+    if (update) entries.push(update)
+    return entries
+  }
+  if (id === undefined) return null
+  if (subtype === 'task_progress') {
+    const total = record(msg.usage)?.total_tokens
+    const summary = agents.summaries === 'ai' ? nonEmpty(msg.summary) : undefined
+    const update = registry.update(id, { ...(typeof total === 'number' ? { tokens: total } : {}), ...(summary === undefined ? {} : { summary }) })
+    return update ? [update] : []
+  }
+  if (subtype === 'task_updated') {
+    const background = record(msg.patch)?.is_backgrounded
+    const update = typeof background === 'boolean' ? registry.update(id, { background }) : null
+    return update ? [update] : []
+  }
+  const tokens = record(msg.usage)?.total_tokens
+  const extra = typeof tokens === 'number' ? { tokens } : {}
+  const summary = typeof msg.summary === 'string' ? msg.summary : ''
+  const ended =
+    msg.status === 'failed'
+      ? registry.end(id, 'failed', { ...extra, error: summary })
+      : msg.status === 'stopped'
+        ? registry.end(id, 'stopped', extra)
+        : registry.end(id, 'done', { ...extra, report: summary })
+  return ended ? [ended] : []
 }
 
 /** The text delta carried by a Claude partial-message event, or null for any other event. */

@@ -1,4 +1,4 @@
-import type { CallState, ChatItem, StructuredMessage, VisualLevel } from '@quirky/protocol'
+import type { AgentKey, CallState, ChatItem, StructuredMessage, VisualLevel } from '@quirky/protocol'
 import { visibleMessages } from '../transcript'
 
 type Of<K extends ChatItem['kind']> = Extract<ChatItem, { kind: K }>
@@ -24,12 +24,20 @@ export type Block =
   | { kind: 'steps'; seq: number; item: StepsItem; state: StepsState }
   | { kind: 'plan'; seq: number; item: PlanItem }
   | { kind: 'ask'; seq: number; item: Of<'ask'> }
+  | { kind: 'agent-marker'; seq: number; agent: AgentKey; phase: MarkerPhase }
+  | { kind: 'agent-fold'; seq: number; agents: AgentKey[]; phase: MarkerPhase }
   | { kind: 'view'; seq: number; item: Of<'view'> }
   | { kind: 'view-error'; seq: number; item: Of<'view-error'> }
   | { kind: 'changes'; seq: number; item: Of<'changes'> }
   | { kind: 'error'; seq: number; item: Of<'error'> }
   | { kind: 'status'; seq: number; text: string }
   | { kind: 'legacy'; seq: number; message: StructuredMessage }
+
+/** Whether a marker shows where an agent started or where it ended. */
+export type MarkerPhase = 'spawn' | 'return'
+
+/** How many consecutive markers of one phase fold into a single line. */
+const FOLD_AT = 4
 
 export type TurnEnd = { state: Of<'turn-end'>['state']; durationMs?: number }
 
@@ -47,6 +55,7 @@ type CallEntry = { kind: 'call'; seq: number; item: ActivityItem | FileChangeIte
 type Entry =
   | CallEntry
   | PlainEntry
+  | { kind: 'marker'; seq: number; agent: AgentKey; phase: MarkerPhase }
   | { kind: 'legacy'; seq: number; message: StructuredMessage }
 
 type PlainEntry = { kind: 'plain'; seq: number; item: ChatItem }
@@ -66,13 +75,19 @@ const isAgentInjected = (message: StructuredMessage): boolean =>
  * `messages` (in journal order) as turns. A `user` item starts a turn, and a message before the
  * first one goes in a turn with no user message, except a `turn-end` or a `plan` that nothing else
  * shows up beside, such as what a resumed chat journals before its first message; a `user` item the
- * agent injected itself is dropped. Of the items sharing a `callId` only the last counts, shown
+ * agent injected itself is dropped, and so is one tagged for another agent than `owner`. Of the items sharing a `callId` only the last counts, shown
  * where the first appeared, and the same holds for the `plan` items of one version across turns.
  * `mode` items only feed the composer and never render, and neither do `visual-level` items. A turn
  * shows each view once, at the newest version the turn made. Messages with no `item` stay as
  * `legacy` blocks, and `status` items and diagnostics are left out unless `showAll`.
+ *
+ * `owner` picks whose items are drawn: undefined is the main agent, so items a subagent tagged never
+ * show; a key draws that agent's own items. An `agent` item of the owner's becomes a spawn marker
+ * where it first appears and a return marker on its first ended snapshot, which joins the turn that
+ * holds the spawn marker even after that turn ended; a refused spawn gets no return marker. An `ask`
+ * is always the main agent's, whoever asked.
  */
-export function groupTurns(messages: StructuredMessage[], options: { showAll?: boolean } = {}): Turn[] {
+export function groupTurns(messages: StructuredMessage[], options: { showAll?: boolean; owner?: AgentKey } = {}): Turn[] {
   return groupChatTurns([messages], options)[0] ?? []
 }
 
@@ -81,15 +96,16 @@ export function groupTurns(messages: StructuredMessage[], options: { showAll?: b
  * of one version are deduplicated across all the chats: the version shows once, in the turn where
  * it first appeared, in its latest state, so a resumed chat's copy overrides the earlier one.
  */
-export function groupChatTurns(chats: StructuredMessage[][], { showAll = false }: { showAll?: boolean } = {}): Turn[][] {
+export function groupChatTurns(chats: StructuredMessage[][], { showAll = false, owner }: { showAll?: boolean; owner?: AgentKey } = {}): Turn[][] {
   const plans = new Map<number, PlainEntry>()
-  const grouped = chats.map((messages) => groupOne(messages, showAll, plans))
+  const grouped = chats.map((messages) => groupOne(messages, showAll, plans, owner))
   return grouped.map((drafts) => drafts.map(({ turn, entries }) => ({ ...turn, blocks: toBlocks(entries, turn.end) })))
 }
 
-function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<number, PlainEntry>): Draft[] {
+function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<number, PlainEntry>, owner: AgentKey | undefined): Draft[] {
   const drafts: Draft[] = []
   const calls = new Map<string, CallEntry>()
+  const spawned = new Map<AgentKey, { draft: Draft; returned: boolean }>()
   let unplaced: { message: StructuredMessage; version: number; entry: PlainEntry }[] = []
   const dropUnplaced = () => {
     for (const { version } of unplaced) plans.delete(version)
@@ -107,16 +123,18 @@ function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<nu
   for (const message of messages) {
     const item = message.item
     if (!item) {
+      if (owner !== undefined) continue
       if (visibleMessages([message], showAll).length === 0) continue
       const draft = drafts[drafts.length - 1] ?? open(message, null)
       draft.entries.push({ kind: 'legacy', seq: message.seq, message })
       continue
     }
     if (item.kind === 'user') {
-      if (isAgentInjected(message)) continue
+      if (item.agent !== owner || isAgentInjected(message)) continue
       open(message, { seq: message.seq, text: item.text, images: item.images ?? [] })
       continue
     }
+    if (item.kind === 'ask' ? owner !== undefined : item.agent !== owner) continue
     if (item.kind === 'status' && !showAll) continue
     if (item.kind === 'mode' || item.kind === 'visual-level') continue
     if (item.kind === 'turn-end') {
@@ -138,6 +156,20 @@ function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<nu
       continue
     }
     const draft = drafts[drafts.length - 1] ?? open(message, null)
+    if (item.kind === 'agent') {
+      let known = spawned.get(item.id)
+      if (!known) {
+        known = { draft, returned: item.refused !== undefined }
+        spawned.set(item.id, known)
+        draft.entries.push({ kind: 'marker', seq: message.seq, agent: item.id, phase: 'spawn' })
+      }
+      if (item.refused !== undefined) known.returned = true
+      if (!known.returned && (item.state === 'done' || item.state === 'failed' || item.state === 'stopped')) {
+        known.returned = true
+        known.draft.entries.push({ kind: 'marker', seq: message.seq, agent: item.id, phase: 'return' })
+      }
+      continue
+    }
     if (isCall(item)) {
       const existing = calls.get(callIdOf(item))
       if (existing) {
@@ -190,6 +222,10 @@ function toBlocks(allEntries: Entry[], end: TurnEnd | null): Block[] {
       blocks.push({ kind: 'legacy', seq: entry.seq, message: entry.message })
       continue
     }
+    if (entry.kind === 'marker') {
+      blocks.push({ kind: 'agent-marker', seq: entry.seq, agent: entry.agent, phase: entry.phase })
+      continue
+    }
     const { item } = entry
     switch (item.kind) {
       case 'activity': {
@@ -234,7 +270,28 @@ function toBlocks(allEntries: Entry[], end: TurnEnd | null): Block[] {
         break
     }
   }
-  return blocks
+  return foldMarkers(blocks)
+}
+
+/** `blocks` with every run of `FOLD_AT` or more markers of one phase replaced by one fold block. */
+function foldMarkers(blocks: Block[]): Block[] {
+  const folded: Block[] = []
+  let index = 0
+  while (index < blocks.length) {
+    const block = blocks[index]!
+    if (block.kind !== 'agent-marker') {
+      folded.push(block)
+      index += 1
+      continue
+    }
+    let stop = index
+    while (stop < blocks.length && blocks[stop]!.kind === 'agent-marker' && (blocks[stop] as typeof block).phase === block.phase) stop += 1
+    const run = blocks.slice(index, stop) as (typeof block)[]
+    if (run.length >= FOLD_AT) folded.push({ kind: 'agent-fold', seq: block.seq, agents: run.map((marker) => marker.agent), phase: block.phase })
+    else folded.push(...run)
+    index = stop
+  }
+  return folded
 }
 
 /** "12s" or "1m 05s"; empty under one second, so an instant call shows no time. */

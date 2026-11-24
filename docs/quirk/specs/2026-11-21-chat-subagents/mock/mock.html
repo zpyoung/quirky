@@ -1,0 +1,132 @@
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0e0f12;color:#d6d8dd;font:12px -apple-system,system-ui,sans-serif}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+.mockbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 8px;border-bottom:1px dashed #3a3d46;background:#0b0c0f;font-size:11px;color:#7c828d}
+.mockbar button{padding:2px 8px;border-radius:5px;background:#1d1f25}.mockbar button.on{background:#7c8cff;color:#0d0e12}
+.app{display:flex;flex-direction:column;height:calc(100% - 31px);background:#16171b}
+.hdr{display:flex;gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid #24262c;height:34px}
+.hdr .title{font-weight:600;font-size:13px}.m{color:#7c828d}.mono{font-family:ui-monospace,monospace;font-size:11px}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}.w{background:#4cc38a}.n{background:#e5b454}.d{background:#5b606a}.f{background:#ef6b73}.s{background:#5b606a;outline:1px solid #7c828d}
+.body{flex:1;display:flex;min-height:0}.chat{flex:1;display:flex;flex-direction:column;min-width:0}
+.log{flex:1;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.sep{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#7c828d;border-top:1px solid #24262c;padding-top:6px}
+.user{align-self:flex-end;background:#22242b;border-radius:10px;padding:6px 10px;max-width:70%}
+.p{line-height:1.5;color:#c9ccd2}.act{color:#7c828d}
+.marker{display:flex;gap:6px;align-items:center;color:#7c828d;padding:2px 4px;border-radius:5px}.marker:hover{background:#1d1f25}.marker b{color:#d6d8dd;font-weight:600}
+.open{border:1px solid #2c2f37;border-radius:5px;padding:0 6px;font-size:11px;color:#b8bcc4}
+.ask{border:1px solid #e5b454;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px;background:#1c1a14}
+.ask .lab{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#e5b454}
+.btn{border:1px solid #2c2f37;border-radius:7px;padding:2px 10px;background:#22242b}.btn.pri{background:#7c8cff;color:#0d0e12;border-color:#7c8cff}
+.bottom{padding:8px 16px 12px;display:flex;flex-direction:column;gap:6px}
+.dock{display:flex;gap:8px;align-items:center;padding:5px 8px;border-radius:7px;background:#1d1f25;border:1px solid #24262c;width:100%;text-align:left}.dock:hover{border-color:#3a3d46}
+.comp{border:1px solid #2c2f37;border-radius:10px;padding:8px 10px;color:#7c828d;display:flex;justify-content:space-between}
+.panel{width:46%;border-left:1px solid #24262c;display:flex;flex-direction:column;min-width:0}
+.rail{width:28px;border-left:1px solid #24262c;display:flex;justify-content:center;padding-top:8px}
+.ptabs{display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid #24262c;align-items:center}
+.ptab{padding:3px 8px;border-radius:5px;background:#22242b;font-size:11px}.ptab.on{background:#2f3340;color:#fff}
+.agents{flex:1;display:flex;min-height:0}.list{width:42%;border-right:1px solid #24262c;overflow:auto;padding:6px}
+.grp{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#7c828d;margin:6px 4px 2px}
+.arow{display:flex;flex-direction:column;gap:1px;padding:4px 6px;border-radius:6px;width:100%;text-align:left;position:relative}.arow:hover{background:#1d1f25}.arow.sel{background:#22242b}
+.arow .top{display:flex;gap:6px;align-items:center}.arow .sub{color:#7c828d;font-size:11px;padding-left:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arow .stop{display:none;position:absolute;right:4px;top:4px;font-size:10.5px;border:1px solid #3a3d46;border-radius:5px;padding:0 5px;background:#16171b}.arow:hover .stop{display:block}
+.amber{color:#e5b454}.red{color:#ef6b73}
+.tx{flex:1;overflow:auto;padding:8px 10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.txh{display:flex;flex-direction:column;gap:2px;border-bottom:1px solid #24262c;padding-bottom:6px}
+.txh .r{display:flex;gap:6px;align-items:center}
+.card{border:1px solid #2c2f37;border-radius:10px;padding:6px 8px;background:#1a1b20}.card .k{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#7c828d}
+details summary{cursor:pointer;color:#7c828d;list-style:none}details summary::before{content:"▸ "}details[open] summary::before{content:"▾ "}
+.inner{border-left:1px solid #2c2f37;margin:4px 0 0 4px;padding-left:8px;color:#7c828d}
+.empty{color:#7c828d;padding:20px;text-align:center}
+</style>
+<div class="mockbar" data-point="mock-scenarios" data-point-label="Mock scenario switcher (not product UI)">Mock scenario:
+<button data-s="running" class="on">1 · Three agents running</button><button data-s="background">2 · Turn ended, one in background</button><button data-s="quiet">3 · Background agent quiet</button><button data-s="done">4 · All finished</button><button data-s="reopened">5 · Reopened after restart</button><button data-s="twelve">6 · Twelve agents</button></div>
+<div class="app">
+ <div class="hdr" data-point="chat-header" data-point-label="Chat header">
+  <span class="title">auth refresh fix</span><span id="status"></span><span style="flex:1"></span>
+  <span class="m mono" id="tokens" data-point="header-tokens" data-point-label="Header token total (includes subagents)" title="Main 31.4k · Subagents 28.0k"></span><span class="m mono">cache 4:12</span><span class="m">⋯</span></div>
+ <div class="body">
+  <div class="chat"><div class="log" id="log"></div>
+   <div class="bottom"><div id="dockwrap"></div>
+    <div class="comp" data-point="composer" data-point-label="Composer"><span id="comptext">Message…</span><span id="compbtn"></span></div></div></div>
+  <div id="panelwrap"></div>
+ </div>
+</div>
+<script>const base={explore:{name:'Explore',task:'Find where auth tokens refresh',model:'haiku',report:'Found 3 refresh handlers. The race is in session.ts refresh().'},
+grep:{name:'grep-helper',task:'Find refresh mocks in tests',model:'haiku',parent:'explore',report:'Found 2 refresh mocks in auth.test.ts.'},
+tests:{name:'test-runner',task:'Run the auth test suite',model:'sonnet',report:'41 passed.'},
+review:{name:'reviewer',task:'Review the session.ts change',model:'sonnet',bg:true,report:'Approved. One note: the retry delay should back off.'}};
+const pk=['git','session','view','ask','vault','structured','agent-status','notifications','terminal-dock','accounts','reviews','worktrees'];
+const big={};pk.forEach((p,i)=>{big['a'+i]={name:'audit '+p,task:'Audit quirky.'+p+' for unhandled promise rejections',model:i%3?'haiku':'sonnet',report:'No unhandled rejections found.'}});
+big.c1={name:'trace callers',task:'Trace callers of openStore in quirky.vault',model:'haiku',parent:'a4',report:'4 callers.'};
+big.c2={name:'check tests',task:'Check vault tests cover rejection paths',model:'haiku',parent:'a4',report:'2 gaps.'};
+big.c3={name:'scan workers',task:'Scan worker.ts message handlers',model:'haiku',parent:'a5',report:'Clean.'};
+const S={
+ running:{A:base,status:['w','Working · 1:24'],tok:'59.4k',ended:false,user:'Fix the token refresh race and make sure the auth tests pass.',lead:"I'll look at the refresh flow, run the auth tests, and get a review of the change, in parallel.",asks:{tests:'bun test src/auth'},st:{explore:['working','Tracing where tokens refresh','0:42','18.2k'],grep:['working','Matching refresh mocks in auth tests','0:08','3.1k'],tests:['needs','Waiting on you: run bun test src/auth','0:21','4.0k'],review:['working','Reading the session.ts diff','0:10','2.7k']},returned:[]},
+ background:{A:base,status:['d','Ready'],tok:'71.9k',ended:true,user:'Fix the token refresh race and make sure the auth tests pass.',lead:"I'll look at the refresh flow, run the auth tests, and get a review of the change, in parallel.",st:{explore:['done','Found 3 refresh handlers','1:02','19.4k'],grep:['done','Found 2 mocks','0:19','3.6k'],tests:['done','41 passed','0:48','6.2k'],review:['working','Checking error paths in refresh()','2:30','9.8k']},returned:['explore','tests'],tail:"The refresh race is fixed and the 41 auth tests pass. The reviewer is still going in the background; I'll fold its notes in when it reports."},
+ quiet:{A:base,status:['d','Ready'],tok:'73.0k',ended:true,user:'Fix the token refresh race and make sure the auth tests pass.',lead:"I'll look at the refresh flow, run the auth tests, and get a review of the change, in parallel.",st:{explore:['done','Found 3 refresh handlers','1:02','19.4k'],grep:['done','Found 2 mocks','0:19','3.6k'],tests:['done','41 passed','0:48','6.2k'],review:['quiet','Last: running bun run typecheck','5:40','10.9k']},returned:['explore','tests'],tail:"The refresh race is fixed and the 41 auth tests pass. The reviewer is still going in the background; I'll fold its notes in when it reports."},
+ done:{A:base,status:['d','Done'],tok:'84.5k',ended:true,user:'Fix the token refresh race and make sure the auth tests pass.',lead:"I'll look at the refresh flow, run the auth tests, and get a review of the change, in parallel.",st:{explore:['done','Found 3 refresh handlers','1:02','19.4k'],grep:['done','Found 2 mocks','0:19','3.6k'],tests:['failed','2 of 41 tests failed','0:48','6.2k'],review:['done','Approved with one note','6:12','13.3k']},returned:['explore','tests','review'],tail:'The refresh race is fixed, but 2 auth tests fail on the new lock timeout. The reviewer approved with one note about the retry delay.'},
+ reopened:{A:base,status:['d','Ready'],tok:'73.0k',ended:true,user:'Fix the token refresh race and make sure the auth tests pass.',lead:"I'll look at the refresh flow, run the auth tests, and get a review of the change, in parallel.",st:{explore:['done','Found 3 refresh handlers','1:02','19.4k'],grep:['done','Found 2 mocks','0:19','3.6k'],tests:['done','41 passed','0:48','6.2k'],review:['stopped','Cut off when Quirky quit','5:40','10.9k']},returned:['explore','tests'],tail:'The refresh race is fixed and the 41 auth tests pass.'},
+ twelve:{A:big,status:['w','Working · 3:05'],tok:'212k',ended:false,user:'Audit every plugin for unhandled promise rejections.',lead:"I'll fan this out: one auditor per plugin, 12 in parallel.",asks:{a3:'bun test plugins/quirky.ask',a9:'gh api repos/:owner/:repo/actions'},
+  st:{a0:['done','No unhandled rejections','1:10','8.1k'],a1:['working','Reading claude-runner.ts error paths','2:40','14.0k'],a2:['done','1 finding in render/controls.tsx','1:55','9.4k'],a3:['needs','Waiting on you: run bun test plugins/quirky.ask','2:02','7.7k'],a4:['working','Following openStore error handling','2:51','16.2k'],a5:['working','Reviewing worker message handlers','2:30','11.9k'],a6:['quiet','Last: grep "catch(" in normalize/','4:12','10.3k'],a7:['working','Checking gates.ts timers','1:48','6.6k'],a8:['done','No unhandled rejections','0:58','5.2k'],a9:['needs','Waiting on you: run gh api …/actions','1:31','6.0k'],a10:['working','Reading StatusBarItem effects','1:12','5.8k'],a11:['working','Scanning worktree create flow','0:44','4.1k'],c1:['working','Listing callers of openStore','0:40','3.3k'],c2:['done','Found 2 test gaps','0:52','3.9k'],c3:['working','Reading worker.ts onmessage','0:21','2.2k']},returned:['a0','a2','a8']}};
+let sc='running',panel=false,sel=null,stopped={},answered={},foldOpen=false,doneOpen=false;
+const dotOf=s=>({working:'w',needs:'n',quiet:'n',done:'d',failed:'f',stopped:'s'}[s]);
+const live=s=>['working','needs','quiet'].includes(s);
+const A=()=>S[sc].A;
+const st=id=>{const v=S[sc].st[id].slice();if(stopped[id]){v[0]='stopped';v[1]='Stopped by you'}if(answered[id]&&v[0]==='needs'){v[0]='working';v[1]='Running '+S[sc].asks[id]}return v};
+const tops=()=>Object.keys(A()).filter(id=>!A()[id].parent);
+const kids=p=>Object.keys(A()).filter(id=>A()[id].parent===p);
+const rank=s=>({needs:0,quiet:1,working:2}[s]??3);
+function marker(id,kind){const a=A()[id],v=st(id);
+ if(kind==='spawn')return `<button class="marker" data-point="marker-spawn-${id}" data-point-label="Spawn marker: ${a.name}" onclick="openAgent('${id}')"><span class="dot ${live(v[0])?dotOf(v[0]):'d'}"></span>Spawned <b>${a.name}</b>${a.bg?' in background':''} · ${a.task}<span style="flex:1"></span><span class="open">Open</span></button>`;
+ return `<button class="marker" data-point="marker-return-${id}" data-point-label="Return marker: ${a.name}" onclick="openAgent('${id}')"><span class="dot ${dotOf(v[0])}"></span><b>${a.name}</b> ${v[0]==='failed'?'<span class="red">failed</span>':'returned'} · ${v[1]}<span style="flex:1"></span><span class="open">Open</span></button>`}
+function counts(ids){const c={run:0,needs:0,quiet:0,failed:0,done:0};ids.forEach(i=>{const s=st(i)[0];if(live(s))c.run++;if(s==='needs')c.needs++;if(s==='quiet')c.quiet++;if(s==='failed')c.failed++;if(s==='done')c.done++});return c}
+function summary(c,total){let t=`${total} agents`;const parts=[];if(c.run)parts.push(`${c.run} running`);if(c.needs)parts.push(`<span class="amber">${c.needs} need${c.needs>1?'':'s'} you</span>`);if(c.quiet)parts.push(`<span class="amber">${c.quiet} quiet</span>`);if(c.failed)parts.push(`<span class="red">${c.failed} failed</span>`);if(c.done)parts.push(`${c.done} done`);return t+' · '+parts.join(' · ')}
+function render(){
+ const sv=S[sc],T=tops(),runTop=T.filter(i=>live(st(i)[0]));
+ document.getElementById('status').innerHTML=`<span class="dot ${sv.status[0]}"></span> ${sv.status[1]} <span class="m">${sv.ended&&runTop.length?'· '+runTop.length+' agent'+(runTop.length>1?'s':'')+' running':''}</span>`;
+ document.getElementById('tokens').textContent=sv.tok+' tokens';
+ let h=`<div class="sep">Turn 3</div><div class="user">${sv.user}</div><div class="p">${sv.lead}</div>`;
+ if(T.length>=4){const c=counts(T);
+  h+=`<button class="marker" data-point="marker-fold" data-point-label="Folded spawn markers" onclick="foldOpen=!foldOpen;render()"><span class="dot ${c.needs||c.quiet?'n':c.run?'w':'d'}"></span>Spawned <b>${summary(c,T.length)}</b><span style="flex:1"></span><span class="m">${foldOpen?'▾':'▸'}</span></button>`;
+  if(foldOpen)h+=`<div class="inner" style="display:flex;flex-direction:column;gap:2px">${T.map(i=>marker(i,'spawn')).join('')}</div>`;
+ } else h+=T.map(i=>marker(i,'spawn')).join('');
+ const asks=Object.keys(sv.asks||{}).filter(i=>!answered[i]&&!stopped[i]);
+ asks.forEach(i=>{h+=`<div class="ask" data-point="ask-${i}" data-point-label="Subagent permission ask: ${A()[i].name}"><div class="lab">${A()[i].name} asks · via Questions too</div><div class="mono">Run: ${sv.asks[i]}</div><div style="display:flex;gap:6px;align-items:center"><button class="btn pri" onclick="answered['${i}']=1;render()">Allow</button><button class="btn" onclick="answered['${i}']=1;render()">Deny</button><button class="m" onclick="openAgent('${i}')">Open ${A()[i].name}</button></div></div>`});
+ if(sv.returned.length){if(sv.ended)h+=`<div class="act mono">${sc==='twelve'?'':'Edited src/auth/session.ts +12 −3'}</div>`;
+  if(sv.returned.length>=4){h+=`<button class="marker"><span class="dot d"></span>${sv.returned.length} agents returned<span style="flex:1"></span>▸</button>`}else h+=sv.returned.map(i=>marker(i,'return')).join('')}
+ if(sv.tail)h+=`<div class="p">${sv.tail}</div>`;
+ document.getElementById('log').innerHTML=h;
+ const c=counts(T),nested=Object.keys(A()).filter(i=>A()[i].parent&&live(st(i)[0])).length;
+ let dock='';
+ if(c.run){let t=`${c.run} agent${c.run>1?'s':''}${nested?' <span class="m">(+'+nested+')</span>':''}`;if(c.needs)t+=` · <span class="amber">${c.needs} need${c.needs>1?'':'s'} you</span>`;if(c.quiet)t+=` · <span class="amber">${c.quiet} quiet</span>`;if(c.failed)t+=` · <span class="red">${c.failed} failed</span>`;
+  dock=`<button class="dock" data-point="dock" data-point-label="Dock summary line" onclick="openAgent(null)"><span class="dot ${c.needs||c.quiet?'n':'w'}"></span>${t}<span style="flex:1"></span><span class="m">Agents ▸</span></button>`}
+ document.getElementById('dockwrap').innerHTML=dock;
+ document.getElementById('comptext').textContent=sv.ended?'Message…':'Message… (Enter queues)';
+ document.getElementById('compbtn').innerHTML=sv.ended?'':'<span class="btn">Stop turn</span>';
+ const pw=document.getElementById('panelwrap');
+ if(!panel){pw.innerHTML=`<div class="rail"><button title="Show visual panel" onclick="panel=true;render()" class="m">◧</button></div>`;return}
+ if(!sel||!A()[sel])sel=T[0];
+ const row=(id,depth)=>{const a=A()[id],v=st(id),s=v[0];const kc=kids(id).filter(k=>st(k)[0]==='needs').length;
+  const lab=s==='needs'?'<span class="amber">needs you</span>':s==='quiet'?'<span class="amber">quiet 3m</span>':s==='failed'?'<span class="red">failed</span>':s==='stopped'?'<span class="m">stopped</span>':'';
+  return `<button class="arow ${sel===id?'sel':''}" style="padding-left:${6+depth*14}px" data-point="row-${id}" data-point-label="Agents list row: ${a.name}" onclick="sel='${id}';render()"><span class="top"><span class="dot ${dotOf(s)}"></span><b>${a.name}</b> ${lab}${kc?'<span class="amber"> · child needs you</span>':''}<span style="flex:1"></span><span class="m mono">${v[2]}</span></span><span class="sub">${v[1]}</span>${live(s)?`<span class="stop" onclick="event.stopPropagation();stopped['${id}']=true;render()" data-point="row-stop-${id}" data-point-label="Row hover Stop">Stop</span>`:''}</button>`};
+ const tree=(id,d)=>row(id,d)+kids(id).filter(k=>live(st(k)[0])||!live(st(id)[0])?true:true).map(k=>tree(k,d+1)).join('');
+ const run=T.filter(i=>live(st(i)[0])).sort((x,y)=>rank(st(x)[0])-rank(st(y)[0])),dn=T.filter(i=>!live(st(i)[0]));
+ const longDone=dn.length>3&&!doneOpen;
+ const a=A()[sel],v=st(sel);
+ pw.innerHTML=`<div class="panel" data-point="visual-panel" data-point-label="Visual panel"><div class="ptabs"><span class="ptab">Plan</span><span class="ptab on" data-point="agents-tab" data-point-label="Agents tab">Agents ${Object.keys(A()).length}</span><span style="flex:1"></span><button class="m" onclick="panel=false;render()">✕</button></div>
+ <div class="agents"><div class="list" data-point="agents-list" data-point-label="Agents list">${run.length?`<div class="grp">Running · ${run.length}</div>`+run.map(i=>tree(i,0)).join(''):''}
+ <button class="grp" style="display:block" onclick="doneOpen=!doneOpen;render()" data-point="done-group" data-point-label="Done group">Done · ${dn.length} ${dn.length>3?(doneOpen?'▾':'▸'):''}</button>${longDone?'':dn.map(i=>tree(i,0)).join('')||'<div class="m" style="padding:4px 6px">None yet</div>'}</div>
+ <div class="tx" data-point="agent-transcript" data-point-label="Selected agent transcript">
+  <div class="txh" data-point="agent-header" data-point-label="Selected agent header"><div class="r"><span class="dot ${dotOf(v[0])}"></span><b>${a.name}</b>${a.parent?`<span class="m">from ${A()[a.parent].name}</span>`:''}<span style="flex:1"></span>${live(v[0])?`<button class="btn" data-point="agent-stop" data-point-label="Stop this agent" onclick="stopped['${sel}']=true;render()">Stop</button>`:''}</div>
+  <div class="m">${a.task}</div><div class="m mono">${a.model} · ${v[2]} · ${v[3]} tokens</div></div>
+  <details data-point="agent-prompt" data-point-label="Prompt it was given"><summary>Prompt it was given</summary><div class="inner">${a.task}. Report file paths and line numbers. Don't edit files.</div></details>
+  <details data-point="agent-activity" data-point-label="Agent activity group"><summary>Read 4 files · searched 2 patterns</summary><div class="inner mono"><div>Read src/auth/session.ts</div><div>Read src/auth/token.ts</div><div>Grep "refresh(" src/</div><div>Grep "expiresAt" src/auth</div></div></details>
+  ${kids(sel).map(k=>`<div class="marker"><span class="dot ${dotOf(st(k)[0])}"></span>Spawned <b>${A()[k].name}</b> · ${A()[k].task}<span style="flex:1"></span><button class="open" onclick="sel='${k}';render()">Open</button></div>`).join('')}
+  ${sel==='tests'?`<div class="card" data-point="agent-tests-card" data-point-label="Test results card"><div class="k">Test results</div><div class="mono">${v[0]==='failed'?'<span class="red">2 failed</span> · 39 passed':'41 passed'} · bun test src/auth</div></div>`:''}
+  ${live(v[0])?`<div class="m"><span class="dot ${dotOf(v[0])}"></span> ${v[1]}…</div>`:`<div class="p">${v[0]==='stopped'?'<span class="m">Stopped before it reported.</span>':v[0]==='failed'?'2 of 41 failed: lock timeout in refresh retries.':a.report}</div>`}
+ </div></div></div>`;
+}
+function openAgent(id){panel=true;if(id)sel=id;else{const T=tops();sel=T.filter(i=>live(st(i)[0])).sort((x,y)=>rank(st(x)[0])-rank(st(y)[0]))[0]||T[0]}render()}
+document.querySelectorAll('.mockbar button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.mockbar button').forEach(x=>x.classList.remove('on'));b.classList.add('on');sc=b.dataset.s;stopped={};answered={};foldOpen=false;doneOpen=false;sel=null;render()});
+render();
+</script>

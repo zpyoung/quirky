@@ -20,7 +20,7 @@ async function until(check: () => boolean) {
   expect(check()).toBe(true)
 }
 
-type AskWaiter = { spec: AskSpec; sessionId: string; resolve: (answer: AskEnvelope) => void }
+type AskWaiter = { spec: AskSpec; sessionId: string; from?: string; resolve: (answer: AskEnvelope) => void }
 type Setup = {
   home: string
   fixture: CodexAppServerFixture
@@ -34,6 +34,7 @@ type Setup = {
   processRunner: OwnedProcessRunner
   spawnCalls: { argv: readonly string[]; options: SpawnOptions }[]
   reported: AgentCommand[][]
+  usage: Parameters<NonNullable<StructuredContext['reportUsage']>>[1][]
 }
 
 let setup: Setup
@@ -54,6 +55,7 @@ function makeSetup(fixtureOptions?: Parameters<typeof createCodexAppServerFixtur
   const asks: AskWaiter[] = []
   const storedProviderSessions: Setup['storedProviderSessions'] = []
   const reported: AgentCommand[][] = []
+  const usage: Setup['usage'] = []
   const context: StructuredContext = {
     process,
     reportCommands(_sessionId, commands) {
@@ -76,9 +78,12 @@ function makeSetup(fixtureOptions?: Parameters<typeof createCodexAppServerFixtur
       statuses.push(status)
     },
     async cancelAsk() {},
-    createAsk(spec, sessionId) {
+    reportUsage(_sessionId, report) {
+      usage.push(report)
+    },
+    createAsk(spec, sessionId, options) {
       const { promise, resolve } = Promise.withResolvers<AskEnvelope>()
-      asks.push({ spec, sessionId, resolve })
+      asks.push({ spec, sessionId, ...(options?.from === undefined ? {} : { from: options.from }), resolve })
       return promise
     },
     async setProviderSession(sessionId, providerSession) {
@@ -108,7 +113,7 @@ function makeSetup(fixtureOptions?: Parameters<typeof createCodexAppServerFixtur
     restorable: false
   }
   const runner = createCodexRunner(context, { env: isolatedProviderEnvironment(home) })
-  return { home, fixture, messages, statuses, asks, storedProviderSessions, runner, session, context, processRunner, spawnCalls, reported }
+  return { home, fixture, messages, statuses, asks, storedProviderSessions, runner, session, context, processRunner, spawnCalls, reported, usage }
 }
 
 beforeEach(() => {
@@ -740,5 +745,447 @@ describe('Codex skills', () => {
       { type: 'skill', name: 'pdf:pdf', path: '/codex/plugins/pdf/SKILL.md' },
       { type: 'skill', name: 'imagegen', path: '/codex/skills/imagegen/SKILL.md' }
     ])
+  })
+})
+
+describe('Codex sub-agents', () => {
+  type AgentSnapshot = {
+    kind: 'agent'
+    id: string
+    name: string
+    task: string
+    state: string
+    agent?: string
+    prompt?: string
+    model?: string
+    nativeId?: string
+    steps: string
+    tokens?: number
+    report?: string
+    error?: string
+    cutOff?: boolean
+  }
+  const PARENT = 'scripted-thread'
+  const ANSWER_ALLOW: AskEnvelope = { status: 'answered', askId: 'a', answers: { decision: { value: 'allow', source: 'option' } }, skipped: [], summary: '' }
+
+  const itemsOf = () => setup.messages.map((message) => message.item as Record<string, unknown> | undefined).filter((item) => item !== undefined) as Record<string, unknown>[]
+  const agentSnapshots = (id: string) => itemsOf().filter((item) => item.kind === 'agent' && item.id === id) as unknown as AgentSnapshot[]
+  const latestAgent = (id: string) => agentSnapshots(id).at(-1)
+  const interrupts = () => setup.fixture.requests().filter((request) => request.method === 'turn/interrupt').map((request) => request.params)
+  const turnEnds = () => itemsOf().filter((item) => item.kind === 'turn-end')
+
+  async function runWith(options: NonNullable<Parameters<typeof makeSetup>[0]>) {
+    await setup.runner.stop(setup.session.id)
+    await setup.processRunner.dispose()
+    rmSync(setup.home, { recursive: true, force: true })
+    setup = makeSetup(options)
+    await setup.runner.start(setup.session, 'go')
+  }
+
+  const spawnCall = (receivers: string[], extra: Record<string, unknown> = {}) => ({
+    method: 'item/completed',
+    params: {
+      threadId: PARENT,
+      turnId: 'turn-1',
+      item: {
+        id: 'collab-1',
+        type: 'collabAgentToolCall',
+        tool: 'spawnAgent',
+        status: 'completed',
+        senderThreadId: PARENT,
+        receiverThreadIds: receivers,
+        prompt: 'Find the flaky test',
+        model: 'gpt-5.5',
+        agentsStates: Object.fromEntries(receivers.map((id) => [id, { status: 'running', message: null }])),
+        ...extra
+      }
+    }
+  })
+
+  test('a child thread becomes an agent item and a later spawn call fills in its prompt and model', async () => {
+    await runWith({ turnScript: { hold: true, notifications: [spawnCall(['child-1'])] }, childThreads: [{ id: 'child-1', agentNickname: 'Scout' }] })
+    await until(() => latestAgent('child-1')?.prompt !== undefined)
+
+    expect(agentSnapshots('child-1')[0]).toMatchObject({ name: 'Scout', nativeId: 'child-1', steps: 'full', state: 'working', task: '' })
+    expect(latestAgent('child-1')).toMatchObject({ prompt: 'Find the flaky test', task: 'Find the flaky test', model: 'gpt-5.5', state: 'working' })
+    expect(latestAgent('child-1')?.agent).toBeUndefined()
+    expect(itemsOf().some((item) => item.kind === 'status' && String(item.text).includes('collabAgentToolCall'))).toBe(false)
+  })
+
+  test('a spawn call seen before its thread/started supplies the prompt at spawn', async () => {
+    await runWith({ turnScript: { hold: true }, childThreads: [{ id: 'first', notifications: [spawnCall(['late'])] }, { id: 'late', agentRole: 'explorer' }] })
+    await until(() => latestAgent('late') !== undefined)
+
+    expect(agentSnapshots('late')).toHaveLength(1)
+    expect(latestAgent('late')).toMatchObject({ name: 'explorer', prompt: 'Find the flaky test', model: 'gpt-5.5' })
+  })
+
+  test('an unnamed child is called agent', async () => {
+    await runWith({ turnScript: { hold: true }, childThreads: [{ id: 'child-1' }] })
+    await until(() => latestAgent('child-1') !== undefined)
+    expect(latestAgent('child-1')?.name).toBe('agent')
+  })
+
+  test('child items are tagged with the child and never end or settle the parent turn', async () => {
+    const item = { id: 'cmd-1', type: 'commandExecution', status: 'inProgress', command: 'ls', cwd: '/' }
+    await runWith({
+      turnScript: { hold: true },
+      childThreads: [
+        {
+          id: 'child-1',
+          agentNickname: 'Scout',
+          notifications: [
+            { method: 'item/started', params: { threadId: 'child-1', turnId: 'child-turn-1', item } },
+            { method: 'item/agentMessage/delta', params: { threadId: 'child-1', turnId: 'child-turn-1', itemId: 'msg-1', delta: 'found it' } },
+            { method: 'item/completed', params: { threadId: 'child-1', turnId: 'child-turn-1', item: { ...item, status: 'completed', aggregatedOutput: 'x' } } },
+            { method: 'item/completed', params: { threadId: 'child-1', turnId: 'child-turn-1', item: { id: 'msg-1', type: 'agentMessage', text: 'found it' } } },
+            { method: 'turn/completed', params: { threadId: 'child-1', turn: { id: 'child-turn-1', status: 'completed', items: [] } } }
+          ]
+        }
+      ]
+    })
+    await until(() => itemsOf().some((entry) => entry.kind === 'prose' && entry.agent === 'child-1'))
+
+    const calls = itemsOf().filter((entry) => entry.kind === 'activity')
+    expect(calls.map((entry) => [entry.state, entry.agent])).toEqual([['running', 'child-1'], ['done', 'child-1']])
+    expect(itemsOf().find((entry) => entry.kind === 'prose')).toMatchObject({ text: 'found it', agent: 'child-1' })
+    expect(turnEnds()).toEqual([])
+    expect(setup.statuses).not.toContain('done')
+  })
+
+  test('a nested child is tagged with its parent agent', async () => {
+    await runWith({
+      turnScript: { hold: true },
+      childThreads: [{ id: 'child-1', agentNickname: 'Lead' }, { id: 'child-2', parentThreadId: 'child-1', agentNickname: 'Helper' }]
+    })
+    await until(() => latestAgent('child-2') !== undefined)
+    expect(latestAgent('child-2')?.agent).toBe('child-1')
+    expect(latestAgent('child-1')?.agent).toBeUndefined()
+  })
+
+  test('collab items and sub-agent activity drive agent state without status lines', async () => {
+    await runWith({
+      turnScript: {
+        hold: true,
+        notifications: [
+          spawnCall(['c-done', 'c-failed', 'c-stopped', 'c-active'], {
+            tool: 'wait',
+            agentsStates: {
+              'c-done': { status: 'completed', message: 'all green' },
+              'c-failed': { status: 'errored', message: 'boom' },
+              'c-stopped': { status: 'shutdown', message: null },
+              'c-active': { status: 'running', message: null }
+            }
+          }),
+          { method: 'item/started', params: { threadId: PARENT, turnId: 'turn-1', item: { id: 'act-1', type: 'subAgentActivity', kind: 'interrupted', agentThreadId: 'c-activity', agentPath: '/root/a' } } }
+        ]
+      },
+      childThreads: [{ id: 'c-done' }, { id: 'c-failed' }, { id: 'c-stopped' }, { id: 'c-active' }, { id: 'c-activity' }]
+    })
+    await until(() => latestAgent('c-activity')?.state === 'stopped')
+
+    expect(latestAgent('c-done')).toMatchObject({ state: 'done', report: 'all green' })
+    expect(latestAgent('c-failed')).toMatchObject({ state: 'failed', error: 'boom' })
+    expect(latestAgent('c-stopped')?.state).toBe('stopped')
+    expect(latestAgent('c-active')?.state).toBe('working')
+    expect(latestAgent('c-done')?.cutOff).toBeUndefined()
+    expect(itemsOf().some((item) => item.kind === 'status' && /collabAgentToolCall|subAgentActivity/.test(String(item.text)))).toBe(false)
+  })
+
+  test('a child approval is accepted, labeled with the agent and flips it to needs-you while pending', async () => {
+    await runWith({
+      turnScript: { hold: true },
+      childThreads: [
+        {
+          id: 'child-1',
+          agentNickname: 'Scout',
+          serverRequests: [{ method: 'item/commandExecution/requestApproval', params: { threadId: 'child-1', turnId: 'child-turn-1', command: 'rm -rf build', reason: 'clean' } }]
+        }
+      ]
+    })
+    await until(() => setup.asks.length === 1)
+
+    expect(setup.asks[0]!.from).toBe('child-1')
+    expect(setup.asks[0]!.spec.title).toBe('Scout asks')
+    expect(latestAgent('child-1')?.state).toBe('needs-you')
+    setup.asks[0]!.resolve(ANSWER_ALLOW)
+    await until(() => latestAgent('child-1')?.state === 'working')
+    await until(() => setup.fixture.requests().some((request) => request.result !== undefined && (request.result as { decision?: string }).decision === 'accept'))
+  })
+
+  test('a child approval for a turn that is not its active turn is declined without asking', async () => {
+    await runWith({
+      turnScript: { hold: true },
+      childThreads: [{ id: 'child-1', serverRequests: [{ method: 'item/commandExecution/requestApproval', params: { threadId: 'child-1', turnId: 'stale-turn', command: 'ls' } }] }]
+    })
+    await until(() => setup.fixture.requests().some((request) => (request.result as { decision?: string } | undefined)?.decision === 'decline'))
+    expect(setup.asks).toEqual([])
+  })
+
+  test('a request from a thread with no agent is declined', async () => {
+    await runWith({
+      turnScript: { hold: true },
+      childThreads: [{ id: 'ghost', announce: false, serverRequests: [{ method: 'item/commandExecution/requestApproval', params: { threadId: 'ghost', turnId: 'child-turn-1', command: 'ls' } }] }]
+    })
+    await until(() => setup.fixture.requests().some((request) => (request.result as { decision?: string } | undefined)?.decision === 'decline'))
+    expect(setup.asks).toEqual([])
+  })
+
+  test('a child native question is asked under the agent label', async () => {
+    await runWith({
+      turnScript: { hold: true },
+      childThreads: [
+        {
+          id: 'child-1',
+          agentNickname: 'Scout',
+          serverRequests: [
+            {
+              method: 'item/tool/requestUserInput',
+              params: { threadId: 'child-1', turnId: 'child-turn-1', questions: [{ id: 'destination', header: 'Target', question: 'Where next?', isSecret: false, options: [{ label: 'Local' }, { label: 'Remote' }] }] }
+            }
+          ]
+        }
+      ]
+    })
+    await until(() => setup.asks.length === 1)
+    expect(setup.asks[0]).toMatchObject({ from: 'child-1', spec: { title: 'Scout asks' } })
+    expect(latestAgent('child-1')?.state).toBe('needs-you')
+    setup.asks[0]!.resolve({ status: 'declined', askId: 'a', answers: {}, skipped: ['destination'], summary: '' })
+    await until(() => latestAgent('child-1')?.state === 'working')
+  })
+
+  test('a parent approval keeps its plain ask', async () => {
+    await setup.runner.start(setup.session, 'please [approve]')
+    await until(() => setup.asks.length === 1)
+    expect(setup.asks[0]!.from).toBeUndefined()
+    expect(setup.asks[0]!.spec.title).toBeUndefined()
+    setup.asks[0]!.resolve(ANSWER_ALLOW)
+    await until(() => setup.statuses.includes('done'))
+  })
+
+  test('stopAgent interrupts the agent and its live descendants, deepest first, and leaves the parent turn open', async () => {
+    await runWith({
+      turnScript: { hold: true },
+      childThreads: [{ id: 'child-1', turnId: 't-1' }, { id: 'child-2', parentThreadId: 'child-1', turnId: 't-2' }, { id: 'other', turnId: 't-3' }]
+    })
+    await until(() => latestAgent('other') !== undefined)
+
+    await setup.runner.stopAgent!(setup.session.id, 'child-1')
+
+    expect(interrupts()).toEqual([{ threadId: 'child-2', turnId: 't-2' }, { threadId: 'child-1', turnId: 't-1' }])
+    expect(latestAgent('child-1')?.state).toBe('stopped')
+    expect(latestAgent('child-2')?.state).toBe('stopped')
+    expect(latestAgent('other')?.state).toBe('working')
+    expect(turnEnds()).toEqual([])
+
+    await setup.runner.stopAgent!(setup.session.id, 'child-1')
+    await setup.runner.stopAgent!(setup.session.id, 'nobody')
+    expect(interrupts()).toHaveLength(2)
+  })
+
+  test('interrupt stops every live child before the parent turn', async () => {
+    await runWith({ turnScript: { hold: true }, childThreads: [{ id: 'child-1', turnId: 't-1' }, { id: 'child-2', turnId: 't-2' }] })
+    await until(() => latestAgent('child-2') !== undefined)
+
+    await setup.runner.interrupt(setup.session.id)
+
+    expect(interrupts()).toEqual([{ threadId: 'child-1', turnId: 't-1' }, { threadId: 'child-2', turnId: 't-2' }, { threadId: PARENT, turnId: 'turn-1' }])
+    expect(latestAgent('child-1')).toMatchObject({ state: 'stopped' })
+    expect(latestAgent('child-2')).toMatchObject({ state: 'stopped' })
+    expect(latestAgent('child-1')?.cutOff).toBeUndefined()
+    expect(turnEnds().map((item) => item.state)).toEqual(['stopped'])
+  })
+
+  test('child token usage feeds the agent and the session without touching the parent turn usage', async () => {
+    const usage = (total: Record<string, number>) => ({ method: 'thread/tokenUsage/updated', params: { threadId: 'child-1', tokenUsage: { total } } })
+    await runWith({
+      turnScript: { hold: true },
+      childThreads: [
+        {
+          id: 'child-1',
+          notifications: [
+            usage({ inputTokens: 100, outputTokens: 20, cachedInputTokens: 8, reasoningOutputTokens: 4 }),
+            usage({ inputTokens: 130, outputTokens: 30, cachedInputTokens: 18, reasoningOutputTokens: 4 })
+          ]
+        }
+      ]
+    })
+    await until(() => setup.usage.length === 2)
+
+    expect(setup.usage).toEqual([
+      { tokens: { input: 92, output: 24, cacheRead: 8, cacheWrite: 0 } },
+      { tokens: { input: 20, output: 10, cacheRead: 10, cacheWrite: 0 } }
+    ])
+    expect(latestAgent('child-1')?.tokens).toBe(164)
+    expect(setup.messages.some((message) => (message.data as { type?: string } | undefined)?.type === 'thread/tokenUsage/updated')).toBe(false)
+  })
+
+  test('a notification from a thread with no thread/started goes to the unattributed agent, journaled once before it', async () => {
+    const message = (id: string) => ({ method: 'item/completed', params: { threadId: 'ghost', turnId: 'x', item: { id, type: 'agentMessage', text: id } } })
+    await runWith({ turnScript: { hold: true }, childThreads: [{ id: 'ghost', announce: false, notifications: [message('m1'), message('m2')] }] })
+    await until(() => itemsOf().filter((item) => item.kind === 'prose').length === 2)
+
+    expect(agentSnapshots('unattributed')).toHaveLength(1)
+    expect(agentSnapshots('unattributed')[0]).toMatchObject({ name: 'Unattributed', steps: 'full' })
+    const order = itemsOf().map((item) => (item.kind === 'agent' ? 'agent' : item.kind))
+    expect(order.indexOf('agent')).toBeLessThan(order.indexOf('prose'))
+    expect(itemsOf().filter((item) => item.kind === 'prose').map((item) => item.agent)).toEqual(['unattributed', 'unattributed'])
+  })
+
+  test('ending the run cuts off agents that are still live', async () => {
+    await runWith({ turnScript: { hold: true }, childThreads: [{ id: 'child-1' }, { id: 'child-2', notifications: [spawnCall([], { agentsStates: {} })] }] })
+    await until(() => latestAgent('child-2') !== undefined)
+
+    await setup.runner.stop(setup.session.id)
+
+    expect(latestAgent('child-1')).toMatchObject({ state: 'stopped', cutOff: true })
+    expect(latestAgent('child-2')).toMatchObject({ state: 'stopped', cutOff: true })
+  })
+
+  const completedCall = (id: string) => spawnCall([id], { tool: 'wait', agentsStates: { [id]: { status: 'completed', message: 'first pass' } } })
+  const collabStatus = (id: string, status: string) => spawnCall([id], { tool: 'wait', agentsStates: { [id]: { status, message: null } } })
+  const childTurnStarted = (id: string, turnId: string) => ({ method: 'turn/started', params: { threadId: id, turn: { id: turnId, status: 'inProgress', items: [] } } })
+
+  test('a completed child that starts a new turn goes back to working and can be stopped', async () => {
+    await runWith({
+      turnScript: { hold: true, notifications: [completedCall('child-1'), childTurnStarted('child-1', 'child-turn-2')] },
+      childThreads: [{ id: 'child-1', turnId: 'child-turn-1' }]
+    })
+    await until(() => agentSnapshots('child-1').some((entry) => entry.state === 'done') && latestAgent('child-1')?.state === 'working')
+
+    expect(agentSnapshots('child-1').map((entry) => entry.state)).toEqual(['working', 'done', 'working'])
+    expect(latestAgent('child-1')).not.toHaveProperty('endedAt')
+    expect(latestAgent('child-1')).not.toHaveProperty('report')
+
+    await setup.runner.stopAgent!(setup.session.id, 'child-1')
+    expect(interrupts()).toEqual([{ threadId: 'child-1', turnId: 'child-turn-2' }])
+    expect(latestAgent('child-1')?.state).toBe('stopped')
+  })
+
+  test('sub-agent activity and a running collab status reopen an ended child', async () => {
+    const activity = (id: string, kind: string) => ({
+      method: 'item/started',
+      params: { threadId: PARENT, turnId: 'turn-1', item: { id: `act-${kind}`, type: 'subAgentActivity', kind, agentThreadId: id, agentPath: '/root/a' } }
+    })
+    await runWith({
+      turnScript: {
+        hold: true,
+        notifications: [
+          completedCall('c-interacted'), activity('c-interacted', 'interacted'),
+          completedCall('c-started'), activity('c-started', 'started'),
+          completedCall('c-running'), collabStatus('c-running', 'running'),
+          completedCall('c-pending'), collabStatus('c-pending', 'pendingInit')
+        ]
+      },
+      childThreads: [{ id: 'c-interacted' }, { id: 'c-started' }, { id: 'c-running' }, { id: 'c-pending' }]
+    })
+    await until(() => ['c-interacted', 'c-started', 'c-running', 'c-pending'].every((id) => agentSnapshots(id).map((entry) => entry.state).join() === 'working,done,working'))
+  })
+
+  test('an ended child stays ended when no new work is signalled', async () => {
+    await runWith({ turnScript: { hold: true, notifications: [completedCall('child-1'), completedCall('child-1')] }, childThreads: [{ id: 'child-1' }] })
+    await until(() => latestAgent('child-1')?.state === 'done')
+    expect(agentSnapshots('child-1').map((entry) => entry.state)).toEqual(['working', 'done'])
+  })
+
+  test('a reopened child has its approvals asked and accepted again', async () => {
+    await runWith({
+      turnScript: {
+        hold: true,
+        notifications: [completedCall('child-1'), childTurnStarted('child-1', 'child-turn-2')],
+        serverRequests: [{ method: 'item/commandExecution/requestApproval', params: { threadId: 'child-1', turnId: 'child-turn-2', command: 'ls' } }]
+      },
+      childThreads: [{ id: 'child-1', agentNickname: 'Scout' }]
+    })
+    await until(() => setup.asks.length === 1)
+
+    expect(setup.asks[0]!.from).toBe('child-1')
+    expect(latestAgent('child-1')?.state).toBe('needs-you')
+    setup.asks[0]!.resolve(ANSWER_ALLOW)
+    await until(() => setup.fixture.requests().some((request) => (request.result as { decision?: string } | undefined)?.decision === 'accept'))
+  })
+
+  test('a child approval answered after the child was stopped is declined', async () => {
+    await runWith({
+      turnScript: { hold: true },
+      childThreads: [{ id: 'child-1', agentNickname: 'Scout', serverRequests: [{ method: 'item/commandExecution/requestApproval', params: { threadId: 'child-1', turnId: 'child-turn-1', command: 'rm -rf build' } }] }]
+    })
+    await until(() => setup.asks.length === 1)
+
+    await setup.runner.stopAgent!(setup.session.id, 'child-1')
+    setup.asks[0]!.resolve(ANSWER_ALLOW)
+    await until(() => setup.fixture.requests().some((request) => (request.result as { decision?: string } | undefined)?.decision === 'decline'))
+
+    expect(setup.fixture.requests().some((request) => (request.result as { decision?: string } | undefined)?.decision === 'accept')).toBe(false)
+    expect(latestAgent('child-1')?.state).toBe('stopped')
+  })
+
+  test('a child approval answered after the child moved to another turn is declined', async () => {
+    await runWith({
+      turnScript: { hold: true, notifications: [childTurnStarted('child-1', 'child-turn-2')] },
+      childThreads: [{ id: 'child-1', serverRequests: [{ method: 'item/commandExecution/requestApproval', params: { threadId: 'child-1', turnId: 'child-turn-1', command: 'ls' } }] }]
+    })
+    await until(() => setup.asks.length === 1)
+    await until(() => setup.fixture.requests().some((request) => request.method === 'turn/start'))
+    await Bun.sleep(100)
+
+    setup.asks[0]!.resolve(ANSWER_ALLOW)
+    await until(() => setup.fixture.requests().some((request) => (request.result as { decision?: string } | undefined)?.decision === 'decline'))
+    expect(setup.fixture.requests().some((request) => (request.result as { decision?: string } | undefined)?.decision === 'accept')).toBe(false)
+  })
+
+  test('stopAgent rejects and keeps the child live when its interrupt fails, and a retry can end it', async () => {
+    await runWith({
+      turnScript: { hold: true, childInterrupt: 'error' },
+      childThreads: [{ id: 'child-1', turnId: 't-1' }]
+    })
+    await until(() => latestAgent('child-1') !== undefined)
+
+    await expect(setup.runner.stopAgent!(setup.session.id, 'child-1')).rejects.toThrow()
+    expect(latestAgent('child-1')?.state).toBe('working')
+    await expect(setup.runner.stopAgent!(setup.session.id, 'child-1')).rejects.toThrow()
+    expect(interrupts()).toEqual([{ threadId: 'child-1', turnId: 't-1' }, { threadId: 'child-1', turnId: 't-1' }])
+    expect(latestAgent('child-1')?.state).toBe('working')
+  })
+
+  test('overlapping stops of one child share a single interrupt, and a failure keeps the child live for a retry', async () => {
+    await runWith({
+      turnScript: { hold: true, childInterrupt: 'error-once' },
+      childThreads: [{ id: 'child-1', turnId: 't-1' }],
+      replyDelayMs: { 'turn/interrupt': 300 }
+    })
+    await until(() => latestAgent('child-1') !== undefined)
+
+    const first = setup.runner.stopAgent!(setup.session.id, 'child-1').then(() => 'stopped', () => 'rejected')
+    await Bun.sleep(50)
+    const second = setup.runner.stopAgent!(setup.session.id, 'child-1').then(() => 'stopped', () => 'rejected')
+
+    expect(await Promise.all([first, second])).toEqual(['rejected', 'rejected'])
+    expect(interrupts()).toEqual([{ threadId: 'child-1', turnId: 't-1' }])
+    expect(latestAgent('child-1')?.state).toBe('working')
+
+    await setup.runner.stopAgent!(setup.session.id, 'child-1')
+    expect(interrupts()).toEqual([{ threadId: 'child-1', turnId: 't-1' }, { threadId: 'child-1', turnId: 't-1' }])
+    expect(latestAgent('child-1')?.state).toBe('stopped')
+  })
+
+  test('a failing child interrupt does not stop the parent interrupt', async () => {
+    await runWith({ turnScript: { hold: true, childInterrupt: 'error' }, childThreads: [{ id: 'child-1', turnId: 't-1' }] })
+    await until(() => latestAgent('child-1') !== undefined)
+
+    await setup.runner.interrupt(setup.session.id)
+
+    expect(interrupts()).toContainEqual({ threadId: PARENT, turnId: 'turn-1' })
+    expect(turnEnds().map((item) => item.state)).toEqual(['stopped'])
+  })
+
+  test('a deny-all session still refuses a child thread', async () => {
+    await setup.runner.stop(setup.session.id)
+    await setup.processRunner.dispose()
+    rmSync(setup.home, { recursive: true, force: true })
+    setup = makeSetup({ turnScript: { hold: true }, childThreads: [{ id: 'child-1' }], configRead: { mcpServers: {} } })
+    await setup.runner.start(setup.session, 'go', { toolPolicy: 'deny-all' })
+    await until(() => setup.messages.some((message) => message.text.includes('tools are disabled')))
+    expect(agentSnapshots('child-1')).toEqual([])
   })
 })

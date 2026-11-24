@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { CacheState, ChatItem, PluginStore, StoreMigration, StructuredMessage, StructuredRole, UsageSummary } from '@quirky/protocol'
+import type { AgentItem, CacheState, ChatItem, PluginStore, StoreMigration, StructuredMessage, StructuredRole, UsageSummary } from '@quirky/protocol'
 import { CREATE_QUEUE_TABLE } from './queue'
 
 type Row = {
@@ -240,6 +240,31 @@ export class Journal {
       if (row.item !== null) message.item = JSON.parse(row.item) as ChatItem
       return message
     })
+  }
+
+  /** The latest snapshot of every agent in the session, ordered by when each was last journaled. */
+  agentItems(sessionId: string): AgentItem[] {
+    return this.latestAgents('session_id = ?', [sessionId]).map((row) => row.item)
+  }
+
+  /** The latest agent snapshot per (session, agent) whose state is still `working` or `needs-you`, across all sessions. */
+  liveAgents(): { sessionId: string; item: AgentItem }[] {
+    return this.latestAgents('1 = 1', [])
+      .filter((row) => row.item.state === 'working' || row.item.state === 'needs-you')
+      .map((row) => ({ sessionId: row.sessionId, item: row.item }))
+  }
+
+  private latestAgents(where: string, params: string[]): { sessionId: string; item: AgentItem }[] {
+    const rows = this.store.all<{ session_id: string; item: string }>(
+      `SELECT session_id, item FROM (
+         SELECT session_id, seq, item,
+                ROW_NUMBER() OVER (PARTITION BY session_id, json_extract(item, '$.id') ORDER BY seq DESC) AS rank
+         FROM structured_messages
+         WHERE ${where} AND item IS NOT NULL AND json_extract(item, '$.kind') = 'agent'
+       ) WHERE rank = 1 ORDER BY session_id, seq`,
+      ...params
+    )
+    return rows.map((row) => ({ sessionId: row.session_id, item: JSON.parse(row.item) as AgentItem }))
   }
 
   /** The session's stored usage summary, or null when nothing was ever reported for it. */
