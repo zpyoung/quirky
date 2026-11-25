@@ -369,7 +369,7 @@ Coverage gaps: Brave's context endpoint wasn't available on the plan, two Reddit
 
 ## Status & amendments
 
-Status: Draft
+Status: Approved (2026-11-25), signed off with the SC-3 queue-after-Stop question and the five component gaps open for the build
 
 **Amendments:**
 
