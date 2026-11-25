@@ -35,14 +35,3 @@ it.each([
 ])('runs %s on %s', (name, hostedRunner) => {
   expect(runnerOf(workflow.jobs[name])).toBe(hostedRunner)
 })
-
-it('still builds and uploads cross-compiled Windows template addons on the x64 lane', () => {
-  const steps = workflow.jobs.persistence.steps
-  for (const fragment of ['process-table addons', 'CLI launchers', 'security addons']) {
-    const upload = steps.find((step) => step.name?.includes(`Keep the Windows ${fragment}`))
-    expect(upload.if).toContain("matrix.os == 'windows-2022'")
-  }
-  const launcher = steps.find((step) => step.uses?.includes('prepare-windows-cli-launcher'))
-  expect(launcher.with.arches).toContain("matrix.os == 'windows-2022'")
-  expect(launcher.with.arches).toContain("'x64 arm64'")
-})

@@ -11,10 +11,29 @@ import {
   crossingRequirements,
   parseDaemonProtocolFacts
 } from './daemon-protocol-facts.mjs'
-import { selectLatestStableReleaseTag } from './stable-release-tags.mjs'
+import { compareReleaseTags } from './stable-release-tags.mjs'
 
 // Same override the cross-version-wire harness honors, so both pair against one ref.
 const RELEASE_REF_ENV = 'QUIRKY_CROSS_VERSION_BASELINE_REF'
+
+// Releases below this come from the pre-fork Quirky line, which has no daemon protocol file.
+const MIN_RELEASE_VERSION_TAG = 'v2.0.0'
+const RELEASE_TAG = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/
+
+/** Newest vX.Y.Z[-pre] tag at or after 2.0.0; stable wins a tie with its own prerelease. */
+function selectLatestCrossableReleaseTag(tags) {
+  let latest = null
+  for (const tag of tags) {
+    if (!RELEASE_TAG.test(tag) || compareReleaseTags(tag, MIN_RELEASE_VERSION_TAG) < 0) {
+      continue
+    }
+    const diff = latest === null ? 1 : compareReleaseTags(tag, latest)
+    if (diff > 0 || (diff === 0 && !tag.includes('-'))) {
+      latest = tag
+    }
+  }
+  return latest
+}
 
 function git(repoRoot, args) {
   return execFileSync('git', args, {
@@ -31,15 +50,7 @@ export function resolveReleaseRef(repoRoot, explicitRef, env = process.env) {
     return override
   }
   const tags = git(repoRoot, ['tag', '--list', 'v[0-9]*']).split('\n').filter(Boolean)
-  const latest = selectLatestStableReleaseTag(tags)
-  if (!latest) {
-    // Why: a shallow clone has no tags; passing here would silently skip the gate.
-    throw new Error(
-      `no stable release tags matching vX.Y.Z (saw ${tags.length} tag(s)). ` +
-        `Check out with fetch-depth: 0, or pass --release-ref / ${RELEASE_REF_ENV}.`
-    )
-  }
-  return latest
+  return selectLatestCrossableReleaseTag(tags)
 }
 
 /**
@@ -64,6 +75,18 @@ export function assessDaemonProtocolCrossing({ release, candidate, releaseRef })
 
 export function checkDaemonProtocolCrossing({ repoRoot, releaseRef: explicitRef, env }) {
   const releaseRef = resolveReleaseRef(repoRoot, explicitRef, env)
+  if (!releaseRef) {
+    return {
+      skipped: true,
+      upgrade: true,
+      rollback: true,
+      lines: [
+        `skipped: no release tag at or after ${MIN_RELEASE_VERSION_TAG} to cross against ` +
+          `(pre-fork releases have no ${DAEMON_PROTOCOL_SOURCE_PATH}). ` +
+          `Pass --release-ref / ${RELEASE_REF_ENV} to force one.`
+      ]
+    }
+  }
   let releaseSource
   try {
     releaseSource = git(repoRoot, ['show', `${releaseRef}:${DAEMON_PROTOCOL_SOURCE_PATH}`])

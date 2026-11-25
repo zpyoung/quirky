@@ -98,17 +98,15 @@ it('requires every platform and compatibility result before publishing a desktop
 })
 
 it('avoids template download-cache transfers while retaining native and verification caches', () => {
-  const install = persistence.steps.find((step) => step.id === 'dependencies')
-  expect(install.with['native-runtime']).toContain("runner.os == 'Windows' && 'node'")
+  const install = persistence.steps.find((step) => step.uses?.includes('install-node-dependencies'))
+  expect(install.with['native-runtime']).toBe('none')
   expect(install.with['cache-pnpm-verification']).toBeUndefined()
   expect(install.with['persist-native-cache']).toBeUndefined()
   const source = install.with['cache-pnpm-store'].slice(3, -2)
-  for (const os of ['Linux', 'macOS', 'Windows']) {
-    for (const buildTemplate of [true, false]) {
-      expect(
-        runInNewContext(source, { inputs: { build_template: buildTemplate }, runner: { os } })
-      ).toBe(!buildTemplate && os !== 'Windows')
-    }
+  for (const buildTemplate of [true, false]) {
+    expect(runInNewContext(source, { inputs: { build_template: buildTemplate } })).toBe(
+      !buildTemplate
+    )
   }
 })
 

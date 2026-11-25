@@ -325,10 +325,7 @@ jobs:
 
       # R1: an upgrade from the newest release must adopt its live terminal daemon.
       - name: Daemon protocol crossing against newest release
-        run: |
-          # This fork publishes only prerelease tags, which the stable-tag selector skips.
-          release_ref="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n1)"
-          pnpm run check:daemon-protocol-crossing -- --release-ref "$release_ref"
+        run: pnpm run check:daemon-protocol-crossing
 
       # R3: a runtime launcher swap must not also bump the daemon protocol (D7.1).
       # The label is read from the event payload, so push again after applying it.

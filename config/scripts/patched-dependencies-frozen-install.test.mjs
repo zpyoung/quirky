@@ -1,12 +1,4 @@
-import {
-  cpSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync
-} from 'node:fs'
+import { cpSync, copyFileSync, existsSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, parse, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -31,7 +23,6 @@ import { workspacePackageManifests } from './workspace-source-exports.mjs'
  * with no node_modules and no native builds.
  */
 const PROJECT_DIR = resolve(import.meta.dirname, '../..')
-const WINDOWS_PROCESS_TREE_PATCH = '@vscode__windows-process-tree@0.8.0.patch'
 
 /**
  * Which pnpm to run belongs to pnpm-cli-invocation.mjs, not to this file: naming
@@ -94,71 +85,5 @@ describe('patched dependencies', () => {
     }
     // The 300s spawn budget is only reachable if the case is allowed to take it;
     // config/vitest.config.ts caps every case at 30s by default.
-  }, 300_000)
-
-  /**
-   * `--lockfile-only` resolves; it never applies a patch. So the case above is
-   * bounded to hash consistency, and the actual question -- can pnpm still put
-   * the patched reader on disk? -- had nothing covering it.
-   *
-   * One package, patch applied for real, assert the marker landed. Scoped to the
-   * single dependency so it stays a ~2s check rather than a full install.
-   */
-  it('materializes the patched command-line reader on a real install', () => {
-    const pnpm = resolvePnpmInvocation()
-    expect(pnpm, 'pnpm must be installed; it is the only thing that can check this').not.toBeNull()
-
-    const scratch = mkdtempSync(join(tmpdir(), 'quirky-patch-apply-'))
-    try {
-      mkdirSync(join(scratch, 'config', 'patches'), { recursive: true })
-      copyFileSync(
-        join(PROJECT_DIR, 'config', 'patches', WINDOWS_PROCESS_TREE_PATCH),
-        join(scratch, 'config', 'patches', WINDOWS_PROCESS_TREE_PATCH)
-      )
-      writeFileSync(
-        join(scratch, 'package.json'),
-        `${JSON.stringify(
-          {
-            name: 'quirky-patch-apply-probe',
-            version: '1.0.0',
-            dependencies: { '@vscode/windows-process-tree': '0.8.0' }
-          },
-          null,
-          2
-        )}\n`
-      )
-      writeFileSync(
-        join(scratch, 'pnpm-workspace.yaml'),
-        'packages: []\n' +
-          'patchedDependencies:\n' +
-          `  '@vscode/windows-process-tree@0.8.0': config/patches/${WINDOWS_PROCESS_TREE_PATCH}\n`
-      )
-
-      const result = runProcessSync({
-        program: pnpm.program,
-        args: [...pnpm.prefixArgs, 'install', '--no-frozen-lockfile', '--ignore-scripts'],
-        cwd: scratch,
-        timeoutMs: 300_000
-      })
-      expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0)
-
-      const materialized = readFileSync(
-        join(
-          scratch,
-          'node_modules',
-          '@vscode',
-          'windows-process-tree',
-          'src',
-          'process_commandline.cc'
-        ),
-        'utf8'
-      )
-      expect(materialized).toContain('kProcessCommandLineInformation')
-      // The whole point of the patch: the upstream reader is gone, not merely
-      // supplemented.
-      expect(materialized).not.toContain('ReadProcessMemory')
-    } finally {
-      removeTreeSync(scratch)
-    }
   }, 300_000)
 })

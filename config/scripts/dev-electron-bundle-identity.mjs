@@ -12,7 +12,7 @@ export const DEV_HELPER_BUNDLE_ID = `${DEV_BUNDLE_ID}.helper`
 // Why a constant display name rather than none: leaving the stock value makes every dev
 // notification and System Settings > Notifications row read "Electron", indistinguishable from any
 // other Electron app. A fixed name keeps that legible without reintroducing per-branch drift.
-export const DEV_BUNDLE_DISPLAY_NAME = 'Quirky'
+export const DEV_BUNDLE_DISPLAY_NAME = 'Quirky Dev'
 
 /** Info.plist patches for the app bundle. Values must not vary per branch — see above. */
 export function getDevBundlePlistPatches() {

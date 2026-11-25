@@ -3,7 +3,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { checkDaemonProtocolCrossing } from './check-daemon-protocol-crossing.mjs'
+import {
+  checkDaemonProtocolCrossing,
+  resolveReleaseRef
+} from './check-daemon-protocol-crossing.mjs'
 import { DAEMON_PROTOCOL_SOURCE_PATH } from './daemon-protocol-facts.mjs'
 import { selectLatestStableReleaseTag } from './stable-release-tags.mjs'
 
@@ -156,17 +159,17 @@ describe('checkDaemonProtocolCrossing', () => {
 
   it('passes a bump that lists the newest release version, reporting rollback as info', () => {
     const repo = repoWithTags([
-      ['v1.0.9', 5],
-      ['v1.0.10', 6]
+      ['v2.0.9', 5],
+      ['v2.0.10', 6]
     ])
     writeProtocol(repo, 7)
     const result = checkDaemonProtocolCrossing({ repoRoot: repo, env })
     expect(result).toMatchObject({ upgrade: true, rollback: false })
-    expect(result.lines[0]).toBe('release v1.0.10: daemon protocol 6')
+    expect(result.lines[0]).toBe('release v2.0.10: daemon protocol 6')
   })
 
   it('fails when the working tree drops the newest release version', () => {
-    const repo = repoWithTags([['v1.0.0', 6]])
+    const repo = repoWithTags([['v2.0.0', 6]])
     writeFileSync(
       join(repo, DAEMON_PROTOCOL_SOURCE_PATH),
       'export const PROTOCOL_VERSION = 7\nexport const PREVIOUS_DAEMON_PROTOCOL_VERSIONS = [1, 2, 3, 4, 5] as const\n'
@@ -176,20 +179,24 @@ describe('checkDaemonProtocolCrossing', () => {
     expect(result.lines.join('\n')).toContain('add 6 to PREVIOUS_DAEMON_PROTOCOL_VERSIONS')
   })
 
-  it('refuses to pass silently without release tags', () => {
-    const repo = repoWithTags([['nightly', 6]])
-    expect(() => checkDaemonProtocolCrossing({ repoRoot: repo, env })).toThrow(
-      /no stable release tags/
-    )
+  it('skips with a notice when no release at or after 2.0.0 exists', () => {
+    const repo = repoWithTags([
+      ['nightly', 6],
+      ['v0.1.1', 5]
+    ])
+    expect(resolveReleaseRef(repo, undefined, {})).toBeNull()
+    const result = checkDaemonProtocolCrossing({ repoRoot: repo, env })
+    expect(result).toMatchObject({ skipped: true, upgrade: true })
+    expect(result.lines[0]).toMatch(/skipped: no release tag at or after v2\.0\.0/)
   })
 
   it('honors an explicit release ref', () => {
     const repo = repoWithTags([
-      ['v1.0.0', 5],
-      ['v1.0.1', 6]
+      ['v2.0.0', 5],
+      ['v2.0.1', 6]
     ])
-    const result = checkDaemonProtocolCrossing({ repoRoot: repo, releaseRef: 'v1.0.0', env })
+    const result = checkDaemonProtocolCrossing({ repoRoot: repo, releaseRef: 'v2.0.0', env })
     expect(result).toMatchObject({ upgrade: true, rollback: false })
-    expect(result.lines[0]).toBe('release v1.0.0: daemon protocol 5')
+    expect(result.lines[0]).toBe('release v2.0.0: daemon protocol 5')
   })
 })

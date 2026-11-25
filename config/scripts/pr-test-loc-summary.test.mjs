@@ -87,18 +87,18 @@ describe('PR test LoC summary', () => {
 
   it('paginates pull files until Link rel=next is gone', async () => {
     const pages = {
-      'https://api.github.com/repos/stablyai/orca/pulls/9/files?per_page=100': {
+      'https://api.github.com/repos/zpyoung/quirky/pulls/9/files?per_page=100': {
         body: [{ filename: 'src/app.ts', additions: 2, deletions: 0 }],
-        link: '<https://api.github.com/repos/stablyai/orca/pulls/9/files?page=2>; rel="next"'
+        link: '<https://api.github.com/repos/zpyoung/quirky/pulls/9/files?page=2>; rel="next"'
       },
-      'https://api.github.com/repos/stablyai/orca/pulls/9/files?page=2': {
+      'https://api.github.com/repos/zpyoung/quirky/pulls/9/files?page=2': {
         body: [{ filename: 'src/app.test.ts', additions: 5, deletions: 1 }],
         link: null
       }
     }
 
     const files = await listPullFiles({
-      owner: 'stablyai',
+      owner: 'zpyoung',
       repo: 'quirky',
       pullNumber: 9,
       token: 'test-token',
@@ -128,7 +128,7 @@ describe('PR test LoC summary', () => {
     ]
     const requests = []
     const result = await updatePullRequest({
-      owner: 'stablyai',
+      owner: 'zpyoung',
       repo: 'quirky',
       pullNumber: 14656,
       token: 'test-token',

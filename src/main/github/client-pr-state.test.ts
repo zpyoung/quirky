@@ -68,7 +68,7 @@ describe('pull request state mutations', () => {
     })
 
     expect(ghExecFileAsyncMock).toHaveBeenCalledWith(
-      ['pr', 'reopen', '3977', '--repo', 'stablyai/orca'],
+      ['pr', 'reopen', '3977', '--repo', 'stablyai/quirky'],
       { cwd: '/repo-root', host: 'github.com' }
     )
     expect(acquireMock).toHaveBeenCalledTimes(1)
@@ -84,7 +84,7 @@ describe('pull request state mutations', () => {
     })
 
     expect(ghExecFileAsyncMock).toHaveBeenCalledWith(
-      ['pr', 'close', '3977', '--repo', 'stablyai/orca'],
+      ['pr', 'close', '3977', '--repo', 'stablyai/quirky'],
       { cwd: '/repo-root', host: 'github.com' }
     )
   })
@@ -100,7 +100,7 @@ describe('pull request state mutations', () => {
     })
 
     expect(ghExecFileAsyncMock).toHaveBeenCalledWith(
-      ['pr', 'reopen', '3977', '--repo', 'stablyai/orca'],
+      ['pr', 'reopen', '3977', '--repo', 'stablyai/quirky'],
       { host: 'github.com' }
     )
   })
@@ -112,7 +112,7 @@ describe('pull request state mutations', () => {
     await expect(markPRReadyForReview('/repo-root', 3977)).resolves.toEqual({ ok: true })
 
     expect(ghExecFileAsyncMock).toHaveBeenCalledWith(
-      ['pr', 'ready', '3977', '--repo', 'stablyai/orca'],
+      ['pr', 'ready', '3977', '--repo', 'stablyai/quirky'],
       { cwd: '/repo-root', host: 'github.com' }
     )
     expect(acquireMock).toHaveBeenCalledTimes(1)

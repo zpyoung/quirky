@@ -76,37 +76,6 @@ function unpatchedWindowsProcessTreeCommandLineSource() {
   return `${preImage}\r\n`
 }
 
-/**
- * Pin `core.autocrlf` for a spawned repair, whatever the host is set to.
- *
- * The repair blinds git to the surrounding repo with `GIT_DIR`, so the value it
- * sees comes from global/system config — on a Git for Windows box that is
- * whichever line-ending option the installer wrote, and `false` (Git's built-in
- * default, "checkout as-is") is the one the repair used to fail under. A global
- * config in a temp HOME outranks the system file, so this is deterministic
- * rather than whatever the developer happens to have.
- */
-export function gitLineEndingEnv(autocrlf) {
-  const home = mkdtempSync(join(tmpdir(), `quirky-git-home-${autocrlf}-`))
-  writeFileSync(join(home, '.gitconfig'), `[core]\n\tautocrlf = ${autocrlf}\n`)
-  return { HOME: home, USERPROFILE: home }
-}
-
-/** Production always runs the repair from inside a work tree; `git apply` behaves differently there. */
-export function initGitWorkTree(projectDir) {
-  for (const args of [['init'], ['config', 'user.email', 'a@b.c'], ['config', 'user.name', 't']]) {
-    spawnSync('git', args, { cwd: projectDir, encoding: 'utf8' })
-  }
-}
-
-export function writeWindowsProcessTreePatchFile(projectDir) {
-  mkdirSync(join(projectDir, 'config', 'patches'), { recursive: true })
-  copyFileSync(
-    sourceWindowsProcessTreePatchPath,
-    join(projectDir, 'config', 'patches', '@vscode__windows-process-tree@0.8.0.patch')
-  )
-}
-
 export function mkTempProject() {
   const projectDir = mkdtempSync(join(tmpdir(), 'quirky-rebuild-native-deps-'))
   mkdirSync(join(projectDir, 'config', 'scripts'), { recursive: true })
