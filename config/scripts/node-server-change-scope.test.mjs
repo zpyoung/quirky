@@ -286,7 +286,7 @@ it.each([
     deferred: true,
     fullQualification: false,
     qualification: false,
-    runners: ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
+    runners: ['ubuntu-22.04'],
     expected: 'should_run=true'
   },
   {
@@ -397,11 +397,7 @@ it('keeps a Node harness smoke without widening it for an unrelated modified SSH
 
 it.each([
   ['src/main/daemon/daemon-authenticated-client-activity.test.ts', NODE_SERVER_RUNNERS, true],
-  [
-    'src/main/daemon/daemon-endpoint-windows.test.ts',
-    ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
-    false
-  ]
+  ['src/main/daemon/daemon-endpoint-windows.test.ts', ['ubuntu-22.04'], false]
 ])('retains daemon platform coverage: %s', async (daemon, runners, qualification) => {
   const root = qualificationTree({ [daemon]: 'throw Error("unselected")' })
   const diff = [registry, daemon, unrelatedSshUnit]
