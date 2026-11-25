@@ -152,8 +152,8 @@ export function WorktreeCardStatusSlot({
     newCardStyle && isUnread ? `${passiveStatusLabel} · Unread` : passiveStatusLabel
   // Why: working and permission already own the new-card status lane, but
   // unread state should still surface to assistive technology and reappear afterward.
-  const showNewCardUnreadAlert =
-    newCardStyle && isUnread && showStatus && status !== 'working' && status !== 'permission'
+  const statusOutranksUnread = showStatus && (status === 'working' || status === 'permission')
+  const showNewCardUnreadAlert = newCardStyle && isUnread && !statusOutranksUnread
   const reviewStatusIconClassName = compactReviewAndBranchStatusIconClassName
   const branchStatusIcon = <GitBranch className={branchStatusIconClassName} aria-hidden="true" />
   const heimdallGlyph = useHeimdallGlyph(worktreeId, status, passiveStatusAnnouncement, className)
@@ -215,7 +215,9 @@ export function WorktreeCardStatusSlot({
 
   const actionLabel = isUnread ? 'Mark as read' : 'Mark as unread'
   const tooltip =
-    showStatus && !isUnread ? `${passiveStatusLabel} · ${unreadTooltip}` : unreadTooltip
+    showStatus && (!isUnread || statusOutranksUnread)
+      ? `${passiveStatusLabel} · ${unreadTooltip}`
+      : unreadTooltip
 
   return (
     <>
@@ -253,7 +255,7 @@ export function WorktreeCardStatusSlot({
               ) : (
                 <span className="sr-only">{actionLabel}</span>
               )
-            ) : isUnread ? (
+            ) : isUnread && !statusOutranksUnread ? (
               <FilledBellIcon className="size-[13px] text-amber-500 drop-shadow-sm" />
             ) : showStatus ? (
               <>
