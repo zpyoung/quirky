@@ -168,7 +168,8 @@ describe('applyViewPatch', () => {
         { op: 'add', path: '/root/props/__proto__', value: { polluted: true } }
       )
     )
-    expect(Reflect.get({}, 'polluted')).toBeUndefined()
+    const pristine: { polluted?: unknown } = {}
+    expect(pristine.polluted).toBeUndefined()
     expect(Object.hasOwn(next.root.props ?? {}, '__proto__')).toBe(true)
   })
 

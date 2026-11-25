@@ -2,7 +2,7 @@ import {
   CAPTION_FIELD,
   FILE_STATUSES,
   ID_FIELD,
-  SKETCH_SHAPES,
+  SKETCH_ELEMENT_KINDS,
   TONE_FIELD,
   type Component,
   type VisualNodeType
@@ -24,7 +24,7 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   diagram: {
     summary:
       'A Mermaid diagram (flowchart, sequence, class, state and the rest), drawn by Quirky. Node labels are plain text, and a source that could load an image or other remote content (img: shapes, <img>, url()) is refused. Quirky does not parse the source here: a diagram that fails to draw is reported back to you as a message, so fix it with `quirky view update` or `patch`.',
-    shape: {
+    props: {
       source: { kind: 'string', required: true, max: MAX_DIAGRAM_BYTES, bytes: true },
       caption: CAPTION_FIELD
     },
@@ -39,7 +39,7 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   image: {
     summary:
       'A picture from the worktree. `path` is relative to the worktree root, never starts with / or contains .., and ends in png, jpg, jpeg, gif, webp or svg. `alt` describes it.',
-    shape: {
+    props: {
       path: { kind: 'string', required: true, max: 400 },
       alt: { kind: 'string', required: true, max: 200 },
       caption: CAPTION_FIELD
@@ -51,7 +51,7 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   },
   html: {
     summary: `A small page or prototype in a sandboxed frame with no network. It may carry inline CSS and, when \`interactive\` is true, inline scripts. Nothing may load from http:, https: or // (src, href, action, srcset, poster or CSS url()); inline images as data: URLs. An element with a data-point attribute can be pointed at; add data-point-label for its name. height is in pixels (${MIN_HTML_HEIGHT} to ${MAX_HTML_HEIGHT}).`,
-    shape: {
+    props: {
       html: { kind: 'string', required: true, max: MAX_HTML_BYTES, bytes: true },
       interactive: { kind: 'boolean', required: true },
       height: { kind: 'number', min: MIN_HTML_HEIGHT, max: MAX_HTML_HEIGHT }
@@ -68,7 +68,7 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   'live-preview': {
     summary:
       'A running local app shown in a browser view. `url` must be http:// on localhost, 127.0.0.1 or a *.quirky.localhost host.',
-    shape: { url: { kind: 'string', required: true, max: 2048 }, caption: CAPTION_FIELD },
+    props: { url: { kind: 'string', required: true, max: 2048 }, caption: CAPTION_FIELD },
     example: {
       type: 'live-preview',
       props: { url: 'http://localhost:5173/', caption: 'The dev server' }
@@ -77,7 +77,7 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   timeline: {
     summary:
       'Items on a time axis, at most 100. `start` and `end` are plain labels or dates; items keep the order given.',
-    shape: {
+    props: {
       items: {
         kind: 'list',
         of: {
@@ -104,7 +104,7 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   },
   board: {
     summary: 'Columns of cards, like a kanban board: at most 8 columns of at most 50 cards.',
-    shape: {
+    props: {
       columns: {
         kind: 'list',
         of: {
@@ -139,7 +139,7 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   },
   matrix: {
     summary: `A grid of short cells: rows by named columns, at most ${MAX_MATRIX_COLUMNS} columns and 50 rows. Every row has one cell per column. \`highlight\` lists column names whose cell in that row stands out.`,
-    shape: {
+    props: {
       columns: { kind: 'strings', min: 1, max: MAX_MATRIX_COLUMNS },
       rows: {
         kind: 'list',
@@ -164,7 +164,7 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   'annotated-code': {
     summary:
       'Code with notes attached to lines. `lines` is a 1-based line "4" or a range "3-7" inside the code; at most 50 notes.',
-    shape: {
+    props: {
       language: { kind: 'string', required: true, max: 40 },
       code: { kind: 'string', required: true, max: MAX_CODE_BYTES, bytes: true },
       notes: {
@@ -190,7 +190,7 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   'file-map': {
     summary:
       'Paths with what happened to each, at most 300. status is added, modified, deleted, renamed or touched.',
-    shape: {
+    props: {
       entries: {
         kind: 'list',
         of: {
@@ -215,7 +215,7 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   },
   plot: {
     summary: 'An x/y plot of up to 8 series, each with 2 to 500 numeric points.',
-    shape: {
+    props: {
       xLabel: { kind: 'string', max: 80 },
       yLabel: { kind: 'string', max: 80 },
       series: {
@@ -254,14 +254,14 @@ export const VISUAL_COMPONENTS: Record<VisualNodeType, Component> = {
   },
   sketch: {
     summary: `A rough hand-drawn diagram on a width by height canvas (${MIN_SKETCH_SIDE} to ${MAX_SKETCH_SIDE}), at most 200 shapes. box and ellipse use x, y, w and h; line and arrow run from x, y to x2, y2; text puts its label at x, y.`,
-    shape: {
+    props: {
       width: { kind: 'number', required: true, min: MIN_SKETCH_SIDE, max: MAX_SKETCH_SIDE },
       height: { kind: 'number', required: true, min: MIN_SKETCH_SIDE, max: MAX_SKETCH_SIDE },
       shapes: {
         kind: 'list',
         of: {
           id: ID_FIELD,
-          kind: { kind: 'enum', values: SKETCH_SHAPES, required: true },
+          kind: { kind: 'enum', values: SKETCH_ELEMENT_KINDS, required: true },
           x: { kind: 'number', required: true },
           y: { kind: 'number', required: true },
           w: { kind: 'number' },

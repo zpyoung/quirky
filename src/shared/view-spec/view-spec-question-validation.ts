@@ -10,7 +10,7 @@ import {
   MAX_PATTERN_LENGTH,
   MAX_PATTERN_TEST_LENGTH,
   UNSAFE_PATTERN_MESSAGES,
-  findUnsafePatternShape
+  findUnsafePatternKind
 } from './view-spec-regex-safety'
 import { ACTION_NAME_PATTERN, FORMAT_PATTERNS, MAX_OPTIONS } from './view-spec-types'
 
@@ -225,7 +225,7 @@ function readTextQuestion(
   if (raw.pattern !== undefined) {
     const unsafe =
       typeof raw.pattern === 'string' && raw.pattern.length <= MAX_PATTERN_LENGTH
-        ? findUnsafePatternShape(raw.pattern)
+        ? findUnsafePatternKind(raw.pattern)
         : undefined
     if (typeof raw.pattern !== 'string') {
       addError(check, `${path}.pattern`, 'pattern must be a string')

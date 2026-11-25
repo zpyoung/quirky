@@ -6,6 +6,7 @@ import {
 } from '../../../shared/structured-agent-session-mutation'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { createBrowserUuid } from '@/lib/browser-uuid'
+import { translate } from '@/i18n/i18n'
 import { callStructuredAgentSession } from './structured-agent-session-client'
 
 const METHOD = 'agentSession.queuedMessageMove'
@@ -43,7 +44,14 @@ export async function moveStructuredAgentSessionQueuedMessage(
   request: QueuedMessageMoveRequest
 ): Promise<QueuedMessageMoveOutcome> {
   if (request.fence === null) {
-    return { ok: false, reason: 'failed', message: 'The chat is not connected yet.' }
+    return {
+      ok: false,
+      reason: 'failed',
+      message: translate(
+        'auto.runtime.structuredAgentSessionQueueMoveClient.notConnected',
+        'The chat is not connected yet.'
+      )
+    }
   }
   const fields = {
     messageId: request.messageId,

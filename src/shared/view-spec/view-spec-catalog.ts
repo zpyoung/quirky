@@ -4,7 +4,7 @@ import {
   isRequired,
   type Component,
   type Field,
-  type Shape
+  type PropFields
 } from './view-spec-catalog-schema'
 import { VISUAL_COMPONENTS } from './view-spec-catalog-visual-components'
 import {
@@ -74,12 +74,12 @@ function describeField(field: Field): string {
     case 'question':
       return 'ask question object (see field)'
     case 'list':
-      return `{${describeShape(field.of)}}[]`
+      return `{${describeFields(field.of)}}[]`
   }
 }
 
-function describeShape(shape: Shape): string {
-  return Object.entries(shape)
+function describeFields(fields: PropFields): string {
+  return Object.entries(fields)
     .map(([name, field]) => {
       return `${name}${isRequired(field) ? '' : '?'}: ${describeField(field)}`
     })
@@ -100,7 +100,7 @@ export function catalogGuide(): string {
   ]
   for (const type of VIEW_NODE_TYPES) {
     const component = COMPONENTS[type]
-    const props = describeShape(component.shape)
+    const props = describeFields(component.props)
     lines.push('', `  ${type}: ${component.summary}`, `    props: ${props || 'none'}`)
     if (component.container) {
       lines.push(

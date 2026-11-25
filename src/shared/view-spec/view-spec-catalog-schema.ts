@@ -5,7 +5,7 @@ import type { ViewNode, ViewNodeType } from './view-spec-types'
 
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] as const
 export const FILE_STATUSES = ['added', 'modified', 'deleted', 'renamed', 'touched'] as const
-export const SKETCH_SHAPES = ['box', 'ellipse', 'line', 'arrow', 'text'] as const
+export const SKETCH_ELEMENT_KINDS = ['box', 'ellipse', 'line', 'arrow', 'text'] as const
 export const TONES = ['neutral', 'good', 'warn', 'bad'] as const
 export const CALLOUT_TONES = ['info', 'good', 'warn', 'bad'] as const
 export const STATUS_STATES = ['ok', 'warn', 'bad', 'pending'] as const
@@ -29,16 +29,16 @@ export type Field =
   | { kind: 'boolean'; required?: boolean }
   | { kind: 'text-or-number'; required?: boolean }
   | { kind: 'strings'; min: number; max: number; optional?: boolean }
-  | { kind: 'list'; of: Shape; min: number; max: number; what: string }
+  | { kind: 'list'; of: PropFields; min: number; max: number; what: string }
   | { kind: 'matrix'; max: number }
   | { kind: 'question' }
 
-export type Shape = Record<string, Field>
+export type PropFields = Record<string, Field>
 
 export type Component = {
   summary: string
   container?: 'any' | 'columns'
-  shape: Shape
+  props: PropFields
   example: ViewNode
 }
 
@@ -63,7 +63,7 @@ export const ID_FIELD: Extract<Field, { kind: 'string' }> = {
 export const CAPTION_FIELD: Field = { kind: 'string', max: 200 }
 export const TONE_FIELD: Field = { kind: 'enum', values: TONES }
 
-export const ITEM_STATE_SHAPE = (states: readonly string[], text: string): Shape => ({
+export const ITEM_STATE_FIELDS = (states: readonly string[], text: string): PropFields => ({
   [text]: { kind: 'string', required: true },
   state: { kind: 'enum', values: states, required: true }
 })
