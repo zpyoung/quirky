@@ -57,7 +57,7 @@ describe('seeding PTY owner colours from saved settings', () => {
       options: { systemPrefersDark: () => false }
     })
 
-    expect(owner.pushes).toEqual([{ foreground: '#2e3434', background: '#ffffff' }])
+    expect(owner.pushes).toEqual([{ foreground: '#1b1d22', background: '#ffffff' }])
   })
 
   it('seeds a host with no display from its saved dark theme', () => {
@@ -66,7 +66,7 @@ describe('seeding PTY owner colours from saved settings', () => {
 
     installTerminalViewAttributesIpc({ getSettings: () => ({ ...settings, theme: 'dark' }) })
 
-    expect(owner.pushes).toEqual([{ foreground: '#ffffff', background: '#282c34' }])
+    expect(owner.pushes).toEqual([{ foreground: '#eceef2', background: '#16171b' }])
   })
 
   it('publishes colours a renderer already pushed instead of the saved theme', () => {
@@ -83,7 +83,7 @@ describe('seeding PTY owner colours from saved settings', () => {
 describe('one viewer colour value for every PTY owner', () => {
   const originalLocal = getLocalPtyProvider()
   const settings = getDefaultSettings('/tmp')
-  const SEED = { foreground: '#ffffff', background: '#282c34' }
+  const SEED = { foreground: '#eceef2', background: '#16171b' }
 
   afterEach(() => {
     _resetTerminalViewAttributesForTest()

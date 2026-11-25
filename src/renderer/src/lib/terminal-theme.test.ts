@@ -381,13 +381,13 @@ describe('resolveOpaqueTerminalBackground', () => {
     expect(resolveOpaqueTerminalBackground('#18181b')).toBe('rgb(24 24 27)')
     expect(
       resolveOpaqueTerminalBackground('rgba(255, 255, 255, 0.1)', { appSurface: 'dark' })
-    ).toBe('rgb(35 35 35)')
+    ).toBe('rgb(45 46 50)')
     expect(
       resolveOpaqueTerminalBackground('#ffffff', {
         backgroundOpacity: 0.1,
         appSurface: 'dark'
       })
-    ).toBe('rgb(35 35 35)')
+    ).toBe('rgb(45 46 50)')
   })
 
   it('returns null for unknown color values', () => {
