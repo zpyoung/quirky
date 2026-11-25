@@ -252,7 +252,7 @@ describe('CandidateRow', () => {
     const states = [
       { state: 'merged' as const, label: 'PR #1', tone: 'text-purple-', muted: false },
       { state: 'closed' as const, label: 'PR #2', tone: 'text-destructive', muted: false },
-      { state: 'open' as const, label: 'PR #3', tone: 'text-agent-done', muted: false },
+      { state: 'open' as const, label: 'PR #3', tone: 'text-agent-done-text', muted: false },
       { state: 'draft' as const, label: 'PR #4', tone: 'text-muted-foreground', muted: true }
     ]
 

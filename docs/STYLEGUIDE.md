@@ -42,8 +42,9 @@ The palette is graphite plus one teal accent. Two canvases carry it: the **surfa
 | Agent needs you  | `#e5b454` | `#a56e08` |
 | Agent failed     | `#ef6b73` | `#d6455d` |
 | Agent done       | `#4cc38a` | `#1f9d63` |
+| Agent done text  | `#4cc38a` | `#167747` |
 
-Teal is the only accent: `primary`, `ring`, links and the selected-row bar. Status hues (`--agent-working`, `--agent-question`, `--agent-done`, `--agent-failed`) mark agent state and nothing else, and each status also carries a glyph or label. Body text clears 4.5:1 and status marks clear 3:1 on both canvases; `graphite-token-contrast.test.ts` enforces it.
+Teal is the only accent: `primary`, `ring`, links and the selected-row bar. Status hues (`--agent-working`, `--agent-question`, `--agent-done`, `--agent-failed`) mark agent state and nothing else, and each status also carries a glyph or label. Use `--agent-done-text` and `--agent-question-text` when a status hue is text, or a fill under text. Body text clears 4.5:1 and status marks clear 3:1 on both canvases; `graphite-token-contrast.test.ts` enforces it.
 
 **Categorical tokens are the exception.** `--git-graph-lane-1` through `-5` and the `--tool-*` family (see [Tool activity colors](#tool-activity-colors)) are standalone hues, not surface/foreground pairs. A categorical token has no paired foreground, so it must clear a measured contrast floor against every surface it's drawn on instead.
 

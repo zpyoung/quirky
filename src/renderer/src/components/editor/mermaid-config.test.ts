@@ -10,28 +10,28 @@ const darkColors = {
   primary: '#193cb8',
   secondary: '#1447e6',
   tertiary: '#155dfc',
-  border: '#8ec5ff',
-  line: '#a1a1a1'
+  line: '#a1a1a1',
+  pie: ['#bedbff', '#2b7fff', '#155dfc', '#1447e6', '#193cb8'] as const
 }
 
 const graphiteDark = {
   background: '#16171b',
   foreground: '#eceef2',
   primary: '#22242b',
-  secondary: '#22242b',
+  secondary: '#101114',
   tertiary: '#16171b',
-  border: '#24262c',
-  line: '#7c828d'
+  line: '#7c828d',
+  pie: ['#bedbff', '#2b7fff', '#155dfc', '#1447e6', '#193cb8'] as const
 }
 
 const graphiteLight = {
   background: '#ffffff',
   foreground: '#1b1d22',
   primary: '#e7e9ef',
-  secondary: '#e7e9ef',
+  secondary: '#f6f7f9',
   tertiary: '#ffffff',
-  border: '#e3e5ea',
-  line: '#646b76'
+  line: '#646b76',
+  pie: ['#bedbff', '#2b7fff', '#155dfc', '#1447e6', '#193cb8'] as const
 }
 
 function luminance(color: string | boolean | undefined): number {
@@ -96,9 +96,11 @@ describe('getMermaidConfig', () => {
         tertiaryColor: colors.tertiary,
         primaryTextColor: colors.foreground,
         tertiaryTextColor: colors.foreground,
-        primaryBorderColor: colors.border,
+        primaryBorderColor: colors.line,
         lineColor: colors.line,
-        edgeLabelBackground: colors.background
+        edgeLabelBackground: colors.background,
+        pie1: colors.pie[0],
+        pie5: colors.pie[4]
       },
       htmlLabels: false
     })
@@ -116,7 +118,7 @@ describe('getMermaidConfig', () => {
         secondaryColor: colors.secondary,
         tertiaryColor: colors.tertiary,
         primaryTextColor: colors.foreground,
-        primaryBorderColor: colors.border,
+        primaryBorderColor: colors.line,
         lineColor: colors.line,
         textColor: colors.foreground,
         edgeLabelBackground: colors.background
@@ -144,8 +146,23 @@ describe('getMermaidConfig', () => {
     }
   )
 
-  it('gives the first three pie categories distinct resolved colors', () => {
-    const variables = resolvedTheme(true)
-    expect(new Set([variables.pie1, variables.pie2, variables.pie3]).size).toBe(3)
+  it.each([
+    ['dark', true, graphiteDark],
+    ['light', false, graphiteLight]
+  ] as const)(
+    'gives the five pie categories distinct resolved colors (%s)',
+    (_mode, isDark, colors) => {
+      const variables = resolvedTheme(isDark, colors)
+      expect(
+        new Set([variables.pie1, variables.pie2, variables.pie3, variables.pie4, variables.pie5])
+          .size
+      ).toBe(5)
+    }
+  )
+
+  it('keeps node borders off the surface fills so shapes stay outlined', () => {
+    const variables = resolvedTheme(true, graphiteDark)
+    expect(variables.primaryBorderColor).toBe(graphiteDark.line)
+    expect(variables.primaryBorderColor).not.toBe(variables.primaryColor)
   })
 })

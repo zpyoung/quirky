@@ -27,7 +27,12 @@ const MODES = {
 }
 
 const CANVASES = ['--background', '--sidebar']
-const TEXT_TOKENS = ['--foreground', '--muted-foreground']
+const TEXT_TOKENS = [
+  '--foreground',
+  '--muted-foreground',
+  '--agent-done-text',
+  '--agent-question-text'
+]
 const STATUS_TOKENS = [
   '--agent-working',
   '--agent-question',
@@ -56,6 +61,14 @@ describe('graphite token contrast', () => {
           })
         }
       }
+
+      it('solid open badge (--agent-done-text under --primary-foreground) clears 4.5:1', () => {
+        const ratio = contrastRatio(
+          readToken(block, '--primary-foreground'),
+          readToken(block, '--agent-done-text')
+        )
+        expect(ratio, `badge: ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5)
+      })
     })
   }
 })

@@ -97,6 +97,7 @@
   --color-agent-working: var(--agent-working);
   --color-agent-question-text: var(--agent-question-text);
   --color-agent-done: var(--agent-done);
+  --color-agent-done-text: var(--agent-done-text);
   --color-agent-failed: var(--agent-failed);
   --color-code-background: var(--code-background);
   --color-code-header: var(--code-header);
@@ -243,6 +244,8 @@
   /* Legible weight for text/glyphs on a tinted --agent-question surface. */
   --agent-question-text: #855706;
   --agent-done: #1f9d63;
+  /* Legible weight for done green as text, or as a fill under text. */
+  --agent-done-text: #167747;
   --agent-failed: #d6455d;
   --workspace-status-done: #8f6a3a;
   --workspace-status-review: #1f9d63;
@@ -360,6 +363,7 @@
   --agent-working: #6fb3ff;
   --agent-question-text: #e5b454;
   --agent-done: #4cc38a;
+  --agent-done-text: #4cc38a;
   --agent-failed: #ef6b73;
   --workspace-status-done: #d6b58c;
   --workspace-status-review: #4cc38a;
