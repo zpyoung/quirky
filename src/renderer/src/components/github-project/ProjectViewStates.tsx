@@ -9,7 +9,7 @@ import { isRenderableProjectViewLayout } from '../../../../shared/github/project
 import type { GitHubProjectViewSummary } from '../../../../shared/github/project-types'
 import type { GitHubProjectViewError } from '../../../../shared/github/project-result-types'
 
-const QUIRKY_FEATURE_REQUEST_URL = 'https://github.com/stablyai/orca/issues/new'
+const QUIRKY_FEATURE_REQUEST_URL = 'https://github.com/zpyoung/quirky/issues/new'
 
 export function ProjectViewTabStrip({
   views,

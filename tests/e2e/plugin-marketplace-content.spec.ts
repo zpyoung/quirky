@@ -85,7 +85,7 @@ async function configureFixtureGit(home: string, repositories: string): Promise<
   }
   const repositoryBaseUrl = pathToFileURL(`${repositories}${sep}`).href
   const entries = [
-    [`url.${repositoryBaseUrl}.insteadOf`, 'https://github.com/stablyai/'],
+    [`url.${repositoryBaseUrl}.insteadOf`, 'https://github.com/zpyoung/'],
     ['protocol.file.allow', 'always'],
     ['commit.gpgSign', 'false'],
     ['tag.gpgSign', 'false'],
@@ -107,19 +107,19 @@ async function createMarketplaceFixture(): Promise<MarketplaceFixture> {
   await copyLaunchPlugin(
     repositories,
     'quirky-portuguese',
-    'stablyai.quirky-portuguese',
+    'zpyoung.quirky-portuguese',
     gitEnvironment
   )
   await copyLaunchPlugin(
     repositories,
     'quirky-multipass-recipes',
-    'stablyai.quirky-multipass-recipes',
+    'zpyoung.quirky-multipass-recipes',
     gitEnvironment
   )
   await copyLaunchPlugin(
     repositories,
     'quirky-navigation-shortcuts',
-    'stablyai.quirky-navigation-shortcuts',
+    'zpyoung.quirky-navigation-shortcuts',
     gitEnvironment
   )
 
@@ -130,16 +130,16 @@ async function createMarketplaceFixture(): Promise<MarketplaceFixture> {
     `${JSON.stringify(
       {
         name: 'Quirky Plugins',
-        owner: 'stablyai',
+        owner: 'zpyoung',
         plugins: [
-          ['stablyai.quirky-portuguese', 'quirky-portuguese', 'languages'],
-          ['stablyai.quirky-multipass-recipes', 'quirky-multipass-recipes', 'vm-recipes'],
-          ['stablyai.quirky-navigation-shortcuts', 'quirky-navigation-shortcuts', 'keybindings']
+          ['zpyoung.quirky-portuguese', 'quirky-portuguese', 'languages'],
+          ['zpyoung.quirky-multipass-recipes', 'quirky-multipass-recipes', 'vm-recipes'],
+          ['zpyoung.quirky-navigation-shortcuts', 'quirky-navigation-shortcuts', 'keybindings']
         ].map(([id, repository, category]) => ({
           id,
           source: {
             kind: 'git',
-            url: `https://github.com/stablyai/${repository}.git`,
+            url: `https://github.com/zpyoung/${repository}.git`,
             ref: 'v1.0.0'
           },
           categories: [category]
@@ -180,7 +180,7 @@ async function installMarketplacePluginThroughUi(
   await expect(listing).toBeVisible()
   await listing.getByRole('button', { name: 'Install' }).click()
   const preview = page.getByRole('dialog', { name: pluginName })
-  await expect(preview).toContainText('Official · stablyai')
+  await expect(preview).toContainText('Official · zpyoung')
   await preview.getByRole('button', { name: 'Install plugin' }).click()
   const consent = page.getByRole('dialog', { name: consentDialogName })
   await expect(consent).toBeVisible()
@@ -204,7 +204,7 @@ async function enableInstalledPluginThroughUi(
 }
 
 async function applyInstalledLanguage(page: Page): Promise<void> {
-  const languageId = 'plugin:stablyai.quirky-portuguese/pt-BR'
+  const languageId = 'plugin:zpyoung.quirky-portuguese/pt-BR'
   await page.evaluate(() => {
     const state = window.__store?.getState()
     if (!state) {
@@ -215,9 +215,7 @@ async function applyInstalledLanguage(page: Page): Promise<void> {
   await expect(page.locator('[data-settings-section="appearance"]')).toBeVisible()
   await page.evaluate(() => window.__store?.setState({ settingsSearchQuery: 'Language' }))
   await page.getByRole('combobox', { name: 'Language' }).click()
-  await page
-    .getByRole('option', { name: 'pt-BR — stablyai.quirky-portuguese', exact: true })
-    .click()
+  await page.getByRole('option', { name: 'pt-BR — zpyoung.quirky-portuguese', exact: true }).click()
   await expect
     .poll(() => page.evaluate(() => window.__store?.getState().settings?.uiLanguage))
     .toBe(languageId)
@@ -241,10 +239,10 @@ async function runMarketplaceJourney(page: Page): Promise<void> {
     .toMatchObject({
       sources: [expect.objectContaining({ official: true, stale: false })],
       listings: expect.arrayContaining([
-        expect.objectContaining({ pluginKey: 'stablyai.quirky-portuguese', official: true }),
-        expect.objectContaining({ pluginKey: 'stablyai.quirky-multipass-recipes', official: true }),
+        expect.objectContaining({ pluginKey: 'zpyoung.quirky-portuguese', official: true }),
+        expect.objectContaining({ pluginKey: 'zpyoung.quirky-multipass-recipes', official: true }),
         expect.objectContaining({
-          pluginKey: 'stablyai.quirky-navigation-shortcuts',
+          pluginKey: 'zpyoung.quirky-navigation-shortcuts',
           official: true
         })
       ])
@@ -252,19 +250,19 @@ async function runMarketplaceJourney(page: Page): Promise<void> {
 
   await installMarketplacePluginThroughUi(
     page,
-    'stablyai.quirky-portuguese',
+    'zpyoung.quirky-portuguese',
     'Português do Brasil',
     'Review plugin'
   )
   await installMarketplacePluginThroughUi(
     page,
-    'stablyai.quirky-multipass-recipes',
+    'zpyoung.quirky-multipass-recipes',
     'Multipass VM Recipes',
     'Review plugin content'
   )
   await enableInstalledPluginThroughUi(
     page,
-    'stablyai.quirky-navigation-shortcuts',
+    'zpyoung.quirky-navigation-shortcuts',
     'Review plugin content'
   )
 

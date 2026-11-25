@@ -22,7 +22,7 @@ export const PROJECT_COMMAND_SPECS: CommandSpec[] = [
     ],
     examples: [
       'quirky project setups',
-      'quirky project setups --project github:stablyai/orca',
+      'quirky project setups --project github:zpyoung/quirky',
       'quirky project setups --host local',
       'quirky project setups --host runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3'
     ]
@@ -39,8 +39,8 @@ export const PROJECT_COMMAND_SPECS: CommandSpec[] = [
       'SSH targets are set up through the desktop UI because the desktop client owns SSH connections.'
     ],
     examples: [
-      'quirky project setup-existing-folder --project github:stablyai/orca --host local --path ~/quirky',
-      'quirky project setup-existing-folder --project github:stablyai/orca --host runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3 --path /home/me/quirky --kind git --json'
+      'quirky project setup-existing-folder --project github:zpyoung/quirky --host local --path ~/quirky',
+      'quirky project setup-existing-folder --project github:zpyoung/quirky --host runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3 --path /home/me/quirky --kind git --json'
     ]
   },
   {
@@ -55,8 +55,8 @@ export const PROJECT_COMMAND_SPECS: CommandSpec[] = [
       'SSH targets are cloned through the desktop UI because the desktop client owns SSH connections.'
     ],
     examples: [
-      'quirky project setup-clone --project github:stablyai/orca --host local --url https://github.com/stablyai/orca.git --destination ~/src',
-      'quirky project setup-clone --project github:stablyai/orca --host runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3 --url https://github.com/stablyai/orca.git --destination /srv --json'
+      'quirky project setup-clone --project github:zpyoung/quirky --host local --url https://github.com/zpyoung/quirky.git --destination ~/src',
+      'quirky project setup-clone --project github:zpyoung/quirky --host runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3 --url https://github.com/zpyoung/quirky.git --destination /srv --json'
     ]
   },
   {
@@ -83,7 +83,7 @@ export const PROJECT_COMMAND_SPECS: CommandSpec[] = [
       'Use setup-existing-folder when Quirky should import and manage an actual checkout path now.'
     ],
     examples: [
-      'quirky project setup-create --project github:stablyai/orca --host runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3 --state setting-up --method provisioned --json'
+      'quirky project setup-create --project github:zpyoung/quirky --host runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3 --state setting-up --method provisioned --json'
     ]
   },
   {
@@ -109,8 +109,8 @@ export const PROJECT_COMMAND_SPECS: CommandSpec[] = [
       'Path and availability state changes are only supported for independent setup records.'
     ],
     examples: [
-      'quirky project setup-update --setup github:stablyai/orca::gpu --display-name "GPU VM"',
-      'quirky project setup-update --setup github:stablyai/orca::gpu --path /srv/quirky --state ready --json'
+      'quirky project setup-update --setup github:zpyoung/quirky::gpu --display-name "GPU VM"',
+      'quirky project setup-update --setup github:zpyoung/quirky::gpu --path /srv/quirky --state ready --json'
     ]
   },
   {
@@ -124,6 +124,6 @@ export const PROJECT_COMMAND_SPECS: CommandSpec[] = [
       'Repo-backed setups remove the registered repo compatibility record.',
       'Refuses while the project has open terminals or saved workspace details; --force removes it anyway.'
     ],
-    examples: ['quirky project setup-delete --setup github:stablyai/orca::gpu --json']
+    examples: ['quirky project setup-delete --setup github:zpyoung/quirky::gpu --json']
   }
 ]
