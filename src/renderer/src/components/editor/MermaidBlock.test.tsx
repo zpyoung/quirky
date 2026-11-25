@@ -76,7 +76,16 @@ describe('MermaidBlock rendering', () => {
       secondary: isDark ? '#101114' : '#f6f7f9',
       tertiary: isDark ? '#16171b' : '#ffffff',
       line: isDark ? '#7c828d' : '#646b76',
-      pie: ['#bedbff', '#2b7fff', '#155dfc', '#1447e6', '#193cb8'] as const
+      pie: [
+        '#bedbff',
+        '#2b7fff',
+        '#155dfc',
+        '#1447e6',
+        '#193cb8',
+        '#1c398e',
+        '#162456',
+        '#0b1437'
+      ] as const
     }
     themeColors.read.mockReturnValue(colors)
     const onExpand = vi.fn()

@@ -7,7 +7,7 @@ export type MermaidThemeColors = {
   secondary: string
   tertiary: string
   line: string
-  pie: readonly [string, string, string, string, string]
+  pie: readonly [string, string, string, string, string, string, string, string]
 }
 
 export function getMermaidConfig(
@@ -50,6 +50,14 @@ export function getMermaidConfig(
             pie3: colors.pie[2],
             pie4: colors.pie[3],
             pie5: colors.pie[4],
+            pie6: colors.pie[5],
+            pie7: colors.pie[6],
+            pie8: colors.pie[7],
+            // slots 9-12 repeat chart 2-5 so no slice 6+ falls back to mermaid's pale defaults
+            pie9: colors.pie[1],
+            pie10: colors.pie[2],
+            pie11: colors.pie[3],
+            pie12: colors.pie[4],
             pieSectionTextColor: '#ffffff'
           }
         }
