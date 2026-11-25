@@ -42,4 +42,19 @@ describe('mobile text contrast', () => {
     }
     expect(contrastRatio(colors.bgBase, onBrightColors.codeBackground)).toBeGreaterThanOrEqual(4.5)
   })
+
+  it('keeps the accent, its on-fill text and every status colour readable on the dark surfaces', () => {
+    for (const surface of [colors.bgBase, colors.bgPanel, colors.bgRaised]) {
+      for (const foreground of [
+        colors.accent,
+        colors.statusBlue,
+        colors.statusGreen,
+        colors.statusAmber,
+        colors.statusRed
+      ]) {
+        expect(contrastRatio(foreground, surface)).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+    expect(contrastRatio(colors.onAccent, colors.accent)).toBeGreaterThanOrEqual(4.5)
+  })
 })

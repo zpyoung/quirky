@@ -86,7 +86,7 @@ export function TextInputModal({
         keyboardType={keyboardType}
         returnKeyType="done"
         onSubmitEditing={handleSubmit}
-        selectionColor={colors.accentBlue}
+        selectionColor={colors.accent}
       />
 
       <View style={styles.actions}>
