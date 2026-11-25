@@ -21,7 +21,7 @@ export function getSolidStateTone(item: GitHubWorkItem): string {
   }
   return item.state === 'closed'
     ? 'bg-destructive text-destructive-foreground'
-    : 'bg-agent-done text-primary-foreground'
+    : 'bg-agent-done-text text-primary-foreground'
 }
 
 export function WorkItemStateBadge({

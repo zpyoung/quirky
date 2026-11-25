@@ -5,7 +5,7 @@ import type { HostedReviewState } from '../../../../shared/hosted-review'
 export type ReviewStateForDisplay = HostedReviewState | 'unknown' | null | undefined
 
 /** Also the tone for an open issue, which reads the same as an open review. */
-export const OPEN_REVIEW_STATE_TONE = 'border-agent-done/30 bg-agent-done/10 text-agent-done'
+export const OPEN_REVIEW_STATE_TONE = 'border-agent-done/30 bg-agent-done/10 text-agent-done-text'
 
 /** Outline-pill tone: purple merged, destructive closed, muted draft, green open, neutral unknown. */
 export function getReviewStateTone(state: ReviewStateForDisplay): string {

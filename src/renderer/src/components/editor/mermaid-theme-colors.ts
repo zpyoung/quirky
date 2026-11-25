@@ -20,9 +20,15 @@ export function readMermaidThemeColors(): MermaidThemeColors | undefined {
     background: readColor('--background'),
     foreground: readColor('--foreground'),
     primary: readColor('--secondary'),
-    secondary: readColor('--muted'),
+    secondary: readColor('--code-background'),
     tertiary: readColor('--card'),
-    border: readColor('--border'),
-    line: readColor('--muted-foreground')
+    line: readColor('--muted-foreground'),
+    pie: [
+      readColor('--chart-1'),
+      readColor('--chart-2'),
+      readColor('--chart-3'),
+      readColor('--chart-4'),
+      readColor('--chart-5')
+    ]
   }
 }

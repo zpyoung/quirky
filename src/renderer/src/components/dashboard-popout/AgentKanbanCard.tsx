@@ -116,7 +116,7 @@ function sameCard(a: DashboardCard, b: DashboardCard): boolean {
 const REVIEW_PRESENTATION = {
   open: {
     icon: GitPullRequest,
-    className: 'border-agent-done/30 bg-agent-done/10 text-agent-done'
+    className: 'border-agent-done/30 bg-agent-done/10 text-agent-done-text'
   },
   draft: {
     icon: GitPullRequestDraft,

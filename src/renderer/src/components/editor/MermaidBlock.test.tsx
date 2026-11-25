@@ -9,13 +9,14 @@ const mermaid = vi.hoisted(() => ({
   sanitize: vi.fn<(svg: string) => string>()
 }))
 const themeColors = vi.hoisted(() => ({
-  read: vi.fn<() => Record<string, string> | undefined>()
+  read: vi.fn<() => MermaidThemeColors | undefined>()
 }))
 vi.mock('mermaid', () => ({ default: mermaid }))
 vi.mock('./mermaid-theme-colors', () => ({ readMermaidThemeColors: themeColors.read }))
 vi.mock('dompurify', () => ({ default: { sanitize: mermaid.sanitize } }))
 
 import MermaidBlock from './MermaidBlock'
+import type { MermaidThemeColors } from './mermaid-config'
 
 const partial = 'flowchart TD\n A["Sync with main '
 const complete = `${partial}once"]`
@@ -72,10 +73,10 @@ describe('MermaidBlock rendering', () => {
       background: isDark ? '#16171b' : '#ffffff',
       foreground: isDark ? '#eceef2' : '#1b1d22',
       primary: isDark ? '#22242b' : '#e7e9ef',
-      secondary: isDark ? '#22242b' : '#e7e9ef',
+      secondary: isDark ? '#101114' : '#f6f7f9',
       tertiary: isDark ? '#16171b' : '#ffffff',
-      border: isDark ? '#24262c' : '#e3e5ea',
-      line: isDark ? '#7c828d' : '#646b76'
+      line: isDark ? '#7c828d' : '#646b76',
+      pie: ['#bedbff', '#2b7fff', '#155dfc', '#1447e6', '#193cb8'] as const
     }
     themeColors.read.mockReturnValue(colors)
     const onExpand = vi.fn()
@@ -89,7 +90,9 @@ describe('MermaidBlock rendering', () => {
         themeVariables: expect.objectContaining({
           darkMode: isDark,
           background: colors.background,
-          lineColor: colors.line
+          lineColor: colors.line,
+          pie1: colors.pie[0],
+          pie5: colors.pie[4]
         })
       })
     )
