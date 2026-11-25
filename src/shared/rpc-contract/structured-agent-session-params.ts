@@ -278,6 +278,80 @@ export const SetOptionParams = z.strictObject({
 
 export const OptionsParams = z.object({ sessionId: SessionId }).strict()
 export const ItemParams = OptionsParams.extend({ itemId: z.string().min(1) }).strict()
+
+const MAX_TITLE_LENGTH = 256
+const MAX_DIFF_PATH_LENGTH = 4096
+
+/** `agentSession.queuedMessageMove`: reorders one queued card. `toIndex` is clamped to the queue. */
+export const QueuedMessageMoveParams = z
+  .object({
+    envelope: MutationEnvelope,
+    messageId: Identifier('Invalid queued message id'),
+    toIndex: z.number().int().nonnegative(),
+    /** Compare-and-set: the queue revision the client had on screen. */
+    expectedRevision: z.number().int().nonnegative().optional()
+  })
+  .strict()
+export type QueuedMessageMoveResult =
+  | { ok: true }
+  | { ok: false; reason: 'not-found' | 'stale' | 'sending' }
+
+/** `agentSession.fork`: a new session continuing this one, from `fromItemId` when given. */
+export const AgentSessionForkParams = z
+  .object({
+    envelope: MutationEnvelope,
+    fromItemId: Identifier('Invalid item id').optional(),
+    title: z.string().min(1).max(MAX_TITLE_LENGTH).optional()
+  })
+  .strict()
+export type AgentSessionForkResult =
+  | { ok: true; sessionId: string }
+  | { ok: false; reason: 'unsupported' | 'busy' | 'failed' }
+
+/** `agentSession.turnDiff`: one file's patch for a turn's `turn-changes` item. */
+export const AgentSessionTurnDiffParams = OptionsParams.extend({
+  turnId: Identifier('Invalid turn id'),
+  path: z.string().min(1).max(MAX_DIFF_PATH_LENGTH)
+}).strict()
+export type AgentSessionTurnDiffResult =
+  | { ok: true; patch: string; truncated: boolean }
+  | { ok: false; reason: 'gone' | 'not-git' | 'failed' }
+
+const ViewId = Identifier('Invalid view id')
+
+// spec and patch stay unknown here; the view-spec validator owns their shape
+/** `agentSession.view.open`: writes a `visual` item at version 1. */
+export const AgentSessionViewOpenParams = z
+  .object({
+    envelope: MutationEnvelope,
+    spec: z.unknown(),
+    title: z.string().min(1).max(MAX_TITLE_LENGTH).optional(),
+    placement: z.enum(['inline', 'pane']).optional()
+  })
+  .strict()
+export type AgentSessionViewOpenResult = { viewId: string; version: number }
+
+/** `agentSession.view.update`: replaces a view's spec as the next version. */
+export const AgentSessionViewUpdateParams = z
+  .object({ envelope: MutationEnvelope, viewId: ViewId, spec: z.unknown() })
+  .strict()
+export type AgentSessionViewUpdateResult = { version: number }
+
+/** `agentSession.view.patch`: applies a patch to a view's spec as the next version. */
+export const AgentSessionViewPatchParams = z
+  .object({ envelope: MutationEnvelope, viewId: ViewId, patch: z.unknown() })
+  .strict()
+export type AgentSessionViewPatchResult = { version: number }
+
+/** `agentSession.view.close`: marks a view closed; closing a closed view succeeds. */
+export const AgentSessionViewCloseParams = z
+  .object({ envelope: MutationEnvelope, viewId: ViewId })
+  .strict()
+export type AgentSessionViewCloseResult = { ok: true }
+
+/** `agentSession.view.get`: a view's whole spec, closed or not. */
+export const AgentSessionViewGetParams = OptionsParams.extend({ viewId: ViewId }).strict()
+export type AgentSessionViewGetResult = { spec: unknown; version: number; closed: boolean }
 // Why optional: only a host advertising the workspace-sleep-mark capability is sent `markAsleep`.
 export const SleepWorkspaceParams = z
   .object({ workspaceId: z.string().min(1), markAsleep: z.literal(true).optional() })

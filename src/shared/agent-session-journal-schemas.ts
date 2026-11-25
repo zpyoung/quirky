@@ -29,6 +29,7 @@ import { z } from 'zod'
 import { AgentSessionContextUsageSchema } from './agent-session-context-usage-schema'
 import { AgentJournalThreadGoalStateSchema } from './agent-session-journal-thread-goal-schema'
 import { AgentSessionFailureFactSchema } from './agent-session-failure-fact-schema'
+import { V1_CHAT_ITEM_ARMS } from './agent-session-journal-v1-items'
 import { knownTags, openDiscriminatedUnion } from './agent-session-journal-open-union'
 import type {
   AgentJournalItemBody,
@@ -280,7 +281,8 @@ const KnownItemBody = z.discriminatedUnion('kind', [
     ...TurnLifecycleFields,
     contextUsage: AgentSessionContextUsageSchema.optional(),
     providerTurnId: z.string().min(1).optional()
-  })
+  }),
+  ...V1_CHAT_ITEM_ARMS
 ])
 
 /** Every body kind this build knows; a body of another kind is kept as-is and drawn by nobody. */

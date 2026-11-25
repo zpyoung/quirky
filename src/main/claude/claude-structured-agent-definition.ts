@@ -17,7 +17,8 @@ export const CLAUDE_STRUCTURED_AGENT: DirectoryAccountAgentDefinition = {
     imagePrompts: true,
     steering: 'inject',
     // The permission mode is a launch flag the CLI enforces.
-    approvalEnforcement: 'provider'
+    approvalEnforcement: 'provider',
+    planMode: true
   },
   restingOptions: {
     acceptsKey: isClaudeStructuredOptionKey,

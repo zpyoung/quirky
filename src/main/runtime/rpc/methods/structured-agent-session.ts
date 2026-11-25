@@ -21,6 +21,10 @@ import {
   projectTurnItemEvent,
   projectTurnItemHistory
 } from './structured-agent-session-turn-item-capability'
+import {
+  projectV1ItemEvent,
+  projectV1ItemHistory
+} from './structured-agent-session-v1-items-capability'
 import { defineMethod, defineStreamingMethod } from '../core'
 import {
   ensureStructuredHostInstalled as ensureHostInstalled,
@@ -225,13 +229,16 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
     params: HistoryParams,
     handler: async (params, ctx) => {
       const host = await requireInstalledHost(ctx, params.sessionId)
-      return projectTurnItemHistory(
-        projectQueuedImageCardHistory(
-          projectBackgroundTaskHistory(await host.history(params), ctx),
-          ctx
-        ),
+      return projectV1ItemHistory(
         ctx,
-        host.sessionAgent(params.sessionId)
+        projectTurnItemHistory(
+          projectQueuedImageCardHistory(
+            projectBackgroundTaskHistory(await host.history(params), ctx),
+            ctx
+          ),
+          ctx,
+          host.sessionAgent(params.sessionId)
+        )
       )
     }
   }),
@@ -258,10 +265,13 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
           projectQueuedImageCardPublication(publication, ctx),
         emit: (event) =>
           emit(
-            projectTurnItemEvent(
-              projectBackgroundTaskEvent(event, ctx),
+            projectV1ItemEvent(
               ctx,
-              host.sessionAgent(params.sessionId)
+              projectTurnItemEvent(
+                projectBackgroundTaskEvent(event, ctx),
+                ctx,
+                host.sessionAgent(params.sessionId)
+              )
             )
           ),
         ...(params.cursor ? { cursor: params.cursor } : {}),

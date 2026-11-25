@@ -26,4 +26,6 @@ export type AgentSessionCapabilities = {
    * WHEN it asks, so only what it asks about is covered, never a sandbox.
    */
   approvalEnforcement: 'provider' | 'quirky'
+  /** The agent has a plan mode that proposes a plan for approval before it edits. Absent means no. */
+  planMode?: boolean
 }
