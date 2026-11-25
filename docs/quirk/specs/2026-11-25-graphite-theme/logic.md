@@ -4,9 +4,11 @@ Quirky gets back the look it had in v1: calm graphite surfaces, one teal accent,
 
 ## Status & amendments
 
-**Status:** Approved
+**Status:** Approved. Tech spec: [tech.md](tech.md) (complexity gate fired: it crosses the renderer, main, shared and mobile).
 
-**Amendments:** none yet.
+**Amendments:**
+
+- 2026-11-25: two light values are darkened to meet this spec's contrast floors, at the owner's pick. v1's muted `#80868f` was 3.7:1 on white and becomes `#646b76`. v1's needs-you amber `#c98a0b` was 2.9:1 on white and becomes `#a56e08` for marks, and amber text uses `#855706`. Both values already exist in v1's light terminal palette.
 
 ## The model
 
@@ -27,10 +29,10 @@ It is a recolour only. Geist, Orca's sizing, spacing, radii and layout all stay.
 | Selected                                       | `#22242b` | `#e7e9ef` |
 | Border                                         | `#24262c` | `#e3e5ea` |
 | Text                                           | `#eceef2` | `#1b1d22` |
-| Muted text                                     | `#7c828d` | `#80868f` |
+| Muted text                                     | `#7c828d` | `#646b76` |
 | Accent (teal)                                  | `#5fd0d6` | `#14808a` |
 | Working (blue)                                 | `#6fb3ff` | `#2f74c0` |
-| Needs you (amber)                              | `#e5b454` | `#c98a0b` |
+| Needs you (amber)                              | `#e5b454` | `#a56e08` |
 | Failing (red)                                  | `#ef6b73` | `#d6455d` |
 | Done (green)                                   | `#4cc38a` | `#1f9d63` |
 
@@ -178,7 +180,7 @@ These are out of scope:
 **Scope**
 
 - Accent: teal (`#5fd0d6` dark, `#14808a` light) on primary actions, focus rings, the active tab, selection and links. It replaced indigo at the owner's request.
-- Agent status: working is blue (`#6fb3ff` / `#2f74c0`) with a halo and slow pulse; needs you is amber (`#e5b454` / `#c98a0b`); failing is red (`#ef6b73` / `#d6455d`); done is green (`#4cc38a` / `#1f9d63`).
+- Agent status: working is blue (`#6fb3ff` / `#2f74c0`) with a halo and slow pulse; needs you is amber (`#e5b454` / `#a56e08`, with light amber text `#855706`); failing is red (`#ef6b73` / `#d6455d`); done is green (`#4cc38a` / `#1f9d63`).
 - UI font: Geist stays.
 - Density: Orca's sizing stays, so the theme is colour only.
 
