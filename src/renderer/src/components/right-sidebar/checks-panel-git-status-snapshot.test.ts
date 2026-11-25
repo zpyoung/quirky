@@ -77,21 +77,7 @@ describe('buildChecksPanelGitStatusContextKey', () => {
       buildChecksPanelGitStatusContextKey({
         ...base,
         linkedGitHubPR: null,
-        linkedGitLabMR: null
-      })
-    ).not.toBe(unlinkedContext)
-    expect(
-      buildChecksPanelGitStatusContextKey({
-        ...base,
-        linkedGitHubPR: null,
-        linkedGitLabMR: null
-      })
-    ).not.toBe(unlinkedContext)
-    expect(
-      buildChecksPanelGitStatusContextKey({
-        ...base,
-        linkedGitHubPR: null,
-        linkedGitLabMR: null
+        linkedGitLabMR: 34
       })
     ).not.toBe(unlinkedContext)
   })

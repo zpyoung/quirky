@@ -21,7 +21,7 @@ function repo(id: string, overrides: Partial<Repo> = {}): Repo {
 
 function project(overrides: Partial<Project> = {}): Project {
   return {
-    id: 'github:stablyai/orca',
+    id: 'github:stablyai/quirky',
     displayName: 'quirky',
     badgeColor: '#111111',
     providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' },
@@ -35,7 +35,7 @@ function project(overrides: Partial<Project> = {}): Project {
 function setup(overrides: Partial<ProjectHostSetup>): ProjectHostSetup {
   return {
     id: overrides.id ?? 'local-setup',
-    projectId: overrides.projectId ?? 'github:stablyai/orca',
+    projectId: overrides.projectId ?? 'github:stablyai/quirky',
     hostId: overrides.hostId ?? 'local',
     repoId: overrides.repoId ?? 'local-repo',
     path: overrides.path ?? '/tmp/quirky',
@@ -77,12 +77,12 @@ describe('buildNewWorkspaceProjectOptions', () => {
 
     expect(options).toEqual([
       {
-        id: 'github:stablyai/orca',
+        id: 'github:stablyai/quirky',
         kind: 'project',
-        projectId: 'github:stablyai/orca',
+        projectId: 'github:stablyai/quirky',
         displayName: 'quirky',
         badgeColor: '#111111',
-        detail: 'stablyai/orca'
+        detail: 'stablyai/quirky'
       }
     ])
   })
@@ -102,7 +102,7 @@ describe('buildNewWorkspaceProjectOptions', () => {
       eligibleRepos: [repo('local-repo'), repo('other-repo')]
     })
 
-    expect(options.map((option) => option.id)).toEqual(['github:stablyai/orca'])
+    expect(options.map((option) => option.id)).toEqual(['github:stablyai/quirky'])
   })
 
   it('excludes projects configured only on removed hosts', () => {
@@ -130,7 +130,7 @@ describe('buildNewWorkspaceProjectOptions', () => {
     })
 
     expect(options).toEqual([
-      expect.objectContaining({ id: 'github:stablyai/orca', detail: 'stablyai/orca' })
+      expect.objectContaining({ id: 'github:stablyai/quirky', detail: 'stablyai/quirky' })
     ])
   })
 
@@ -407,7 +407,7 @@ describe('buildNewWorkspaceCreateTargetOptions', () => {
     })
 
     expect(options.map((option) => option.id).sort()).toEqual([
-      'github:stablyai/orca',
+      'github:stablyai/quirky',
       'project-group:folder-group'
     ])
     expect(options.find((option) => option.id === 'project-group:folder-group')).toMatchObject({

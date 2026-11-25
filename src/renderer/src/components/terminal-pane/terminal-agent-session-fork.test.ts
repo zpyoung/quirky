@@ -144,13 +144,12 @@ describe('forkAgentSessionFromPane', () => {
       'feature/auth',
       'inherit',
       undefined,
-      'terminal_context_menu',
       'Fork of auth-feature',
       undefined,
       undefined,
       undefined,
       'codex',
-      ...Array(14).fill(undefined),
+      ...Array(11).fill(undefined),
       { executionHostId: 'local' }
     )
 
@@ -390,13 +389,12 @@ describe('forkAgentSessionFromPane', () => {
       'feature/auth',
       'inherit',
       undefined,
-      'terminal_context_menu',
       'Fork of auth-feature',
       undefined,
       undefined,
       undefined,
       undefined,
-      ...Array(14).fill(undefined),
+      ...Array(11).fill(undefined),
       { executionHostId: 'local' }
     )
     expect(mockLaunchAgentInNewTab).not.toHaveBeenCalled()

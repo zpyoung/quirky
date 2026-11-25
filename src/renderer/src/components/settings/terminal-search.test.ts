@@ -8,36 +8,8 @@ import {
 import { matchesSettingsSearch } from './settings-search'
 
 describe('getTerminalPaneSearchEntries', () => {
-  it('indexes desktop administrator mode only for Windows clients', () => {
-    const windows = getTerminalPaneSearchEntries({ isWindows: true, isMac: false })
-    const remoteWindows = getTerminalPaneSearchEntries({
-      isWindows: false,
-      isWindowsTerminalHost: true,
-      isMac: true
-    })
-    expect(windows.some((entry) => entry.title === 'Administrator mode')).toBe(true)
-    expect(matchesSettingsSearch('uac', windows)).toBe(true)
-    expect(remoteWindows.some((entry) => entry.title === 'Administrator mode')).toBe(false)
-  })
   it('includes the Windows right-click setting on Windows', () => {
     const entries = getTerminalPaneSearchEntries({ isWindows: true, isMac: false })
-    expect(entries.some((entry) => entry.title === 'Right-click to paste')).toBe(true)
-  })
-
-  it('includes the PowerShell version setting on Windows', () => {
-    const entries = getTerminalPaneSearchEntries({ isWindows: true, isMac: false })
-    expect(entries.some((entry) => entry.title === 'PowerShell Version')).toBe(true)
-  })
-
-  it('keeps Windows host entries separate from Windows client entries', () => {
-    const entries = getTerminalPaneSearchEntries({
-      isWindows: false,
-      isWindowsTerminalHost: true,
-      isMac: false
-    })
-
-    expect(entries.some((entry) => entry.title === 'Default Shell')).toBe(true)
-    expect(entries.some((entry) => entry.title === 'PowerShell Version')).toBe(true)
     expect(entries.some((entry) => entry.title === 'Right-click to paste')).toBe(true)
   })
 

@@ -92,7 +92,7 @@ describe('resolveMissingRepoProjectDialogState', () => {
       slugIndexReady: true,
       slugDialog,
       repoNotInQuirky,
-      lookupSlug: (slug) => (slug === 'stablyai/orca' ? [{ id: 'repo-1' }] : []),
+      lookupSlug: (slug) => (slug === 'stablyai/quirky' ? [{ id: 'repo-1' }] : []),
       selectedRepoIds: new Set(['repo-1'])
     })
 
@@ -107,7 +107,7 @@ describe('resolveMissingRepoProjectDialogState', () => {
       slugIndexReady: true,
       slugDialog,
       repoNotInQuirky,
-      lookupSlug: (slug) => (slug === 'stablyai/orca' ? [{ id: 'repo-1' }] : []),
+      lookupSlug: (slug) => (slug === 'stablyai/quirky' ? [{ id: 'repo-1' }] : []),
       selectedRepoIds: new Set(['repo-1'])
     })
 

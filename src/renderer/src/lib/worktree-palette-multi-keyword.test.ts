@@ -71,7 +71,7 @@ describe('token coverage', () => {
 
   it('cannot bypass short-token guards with a whole-query match', () => {
     // A single Latin letter may equal or prefix a word, never match mid-word.
-    expect(ids('q')).toEqual([])
+    expect(ids('k')).toEqual([])
     expect(ids('a').length).toBeGreaterThan(0)
   })
 

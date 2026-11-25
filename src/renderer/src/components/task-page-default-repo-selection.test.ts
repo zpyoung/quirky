@@ -28,7 +28,7 @@ describe('getTaskEligibleRepos', () => {
           type: 'image',
           src: 'https://github.com/stablyai.png?size=64',
           source: 'github',
-          label: 'stablyai/orca'
+          label: 'stablyai/quirky'
         }
       }),
       repo({
@@ -224,7 +224,7 @@ describe('getTaskProjectPickerGroups', () => {
 
     expect(groups).toHaveLength(2)
     expect(groups[0]).toMatchObject({
-      projectKey: 'github:stablyai/orca',
+      projectKey: 'github:stablyai/quirky',
       repo: { id: 'local-quirky' }
     })
     expect(groups[0]?.sources.map((source) => source.id)).toEqual(['local-quirky', 'ssh-quirky'])

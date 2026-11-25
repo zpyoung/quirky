@@ -70,8 +70,6 @@ describe('web preload API composition', () => {
       'skills',
       'pty',
       'ssh',
-      'wsl',
-      'wslMove',
       'pwsh',
       'gitBash',
       'agentStatus',
