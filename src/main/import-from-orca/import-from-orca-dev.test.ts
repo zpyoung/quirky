@@ -399,6 +399,7 @@ describe('importFromOrcaDev', () => {
 
     expect(report.ok).toBe(true)
     expect(report.imported.repos).toBe(1)
+    expect(report.imported.projects).toBe(1)
     expect(
       store
         .getRepos()
