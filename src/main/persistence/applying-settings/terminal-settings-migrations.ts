@@ -5,6 +5,10 @@ import {
   normalizeDesktopTerminalScrollbackRows
 } from '../../../shared/terminal-scrollback-policy'
 import {
+  DEFAULT_TERMINAL_THEME_DARK,
+  DEFAULT_TERMINAL_THEME_LIGHT
+} from '../../../shared/terminal-theme-selection'
+import {
   DEFAULT_TUI_AGENT_ARGS,
   DEFAULT_TUI_AGENT_ENV,
   normalizeTuiAgentArgsRecord,
@@ -150,6 +154,78 @@ export function migrateTerminalTuiScrollSensitivityDefault(settings: GlobalSetti
       terminalTuiScrollSensitivityDefaultedToOne: true
     },
     needsSave: !alreadyDefaultedToOne || current === undefined
+  }
+}
+
+export const LEGACY_TERMINAL_THEME_DARK = 'Ghostty Default Style Dark'
+export const LEGACY_TERMINAL_THEME_LIGHT = 'Builtin Tango Light'
+export const LEGACY_TERMINAL_DIVIDER_DARK = '#3f3f46'
+export const LEGACY_TERMINAL_DIVIDER_LIGHT = '#d4d4d8'
+
+const GRAPHITE_TERMINAL_DIVIDER_DARK = '#24262c'
+const GRAPHITE_TERMINAL_DIVIDER_LIGHT = '#e3e5ea'
+
+type TerminalGraphiteSettings = Pick<
+  GlobalSettings,
+  | 'terminalThemeDark'
+  | 'terminalThemeLight'
+  | 'terminalDividerColorDark'
+  | 'terminalDividerColorLight'
+  | 'terminalGraphiteDefaultsMigrated'
+>
+
+/**
+ * Moves each terminal theme and divider key still on the old Orca default to Quirky Graphite,
+ * once per profile. Any other value is a user choice and survives; the marker stops a later
+ * pick of the old theme from being moved again.
+ */
+export function migrateTerminalGraphiteDefaults(settings: Partial<GlobalSettings>): {
+  settings: TerminalGraphiteSettings
+  needsSave: boolean
+} {
+  if (settings.terminalGraphiteDefaultsMigrated === true) {
+    return {
+      settings: {
+        terminalThemeDark: settings.terminalThemeDark ?? DEFAULT_TERMINAL_THEME_DARK,
+        terminalThemeLight: settings.terminalThemeLight ?? DEFAULT_TERMINAL_THEME_LIGHT,
+        terminalDividerColorDark:
+          settings.terminalDividerColorDark ?? GRAPHITE_TERMINAL_DIVIDER_DARK,
+        terminalDividerColorLight:
+          settings.terminalDividerColorLight ?? GRAPHITE_TERMINAL_DIVIDER_LIGHT,
+        terminalGraphiteDefaultsMigrated: true
+      },
+      needsSave: false
+    }
+  }
+
+  const moveLegacy = (current: string | undefined, legacy: string, next: string): string =>
+    current === undefined || current === '' || current === legacy ? next : current
+
+  return {
+    settings: {
+      terminalThemeDark: moveLegacy(
+        settings.terminalThemeDark,
+        LEGACY_TERMINAL_THEME_DARK,
+        DEFAULT_TERMINAL_THEME_DARK
+      ),
+      terminalThemeLight: moveLegacy(
+        settings.terminalThemeLight,
+        LEGACY_TERMINAL_THEME_LIGHT,
+        DEFAULT_TERMINAL_THEME_LIGHT
+      ),
+      terminalDividerColorDark: moveLegacy(
+        settings.terminalDividerColorDark,
+        LEGACY_TERMINAL_DIVIDER_DARK,
+        GRAPHITE_TERMINAL_DIVIDER_DARK
+      ),
+      terminalDividerColorLight: moveLegacy(
+        settings.terminalDividerColorLight,
+        LEGACY_TERMINAL_DIVIDER_LIGHT,
+        GRAPHITE_TERMINAL_DIVIDER_LIGHT
+      ),
+      terminalGraphiteDefaultsMigrated: true
+    },
+    needsSave: true
   }
 }
 

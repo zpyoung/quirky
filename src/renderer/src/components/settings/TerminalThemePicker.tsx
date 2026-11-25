@@ -160,9 +160,7 @@ export function ThemePicker({
                       </span>
                       {/* Why: hide swatches on the current row so the color grid
                         doesn't shift left to make room for the "Current" label. */}
-                      {theme.group === 'imported' &&
-                      theme.previewTheme &&
-                      selectedTheme !== theme.value ? (
+                      {theme.previewTheme && selectedTheme !== theme.value ? (
                         <span className="flex shrink-0 overflow-hidden rounded-sm border border-border/60">
                           {[
                             theme.previewTheme.black,

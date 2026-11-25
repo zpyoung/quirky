@@ -192,3 +192,42 @@ describe('terminal default shell', () => {
     expect(normalizeLegacyProfile({ terminalDefaultShell: '   ' }).terminalDefaultShell).toBe('')
   })
 })
+
+describe('terminal graphite defaults', () => {
+  const unmigrated = {
+    terminalGraphiteDefaultsMigrated: undefined,
+    terminalThemeDark: 'Ghostty Default Style Dark',
+    terminalThemeLight: 'Builtin Tango Light',
+    terminalDividerColorDark: '#3f3f46',
+    terminalDividerColorLight: '#d4d4d8'
+  }
+
+  it('moves a profile still on the old defaults to Quirky Graphite and stamps the marker', () => {
+    const normalized = normalizeLegacyProfile(unmigrated)
+
+    expect(normalized).toMatchObject({
+      terminalThemeDark: 'Quirky Graphite Dark',
+      terminalThemeLight: 'Quirky Graphite Light',
+      terminalDividerColorDark: '#24262c',
+      terminalDividerColorLight: '#e3e5ea',
+      terminalGraphiteDefaultsMigrated: true
+    })
+  })
+
+  it('keeps a custom theme and moves only the key on the old default', () => {
+    const normalized = normalizeLegacyProfile({ ...unmigrated, terminalThemeDark: 'Dracula' })
+
+    expect(normalized.terminalThemeDark).toBe('Dracula')
+    expect(normalized.terminalThemeLight).toBe('Quirky Graphite Light')
+  })
+
+  it('does not move an old theme the user picked after the marker was stamped', () => {
+    const normalized = normalizeLegacyProfile({
+      ...unmigrated,
+      terminalGraphiteDefaultsMigrated: true
+    })
+
+    expect(normalized.terminalThemeDark).toBe('Ghostty Default Style Dark')
+    expect(normalized.terminalDividerColorDark).toBe('#3f3f46')
+  })
+})
