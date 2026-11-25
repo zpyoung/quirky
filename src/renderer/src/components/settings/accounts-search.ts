@@ -277,7 +277,6 @@ export const getAccountsZcodePlanSearchEntries = createLocalizedCatalog(() => [
 ])
 
 export const getAccountsPaneSearchEntries = createLocalizedCatalog((): SettingsSearchEntry[] => [
-  ...getAccountsLocationSearchEntries(),
   ...getAccountsClaudeSearchEntries(),
   ...getAccountsCodexSearchEntries(),
   ...getAccountsGeminiSearchEntries(),
