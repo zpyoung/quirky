@@ -76,6 +76,26 @@ export const WORK_METHODS = [
   { method: 'agentSession.queuedMessagesResume', params: { envelope: envelope() } },
   { method: 'agentSession.fork', params: { envelope: envelope() } },
   {
+    method: 'agentSession.view.open',
+    params: {
+      envelope: envelope(),
+      spec: { title: 't', root: { type: 'markdown', props: { text: 'x' } } }
+    }
+  },
+  {
+    method: 'agentSession.view.update',
+    params: {
+      envelope: envelope(),
+      viewId: 'view-1',
+      spec: { title: 't', root: { type: 'markdown', props: { text: 'x' } } }
+    }
+  },
+  {
+    method: 'agentSession.view.patch',
+    params: { envelope: envelope(), viewId: 'view-1', patch: { ops: [] } }
+  },
+  { method: 'agentSession.view.close', params: { envelope: envelope(), viewId: 'view-1' } },
+  {
     method: 'agentSession.rewind',
     params: { envelope: envelope(), itemId: 'chosen', expectedEpoch: 'epoch' }
   },
@@ -105,6 +125,7 @@ export const WORK_METHODS = [
     method: 'agentSession.turnDiff',
     params: { sessionId: SESSION, turnId: 'turn-1', path: 'src/a.ts' }
   },
+  { method: 'agentSession.view.get', params: { sessionId: SESSION, viewId: 'view-1' } },
   { method: 'agentSession.subscribe', params: { sessionId: SESSION } },
   { method: 'agentSession.hold', params: { sessionId: SESSION, holderId: 'surface-1' } },
   { method: 'agentSession.reveal', params: { sessionId: SESSION } },
