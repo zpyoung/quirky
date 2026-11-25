@@ -4,6 +4,7 @@ import { is } from '@electron-toolkit/utils'
 import type { Store } from '../persistence'
 import { isBackgroundLaunch, showWindowWithoutStealingFocus } from './foreground-activation-policy'
 import { rectHasVisibleAreaOnAnyDisplay } from './window-bounds-validation'
+import { resolveWindowBackground } from './window-background'
 import { sendToTrustedUIRenderer } from '../ipc/ui'
 import { installPrivilegedWindowNavigationPolicy } from './privileged-window-navigation'
 import { stepUIZoomLevel, type UIZoomDirection } from '../../shared/ui-zoom-level'
@@ -160,7 +161,10 @@ export function createOrFocusDashboardPopout(
     title: 'Quirky Agent Dashboard',
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff',
+    backgroundColor: resolveWindowBackground(
+      store?.getSettings().theme ?? 'system',
+      nativeTheme.shouldUseDarkColors
+    ),
     // Why: the pop-out uses a standard native frame so it is movable, closable,
     // and minimizable on every platform without reimplementing the main
     // window's custom titlebar/drag-region/window-control chrome. The main

@@ -50,7 +50,7 @@ export type ElectronModuleMock = {
   ipcMain: IpcMainMock
   Menu: { buildFromTemplate: typeof buildFromTemplateMock }
   Notification: typeof notificationMock
-  nativeTheme: { shouldUseDarkColors: boolean }
+  nativeTheme: { shouldUseDarkColors: boolean; themeSource: string; on: MainWindowSpy }
   powerMonitor: { on: MainWindowSpy; removeListener: MainWindowSpy }
   screen: {
     getPrimaryDisplay: () => { workAreaSize: { width: number; height: number } }
@@ -75,7 +75,7 @@ export function electronModuleMock(): ElectronModuleMock {
     ipcMain: ipcMainMock,
     Menu: { buildFromTemplate: buildFromTemplateMock },
     Notification: notificationMock,
-    nativeTheme: { shouldUseDarkColors: false },
+    nativeTheme: { shouldUseDarkColors: false, themeSource: 'system', on: vi.fn() },
     powerMonitor: { on: powerMonitorOnMock, removeListener: powerMonitorRemoveListenerMock },
     screen: {
       getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }),

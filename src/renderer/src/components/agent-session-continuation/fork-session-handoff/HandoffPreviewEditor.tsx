@@ -8,11 +8,12 @@ import { syncContentOnMount, syncContentUpdate } from '@/components/editor/monac
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
 import { computeEditorFontSize, resolveEditorFontFamily } from '@/lib/editor-font-zoom'
-import { resolveDocumentTheme } from '@/lib/document-theme'
+import { useDocumentDarkTheme } from '@/hooks/use-document-dark-theme'
 import '@/lib/monaco-setup'
 import { useAppStore } from '@/store'
 import type { SecretScanHit } from '@/lib/fork-session-handoff/handoff-secret-scan'
 import { HANDOFF_PREVIEW_EDITOR_SLOT } from './handoff-preview-editor-slot'
+import { monacoThemeFor } from '@/lib/monaco-graphite-theme'
 
 type HandoffPreviewEditorProps = {
   value: string
@@ -52,7 +53,7 @@ export function HandoffPreviewEditor({
 
   const fontSize = computeEditorFontSize(settings?.terminalFontSize ?? 13, editorFontZoomLevel)
   const fontFamily = resolveEditorFontFamily(settings)
-  const isDark = resolveDocumentTheme(settings?.theme ?? 'system')
+  const isDark = useDocumentDarkTheme()
   const options = useMemo<editor.IStandaloneEditorConstructionOptions>(
     () => ({
       ariaLabel: translate(
@@ -216,7 +217,7 @@ export function HandoffPreviewEditor({
           height="100%"
           defaultLanguage="plaintext"
           defaultValue={value}
-          theme={isDark ? 'vs-dark' : 'vs'}
+          theme={monacoThemeFor(isDark)}
           onChange={handleChange}
           onMount={handleMount}
           options={options}

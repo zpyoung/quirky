@@ -52,7 +52,7 @@ export type ElectronModuleMock = {
   BrowserWindow: undefined
   app: { isPackaged: boolean; getPath: Mock; getVersion: () => string }
   powerMonitor: { on: Mock }
-  nativeTheme: { shouldUseDarkColors: boolean }
+  nativeTheme: { shouldUseDarkColors: boolean; themeSource: string; on: Mock }
   ipcMain: { handle: Mock; on: Mock; removeHandler: Mock; removeAllListeners: Mock }
 }
 
@@ -68,7 +68,9 @@ export const electronModuleMock = (): ElectronModuleMock => ({
     on: vi.fn()
   },
   nativeTheme: {
-    shouldUseDarkColors: true
+    shouldUseDarkColors: true,
+    themeSource: 'system',
+    on: vi.fn()
   },
   ipcMain: {
     handle: handleMock,
