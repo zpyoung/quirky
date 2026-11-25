@@ -87,6 +87,15 @@ describe('collectChartSources', () => {
       l: { language: 'csv', code: 'a,b' }
     })
   })
+
+  it('removes the indentation of the opening fence from the body, as the parser does', () => {
+    expect(collectChartSources('  ```csv title=i\n  day,ms\n   mon,3\n  ```')).toEqual({
+      i: { language: 'csv', code: 'day,ms\n mon,3' }
+    })
+    expect(collectChartSources('- ```csv title=l\n  a,b\n  ```')).toEqual({
+      l: { language: 'csv', code: 'a,b' }
+    })
+  })
 })
 
 describe('collectLocalImageSources', () => {
