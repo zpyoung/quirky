@@ -95,11 +95,11 @@ function resolveTerminalSurfaceVariables(
 ): LeftSidebarStyleVariables {
   const appearance = resolveEffectiveTerminalAppearance(settings, systemPrefersDark)
   const background = applyAlpha(
-    settings.terminalColorOverrides?.background ?? appearance.theme?.background ?? '#000000',
+    settings.terminalColorOverrides?.background ?? appearance.theme?.background ?? '#0c0d0f',
     settings.terminalBackgroundOpacity
   )
   const foreground =
-    settings.terminalColorOverrides?.foreground ?? appearance.theme?.foreground ?? '#fafafa'
+    settings.terminalColorOverrides?.foreground ?? appearance.theme?.foreground ?? '#eceef2'
   return buildSurfaceVariables({ background, foreground, overrideTextTokens: true })
 }
 
