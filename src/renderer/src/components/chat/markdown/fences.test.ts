@@ -83,6 +83,9 @@ describe('collectChartSources', () => {
     expect(collectChartSources('> ```csv title=q\n> a,b\n> ```')).toEqual({
       q: { language: 'csv', code: 'a,b' }
     })
+    expect(collectChartSources('  ```csv title=t\n\tday,ms\n  mon,3\n  ```')).toEqual({
+      t: { language: 'csv', code: '  day,ms\nmon,3' }
+    })
     expect(collectChartSources('- ```csv title=l\n  a,b\n  ```')).toEqual({
       l: { language: 'csv', code: 'a,b' }
     })

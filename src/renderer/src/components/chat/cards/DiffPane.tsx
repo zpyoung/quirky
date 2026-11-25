@@ -11,6 +11,9 @@ type Numbered = Extract<PatchLine, { kind: 'context' | 'added' | 'removed' }>
 /** The line a comment names: the new file's line, or the old file's for a removed line. */
 const commentLine = (line: Numbered): number => line.newLine ?? line.oldLine ?? 0
 
+const commentSide = (line: Numbered): TurnLineComment['side'] =>
+  line.kind === 'removed' ? 'old' : 'new'
+
 function CommentForm({
   onSave,
   onCancel
@@ -83,9 +86,8 @@ export function DiffPane({
           )
         }
         const number = commentLine(line)
-        const attached = own.filter(
-          (comment) => comment.line === number && lineOwnsComment(lines, index)
-        )
+        const side = commentSide(line)
+        const attached = own.filter((comment) => comment.line === number && comment.side === side)
         return (
           <div key={index}>
             <div
@@ -136,7 +138,7 @@ export function DiffPane({
               <CommentForm
                 onCancel={() => setComposing(null)}
                 onSave={(text) => {
-                  addTurnComment(commentKey, { path, line: number, text })
+                  addTurnComment(commentKey, { path, line: number, side, text })
                   setComposing(null)
                 }}
               />
@@ -145,17 +147,5 @@ export function DiffPane({
         )
       })}
     </div>
-  )
-}
-
-/** A removed and an added line can share a number; the comment belongs to the first line drawn with it. */
-function lineOwnsComment(lines: readonly PatchLine[], index: number): boolean {
-  const line = lines[index]
-  if (!line || line.kind === 'hunk') {
-    return false
-  }
-  const number = commentLine(line)
-  return (
-    lines.findIndex((other) => other.kind !== 'hunk' && commentLine(other) === number) === index
   )
 }
