@@ -228,7 +228,7 @@ export function MobileNativeChatComposer({
             onSelectionChange={(e) => menu.onSelectionChange(e.nativeEvent.selection)}
             placeholder={placeholder}
             placeholderTextColor={colors.textMuted}
-            selectionColor={colors.accentBlue}
+            selectionColor={colors.accent}
             multiline
             // Why: never revoke `editable` — iOS resigns first responder on a focused
             // field, so a transient lock would yank the keyboard mid-typing (#10681).

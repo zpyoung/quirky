@@ -148,7 +148,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 2
   },
   currentBadgeText: {
-    color: colors.accentBlue,
+    color: colors.accent,
     fontSize: typography.metaSize,
     fontWeight: '600'
   },

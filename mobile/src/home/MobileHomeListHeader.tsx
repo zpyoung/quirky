@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: spacing.lg },
   statCard: {
     flex: 1,
-    backgroundColor: 'rgba(26,26,26,0.6)',
+    backgroundColor: colors.bgPanel,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     borderRadius: 10,

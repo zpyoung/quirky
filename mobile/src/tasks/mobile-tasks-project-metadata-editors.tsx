@@ -76,7 +76,7 @@ export function renderMobileTasksProjectLabelsEditor(model: ConnectionPresentati
                 }
               >
                 <View style={styles.issueTypeChipContent}>
-                  {selected ? <Check size={12} color={colors.accentBlue} /> : null}
+                  {selected ? <Check size={12} color={colors.accent} /> : null}
                   <Text style={styles.detailChipText}>{label}</Text>
                 </View>
               </Pressable>
@@ -156,7 +156,7 @@ export function renderMobileTasksProjectAssigneesEditor(model: ConnectionPresent
                 }
               >
                 <View style={styles.issueTypeChipContent}>
-                  {selected ? <Check size={12} color={colors.accentBlue} /> : null}
+                  {selected ? <Check size={12} color={colors.accent} /> : null}
                   <Text style={styles.detailChipText}>{user.login}</Text>
                 </View>
               </Pressable>

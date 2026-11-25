@@ -30,7 +30,7 @@ function statusColor(status: MobileDiffReviewQueueItem['status']): string {
     case 'deleted':
       return colors.statusRed
     case 'renamed':
-      return colors.accentBlue
+      return colors.accent
     case 'untracked':
       return colors.statusAmber
     case 'modified':

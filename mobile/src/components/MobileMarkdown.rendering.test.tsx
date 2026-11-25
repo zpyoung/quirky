@@ -194,7 +194,7 @@ describe('MobileMarkdown tone', () => {
 
     act(() => renderer!.update(createElement(MobileMarkdown, { content })))
     expect(styleOf(renderer!.root, 'bold').color).toBe(colors.textPrimary)
-    expect(styleOf(renderer!.root, 'docs').color).toBe(colors.accentBlue)
+    expect(styleOf(renderer!.root, 'docs').color).toBe(colors.accent)
   })
 
   it('keeps the default palette inside a table, which keeps its dark surface', () => {
@@ -203,7 +203,7 @@ describe('MobileMarkdown tone', () => {
       renderer = create(createElement(MobileMarkdown, { content, tone: 'onBright' }))
     })
     expect(styleOf(renderer!.root, 'Head').color).toBe(colors.textPrimary)
-    expect(styleOf(renderer!.root, 'docs').color).toBe(colors.accentBlue)
+    expect(styleOf(renderer!.root, 'docs').color).toBe(colors.accent)
   })
 
   it('zooms every block with the text, not only paragraphs', () => {

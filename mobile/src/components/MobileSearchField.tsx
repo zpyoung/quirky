@@ -123,7 +123,7 @@ export function MobileSearchField({
         }}
         clearButtonMode="never"
         accessibilityLabel={accessibilityLabel ?? placeholder}
-        selectionColor={colors.accentBlue}
+        selectionColor={colors.accent}
       />
       {clearVisible ? (
         <Pressable

@@ -382,9 +382,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)'
+    backgroundColor: `${colors.statusRed}1a`
   },
   deleteButtonPressed: {
-    backgroundColor: 'rgba(239, 68, 68, 0.2)'
+    backgroundColor: `${colors.statusRed}33`
   }
 })

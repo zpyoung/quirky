@@ -5,21 +5,21 @@ import { colors } from '../theme/mobile-theme'
 import { useWorkingRingRotation } from './use-working-ring-rotation'
 
 // Per-agent state indicator, 1:1 with desktop AgentStateDot
-// (src/renderer/src/components/AgentStateDot.tsx): yellow spinner for 'working',
-// emerald for 'done', red for blocked/waiting/failed (attention), muted for a user's Stop
+// (src/renderer/src/components/AgentStateDot.tsx): blue spinner for 'working',
+// green for 'done', amber for blocked/waiting (needs you), red for failed, muted for a user's Stop
 // ('interrupted'), amber for 'unconfirmed' (desktop's missing-evidence tone), neutral for idle. Distinct from the
 // worktree-level AgentSpinner, which collapses the agent vocabulary into the 5-state
 // rollup the sidebar dot uses.
 const DOT_COLORS: Record<Exclude<AgentDotState, 'working' | 'monitoring'>, string> = {
-  done: '#10b981',
-  blocked: '#ef4444',
-  waiting: '#ef4444',
+  done: colors.statusGreen,
+  blocked: colors.statusAmber,
+  waiting: colors.statusAmber,
   interrupted: colors.textMuted,
-  failed: '#ef4444',
+  failed: colors.statusRed,
   unconfirmed: colors.statusAmber,
   idle: 'rgba(115,115,115,0.4)'
 }
-export const AGENT_WORKING_COLOR = '#eab308'
+export const AGENT_WORKING_COLOR = colors.statusBlue
 
 /** `unverifiable` is a child row's lost contact: desktop's dashed amber ring, a missing-evidence
  *  mark rather than a state claim. */

@@ -82,7 +82,7 @@ export function renderMobileTasksProjectFieldEditors(model: ConnectionPresentati
                       }
                     >
                       <View style={styles.issueTypeChipContent}>
-                        {selected ? <Check size={12} color={colors.accentBlue} /> : null}
+                        {selected ? <Check size={12} color={colors.accent} /> : null}
                         <Text style={styles.detailChipText}>{option.name}</Text>
                       </View>
                     </Pressable>

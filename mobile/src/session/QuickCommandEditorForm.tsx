@@ -191,7 +191,7 @@ export function QuickCommandEditorForm({
                 <Switch
                   value={draft.appendEnter}
                   onValueChange={(appendEnter) => onChange({ appendEnter })}
-                  trackColor={{ false: colors.bgRaised, true: colors.accentBlue }}
+                  trackColor={{ false: colors.bgRaised, true: colors.accent }}
                   thumbColor={colors.surfaceBright}
                 />
               </View>

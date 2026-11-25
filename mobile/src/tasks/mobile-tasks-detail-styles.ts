@@ -106,7 +106,7 @@ export const mobileTasksDetailStyles = StyleSheet.create({
     paddingVertical: 2
   },
   detailChipSelected: {
-    borderColor: colors.accentBlue,
+    borderColor: colors.accent,
     backgroundColor: colors.bgRaised
   },
   detailChipText: {
