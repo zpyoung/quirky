@@ -18,7 +18,7 @@ export const BUILTIN_TERMINAL_THEME_NAMES = getThemeNames()
 
 export { DEFAULT_TERMINAL_THEME_DARK, DEFAULT_TERMINAL_THEME_LIGHT }
 export const DEFAULT_TERMINAL_DIVIDER_DARK = '#24262c'
-const DEFAULT_TERMINAL_DIVIDER_LIGHT = '#e3e5ea'
+export const DEFAULT_TERMINAL_DIVIDER_LIGHT = '#e3e5ea'
 
 export type EffectiveTerminalAppearance = {
   mode: 'dark' | 'light'

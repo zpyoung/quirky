@@ -13,6 +13,8 @@ import { WarpThemeImportButton } from './WarpThemeImportButton'
 import { YamlThemeImportButton } from './YamlThemeImportButton'
 import type { UseWarpThemeImportReturn } from './useWarpThemeImport'
 import {
+  DEFAULT_TERMINAL_DIVIDER_DARK,
+  DEFAULT_TERMINAL_DIVIDER_LIGHT,
   DEFAULT_TERMINAL_THEME_DARK,
   DEFAULT_TERMINAL_THEME_LIGHT,
   getAvailableTerminalThemeOptions,
@@ -285,7 +287,9 @@ export function TerminalThemeCatalogSection({
                       ? settings.terminalDividerColorLight
                       : settings.terminalDividerColorDark
                   }
-                  fallback={isLightTarget ? '#d4d4d8' : '#3f3f46'}
+                  fallback={
+                    isLightTarget ? DEFAULT_TERMINAL_DIVIDER_LIGHT : DEFAULT_TERMINAL_DIVIDER_DARK
+                  }
                   onChange={(value) =>
                     updateSettings(
                       isLightTarget
