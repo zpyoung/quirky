@@ -65,7 +65,7 @@ describe('turn tree snapshots (real git)', () => {
     writeFileSync(join(context.dir, 'ignored.log'), 'noise\n')
     const indexPath = join(context.dir, '.git', 'index')
     const indexBefore = statSync(indexPath).mtimeMs
-    const statusBefore = context.git('status', '--porcelain')
+    const statusBefore = context.git('--no-optional-locks', 'status', '--porcelain')
     const headBefore = context.git('rev-parse', 'HEAD')
 
     const tree = await treeOf(context.dir)
@@ -76,7 +76,7 @@ describe('turn tree snapshots (real git)', () => {
       'untracked.txt'
     ])
     expect(context.git('diff', '--cached')).toBe('')
-    expect(context.git('status', '--porcelain')).toBe(statusBefore)
+    expect(context.git('--no-optional-locks', 'status', '--porcelain')).toBe(statusBefore)
     expect(statSync(indexPath).mtimeMs).toBe(indexBefore)
     expect(context.git('rev-parse', 'HEAD')).toBe(headBefore)
   })
@@ -104,7 +104,7 @@ describe('turn tree snapshots (real git)', () => {
 
     expect(tree).not.toBe(EMPTY_TREE)
     expect(context.git('ls-tree', '--name-only', tree).trim()).toBe('first.txt')
-    expect(context.git('status', '--porcelain').trim()).toBe('?? first.txt')
+    expect(context.git('--no-optional-locks', 'status', '--porcelain').trim()).toBe('?? first.txt')
   })
 
   it('reports a directory outside any repository as notGit', async () => {

@@ -20,7 +20,7 @@ const TRUST_DIALOGS = [
 
 // Trust decisions made outside a dialog: agent command approvals and certificate overrides.
 const INLINE_TRUST_SURFACES = [
-  'native-chat/NativeChatApprovalCard.tsx',
+  'chat/turn/AskRow.tsx',
   'browser-pane/navigate/browser-load-failure-overlay.tsx'
 ]
 

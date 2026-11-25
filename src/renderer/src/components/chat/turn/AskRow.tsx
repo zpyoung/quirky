@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { SecuritySurface } from '@/components/ui/security-surface'
 import { translate } from '@/i18n/i18n'
 import { agentSessionPromptQuestions } from '../../../../../shared/agent-session-question-answer'
 import type { AgentSessionPromptResponse } from '../../../../../shared/agent-session-question-answer'
@@ -111,9 +112,11 @@ export function AskRow({ item }: { item: AskItem }): React.JSX.Element {
   }
   if (item.body.kind === 'approval') {
     return (
-      <div className="rounded-lg border border-border bg-card px-3 py-2 text-card-foreground">
-        <ApprovalControls item={{ ...item, body: item.body }} />
-      </div>
+      <SecuritySurface>
+        <div className="rounded-lg border border-border bg-card px-3 py-2 text-card-foreground">
+          <ApprovalControls item={{ ...item, body: item.body }} />
+        </div>
+      </SecuritySurface>
     )
   }
   const body = item.body

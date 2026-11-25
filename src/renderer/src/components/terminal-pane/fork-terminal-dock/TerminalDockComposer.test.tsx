@@ -72,6 +72,15 @@ describe('TerminalDockComposer', () => {
     mocks.status.state = 'waiting'
     mocks.composer.current = null
     vi.clearAllMocks()
+    mocks.sendNativeChatMessage.mockReset().mockImplementation((_target, _text, options) => {
+      options.onDeliverySettled(true)
+    })
+    mocks.sendWithImages
+      .mockReset()
+      .mockImplementation((_agent, _target, _text, _paths, options) => {
+        options.onDeliverySettled(true)
+      })
+    mocks.sendNativeChatTypedCommand.mockReset()
   })
 
   afterEach(() => {
@@ -110,7 +119,7 @@ describe('TerminalDockComposer', () => {
 
     armTerminalInputQuarantine('tab-1')
 
-    await expect(staleSubmit?.('echo hi', [])).resolves.toBe(false)
+    await expect(Promise.resolve(staleSubmit?.('echo hi', []))).resolves.toBe(false)
     expect(mocks.sendNativeChatMessage).not.toHaveBeenCalled()
   })
 

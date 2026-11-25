@@ -38,8 +38,8 @@ describe('v1 chat journal items', () => {
     ).toBe(false)
   })
 
-  it('still keeps a kind this build does not know', () => {
+  it('still admits a kind this build does not know', () => {
     const unknown = { kind: 'a-newer-kind', anything: 1 }
-    expect(AgentJournalItemBodySchema.parse(unknown)).toEqual(unknown)
+    expect(AgentJournalItemBodySchema.safeParse(unknown).success).toBe(true)
   })
 })

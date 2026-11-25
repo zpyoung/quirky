@@ -72,8 +72,9 @@ type TrackedPlan = {
   outlivedHost: boolean
 }
 
+// weak so an idle-released journal is not kept alive by the observer
 type SessionState = {
-  journal: PlanObserverJournal
+  journalRef: WeakRef<PlanObserverJournal>
   epoch: string
   sequence: number
   nextVersion: number
@@ -166,7 +167,7 @@ export class StructuredAgentSessionPlanObserver {
     const held = this.states.get(sessionId)
     if (
       held &&
-      held.journal === journal &&
+      held.journalRef.deref() === journal &&
       held.epoch === cursor.epoch &&
       cursor.sequence >= held.sequence
     ) {
@@ -181,13 +182,13 @@ export class StructuredAgentSessionPlanObserver {
     )) {
       this.states.delete(oldest)
     }
-    this.reconcile(sessionId, state)
+    this.reconcile(sessionId, state, journal)
     return state
   }
 
   private readState(journal: PlanObserverJournal, cursor: AgentJournalCursor): SessionState {
     const state: SessionState = {
-      journal,
+      journalRef: new WeakRef(journal),
       epoch: cursor.epoch,
       sequence: cursor.sequence,
       nextVersion: 1,
@@ -222,13 +223,13 @@ export class StructuredAgentSessionPlanObserver {
   }
 
   /** Plans a past run left waiting: their approvals ended while nothing here was watching. */
-  private reconcile(sessionId: string, state: SessionState): void {
+  private reconcile(sessionId: string, state: SessionState, journal: PlanObserverJournal): void {
     const scopes = new Map<string, AgentJournalTurnScope>()
     const plans: AgentJournalPlanItem[] = []
     const answered = new Set<string>()
     const rootItemIds = new Set<string>()
     const unplanned: { itemId: string; body: AgentJournalItemBody }[] = []
-    state.journal.visitItemsWithLinkage((itemId, _sequence, body, attribution) => {
+    journal.visitItemsWithLinkage((itemId, _sequence, body, attribution) => {
       scopes.set(itemId, attribution.turnScope ?? AGENT_JOURNAL_THREAD_SCOPE)
       if (isRootAgentJournalItem(attribution)) {
         rootItemIds.add(itemId)
@@ -326,7 +327,11 @@ export class StructuredAgentSessionPlanObserver {
     approvalId: string,
     tracked: TrackedPlan
   ): PlanSettlement | null {
-    const approval = state.journal.itemBody(approvalId)
+    const journal = state.journalRef.deref()
+    if (!journal) {
+      return null
+    }
+    const approval = journal.itemBody(approvalId)
     if (approval?.kind !== 'approval') {
       return { status: 'not-answered', reason: tracked.outlivedHost ? 'restarted' : 'stopped' }
     }
@@ -337,7 +342,7 @@ export class StructuredAgentSessionPlanObserver {
     // Still pending, but the turn that raised it is over: nobody can answer it for that turn.
     const scope = tracked.turnScope
     if (scope.kind === 'turn') {
-      const turn = readAgentJournalTurn(state.journal.itemBody(scope.turnItemId) ?? undefined)
+      const turn = readAgentJournalTurn(journal.itemBody(scope.turnItemId) ?? undefined)
       if (turn && turn.state !== 'running') {
         return { status: 'not-answered', reason: tracked.outlivedHost ? 'restarted' : 'stopped' }
       }
@@ -390,11 +395,12 @@ export class StructuredAgentSessionPlanObserver {
     turnScope: AgentJournalTurnScope
   ): Promise<void> {
     // A rewind or restore replaced the rows this was derived from.
-    if (this.deps.canWrite?.() === false || state.journal.cursor().epoch !== state.epoch) {
+    const journal = state.journalRef.deref()
+    if (!journal || this.deps.canWrite?.() === false || journal.cursor().epoch !== state.epoch) {
       return
     }
     try {
-      await state.journal.appendItem(identity, body, {
+      await journal.appendItem(identity, body, {
         fence: this.deps.fence(sessionId),
         turnScope
       })

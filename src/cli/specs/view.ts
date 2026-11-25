@@ -49,6 +49,7 @@ export const VIEW_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['view', 'get'],
+    aliases: [['view', 'show']],
     summary: "Print a view's current spec, version and whether it is closed",
     usage: 'quirky view get --id <viewId> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id'],
