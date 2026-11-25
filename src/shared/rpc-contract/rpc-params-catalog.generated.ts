@@ -529,6 +529,7 @@ import {
 import { ContinueInterruptedParams } from './structured-agent-session-continue-params'
 import {
   AcknowledgeAttentionParams,
+  AgentSessionTurnDiffParams,
   AgentsParams,
   AttachParams,
   AvailabilityParams,
@@ -721,6 +722,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSession.subscribeStatus': null,
   'agentSession.subscribeTurnCompletions': SubscribeTurnCompletionsParams,
   'agentSession.threadGoal': ThreadGoalParams,
+  'agentSession.turnDiff': AgentSessionTurnDiffParams,
   'agentSession.unsubscribe': UnsubscribeParams,
   'agentSessionAttachment.read': AttachmentReadParams,
   'agentSessionAttachment.uploadAbort': AttachmentUploadIdParams,
