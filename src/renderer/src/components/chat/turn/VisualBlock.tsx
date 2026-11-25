@@ -8,7 +8,15 @@ import { VisualChip } from './VisualChip'
 
 /** A visual in the turn: drawn in place when the agent asked for `inline`, a chip into the panel for `pane`. */
 export function VisualBlock({ item }: { item: RenderItemOf<'visual'> }): React.JSX.Element {
-  const { sessionId, target, onOpenVisual, workspaceRoot, readWorkspaceImage } = useChatTurnEnv()
+  const {
+    sessionId,
+    target,
+    onOpenVisual,
+    workspaceRoot,
+    readWorkspaceImage,
+    worktreeId,
+    markdown
+  } = useChatTurnEnv()
   if (item.body.placement !== 'inline') {
     return <VisualChip item={item} />
   }
@@ -19,6 +27,8 @@ export function VisualBlock({ item }: { item: RenderItemOf<'visual'> }): React.J
         sessionId={sessionId}
         target={target}
         workspaceRoot={workspaceRoot ?? null}
+        worktreeId={worktreeId ?? null}
+        onOpenLink={markdown.onOpenLink}
         {...(readWorkspaceImage ? { readWorkspaceImage } : {})}
       />
       {onOpenVisual && (

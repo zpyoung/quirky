@@ -39,6 +39,8 @@ export type ChatViewProps = {
   onForked?(sessionId: string): void
   /** The workspace folder and image reader inline visuals use for their workspace images. */
   workspaceRoot?: string | null
+  /** The workspace that owns the chat, which inline visual links and previews route through. */
+  worktreeId?: string | null
   readWorkspaceImage?: (relativePath: string) => Promise<WorkspaceImage>
   /** The agent-session tab showing this chat. It names the workspace links and files resolve in
    *  and the tab whose title Rename edits; without it both are off and the title is read-only. */
@@ -80,6 +82,7 @@ export function ChatView({
   onOpenVisual,
   onForked,
   workspaceRoot,
+  worktreeId,
   readWorkspaceImage,
   tabId
 }: ChatViewProps): React.JSX.Element {
@@ -114,6 +117,7 @@ export function ChatView({
       onOpenVisual,
       onSendComments: (text) => send(text) !== false,
       workspaceRoot,
+      worktreeId,
       readWorkspaceImage,
       hostServesV1ChatMethods
     }),
@@ -132,7 +136,8 @@ export function ChatView({
       subagentRoster,
       target,
       turnId,
-      workspaceRoot
+      workspaceRoot,
+      worktreeId
     ]
   )
 

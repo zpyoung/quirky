@@ -22,6 +22,8 @@ export type ChatTurnEnv = {
   onOpenVisual: ((viewId: string) => void) | undefined
   /** Sends the composed comments; false when the chat refused them, which keeps them. */
   onSendComments: ((text: string) => boolean) | undefined
+  /** The workspace that owns the chat; inline visual links and previews route through it. */
+  worktreeId?: string | null
   /** The chat's workspace folder, which an inline visual's image paths resolve against. */
   workspaceRoot?: string | null
   /** Reads an inline visual's workspace image from the machine that owns the workspace. */
