@@ -5,6 +5,7 @@ import type { AgentSessionTurnDiffResult } from '../../../../../shared/rpc-contr
 import { Button } from '@/components/ui/button'
 import { readStructuredAgentSessionTurnDiff } from '@/runtime/structured-agent-session-v1-chat-client'
 import { cn } from '@/lib/utils'
+import { translate } from '@/i18n/i18n'
 import type { RenderItemOf } from '../chat-turns'
 import { useChatTurnEnv } from '../turn/chat-turn-env'
 import { Card, Delta } from './Card'
@@ -23,23 +24,51 @@ const STATUS_LETTERS: Record<TurnChangesFile['status'], string> = {
   renamed: 'R'
 }
 
-const STATUS_WORDS: Record<TurnChangesFile['status'], string> = {
-  added: 'Added',
-  modified: 'Modified',
-  deleted: 'Deleted',
-  renamed: 'Renamed'
+function statusWord(status: TurnChangesFile['status']): string {
+  switch (status) {
+    case 'added':
+      return translate('components.chat.cards.statusAdded', 'Added')
+    case 'modified':
+      return translate('components.chat.cards.statusModified', 'Modified')
+    case 'deleted':
+      return translate('components.chat.cards.statusDeleted', 'Deleted')
+    case 'renamed':
+      return translate('components.chat.cards.statusRenamed', 'Renamed')
+  }
 }
 
-const GONE_WORDS = {
-  gone: 'This diff is no longer available.',
-  'not-git': 'This workspace has no git history to diff.',
-  failed: 'Could not load this diff.'
-} as const
+type GoneReason = 'gone' | 'not-git' | 'failed'
+
+function goneWords(reason: GoneReason): string {
+  switch (reason) {
+    case 'gone':
+      return translate('components.chat.cards.diffGone', 'This diff is no longer available.')
+    case 'not-git':
+      return translate(
+        'components.chat.cards.diffNotGit',
+        'This workspace has no git history to diff.'
+      )
+    case 'failed':
+      return translate('components.chat.cards.diffFailed', 'Could not load this diff.')
+  }
+}
+
+function fileCountLabel(count: number): string {
+  return count === 1
+    ? translate('components.chat.cards.fileCountOne', '{{count}} file', { count })
+    : translate('components.chat.cards.fileCountMany', '{{count}} files', { count })
+}
+
+function commentCountLabel(count: number): string {
+  return count === 1
+    ? translate('components.chat.cards.commentCountOne', '{{count}} comment', { count })
+    : translate('components.chat.cards.commentCountMany', '{{count}} comments', { count })
+}
 
 type Loaded =
   | { state: 'loading' }
   | { state: 'ready'; patch: string; truncated: boolean }
-  | { state: 'unavailable'; reason: keyof typeof GONE_WORDS }
+  | { state: 'unavailable'; reason: GoneReason }
 
 function FileRow({
   file,
@@ -77,8 +106,8 @@ function FileRow({
     <>
       <span
         className="w-4 shrink-0 text-center font-mono text-xs text-muted-foreground"
-        title={STATUS_WORDS[file.status]}
-        aria-label={STATUS_WORDS[file.status]}
+        title={statusWord(file.status)}
+        aria-label={statusWord(file.status)}
       >
         {STATUS_LETTERS[file.status]}
       </span>
@@ -86,7 +115,7 @@ function FileRow({
         {file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
       </span>
       {count > 0 && (
-        <span className="shrink-0 text-xs text-muted-foreground">{`${count} ${count === 1 ? 'comment' : 'comments'}`}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">{commentCountLabel(count)}</span>
       )}
       <Delta
         {...(file.added !== undefined ? { added: file.added } : {})}
@@ -119,14 +148,16 @@ function FileRow({
         </div>
       )}
       {open && loaded?.state === 'loading' && (
-        <p className="px-6 py-2 text-xs text-muted-foreground">Loading diff</p>
+        <p className="px-6 py-2 text-xs text-muted-foreground">
+          {translate('components.chat.cards.loadingDiff', 'Loading diff')}
+        </p>
       )}
       {open && loaded?.state === 'unavailable' && (
         <div className="flex items-center gap-2 px-6 py-2 text-xs text-muted-foreground">
-          <span>{GONE_WORDS[loaded.reason]}</span>
+          <span>{goneWords(loaded.reason)}</span>
           {loaded.reason === 'failed' && (
             <Button type="button" variant="outline" size="xs" onClick={load}>
-              Retry
+              {translate('components.chat.cards.retry', 'Retry')}
             </Button>
           )}
         </div>
@@ -141,7 +172,10 @@ function FileRow({
           />
           {loaded.truncated && (
             <p className="px-6 py-1 text-xs text-muted-foreground">
-              This diff is cut short at the host&apos;s size limit.
+              {translate(
+                'components.chat.cards.diffTruncated',
+                "This diff is cut short at the host's size limit."
+              )}
             </p>
           )}
         </>
@@ -174,13 +208,13 @@ export function ChangesCard({ item }: { item: RenderItemOf<'turn-changes'> }): R
   }
   return (
     <Card
-      label="Changes"
-      ariaLabel={`Changes: ${files.length} ${files.length === 1 ? 'file' : 'files'}`}
+      label={translate('components.chat.cards.changesLabel', 'Changes')}
+      ariaLabel={translate('components.chat.cards.changesAria', 'Changes: {{files}}', {
+        files: fileCountLabel(files.length)
+      })}
       header={
         <>
-          <span className="text-xs text-muted-foreground">
-            {`${files.length} ${files.length === 1 ? 'file' : 'files'}`}
-          </span>
+          <span className="text-xs text-muted-foreground">{fileCountLabel(files.length)}</span>
           {known && <Delta added={added} removed={removed} />}
         </>
       }
@@ -204,10 +238,12 @@ export function ChangesCard({ item }: { item: RenderItemOf<'turn-changes'> }): R
             size="xs"
             onClick={() => clearTurnComments(commentKey)}
           >
-            Discard
+            {translate('components.chat.cards.discard', 'Discard')}
           </Button>
           <Button type="button" size="xs" disabled={onSendComments === undefined} onClick={send}>
-            {`Send ${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} to agent`}
+            {translate('components.chat.cards.sendCommentsToAgent', 'Send {{comments}} to agent', {
+              comments: commentCountLabel(comments.length)
+            })}
           </Button>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import {
   forwardRef,
   useCallback,
@@ -363,7 +364,11 @@ const ComposerPane = forwardRef<ComposerHandle, ComposerProps>(function Composer
           <SuggestionList
             items={items}
             active={active}
-            label={trigger?.kind === '@' ? 'Files' : 'Commands'}
+            label={
+              trigger?.kind === '@'
+                ? translate('components.chat.composer.suggestionsFiles', 'Files')
+                : translate('components.chat.composer.suggestionsCommands', 'Commands')
+            }
             empty={
               trigger?.kind === '@'
                 ? 'No matching files'
@@ -388,7 +393,10 @@ const ComposerPane = forwardRef<ComposerHandle, ComposerProps>(function Composer
           onBlurCapture={() => setFocused(false)}
         >
           {imagesOn && images.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5" aria-label="Attachments">
+            <div
+              className="flex flex-wrap gap-1.5"
+              aria-label={translate('components.chat.composer.attachments', 'Attachments')}
+            >
               {images.map((image) => (
                 <ImageChip
                   key={image.id}
@@ -460,7 +468,13 @@ const ComposerPane = forwardRef<ComposerHandle, ComposerProps>(function Composer
             {chat && working && canStop ? <StopButton onStop={stop} /> : null}
             <SendButton
               disabled={sendHeld || !canSend}
-              title={quarantined ? quarantineReason : working ? 'Queue (Enter)' : 'Send (Enter)'}
+              title={
+                quarantined
+                  ? quarantineReason
+                  : working
+                    ? translate('components.chat.composer.queueEnterTitle', 'Queue (Enter)')
+                    : translate('components.chat.composer.sendEnterTitle', 'Send (Enter)')
+              }
               onSend={() => void submit('send')}
             />
           </div>

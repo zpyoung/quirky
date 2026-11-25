@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { Fragment, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
@@ -5,70 +6,12 @@ import { ChartSourcesContext } from '../runtime'
 import type { FenceProps } from '../types'
 import { BlockFrame, CodeBlock, CopyButton, fenceTitle } from './CodeBlock'
 import { RenderError } from './RenderError'
+import { parseChartSpec, parseTable, resolveChart } from './chart-data-parsing'
+import type { ChartPoint } from './chart-data-parsing'
+import { positionKeyed } from '../../position-keyed'
 
-type CsvResult = { rows: string[][] } | { error: string }
-
-/** Reads RFC-4180 delimited text: quoted fields may hold the delimiter, newlines and doubled quotes. */
-function parseDelimited(source: string, delimiter: string): CsvResult {
-  const rows: string[][] = []
-  let row: string[] = []
-  let field = ''
-  let quoted = false
-  let touched = false
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index]
-    if (quoted) {
-      if (char === '"') {
-        if (source[index + 1] === '"') {
-          field += '"'
-          index += 1
-        } else {
-          quoted = false
-        }
-      } else {
-        field += char
-      }
-      continue
-    }
-    if (char === '"' && field === '') {
-      quoted = true
-      touched = true
-    } else if (char === delimiter) {
-      row.push(field)
-      field = ''
-      touched = true
-    } else if (char === '\n' || char === '\r') {
-      if (char === '\r' && source[index + 1] === '\n') {
-        index += 1
-      }
-      if (touched || field !== '') {
-        row.push(field)
-        rows.push(row)
-      }
-      row = []
-      field = ''
-      touched = false
-    } else {
-      field += char
-      touched = true
-    }
-  }
-  if (quoted) {
-    return { error: 'a quoted field is never closed' }
-  }
-  if (touched || field !== '') {
-    row.push(field)
-    rows.push(row)
-  }
-  if (rows.length === 0) {
-    return { error: 'it has no rows' }
-  }
-  return { rows }
-}
-
-function parseTable(language: string, code: string): CsvResult {
-  return parseDelimited(code, language === 'tsv' ? '\t' : ',')
-}
+export { parseChartSpec }
+export type { ChartPoint, ChartSpec } from './chart-data-parsing'
 
 function DataTable({ rows }: { rows: string[][] }) {
   const [header, ...body] = rows
@@ -80,18 +23,18 @@ function DataTable({ rows }: { rows: string[][] }) {
         <table data-streamdown="table">
           <thead data-streamdown="table-header">
             <tr data-streamdown="table-row">
-              {pad(header).map((cell, index) => (
-                <th key={index} data-streamdown="table-header-cell">
+              {positionKeyed(pad(header)).map(({ key, item: cell }) => (
+                <th key={key} data-streamdown="table-header-cell">
                   {cell}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody data-streamdown="table-body">
-            {body.map((row, rowIndex) => (
-              <tr key={rowIndex} data-streamdown="table-row">
-                {pad(row).map((cell, index) => (
-                  <td key={index} data-streamdown="table-cell">
+            {positionKeyed(body).map(({ key: rowKey, item: row }) => (
+              <tr key={rowKey} data-streamdown="table-row">
+                {positionKeyed(pad(row)).map(({ key, item: cell }) => (
+                  <td key={key} data-streamdown="table-cell">
                     {cell}
                   </td>
                 ))}
@@ -118,7 +61,13 @@ function Unreadable({
 }) {
   return (
     <>
-      <RenderError message={`Couldn't read this ${language} block: ${message}`} />
+      <RenderError
+        message={translate(
+          'components.chat.markdown.unreadableBlock',
+          "Couldn't read this {{language}} block: {{message}}",
+          { language, message }
+        )}
+      />
       <CodeBlock code={code} language={language} meta={meta} isIncomplete={false} />
     </>
   )
@@ -197,8 +146,8 @@ function JsonNode({
           ? `[ ${plural(entries.length, 'item', 'items')} ]`
           : `{ ${plural(entries.length, 'key', 'keys')} }`}
       </summary>
-      {entries.map(([childName, child], index) => (
-        <JsonNode key={index} name={childName} value={child} last={index === entries.length - 1} />
+      {positionKeyed(entries).map(({ key, item: [childName, child] }, index) => (
+        <JsonNode key={key} name={childName} value={child} last={index === entries.length - 1} />
       ))}
     </details>
   )
@@ -237,154 +186,6 @@ export function JsonFence({ code, isIncomplete, language, meta }: FenceProps) {
   )
 }
 
-/** `x` is set only for a point whose x was given as a number, which a line chart places on a linear scale. */
-export type ChartPoint = {
-  label: string
-  value: number
-  x?: number
-}
-export type ChartSpec = {
-  type: 'bar' | 'line'
-  title?: string
-  unit?: string
-  data?: ({ label: string; value: number } | { x: number | string; y: number })[]
-  from?: string
-  x?: string
-  y?: string
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-const isNumber = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value)
-
-/** Validates a `chart` fence body against the documented schema. */
-export function parseChartSpec(source: string): ChartSpec | { error: string } {
-  let raw: unknown
-  try {
-    raw = JSON.parse(source)
-  } catch (error) {
-    return { error: `invalid JSON (${error instanceof Error ? error.message : String(error)})` }
-  }
-  if (!isRecord(raw)) {
-    return { error: 'expected a JSON object' }
-  }
-  if (raw.type !== 'bar' && raw.type !== 'line') {
-    return { error: '"type" must be "bar" or "line"' }
-  }
-  for (const key of ['title', 'unit', 'from', 'x', 'y'] as const) {
-    if (raw[key] !== undefined && typeof raw[key] !== 'string') {
-      return { error: `"${key}" must be a string` }
-    }
-  }
-  const hasData = raw.data !== undefined
-  const hasFrom = raw.from !== undefined
-  if (hasData === hasFrom) {
-    return { error: 'exactly one of "data" and "from" is required' }
-  }
-  const spec: ChartSpec = { type: raw.type }
-  if (typeof raw.title === 'string') {
-    spec.title = raw.title
-  }
-  if (typeof raw.unit === 'string') {
-    spec.unit = raw.unit
-  }
-  if (typeof raw.from === 'string') {
-    if (typeof raw.x !== 'string' || typeof raw.y !== 'string') {
-      return { error: '"from" needs "x" and "y" column names' }
-    }
-    spec.from = raw.from
-    spec.x = raw.x
-    spec.y = raw.y
-    return spec
-  }
-  if (!Array.isArray(raw.data) || raw.data.length === 0) {
-    return { error: '"data" must be a non-empty array' }
-  }
-  const data: NonNullable<ChartSpec['data']> = []
-  for (const [index, entry] of raw.data.entries()) {
-    if (!isRecord(entry)) {
-      return { error: `data[${index}] must be an object` }
-    }
-    if (raw.type === 'bar') {
-      if (typeof entry.label !== 'string' || !isNumber(entry.value)) {
-        return { error: `data[${index}] needs a string "label" and a number "value"` }
-      }
-      if (entry.value < 0) {
-        return { error: 'bar values must be zero or more' }
-      }
-      data.push({ label: entry.label, value: entry.value })
-    } else {
-      if ((typeof entry.x !== 'string' && !isNumber(entry.x)) || !isNumber(entry.y)) {
-        return { error: `data[${index}] needs an "x" and a number "y"` }
-      }
-      data.push({ x: entry.x, y: entry.y })
-    }
-  }
-  spec.data = data
-  return spec
-}
-
-type Resolved = { type: 'bar' | 'line'; title?: string; unit?: string; points: ChartPoint[] }
-
-function resolveChart(
-  spec: ChartSpec,
-  sources: Record<string, { language: string; code: string }>
-): Resolved | { error: string } {
-  const base = { type: spec.type, title: spec.title, unit: spec.unit }
-  if (spec.data) {
-    return {
-      ...base,
-      points: spec.data.map((entry) =>
-        'label' in entry
-          ? { label: entry.label, value: entry.value }
-          : {
-              label: String(entry.x),
-              value: entry.y,
-              ...(typeof entry.x === 'number' ? { x: entry.x } : {})
-            }
-      )
-    }
-  }
-  const { from: name, x: xColumn, y: yColumn } = spec
-  if (name === undefined || xColumn === undefined || yColumn === undefined) {
-    return { error: '"from" needs "x" and "y" column names' }
-  }
-  const source = Object.hasOwn(sources, name) ? sources[name] : undefined
-  if (!source) {
-    return { error: `no csv block named ${name}` }
-  }
-  const table = parseTable(source.language, source.code)
-  if ('error' in table) {
-    return { error: `${name}: ${table.error}` }
-  }
-  const [header, ...rows] = table.rows
-  const xIndex = header.indexOf(xColumn)
-  const yIndex = header.indexOf(yColumn)
-  if (xIndex === -1) {
-    return { error: `no column ${xColumn} in ${name}` }
-  }
-  if (yIndex === -1) {
-    return { error: `no column ${yColumn} in ${name}` }
-  }
-  const points: ChartPoint[] = []
-  for (const row of rows) {
-    const cell = (row[yIndex] ?? '').trim()
-    const value = Number(cell.replace(/,/g, ''))
-    if (cell === '' || !Number.isFinite(value)) {
-      return { error: `${yColumn} has a value that is not a number: ${cell || 'empty'}` }
-    }
-    if (spec.type === 'bar' && value < 0) {
-      return { error: 'bar values must be zero or more' }
-    }
-    points.push({ label: row[xIndex] ?? '', value })
-  }
-  if (points.length === 0) {
-    return { error: `${name} has no rows` }
-  }
-  return { ...base, points }
-}
-
 const BAR_ROW = 22
 const BAR_HEIGHT = 14
 const BAR_MAX = 220
@@ -409,7 +210,7 @@ function BarChart({ points, unit }: { points: ChartPoint[]; unit?: string }) {
       width={labelWidth + BAR_MAX + valueWidth}
       height={height}
       role="img"
-      aria-label="Bar chart"
+      aria-label={translate('components.chat.markdown.barChart', 'Bar chart')}
     >
       {points.map((point, index) => {
         const y = index * BAR_ROW + 2
@@ -468,7 +269,7 @@ function LineChart({ points, unit }: { points: ChartPoint[]; unit?: string }) {
       width={LINE_WIDTH}
       height={LINE_HEIGHT}
       role="img"
-      aria-label="Line chart"
+      aria-label={translate('components.chat.markdown.lineChart', 'Line chart')}
     >
       <line
         className="qmd-chart-axis"
@@ -523,7 +324,13 @@ export function ChartFence({ code, isIncomplete, language, meta }: FenceProps) {
   }
   return (
     <BlockFrame
-      label={outcome.title ? `chart · ${outcome.title}` : 'chart'}
+      label={
+        outcome.title
+          ? translate('components.chat.markdown.chartTitled', 'chart · {{title}}', {
+              title: outcome.title
+            })
+          : 'chart'
+      }
       language="chart"
       actions={
         <>
@@ -535,7 +342,9 @@ export function ChartFence({ code, isIncomplete, language, meta }: FenceProps) {
             aria-pressed={showSource}
             onClick={() => setShowSource((value) => !value)}
           >
-            {showSource ? 'Chart' : 'Source'}
+            {showSource
+              ? translate('components.chat.markdown.chartToggle', 'Chart')
+              : translate('components.chat.markdown.sourceToggle', 'Source')}
           </Button>
           <CopyButton code={code} />
         </>

@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -89,8 +90,14 @@ function PlanAnswerControls({ target, respond, onSendMessage }: AnswerControlsPr
       {askingForFeedback ? (
         <>
           <Textarea
-            aria-label="What should Claude change?"
-            placeholder="What should Claude change?"
+            aria-label={translate(
+              'components.chat.panels.planFeedbackLabel',
+              'What should Claude change?'
+            )}
+            placeholder={translate(
+              'components.chat.panels.planFeedbackPlaceholder',
+              'What should Claude change?'
+            )}
             value={feedback}
             onChange={(event) => setFeedback(event.target.value)}
           />
@@ -100,10 +107,10 @@ function PlanAnswerControls({ target, respond, onSendMessage }: AnswerControlsPr
               disabled={busy}
               onClick={() => void answer(keepOptionId, feedback.trim())}
             >
-              Send to Claude
+              {translate('components.chat.panels.planSendToClaude', 'Send to Claude')}
             </Button>
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => setFeedback(null)}>
-              Cancel
+              {translate('components.chat.panels.planFeedbackCancel', 'Cancel')}
             </Button>
           </div>
         </>
@@ -115,7 +122,7 @@ function PlanAnswerControls({ target, respond, onSendMessage }: AnswerControlsPr
               disabled={busy}
               onClick={() => void answer(target.approveOptionId ?? '')}
             >
-              Approve
+              {translate('components.chat.panels.planApprove', 'Approve')}
             </Button>
           )}
           {keepOptionId !== null && (
@@ -127,7 +134,7 @@ function PlanAnswerControls({ target, respond, onSendMessage }: AnswerControlsPr
                 onSendMessage === undefined ? void answer(keepOptionId) : setFeedback('')
               }
             >
-              Keep planning
+              {translate('components.chat.panels.planKeepPlanning', 'Keep planning')}
             </Button>
           )}
         </div>
@@ -153,22 +160,31 @@ function PlanBody({
     <div className="native-chat-panel-plan-body">
       {restarted && (
         <p className="native-chat-panel-note">
-          Quirky restarted before you answered. The agent is no longer waiting on this plan.
+          {translate(
+            'components.chat.panels.planRestarted',
+            'Quirky restarted before you answered. The agent is no longer waiting on this plan.'
+          )}
           {onSendMessage !== undefined && (
             <Button size="xs" variant="outline" onClick={() => void onSendMessage(PRESENT_AGAIN)}>
-              Ask it to present the plan again
+              {translate(
+                'components.chat.panels.planPresentAgain',
+                'Ask it to present the plan again'
+              )}
             </Button>
           )}
         </p>
       )}
       {body.empty === true ? (
-        <p className="native-chat-panel-muted">The agent sent an empty plan.</p>
+        <p className="native-chat-panel-muted">
+          {translate('components.chat.panels.planEmpty', 'The agent sent an empty plan.')}
+        </p>
       ) : (
         <ChatMarkdown text={body.text} onOpenLink={onOpenLink} />
       )}
       {body.filePath !== undefined && (
         <p className="native-chat-panel-muted">
-          Plan file: <span className="native-chat-panel-mono">{body.filePath}</span>
+          {translate('components.chat.panels.planFile', 'Plan file:')}{' '}
+          <span className="native-chat-panel-mono">{body.filePath}</span>
         </p>
       )}
     </div>
@@ -200,9 +216,15 @@ export function PlanPanel({
   const target = selected ? planAnswerTarget(selected, prompts) : null
 
   return (
-    <section className="native-chat-panel-panel" aria-label="Plan" data-plan-panel>
+    <section
+      className="native-chat-panel-panel"
+      aria-label={translate('components.chat.panels.planPanelLabel', 'Plan')}
+      data-plan-panel
+    >
       <header className="native-chat-panel-panel-header">
-        <h3 className="native-chat-panel-panel-title">Plan</h3>
+        <h3 className="native-chat-panel-panel-title">
+          {translate('components.chat.panels.planTitle', 'Plan')}
+        </h3>
         {selected && (
           <span className="native-chat-panel-muted">{planVersionMarker(selected.body)}</span>
         )}
@@ -210,17 +232,22 @@ export function PlanPanel({
           className="ml-auto"
           size="icon-xs"
           variant="ghost"
-          aria-label="Close plan"
+          aria-label={translate('components.chat.panels.planClose', 'Close plan')}
           onClick={onClose}
         >
           <X />
         </Button>
       </header>
       {selected === undefined ? (
-        <p className="native-chat-panel-muted native-chat-panel-pad">No plan yet.</p>
+        <p className="native-chat-panel-muted native-chat-panel-pad">
+          {translate('components.chat.panels.planNone', 'No plan yet.')}
+        </p>
       ) : (
         <>
-          <ul className="native-chat-panel-version-list" aria-label="Plan versions">
+          <ul
+            className="native-chat-panel-version-list"
+            aria-label={translate('components.chat.panels.planVersions', 'Plan versions')}
+          >
             {versions.map((plan) => (
               <li key={plan.body.version}>
                 <button

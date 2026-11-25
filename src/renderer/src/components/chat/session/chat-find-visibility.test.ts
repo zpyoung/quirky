@@ -82,11 +82,11 @@ describe('native chat find visibility', () => {
   })
 
   it('centres a revealed match below the bar only when the bar shares its column', () => {
-    expect(
-      chatFindScrollDelta({ top: 900, bottom: 920, left: 500, right: 540 }, VIEW, BAR)
-    ).toBe(910 - (144 + 700) / 2)
-    expect(
-      chatFindScrollDelta({ top: 900, bottom: 920, left: 20, right: 60 }, VIEW, BAR)
-    ).toBe(910 - (100 + 700) / 2)
+    expect(chatFindScrollDelta({ top: 900, bottom: 920, left: 500, right: 540 }, VIEW, BAR)).toBe(
+      910 - (144 + 700) / 2
+    )
+    expect(chatFindScrollDelta({ top: 900, bottom: 920, left: 20, right: 60 }, VIEW, BAR)).toBe(
+      910 - (100 + 700) / 2
+    )
   })
 })

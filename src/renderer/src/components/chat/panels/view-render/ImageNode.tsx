@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useEffect, useState } from 'react'
 import { asString, type NodeProps } from './view-prop-readers'
 import { useViewRuntime } from './view-runtime'
@@ -46,10 +47,21 @@ export function ImageNode({ props }: { props: NodeProps }) {
 
   return (
     <figure data-view-node="image" className="native-chat-view-figure">
-      {state.kind === 'loading' && <p className="native-chat-view-muted">Loading image…</p>}
+      {state.kind === 'loading' && (
+        <p className="native-chat-view-muted">
+          {translate('components.chat.viewRender.loadingImage', 'Loading image…')}
+        </p>
+      )}
       {state.kind === 'failed' && (
         <p role="alert" className="native-chat-view-error" data-image-error>
-          {`Could not show ${path || 'the image'}: ${state.message}`}
+          {translate(
+            'components.chat.viewRender.imageFailed',
+            'Could not show {{target}}: {{message}}',
+            {
+              target: path || translate('components.chat.viewRender.theImage', 'the image'),
+              message: state.message
+            }
+          )}
         </p>
       )}
       {state.kind === 'ready' && (

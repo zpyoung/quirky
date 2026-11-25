@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import type { AgentSessionConversationCommand } from '../../../../../shared/agent-session-conversation-command'
 import type { AgentSessionSlashCommand } from '../../../../../shared/agent-session-wire'
 
@@ -12,9 +13,13 @@ export type ComposerCommand = {
   argumentHint?: string
 }
 
-const HOST_COMMAND_DESCRIPTIONS: Record<AgentSessionConversationCommand, string> = {
-  clear: 'Start over with an empty context',
-  compact: 'Summarize the conversation to free up context'
+function hostCommandDescription(name: AgentSessionConversationCommand): string {
+  return name === 'clear'
+    ? translate('components.chat.composer.commandClear', 'Start over with an empty context')
+    : translate(
+        'components.chat.composer.commandCompact',
+        'Summarize the conversation to free up context'
+      )
 }
 
 /** Builds the `/` list from what the session controller reports; host commands come first. */
@@ -25,7 +30,7 @@ export function composerCommandsFor(source: {
   const host = (source.conversationCommands ?? []).map((name): ComposerCommand => ({
     name,
     kind: 'host',
-    description: HOST_COMMAND_DESCRIPTIONS[name]
+    description: hostCommandDescription(name)
   }))
   const hostNames = new Set(host.map((command) => command.name))
   const agent = (source.sessionCommands ?? [])
@@ -44,10 +49,27 @@ export type LocalCommandName = 'model' | 'effort' | 'mode' | 'plan' | 'stop'
 
 export type LocalCommand = { name: LocalCommandName; description: string }
 
-export const LOCAL_COMMANDS: readonly LocalCommand[] = [
-  { name: 'model', description: 'Switch model' },
-  { name: 'effort', description: 'Set effort' },
-  { name: 'mode', description: 'Choose permission mode' },
-  { name: 'plan', description: 'Switch to or from plan mode' },
-  { name: 'stop', description: 'Stop the running turn' }
-]
+export function localCommands(): readonly LocalCommand[] {
+  return [
+    {
+      name: 'model',
+      description: translate('components.chat.composer.commandModel', 'Switch model')
+    },
+    {
+      name: 'effort',
+      description: translate('components.chat.composer.commandEffort', 'Set effort')
+    },
+    {
+      name: 'mode',
+      description: translate('components.chat.composer.commandMode', 'Choose permission mode')
+    },
+    {
+      name: 'plan',
+      description: translate('components.chat.composer.commandPlan', 'Switch to or from plan mode')
+    },
+    {
+      name: 'stop',
+      description: translate('components.chat.composer.commandStop', 'Stop the running turn')
+    }
+  ]
+}

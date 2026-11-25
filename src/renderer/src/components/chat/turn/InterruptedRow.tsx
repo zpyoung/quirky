@@ -1,4 +1,5 @@
 import { CircleSlash } from 'lucide-react'
+import { translate } from '@/i18n/i18n'
 import { formatDuration } from './elapsed'
 
 /** Closes a turn the agent was cut off in, such as one running when Quirky quit. */
@@ -12,8 +13,16 @@ export function InterruptedRow({ durationMs }: { durationMs?: number }): React.J
     >
       <CircleSlash className="size-3.5 shrink-0" aria-hidden="true" />
       <span>
-        {after ? `Interrupted after ${after}` : 'Interrupted'}. The turn did not finish. Send a
-        message to continue.
+        {after
+          ? translate(
+              'components.chat.turn.interruptedAfter',
+              'Interrupted after {{duration}}. The turn did not finish. Send a message to continue.',
+              { duration: after }
+            )
+          : translate(
+              'components.chat.turn.interrupted',
+              'Interrupted. The turn did not finish. Send a message to continue.'
+            )}
       </span>
     </div>
   )

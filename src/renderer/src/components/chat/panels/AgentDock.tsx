@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useEffect, useState } from 'react'
 import type { StructuredAgentSubagentRoster } from '../../../../../shared/structured-agent-session-subagent-roster'
 import { dockSummary } from './agent-dock-summary'
@@ -37,19 +38,39 @@ export function AgentDock({ roster, onOpen }: AgentDockProps) {
   }
   const count = summary.running.length
   return (
-    <section className="native-chat-panel-dock" aria-label="Running agents" data-agent-dock>
+    <section
+      className="native-chat-panel-dock"
+      aria-label={translate('components.chat.panels.dockRunningAgents', 'Running agents')}
+      data-agent-dock
+    >
       <div className="native-chat-panel-dock-head">
         <span className="native-chat-panel-dot" aria-hidden="true" />
-        <span className="native-chat-panel-dock-count">{`${count} ${count === 1 ? 'agent' : 'agents'} running`}</span>
+        <span className="native-chat-panel-dock-count">
+          {count === 1
+            ? translate('components.chat.panels.dockAgentRunning', '{{total}} agent running', {
+                total: count
+              })
+            : translate('components.chat.panels.dockAgentsRunning', '{{total}} agents running', {
+                total: count
+              })}
+        </span>
         {summary.failed > 0 && (
-          <span className="native-chat-panel-bad">{`· ${summary.failed} failed`}</span>
+          <span className="native-chat-panel-bad">
+            {translate('components.chat.panels.dockFailed', '· {{total}} failed', {
+              total: summary.failed
+            })}
+          </span>
         )}
         {summary.unverifiable > 0 && (
-          <span className="native-chat-panel-muted">{`· ${summary.unverifiable} not reporting`}</span>
+          <span className="native-chat-panel-muted">
+            {translate('components.chat.panels.dockNotReporting', '· {{total}} not reporting', {
+              total: summary.unverifiable
+            })}
+          </span>
         )}
         {onOpen !== undefined && (
           <button type="button" className="native-chat-panel-dock-open" onClick={onOpen}>
-            Agents
+            {translate('components.chat.panels.dockAgents', 'Agents')}
           </button>
         )}
       </div>

@@ -82,5 +82,26 @@
     "text": "sidebar",
     "dynamic": false,
     "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/chat/markdown/blocks/DataBlocks.tsx",
+    "kind": "jsx-attribute:label",
+    "text": "json",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/chat/markdown/blocks/DataBlocks.tsx",
+    "kind": "jsx-attribute:label",
+    "text": "chart",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/chat/markdown/blocks/MermaidBlock.tsx",
+    "kind": "jsx-attribute:label",
+    "text": "mermaid",
+    "dynamic": false,
+    "count": 1
   }
 ]

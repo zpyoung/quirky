@@ -23,7 +23,7 @@ function run(text: string, plugin: () => (tree: Root) => void): Node {
   const processor = unified().use(remarkParse)
   const tree = processor.parse(text)
   plugin()(tree)
-  // SAFETY: mdast Root and the structural Node used for assertions describe the same tree
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: mdast Root and the structural Node used for assertions describe the same tree
   return tree as unknown as Node
 }
 

@@ -2,15 +2,22 @@ import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { describeToolInput, formatToolInput } from '../../../../../shared/native-chat-tool-summary'
 import { cn } from '@/lib/utils'
+import { translate } from '@/i18n/i18n'
 import type { RenderItemOf } from '../chat-turns'
 import { callLifecycle, summarizeActivity } from './activity-summary'
 
-const STATE_WORDS = {
-  running: 'Running',
-  completed: 'Done',
-  failed: 'Failed',
-  interrupted: 'Interrupted'
-} as const
+function stateWord(state: 'running' | 'completed' | 'failed' | 'interrupted'): string {
+  switch (state) {
+    case 'running':
+      return translate('components.chat.turn.callRunning', 'Running')
+    case 'completed':
+      return translate('components.chat.turn.callDone', 'Done')
+    case 'failed':
+      return translate('components.chat.turn.callFailed', 'Failed')
+    case 'interrupted':
+      return translate('components.chat.turn.callInterrupted', 'Interrupted')
+  }
+}
 
 function CallRow({
   call,
@@ -41,7 +48,7 @@ function CallRow({
               (lifecycle === 'failed' || lifecycle === 'interrupted') && 'bg-destructive'
             )}
             role="img"
-            aria-label={STATE_WORDS[lifecycle]}
+            aria-label={stateWord(lifecycle)}
           />
           <span className="min-w-0 truncate font-mono text-chat-code" title={label}>
             {label}
@@ -71,7 +78,7 @@ export function Activity({
     <details
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
-      aria-label="Tool activity"
+      aria-label={translate('components.chat.turn.toolActivity', 'Tool activity')}
     >
       <summary className="flex cursor-pointer items-center gap-1.5 py-1 text-sm text-chat-foreground-faint">
         <ChevronRight

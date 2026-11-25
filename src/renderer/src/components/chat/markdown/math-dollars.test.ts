@@ -23,7 +23,7 @@ function parse(text: string): Node {
     .use(remarkGfm)
     .use(remarkMath, { singleDollarTextMath: true })
   const tree: Root = processor.parse(text)
-  // SAFETY: mdast Root and the structural Node used for assertions describe the same tree
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: mdast Root and the structural Node used for assertions describe the same tree
   return processor.runSync(tree, { value: text }) as unknown as Node
 }
 

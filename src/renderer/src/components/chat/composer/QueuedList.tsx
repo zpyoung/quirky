@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useState, type KeyboardEvent } from 'react'
 import { CornerDownRight, GripVertical, ListEnd, Pencil, Play, Send, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -73,7 +74,10 @@ export function QueuedList({
     >
       <div className="flex items-center gap-1 py-1 pr-1 pl-2.5 text-xs text-muted-foreground">
         <p className={cn('flex-1 truncate', pause && 'font-medium text-foreground')}>
-          {pause ? 'Paused' : 'Queued'} <span aria-hidden>·</span> {cards.length}
+          {pause
+            ? translate('components.chat.composer.queuePaused', 'Paused')
+            : translate('components.chat.composer.queueQueued', 'Queued')}{' '}
+          <span aria-hidden>·</span> {cards.length}
         </p>
         {pause ? (
           <>
@@ -85,7 +89,7 @@ export function QueuedList({
               onClick={() => void queue.clear()}
             >
               <Trash2 />
-              Clear all
+              {translate('components.chat.composer.queueClearAll', 'Clear all')}
             </Button>
             <Button
               type="button"
@@ -95,14 +99,14 @@ export function QueuedList({
               onClick={() => void queue.resume()}
             >
               <Play />
-              Resume
+              {translate('components.chat.composer.queueResume', 'Resume')}
             </Button>
           </>
         ) : null}
       </div>
       <ul
         className="scrollbar-sleek max-h-40 divide-y divide-border overflow-y-auto"
-        aria-label="Queued messages"
+        aria-label={translate('components.chat.composer.queuedMessages', 'Queued messages')}
       >
         {cards.map((card, index) => {
           const pending = queue.pending(card.messageId)
@@ -151,8 +155,14 @@ export function QueuedList({
                     <button
                       type="button"
                       className="cursor-grab text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                      aria-label="Reorder queued message (drag, or Up and Down arrows)"
-                      title="Drag to reorder"
+                      aria-label={translate(
+                        'components.chat.composer.queueReorderLabel',
+                        'Reorder queued message (drag, or Up and Down arrows)'
+                      )}
+                      title={translate(
+                        'components.chat.composer.queueDragToReorder',
+                        'Drag to reorder'
+                      )}
                       onKeyDown={(event) => onHandleKey(event, card.messageId, index)}
                     >
                       <GripVertical className="size-3.5" aria-hidden />
@@ -162,7 +172,14 @@ export function QueuedList({
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate" title={card.text}>
-                      {card.text || (card.images ? `${card.images.length} image(s)` : '')}
+                      {card.text ||
+                        (card.images
+                          ? translate(
+                              'components.chat.composer.queueImageCount',
+                              '{{total}} image(s)',
+                              { total: card.images.length }
+                            )
+                          : '')}
                     </p>
                     {caption ? (
                       <p
@@ -186,7 +203,9 @@ export function QueuedList({
                           onClick={() => void queue.steer(card.messageId)}
                         >
                           {steers ? <CornerDownRight /> : <Send />}
-                          {steers && working ? 'Steer now' : 'Send now'}
+                          {steers && working
+                            ? translate('components.chat.composer.queueSteerNow', 'Steer now')
+                            : translate('components.chat.composer.queueSendNow', 'Send now')}
                         </Button>
                       )}
                       {queue.editCapable && !card.command ? (
@@ -194,7 +213,10 @@ export function QueuedList({
                           type="button"
                           variant="ghost"
                           size="icon-xs"
-                          aria-label="Edit queued message"
+                          aria-label={translate(
+                            'components.chat.composer.queueEditMessage',
+                            'Edit queued message'
+                          )}
                           disabled={busy || queue.editor !== undefined}
                           onClick={() => void queue.edit(card.messageId)}
                         >
@@ -205,7 +227,10 @@ export function QueuedList({
                         type="button"
                         variant="ghost"
                         size="icon-xs"
-                        aria-label="Delete queued message"
+                        aria-label={translate(
+                          'components.chat.composer.queueDeleteMessage',
+                          'Delete queued message'
+                        )}
                         disabled={busy}
                         onClick={() => void queue.remove(card.messageId)}
                       >
@@ -233,7 +258,10 @@ function QueuedEdit({
       <Textarea
         autoFocus
         rows={2}
-        aria-label="Edit queued message"
+        aria-label={translate(
+          'components.chat.composer.queueEditMessageField',
+          'Edit queued message'
+        )}
         value={editor.text}
         readOnly={editor.acquiring}
         onChange={(event) => editor.change(event.target.value)}
@@ -246,7 +274,7 @@ function QueuedEdit({
       />
       <div className="flex justify-end gap-1">
         <Button type="button" variant="ghost" size="xs" onClick={editor.cancel}>
-          Cancel
+          {translate('components.chat.composer.queueEditCancel', 'Cancel')}
         </Button>
         <Button
           type="button"
@@ -254,7 +282,7 @@ function QueuedEdit({
           disabled={!editor.canSave || editor.saving}
           onClick={editor.save}
         >
-          Save
+          {translate('components.chat.composer.queueEditSave', 'Save')}
         </Button>
       </div>
     </div>

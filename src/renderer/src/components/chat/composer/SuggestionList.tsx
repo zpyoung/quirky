@@ -1,6 +1,6 @@
 import { File } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { LOCAL_COMMANDS, type ComposerCommand, type LocalCommandName } from './composer-commands'
+import { localCommands, type ComposerCommand, type LocalCommandName } from './composer-commands'
 
 /** One pickable row of the list; `source` says what picking it does. */
 export type Suggestion =
@@ -58,18 +58,18 @@ export function slashSuggestions(
 ): Suggestion[] {
   const wanted = query.toLowerCase()
   const matches = (name: string) => name.toLowerCase().includes(wanted)
-  const local = LOCAL_COMMANDS.filter(
-    (command) => available.has(command.name) && matches(command.name)
-  ).map((command): Suggestion => ({
-    id: `local:${command.name}`,
-    group: 'Composer',
-    label: `/${command.name}`,
-    detail: command.description,
-    tag: 'acts now',
-    source: 'local',
-    command: command.name
-  }))
-  const localNames = new Set<string>(LOCAL_COMMANDS.map((command) => command.name))
+  const local = localCommands()
+    .filter((command) => available.has(command.name) && matches(command.name))
+    .map((command): Suggestion => ({
+      id: `local:${command.name}`,
+      group: 'Composer',
+      label: `/${command.name}`,
+      detail: command.description,
+      tag: 'acts now',
+      source: 'local',
+      command: command.name
+    }))
+  const localNames = new Set<string>(localCommands().map((command) => command.name))
   const offered = commands.filter(
     (command) => matches(command.name) && !localNames.has(command.name)
   )

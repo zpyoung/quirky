@@ -1,7 +1,17 @@
 import type { RenderItemOf } from '../chat-turns'
 import { Card } from './Card'
+import { translate } from '@/i18n/i18n'
 
-const STATE_WORDS = { running: 'Running', passed: 'Passed', failed: 'Failed' } as const
+function stateWord(state: 'running' | 'passed' | 'failed'): string {
+  switch (state) {
+    case 'running':
+      return translate('components.chat.cards.testStateRunning', 'Running')
+    case 'passed':
+      return translate('components.chat.cards.testStatePassed', 'Passed')
+    case 'failed':
+      return translate('components.chat.cards.testStateFailed', 'Failed')
+  }
+}
 
 /** A test run: the command, then passed, failed and skipped counts, with the output tail on failure. */
 export function TestResults({ item }: { item: RenderItemOf<'test-result'> }): React.JSX.Element {
@@ -11,8 +21,8 @@ export function TestResults({ item }: { item: RenderItemOf<'test-result'> }): Re
   const failing = state === 'failed' || (failed ?? 0) > 0
   return (
     <Card
-      label="Tests"
-      ariaLabel={`Tests: ${command}`}
+      label={translate('components.chat.cards.testsLabel', 'Tests')}
+      ariaLabel={translate('components.chat.cards.testsAria', 'Tests: {{command}}', { command })}
       tone={failing ? 'failing' : 'neutral'}
       header={
         <>
@@ -20,7 +30,7 @@ export function TestResults({ item }: { item: RenderItemOf<'test-result'> }): Re
             {command}
           </span>
           {state !== 'passed' && (
-            <span className="shrink-0 text-xs text-muted-foreground">{STATE_WORDS[state]}</span>
+            <span className="shrink-0 text-xs text-muted-foreground">{stateWord(state)}</span>
           )}
         </>
       }
@@ -28,19 +38,35 @@ export function TestResults({ item }: { item: RenderItemOf<'test-result'> }): Re
       {hasCounts ? (
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           {passed !== undefined && (
-            <span className="text-base font-semibold text-chat-diff-added">{`${passed} passed`}</span>
+            <span className="text-base font-semibold text-chat-diff-added">
+              {translate('components.chat.cards.testsPassed', '{{count}} passed', {
+                count: passed
+              })}
+            </span>
           )}
           {failed !== undefined && failed > 0 && (
-            <span className="text-base font-semibold text-chat-diff-removed">{`${failed} failed`}</span>
+            <span className="text-base font-semibold text-chat-diff-removed">
+              {translate('components.chat.cards.testsFailed', '{{count}} failed', {
+                count: failed
+              })}
+            </span>
           )}
           {skipped !== undefined && skipped > 0 && (
-            <span className="text-muted-foreground">{`${skipped} skipped`}</span>
+            <span className="text-muted-foreground">
+              {translate('components.chat.cards.testsSkipped', '{{count}} skipped', {
+                count: skipped
+              })}
+            </span>
           )}
-          <span className="text-muted-foreground">{`${total} total`}</span>
+          <span className="text-muted-foreground">
+            {translate('components.chat.cards.testsTotal', '{{count}} total', { count: total })}
+          </span>
         </div>
       ) : (
         <span className="text-muted-foreground">
-          {state === 'running' ? 'Running tests' : STATE_WORDS[state]}
+          {state === 'running'
+            ? translate('components.chat.cards.testsRunning', 'Running tests')
+            : stateWord(state)}
         </span>
       )}
       {tail && failing && (

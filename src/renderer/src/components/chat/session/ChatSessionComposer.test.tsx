@@ -51,7 +51,8 @@ function baseController(overrides: Record<string, unknown> = {}) {
     setStructuredOption: vi.fn(),
     acceptsImages: true,
     canStop: false,
-    send: vi.fn(() => true),
+    send: vi.fn((): boolean | 'queued' => true),
+    queuedMessages: { steerNewest: vi.fn(() => true) },
     runConversationCommand: vi.fn(async () => ({ accepted: true, error: null })),
     ...overrides
   }
@@ -136,6 +137,36 @@ describe('ChatSessionComposer', () => {
     expect(sendThroughLaunch).toHaveBeenCalledWith('look', true, expect.any(Function))
     expect(controller.send).toHaveBeenCalledWith('look', attachments)
     expect(result).toBe('queued')
+  })
+
+  it('steers the newest queued card into the running turn after queueing a steer', async () => {
+    const controller = baseController({ send: vi.fn(() => 'queued') })
+    renderComposer(controller)
+
+    await mocks.composer.current?.onSubmit('actually, use bun', [], { intent: 'steer' })
+
+    expect(controller.send).toHaveBeenCalledWith('actually, use bun', [])
+    expect(controller.queuedMessages.steerNewest).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats a steer on an idle chat as an ordinary send', async () => {
+    const controller = baseController({ send: vi.fn(() => true) })
+    renderComposer(controller)
+
+    await mocks.composer.current?.onSubmit('hello', [], { intent: 'steer' })
+
+    expect(controller.send).toHaveBeenCalledWith('hello', [])
+    expect(controller.queuedMessages.steerNewest).not.toHaveBeenCalled()
+  })
+
+  it('does not steer a plain send that queued', async () => {
+    const controller = baseController({ send: vi.fn(() => 'queued') })
+    renderComposer(controller)
+
+    await mocks.composer.current?.onSubmit('later', [], { intent: 'send' })
+    await mocks.composer.current?.onSubmit('later', [])
+
+    expect(controller.queuedMessages.steerNewest).not.toHaveBeenCalled()
   })
 
   it('refuses a send while the host may take no turn, keeping the draft', async () => {

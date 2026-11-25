@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { createCodePlugin } from '@streamdown/code'
@@ -33,7 +34,7 @@ type CodeLanguage = Parameters<typeof codePlugin.supportsLanguage>[0]
 
 /** Narrows a fence's language to the names the highlighter accepts; callers check `supportsLanguage` first. */
 function highlighterLanguage(language: string): CodeLanguage {
-  // SAFETY: only reached for names `codePlugin.supportsLanguage` accepted
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only reached for names `codePlugin.supportsLanguage` accepted
   return language as CodeLanguage
 }
 
@@ -145,7 +146,9 @@ export function CopyButton({ code }: { code: string }) {
       data-streamdown="code-block-copy-button"
       onClick={() => void copy()}
     >
-      {copied ? 'Copied' : 'Copy'}
+      {copied
+        ? translate('components.chat.markdown.copied', 'Copied')
+        : translate('components.chat.markdown.copy', 'Copy')}
     </Button>
   )
 }
@@ -259,7 +262,11 @@ export function CodeBlock({ code, language, meta, isIncomplete, lineNodes }: Cod
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
         >
-          {expanded ? 'Show less' : `Show all ${lines.length} lines`}
+          {expanded
+            ? translate('components.chat.markdown.showLess', 'Show less')
+            : translate('components.chat.markdown.showAllLines', 'Show all {{count}} lines', {
+                count: lines.length
+              })}
         </Button>
       ) : null}
     </BlockFrame>

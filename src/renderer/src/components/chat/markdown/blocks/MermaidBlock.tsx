@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useEffect, useId, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { Button } from '@/components/ui/button'
@@ -180,7 +181,11 @@ export function MermaidFence({ code, isIncomplete, language, meta }: FenceProps)
     return (
       <>
         <RenderError
-          message={`Couldn't draw this diagram: ${outcome.message}. Showing the source.`}
+          message={translate(
+            'components.chat.markdown.diagramFailed',
+            "Couldn't draw this diagram: {{message}}. Showing the source.",
+            { message: outcome.message }
+          )}
         />
         <CodeBlock code={code} language={language} meta={meta} isIncomplete={false} />
       </>
@@ -200,7 +205,9 @@ export function MermaidFence({ code, isIncomplete, language, meta }: FenceProps)
             aria-pressed={showSource}
             onClick={() => setShowSource((value) => !value)}
           >
-            {showSource ? 'Diagram' : 'Source'}
+            {showSource
+              ? translate('components.chat.markdown.diagramToggle', 'Diagram')
+              : translate('components.chat.markdown.diagramSourceToggle', 'Source')}
           </Button>
           <CopyButton code={code} />
         </>

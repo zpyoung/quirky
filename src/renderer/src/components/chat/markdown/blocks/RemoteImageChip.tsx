@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useContext } from 'react'
 import { Globe } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -30,7 +31,11 @@ export function RemoteImageChip({ src, alt }: { src: string; alt?: string }) {
         onClick={() => runtime.current.onOpenLink(url)}
       >
         <Globe aria-hidden="true" />
-        <span>image: {shortLabel(url)}</span>
+        <span>
+          {translate('components.chat.markdown.remoteImage', 'image: {{label}}', {
+            label: shortLabel(url)
+          })}
+        </span>
       </button>
     </Badge>
   )

@@ -29,8 +29,8 @@ export function remarkMark() {
       }
       if (cursor < node.value.length) {
         parts.push({ type: 'text', value: node.value.slice(cursor) })
-        // SAFETY: the parent of a text node holds phrasing content
       }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the parent of a text node holds phrasing content
       ;(parent.children as PhrasingContent[]).splice(index, 1, ...parts)
       return [SKIP, index + parts.length]
     })

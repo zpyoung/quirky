@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store'
+import { translate } from '@/i18n/i18n'
 import { useStructuredAgentSessionHostCapability } from '@/runtime/structured-agent-session-host-capability'
 import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-label'
 import { AGENT_SESSION_V1_CHAT_METHODS_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-runtime-capabilities'
@@ -10,6 +11,7 @@ import type {
   StructuredPromptItem,
   useStructuredAgentSession
 } from '../native-chat/use-structured-agent-session'
+import type { WorkspaceImage } from './panels/view-render/view-runtime'
 import { ChatHeader, type ChatHeaderStatus } from './header/ChatHeader'
 import { projectChatTurns } from './chat-turns'
 import { ChatTurnEnvContext, type ChatTurnEnv } from './turn/chat-turn-env'
@@ -35,6 +37,9 @@ export type ChatViewProps = {
   onOpenPlan?(version: number): void
   onOpenVisual?(viewId: string): void
   onForked?(sessionId: string): void
+  /** The workspace folder and image reader inline visuals use for their workspace images. */
+  workspaceRoot?: string | null
+  readWorkspaceImage?: (relativePath: string) => Promise<WorkspaceImage>
   /** The agent-session tab showing this chat. It names the workspace links and files resolve in
    *  and the tab whose title Rename edits; without it both are off and the title is read-only. */
   tabId?: string
@@ -74,6 +79,8 @@ export function ChatView({
   onOpenPlan,
   onOpenVisual,
   onForked,
+  workspaceRoot,
+  readWorkspaceImage,
   tabId
 }: ChatViewProps): React.JSX.Element {
   const { journalItems, prompts, send, respond, cancel, turnId, rewind, subagentRoster } =
@@ -106,6 +113,8 @@ export function ChatView({
       onOpenPlan,
       onOpenVisual,
       onSendComments: (text) => send(text) !== false,
+      workspaceRoot,
+      readWorkspaceImage,
       hostServesV1ChatMethods
     }),
     [
@@ -117,11 +126,13 @@ export function ChatView({
       onOpenVisual,
       respond,
       rewind.surface,
+      readWorkspaceImage,
       send,
       sessionId,
       subagentRoster,
       target,
-      turnId
+      turnId,
+      workspaceRoot
     ]
   )
 
@@ -217,13 +228,24 @@ export function ChatView({
                         disabled={controller.loadingOlder}
                         onClick={loadOlder}
                       >
-                        {controller.loadingOlder ? 'Loading older messages' : 'Load older messages'}
+                        {controller.loadingOlder
+                          ? translate(
+                              'components.chat.view.loadingOlderMessages',
+                              'Loading older messages'
+                            )
+                          : translate(
+                              'components.chat.view.loadOlderMessages',
+                              'Load older messages'
+                            )}
                       </Button>
                     </div>
                   )}
                   {controller.status === 'error' && (
                     <p role="alert" className="text-sm text-destructive">
-                      Could not load this chat.
+                      {translate(
+                        'components.chat.view.couldNotLoadChat',
+                        'Could not load this chat.'
+                      )}
                     </p>
                   )}
                   <ChatTurnList turns={turns} />

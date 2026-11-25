@@ -1,4 +1,5 @@
 import type { RenderItemOf } from '../chat-turns'
+import { translate } from '@/i18n/i18n'
 import { Card, Delta } from './Card'
 import { countPatchLines } from './patch-lines'
 
@@ -8,8 +9,8 @@ export function FileChange({ item }: { item: RenderItemOf<'diff'> }): React.JSX.
   const counts = countPatchLines(patch.head, patch.truncated)
   return (
     <Card
-      label="Edited"
-      ariaLabel={`Edited ${path}`}
+      label={translate('components.chat.cards.editedLabel', 'Edited')}
+      ariaLabel={translate('components.chat.cards.editedAria', 'Edited {{path}}', { path })}
       header={
         <>
           <span className="min-w-0 truncate font-mono text-chat-code" title={path}>

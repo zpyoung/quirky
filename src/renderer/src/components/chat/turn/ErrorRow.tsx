@@ -1,5 +1,6 @@
 import { TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { translate } from '@/i18n/i18n'
 import type { RenderItemOf } from '../chat-turns'
 import { useChatErrorActions } from './chat-error-actions'
 
@@ -21,12 +22,12 @@ export function ErrorRow({ item }: { item: RenderItemOf<'status'> }): React.JSX.
         <div className="flex flex-wrap gap-2 pl-6">
           {onRestart && (
             <Button type="button" variant="outline" size="xs" onClick={onRestart}>
-              Restart
+              {translate('components.chat.turn.errorRestart', 'Restart')}
             </Button>
           )}
           {onOpenInTerminal && (
             <Button type="button" variant="outline" size="xs" onClick={onOpenInTerminal}>
-              Open in terminal
+              {translate('components.chat.turn.errorOpenInTerminal', 'Open in terminal')}
             </Button>
           )}
         </div>

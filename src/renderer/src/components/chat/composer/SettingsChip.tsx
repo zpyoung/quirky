@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import { Check, ChevronDown, ClipboardList } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -68,7 +69,11 @@ export function SettingsChip({
           type="button"
           variant="ghost"
           size="xs"
-          aria-label={`Session settings: ${settingsSummary(snapshot)}`}
+          aria-label={translate(
+            'components.chat.composer.sessionSettings',
+            'Session settings: {{summary}}',
+            { summary: settingsSummary(snapshot) }
+          )}
           className="max-w-56 min-w-0 shrink"
         >
           <span className="truncate">{settingsSummary(snapshot)}</span>
@@ -86,8 +91,14 @@ export function SettingsChip({
               onClick={onTogglePlan}
             >
               <ClipboardList className="size-3.5 shrink-0" aria-hidden />
-              <span className="flex-1">Plan mode</span>
-              <span className="text-xs text-muted-foreground">{planOn ? 'On' : 'Off'}</span>
+              <span className="flex-1">
+                {translate('components.chat.composer.planMode', 'Plan mode')}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {planOn
+                  ? translate('components.chat.composer.planModeOn', 'On')
+                  : translate('components.chat.composer.planModeOff', 'Off')}
+              </span>
             </button>
           ) : null}
           {descriptors.map((descriptor) => (

@@ -1,6 +1,7 @@
 import { ChatMarkdown } from '../../markdown'
 import { asItems, asString, asStrings, oneOf, type NodeProps } from './view-prop-readers'
 import { useViewRuntime } from './view-runtime'
+import { positionKeyed } from '../../position-keyed'
 
 const TONES = ['neutral', 'good', 'warn', 'bad'] as const
 const CALLOUT_TONES = ['info', 'good', 'warn', 'bad'] as const
@@ -40,8 +41,8 @@ export function StatNode({ props }: { props: NodeProps }) {
 export function KeyValueNode({ props }: { props: NodeProps }) {
   return (
     <dl data-view-node="kv" className="native-chat-view-kv">
-      {asItems(props.items).map((item, index) => (
-        <div key={index} className="native-chat-view-contents">
+      {positionKeyed(asItems(props.items)).map(({ key, item }) => (
+        <div key={key} className="native-chat-view-contents">
           <dt className="native-chat-view-muted">{asString(item.key)}</dt>
           <dd>{asString(item.value)}</dd>
         </div>
@@ -58,18 +59,18 @@ export function TableNode({ props }: { props: NodeProps }) {
       <table className="native-chat-view-table">
         <thead>
           <tr>
-            {columns.map((column, index) => (
-              <th key={index} scope="col">
+            {positionKeyed(columns).map(({ key, item: column }) => (
+              <th key={key} scope="col">
                 {column}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {row.map((cell: unknown, cellIndex: number) => (
-                <td key={cellIndex}>{asString(cell)}</td>
+          {positionKeyed(rows).map(({ key: rowKey, item: row }) => (
+            <tr key={rowKey}>
+              {positionKeyed<unknown>(row).map(({ key, item: cell }) => (
+                <td key={key}>{asString(cell)}</td>
               ))}
             </tr>
           ))}
@@ -82,11 +83,11 @@ export function TableNode({ props }: { props: NodeProps }) {
 export function StatusListNode({ props }: { props: NodeProps }) {
   return (
     <ul data-view-node="status-list" className="native-chat-view-list">
-      {asItems(props.items).map((item, index) => {
+      {positionKeyed(asItems(props.items)).map(({ key, item }) => {
         const state = oneOf(item.state, STATUS_STATES, 'pending')
         const detail = asString(item.detail)
         return (
-          <li key={index} className="native-chat-view-row">
+          <li key={key} className="native-chat-view-row">
             <span
               className="native-chat-view-mark"
               data-state={state}
@@ -107,10 +108,10 @@ export function StatusListNode({ props }: { props: NodeProps }) {
 export function StepsNode({ props }: { props: NodeProps }) {
   return (
     <ol data-view-node="steps" className="native-chat-view-list">
-      {asItems(props.items).map((item, index) => {
+      {positionKeyed(asItems(props.items)).map(({ key, item }) => {
         const state = oneOf(item.state, STEP_STATES, 'pending')
         return (
-          <li key={index} className="native-chat-view-row" data-state={state}>
+          <li key={key} className="native-chat-view-row" data-state={state}>
             <span className="native-chat-view-mark" data-state={state} aria-hidden="true">
               {STEP_GLYPH[state]}
             </span>

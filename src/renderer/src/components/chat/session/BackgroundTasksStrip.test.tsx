@@ -17,19 +17,10 @@ afterEach(() => {
 /** The strip's disclosure is parent-owned, because the strip unmounts whenever
  *  live work momentarily drops to nothing; this stands in for that owner. */
 function DisclosureHost(
-  props: Omit<
-    Parameters<typeof BackgroundTasksStrip>[0],
-    'expanded' | 'onExpandedChange'
-  >
+  props: Omit<Parameters<typeof BackgroundTasksStrip>[0], 'expanded' | 'onExpandedChange'>
 ): React.JSX.Element {
   const [expanded, setExpanded] = useState(false)
-  return (
-    <BackgroundTasksStrip
-      {...props}
-      expanded={expanded}
-      onExpandedChange={setExpanded}
-    />
-  )
+  return <BackgroundTasksStrip {...props} expanded={expanded} onExpandedChange={setExpanded} />
 }
 
 const TASKS: AgentSessionBackgroundTask[] = [

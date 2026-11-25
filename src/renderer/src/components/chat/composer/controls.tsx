@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { ArrowUp, Paperclip, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -15,8 +16,11 @@ export function AttachButton({
       type="button"
       variant="ghost"
       size="icon-xs"
-      aria-label="Attach files"
-      title={reason ?? 'Attach files or images'}
+      aria-label={translate('components.chat.composer.attachFiles', 'Attach files')}
+      title={
+        reason ??
+        translate('components.chat.composer.attachFilesOrImages', 'Attach files or images')
+      }
       disabled={disabled}
       onClick={onAttach}
     >
@@ -31,8 +35,8 @@ export function StopButton({ onStop }: { onStop: () => void }): React.JSX.Elemen
       type="button"
       variant="destructive"
       size="icon-xs"
-      aria-label="Stop"
-      title="Stop (Esc)"
+      aria-label={translate('components.chat.composer.stop', 'Stop')}
+      title={translate('components.chat.composer.stopEsc', 'Stop (Esc)')}
       onClick={onStop}
     >
       <Square />
@@ -53,7 +57,7 @@ export function SendButton({
     <Button
       type="button"
       size="icon-xs"
-      aria-label="Send"
+      aria-label={translate('components.chat.composer.send', 'Send')}
       title={title}
       disabled={disabled}
       onClick={onSend}

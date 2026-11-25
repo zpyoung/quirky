@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import type { ReactNode } from 'react'
 import type { ViewNode } from '../../../../../../shared/view-spec/view-spec-types'
 import { BarChartNode, LineChartNode } from './ChartNodes'
@@ -29,6 +30,7 @@ import {
   PlotNode,
   TimelineNode
 } from './VisualNodes'
+import { positionKeyed } from '../../position-keyed'
 
 function HtmlNode({ props }: { props: NodeProps }) {
   const { viewId } = useViewRuntime()
@@ -37,7 +39,7 @@ function HtmlNode({ props }: { props: NodeProps }) {
       html={asString(props.html)}
       interactive={props.interactive === true}
       height={asNumber(props.height)}
-      title={`Visual ${viewId}`}
+      title={translate('components.chat.viewRender.visualTitle', 'Visual {{viewId}}', { viewId })}
     />
   )
 }
@@ -103,8 +105,8 @@ function drawNode(node: ViewNode, props: NodeProps, children: ReactNode[]): Reac
 
 /** Draws one catalog node and its children as React elements. */
 export function ViewNodeRenderer({ node }: { node: ViewNode }) {
-  const children = (node.children ?? []).map((child, index) => (
-    <ViewNodeRenderer key={index} node={child} />
+  const children = positionKeyed(node.children ?? []).map(({ key, item: child }) => (
+    <ViewNodeRenderer key={key} node={child} />
   ))
   return drawNode(node, node.props ?? {}, children)
 }

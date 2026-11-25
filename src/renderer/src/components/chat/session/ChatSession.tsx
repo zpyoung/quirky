@@ -43,6 +43,7 @@ import { ChatView } from '../ChatView'
 import { AgentDock } from '../panels/AgentDock'
 import { PlanPanel } from '../panels/PlanPanel'
 import { VisualPanel } from '../panels/VisualPanel'
+import { ChatErrorActionsProvider } from '../turn/chat-error-actions'
 import { useChatMarkdownWiring } from '../turn/use-chat-markdown-wiring'
 import type { ComposerHandle } from '../composer/composer-types'
 import { BackgroundTasksPanel } from './BackgroundTasksPanel'
@@ -50,6 +51,7 @@ import { ChatFindBar } from './ChatFindBar'
 import { chatFindGeometry, chatFindScrollDelta } from './chat-find-visibility'
 import { ChatSessionComposer } from './ChatSessionComposer'
 import { useChatFind } from './use-chat-find'
+import { useChatSessionErrorActions } from './use-chat-session-error-actions'
 import { useChatSplitShortcut } from './use-chat-split-shortcut'
 import { workspaceImageReaderFor } from './workspace-image-reading'
 
@@ -240,6 +242,15 @@ export function ChatSession(props: ChatSessionProps): React.JSX.Element {
     [send, sendThroughLaunch]
   )
 
+  const errorActions = useChatSessionErrorActions({
+    tabId,
+    sessionId,
+    agent,
+    target,
+    ownerWorktreeId,
+    retryLaunch: provisionalLaunch.lifecycle === 'failed' ? provisionalLaunch.retry : undefined
+  })
+
   const onForked = useCallback(
     (forkedSessionId: string) => {
       if (ownerWorktreeId === null || !isTuiAgent(agent)) {
@@ -295,58 +306,62 @@ export function ChatSession(props: ChatSessionProps): React.JSX.Element {
       }}
       className="flex h-full min-h-0 w-full flex-col focus:outline-none"
     >
-      <ChatView
-        controller={controller}
-        sessionId={sessionId}
-        agent={agent}
-        target={target}
-        tabId={tabId}
-        onOpenPlan={onOpenPlan}
-        onOpenVisual={onOpenVisual}
-        onForked={onForked}
-        planPanel={planPanel}
-        visualPanel={visualPanel}
-        dock={<AgentDock roster={controller.subagentRoster} />}
-        backgroundTasks={
-          <BackgroundTasksPanel
-            sessionId={sessionId}
-            paneKey={paneKey}
-            isVisible={isVisible}
-            backgroundTasks={controller.backgroundTasks}
-            stopBackgroundTask={controller.stopBackgroundTask}
-          />
-        }
-        findBar={find.isOpen ? <ChatFindBar find={find} isVisible={isVisible} /> : undefined}
-        composer={
-          readFailedFinally ? undefined : (
-            <>
-              {composerReady ? (
-                <NativeChatInstallSlot slot={install.slot} agentLabel={agentLabel} />
-              ) : null}
-              <ChatSessionComposer
-                ref={composerRef}
-                controller={controller}
-                sessionId={sessionId}
-                agent={agent}
-                target={target}
-                tabId={tabId}
-                paneKey={paneKey}
-                worktreeId={ownerWorktreeId ?? undefined}
-                queue={queue}
-                sendThroughLaunch={provisionalLaunch.sendThroughLaunch}
-                starting={provisionalLaunch.starting}
-                transportEnabled={provisionalLaunch.transportEnabled}
-                sendBlockedReason={hostPermission.sendBlockedReason ?? install.sendBlockedReason}
-                unavailableHint={install.unavailableHint}
-                working={stopControls.composer.isWorking}
-                onStop={stopControls.composer.onStop}
-                notices={notices}
-                onError={reportComposerError}
-              />
-            </>
-          )
-        }
-      />
+      <ChatErrorActionsProvider actions={errorActions}>
+        <ChatView
+          controller={controller}
+          sessionId={sessionId}
+          agent={agent}
+          target={target}
+          tabId={tabId}
+          onOpenPlan={onOpenPlan}
+          onOpenVisual={onOpenVisual}
+          onForked={onForked}
+          workspaceRoot={imageRuntimeContext?.worktreePath ?? null}
+          {...(readWorkspaceImage ? { readWorkspaceImage } : {})}
+          planPanel={planPanel}
+          visualPanel={visualPanel}
+          dock={<AgentDock roster={controller.subagentRoster} />}
+          backgroundTasks={
+            <BackgroundTasksPanel
+              sessionId={sessionId}
+              paneKey={paneKey}
+              isVisible={isVisible}
+              backgroundTasks={controller.backgroundTasks}
+              stopBackgroundTask={controller.stopBackgroundTask}
+            />
+          }
+          findBar={find.isOpen ? <ChatFindBar find={find} isVisible={isVisible} /> : undefined}
+          composer={
+            readFailedFinally ? undefined : (
+              <>
+                {composerReady ? (
+                  <NativeChatInstallSlot slot={install.slot} agentLabel={agentLabel} />
+                ) : null}
+                <ChatSessionComposer
+                  ref={composerRef}
+                  controller={controller}
+                  sessionId={sessionId}
+                  agent={agent}
+                  target={target}
+                  tabId={tabId}
+                  paneKey={paneKey}
+                  worktreeId={ownerWorktreeId ?? undefined}
+                  queue={queue}
+                  sendThroughLaunch={provisionalLaunch.sendThroughLaunch}
+                  starting={provisionalLaunch.starting}
+                  transportEnabled={provisionalLaunch.transportEnabled}
+                  sendBlockedReason={hostPermission.sendBlockedReason ?? install.sendBlockedReason}
+                  unavailableHint={install.unavailableHint}
+                  working={stopControls.composer.isWorking}
+                  onStop={stopControls.composer.onStop}
+                  notices={notices}
+                  onError={reportComposerError}
+                />
+              </>
+            )
+          }
+        />
+      </ChatErrorActionsProvider>
     </div>
   )
 }

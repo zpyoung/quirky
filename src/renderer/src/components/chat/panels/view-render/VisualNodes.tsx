@@ -1,4 +1,6 @@
+import { translate } from '@/i18n/i18n'
 import { asItems, asNumber, asString, asStrings, oneOf, type NodeProps } from './view-prop-readers'
+import { positionKeyed } from '../../position-keyed'
 
 const TONES = ['neutral', 'good', 'warn', 'bad'] as const
 const FILE_STATUSES = ['added', 'modified', 'deleted', 'renamed', 'touched'] as const
@@ -37,11 +39,11 @@ export function TimelineNode({ props }: { props: NodeProps }) {
         <span>{items[0]?.start}</span>
         <span>{last === undefined ? '' : last.end || last.start}</span>
       </div>
-      {items.map((item, index) => {
+      {positionKeyed(items).map(({ key, item }) => {
         const width = Math.max(2, at(item.to) - at(item.from))
         const left = Math.min(at(item.from), 100 - width)
         return (
-          <div key={index} className="native-chat-view-timeline-row">
+          <div key={key} className="native-chat-view-timeline-row">
             <span>{item.label}</span>
             <div aria-hidden="true" className="native-chat-view-timeline-track">
               <div
@@ -104,22 +106,22 @@ export function MatrixNode({ props }: { props: NodeProps }) {
         <thead>
           <tr>
             <td />
-            {columns.map((column, index) => (
-              <th key={index} scope="col">
+            {positionKeyed(columns).map(({ key, item: column }) => (
+              <th key={key} scope="col">
                 {column}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, rowIndex) => {
+          {positionKeyed(rows).map(({ key: rowKey, item: row }) => {
             const cells = Array.isArray(row.cells) ? row.cells : []
             const highlight = asStrings(row.highlight)
             return (
-              <tr key={rowIndex}>
+              <tr key={rowKey}>
                 <th scope="row">{asString(row.label)}</th>
-                {columns.map((column, columnIndex) => (
-                  <td key={columnIndex} data-highlight={highlight.includes(column) || undefined}>
+                {positionKeyed(columns).map(({ key, item: column }, columnIndex) => (
+                  <td key={key} data-highlight={highlight.includes(column) || undefined}>
                     {asString(cells[columnIndex])}
                   </td>
                 ))}
@@ -155,11 +157,11 @@ export function AnnotatedCodeNode({ props }: { props: NodeProps }) {
       data-language={language || undefined}
       className="native-chat-view-code"
     >
-      {lines.map((line, index) => {
+      {positionKeyed(lines).map(({ key, item: line }, index) => {
         const number = index + 1
         const noted = notes.some((note) => number >= note.range[0] && number <= note.range[1])
         return (
-          <div key={index}>
+          <div key={key}>
             <div className="native-chat-view-code-line" data-noted={noted || undefined}>
               <span
                 aria-hidden="true"
@@ -169,13 +171,13 @@ export function AnnotatedCodeNode({ props }: { props: NodeProps }) {
               </span>
               <code>{line === '' ? ' ' : line}</code>
             </div>
-            {notes
-              .filter((note) => note.range[1] === number)
-              .map((note, noteIndex) => (
-                <div key={noteIndex} className="native-chat-view-muted native-chat-view-code-note">
+            {positionKeyed(notes.filter((note) => note.range[1] === number)).map(
+              ({ key: noteKey, item: note }) => (
+                <div key={noteKey} className="native-chat-view-muted native-chat-view-code-note">
                   {note.text}
                 </div>
-              ))}
+              )
+            )}
           </div>
         )
       })}
@@ -186,13 +188,13 @@ export function AnnotatedCodeNode({ props }: { props: NodeProps }) {
 export function FileMapNode({ props }: { props: NodeProps }) {
   return (
     <ul data-view-node="file-map" className="native-chat-view-list native-chat-view-tight">
-      {asItems(props.entries).map((entry, index) => {
+      {positionKeyed(asItems(props.entries)).map(({ key, item: entry }) => {
         const path = asString(entry.path)
         const status = oneOf(entry.status, FILE_STATUSES, 'touched')
         const slash = path.lastIndexOf('/') + 1
         const note = asString(entry.note)
         return (
-          <li key={index} className="native-chat-view-row native-chat-view-nowrap">
+          <li key={key} className="native-chat-view-row native-chat-view-nowrap">
             <span
               className="native-chat-view-mono native-chat-view-file-status"
               data-status={status}
@@ -228,7 +230,7 @@ export function PlotNode({ props }: { props: NodeProps }) {
   if (all.length === 0) {
     return (
       <div data-view-node="plot" className="native-chat-view-muted">
-        No points.
+        {translate('components.chat.viewRender.noPlotPoints', 'No points.')}
       </div>
     )
   }
@@ -250,8 +252,8 @@ export function PlotNode({ props }: { props: NodeProps }) {
       <div className="native-chat-view-row native-chat-view-between native-chat-view-muted">
         <span>{yLabel === '' ? `${high}` : `${yLabel} ${high}`}</span>
         <ul className="native-chat-view-row native-chat-view-legend">
-          {series.map((entry, index) => (
-            <li key={index} className="native-chat-view-row">
+          {positionKeyed(series).map(({ key, item: entry }, index) => (
+            <li key={key} className="native-chat-view-row">
               <span
                 aria-hidden="true"
                 className="native-chat-view-swatch"

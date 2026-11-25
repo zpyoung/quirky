@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+/* oxlint-disable anti-slop/no-reflect-get, anti-slop/no-reflect-apply, anti-slop/no-object-parameters -- patches and probes platform image loaders, which have no typed surface */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { loadsImages, NO_HTML_LABELS, withRemoteImagesBlocked } from './mermaid-safety'
 import { sanitizeSvg } from './MermaidBlock'
