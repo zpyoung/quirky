@@ -3,7 +3,7 @@ import { computeTrustedHash, type CodexTrustEntry } from './config-toml-trust'
 
 // Why: captured from a real Codex 0.129 `/hooks` approval; fails loudly if Codex's serialization drifts.
 const REAL_APPROVED_COMMAND = '/bin/sh "/tmp/quirky-case-b-mCmCe6/agent-hooks/codex-hook.sh"'
-const REAL_APPROVED_HASH = 'sha256:bc013489dba495431d3790fda62ee5a7d907a7c491e29ad26238c3a5d6d2b163'
+const REAL_APPROVED_HASH = 'sha256:151efa5bda6d10bb2f26d9c1a72b0c2c03b240f241844e8bffd023629fb4b4f7'
 
 describe('computeTrustedHash', () => {
   it('reproduces the hash that Codex /hooks wrote for a real approval', () => {

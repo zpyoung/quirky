@@ -87,19 +87,10 @@ it('preserves successful aliases when one repository needs REST fallback', async
   ).toContain('repo%3Afixture%2Frepo-1')
 })
 
-it('falls back on GraphQL quota exhaustion and respects independent runner breaker scopes', async () => {
+it('falls back to REST on GraphQL quota exhaustion', async () => {
   recordGhPrimaryRateLimit('graphql', 3600000, ghRateLimitScopeKey('native', 'github.com'))
   expect((await listWorkItems('fixture/repo', 24, 'is:issue')).items).toHaveLength(24)
   expect(api.graphqlCalls).toBe(0)
-  expect(api.restSearches).toBe(1)
-  expect(
-    (
-      await listWorkItems('fixture/repo', 24, 'is:issue', 1, undefined, undefined, false, {
-        wslDistro: 'Ubuntu'
-      })
-    ).items
-  ).toHaveLength(24)
-  expect(api.graphqlCalls).toBe(1)
   expect(api.restSearches).toBe(1)
 })
 

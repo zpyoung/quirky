@@ -52,9 +52,6 @@ describe('nativeBuildEntryName', () => {
     })
     expect(node).toBe('quirky-napi-darwin-arm64')
     expect(electron).toBe(node)
-    expect(
-      nativeBuildEntryName('@vscode/windows-process-tree', { platform: 'win32', arch: 'x64' })
-    ).toBe('quirky-napi-win32-x64')
   })
 
   it('separates arches and refuses a package with no descriptor', () => {
@@ -76,17 +73,6 @@ describe('nativeBuildEntryName', () => {
     ]) {
       expect(evaluate({ platform, arch })).toBe(
         `build/${nativeBuildEntryName('node-pty', { platform, arch })}`
-      )
-    }
-  })
-
-  it('matches the dir the patched windows-process-tree loader prefers', () => {
-    const line = addedPatchLine('@vscode__windows-process-tree@0.8.0.patch', /quirkyNativeBuild = /)
-    const template = /= `(.*)`;/.exec(line)[1]
-    for (const arch of ['x64', 'arm64']) {
-      const resolved = template.replace('${__dirname}', '/pkg/lib').replace('${process.arch}', arch)
-      expect(path.posix.dirname(path.posix.normalize(resolved))).toBe(
-        `/pkg/build/${nativeBuildEntryName('@vscode/windows-process-tree', { platform: 'win32', arch })}`
       )
     }
   })

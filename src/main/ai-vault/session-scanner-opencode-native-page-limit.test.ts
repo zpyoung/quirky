@@ -8,15 +8,10 @@ vi.mock('./session-scanner-opencode-sqlite-worker-client', () => ({
     readNativeChat = readNativeChat
   }
 }))
-vi.mock('./session-scanner-opencode-wsl-client', () => ({
-  openCodeWslPath: (path: string) =>
-    path.startsWith('wsl:') ? { distro: 'Ubuntu', linuxPath: '/home/test/opencode.db' } : null,
-  openCodeWslClient: async () => ({ readNativeChat }),
-  mapOpenCodeWslSession: (value: unknown) => value
-}))
 import { readOpenCodeTranscriptPageViaWorker } from './session-scanner-opencode-sqlite-worker-spawn'
 
-describe.each(['native.db', 'wsl:opencode.db'])('native-page protocol bounds for %s', (dbPath) => {
+describe('native-page protocol bounds', () => {
+  const dbPath = 'native.db'
   it.each([
     [10.9, 10],
     [0, 1],
@@ -35,7 +30,7 @@ describe.each(['native.db', 'wsl:opencode.db'])('native-page protocol bounds for
       expect(readNativeChat).toHaveBeenLastCalledWith(
         {
           kind: 'native-page',
-          dbPath: dbPath.startsWith('wsl:') ? '/home/test/opencode.db' : dbPath,
+          dbPath,
           sessionId: 'session',
           limit: expected
         },

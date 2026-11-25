@@ -151,16 +151,13 @@ describe('main sync-spawn ratchet', () => {
       "import { restrictWindowsPathSync } from '../shared/secure-path-windows-acl'\nrestrictWindowsPathSync(p, true)",
       'restrictWindowsPathSync'
     ],
-    ["import { grantDirAcl } from './win32-utils'\ngrantDirAcl(dir)", 'grantDirAcl'],
     ["import { getWslHome } from './wsl'\ngetWslHome(distro)", 'getWslHome'],
     ["import { listWslDistros } from './wsl'\nlistWslDistros()", 'listWslDistros'],
     [
       "import { wslUncDirectoryExists } from './wsl'\nwslUncDirectoryExists(p)",
       'wslUncDirectoryExists'
     ],
-    ["import { isWslAvailable } from './wsl'\nisWslAvailable()", 'isWslAvailable'],
-    ["import { isWslAvailable } from './wsl-availability'\nisWslAvailable()", 'isWslAvailable'],
-    ["import { isPwshAvailable } from './pwsh'\nisPwshAvailable()", 'isPwshAvailable']
+    ["import { isWslAvailable } from './wsl'\nisWslAvailable()", 'isWslAvailable']
   ])('gates the repo sync wrapper in %s', (source, symbol) => {
     expect(uses(source)).toEqual({ count: 1, symbols: [symbol] })
   })
@@ -233,8 +230,8 @@ describe('main sync-spawn ratchet', () => {
     expect(adviceFor(['restrictWindowsPathSync'])).toContain(
       "use restrictWindowsDirectory for a directory, or raise this file's count in config/main-sync-spawn-baseline.txt"
     )
-    expect(adviceFor(['gitExecFileSync', 'grantDirAcl'])).toBe(
-      'gitExecFileSync: use gitExecFileAsync. grantDirAcl: use grantDirAclAsync.'
+    expect(adviceFor(['gitExecFileSync', 'getWslHome'])).toBe(
+      'gitExecFileSync: use gitExecFileAsync. getWslHome: use getWslHomeAsync.'
     )
   })
 

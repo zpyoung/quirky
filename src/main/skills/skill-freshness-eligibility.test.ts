@@ -145,8 +145,8 @@ describe('skill freshness name-scoped update eligibility', () => {
 
   it('canonicalizes only names that are safe to put on a command line', () => {
     expect(canonicalizeSkillUpdateNames(['orchestration', 'quirky-cli', 'quirky-cli'])).toEqual([
-      'quirky-cli',
-      'orchestration'
+      'orchestration',
+      'quirky-cli'
     ])
     expect(canonicalizeSkillUpdateNames([])).toBeNull()
     expect(canonicalizeSkillUpdateNames(['quirky-cli;echo unsafe'])).toBeNull()

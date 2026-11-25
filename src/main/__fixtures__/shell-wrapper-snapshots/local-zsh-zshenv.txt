@@ -103,13 +103,6 @@ __quirky_deferred_init() {
   else
     precmd_functions=(${precmd_functions:#__quirky_deferred_init})
   fi
-  if [ -n "${QUIRKY_WSL_CLI_DIR:-}" ]; then
-    if [ -x "$QUIRKY_WSL_CLI_DIR/${QUIRKY_CLI_COMMAND:-}" ]; then
-      export PATH="$QUIRKY_WSL_CLI_DIR${PATH:+:$PATH}"
-    else
-      printf 'Quirky CLI unavailable: cannot run %s. Check WSL Windows-drive mount options.\n' "$QUIRKY_WSL_CLI_DIR/${QUIRKY_CLI_COMMAND:-}" >&2
-    fi
-  fi
   if [ -n "${QUIRKY_CLI_BIN_DIR:-}" ]; then
     case "${PATH:-}" in
       "$QUIRKY_CLI_BIN_DIR"|"$QUIRKY_CLI_BIN_DIR":*) ;;

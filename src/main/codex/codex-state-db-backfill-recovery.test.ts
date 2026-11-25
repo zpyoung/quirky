@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ownerIdentity from '../agent-hooks/managed-hook-owner-identity'
-import { CODEX_READ_ONLY_APP_SERVER_ARGS } from '../codex-cli/codex-read-only-app-server-args'
 import {
   _internals,
   resolveCodexBackfillSupervisorLockRoot,
@@ -458,41 +457,6 @@ describe('Codex state DB backfill recovery', () => {
         now: () => now
       })
     ).resolves.toEqual({ outcome: 'completed', spawnCount: 2 })
-  })
-
-  it('routes a WSL managed home through its distro and Linux CODEX_HOME', async () => {
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-    const child = createFakeChild()
-    const spawnProcess = vi.fn(() => child)
-    const readStatus = vi
-      .fn()
-      .mockReturnValueOnce({ kind: 'incomplete', stateDbPath: 'state.sqlite', status: 'running' })
-      .mockReturnValue({ kind: 'complete', stateDbPath: 'state.sqlite' })
-
-    await runCodexStateDbBackfillRecovery(
-      '\\\\wsl.localhost\\Ubuntu\\home\\alice\\.codex',
-      new AbortController().signal,
-      {
-        spawnProcess: spawnProcess as never,
-        readStatus,
-        terminate: vi.fn(async () => {}),
-        sleep: vi.fn(async () => {}),
-        now: vi.fn(() => 1_000)
-      }
-    )
-
-    expect(spawnProcess).toHaveBeenCalledWith(
-      'wsl.exe',
-      expect.arrayContaining(['-d', 'Ubuntu']),
-      expect.objectContaining({ windowsHide: true })
-    )
-    const spawnCall = spawnProcess.mock.calls[0] as unknown as [string, string[]]
-    const command = spawnCall[1].join(' ')
-    expect(command).toContain('export CODEX_HOME=')
-    expect(command).toContain('/home/alice/.codex')
-    for (const arg of CODEX_READ_ONLY_APP_SERVER_ARGS) {
-      expect(command).toContain(arg)
-    }
   })
 })
 

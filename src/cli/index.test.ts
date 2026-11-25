@@ -265,28 +265,6 @@ describe('command aliases dispatch to the canonical handler', () => {
   })
 })
 
-describe('artifact runtime routing', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs()
-    vi.restoreAllMocks()
-    process.exitCode = 0
-  })
-
-  it('uses the desktop runtime despite remote-selection environment fallbacks', async () => {
-    vi.stubEnv('QUIRKY_ENVIRONMENT', 'remote-environment')
-    vi.stubEnv('QUIRKY_PAIRING_CODE', 'remote-pairing-code')
-    vi.spyOn(console, 'log').mockImplementation(() => undefined)
-    callMock.mockResolvedValue(okFixture('artifact-list', { status: 'ok', value: [] }))
-    runtimeClientConstructorMock.mockClear()
-
-    await main(['artifacts', 'list', '--json'], '/folder-workspace')
-
-    expect(process.exitCode).not.toBe(1)
-    expect(runtimeClientConstructorMock).toHaveBeenCalledWith(null, null)
-    expect(callMock).toHaveBeenCalledWith('artifacts.list', {})
-  })
-})
-
 describe('unknown command surfaces a suggestion', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>
 

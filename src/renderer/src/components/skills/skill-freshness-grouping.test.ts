@@ -56,8 +56,8 @@ describe('groupSkillFreshness', () => {
       ['computer-use', 'linear-tickets', 'quirky-cli', 'orchestration']
     )
     expect(groups.map((group) => [group.name, group.quirkyOwned])).toEqual([
-      ['quirky-cli', true],
       ['orchestration', true],
+      ['quirky-cli', true],
       ['computer-use', false],
       ['linear-tickets', false]
     ])

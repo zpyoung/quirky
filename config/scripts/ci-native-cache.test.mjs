@@ -13,12 +13,7 @@ const native = parse(readFileSync(nativePath, 'utf8'))
 const e2e = parse(readFileSync('.github/workflows/e2e.yml', 'utf8'))
 const identity = native.runs.steps.find((step) => step.id === 'native-cache-scope')
 const inputs = [...identity.env.NATIVE_SOURCE_HASH.matchAll(/'([^']+)'/g)].map((match) => match[1])
-const paths = [
-  'node_modules/.pnpm/node-pty@*/node_modules/node-pty/build',
-  'native/windows-registry/build',
-  'native/windows-security/build',
-  'node_modules/.pnpm/@vscode+windows-process-tre*/node_modules/@vscode/windows-process-tree/build'
-]
+const paths = ['node_modules/.pnpm/node-pty@*/node_modules/node-pty/build']
 
 function resolveIdentity({
   runtime = 'node',

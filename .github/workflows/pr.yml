@@ -323,12 +323,22 @@ jobs:
       - name: Install Electron package binary for tests
         run: node config/scripts/install-electron-package-binary.mjs
 
+      # Why: Quirky releases on this base start at v2.0.0; older tags are the pre-fork app and
+      # share no code with it, so until a v2+ release exists there is nothing to cross against.
+      - name: Find a v2+ release to compare against
+        id: release
+        run: |
+          if git tag --list 'v[2-9]*' 'v[1-9][0-9]*' | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No v2.0.0+ release yet; skipping the release crossing checks."
+          fi
+
       # R1: an upgrade from the newest release must adopt its live terminal daemon.
       - name: Daemon protocol crossing against newest release
-        run: |
-          # This fork publishes only prerelease tags, which the stable-tag selector skips.
-          release_ref="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n1)"
-          pnpm run check:daemon-protocol-crossing -- --release-ref "$release_ref"
+        if: steps.release.outputs.exists == 'true'
+        run: pnpm run check:daemon-protocol-crossing
 
       # R3: a runtime launcher swap must not also bump the daemon protocol (D7.1).
       # The label is read from the event payload, so push again after applying it.
@@ -343,6 +353,7 @@ jobs:
       # Runs the whole directory so a new file there cannot be left out; an empty match
       # exits 1 ("No test files found"), so this lane cannot pass while running zero tests.
       - name: Old/new client and server compatibility journeys
+        if: steps.release.outputs.exists == 'true'
         run: pnpm exec vitest run --config config/vitest.config.ts tests/e2e/cross-version-wire/
 
   verify:

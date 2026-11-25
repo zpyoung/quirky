@@ -29,16 +29,6 @@ afterEach(() => {
   process.exitCode = undefined
 })
 
-it('prepares a WSL pane through the runtime without loading profile storage or an installer', async () => {
-  vi.stubEnv('WSL_DISTRO_NAME', 'Ubuntu')
-  const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-  await main(['agent', 'hooks', 'prepare-codex'])
-  expect(error).not.toHaveBeenCalled()
-  expect(call).toHaveBeenCalledWith('agentHooks.prepareCodexForWslPane', expect.any(Object), {
-    timeoutMs: 50_000
-  })
-})
-
 it('loads nothing and asks nothing for a native pane', async () => {
   vi.stubEnv('WSL_DISTRO_NAME', '')
   const error = vi.spyOn(console, 'error').mockImplementation(() => {})

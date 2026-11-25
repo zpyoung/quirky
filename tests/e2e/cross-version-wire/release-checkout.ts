@@ -28,6 +28,8 @@ export const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..')
 const DEFAULT_CACHE_ROOT = join(REPO_ROOT, 'tests', 'e2e', '.cross-version-checkouts')
 
 const BASELINE_REF_ENV = 'QUIRKY_CROSS_VERSION_BASELINE_REF'
+// Tags below this are the pre-fork Quirky line, whose wire code this harness cannot pair against.
+const MIN_BASELINE_RELEASE_TAG = 'v2.0.0'
 
 export type ReleaseCheckout = {
   /** The ref as requested, e.g. `v1.4.169`. */
@@ -70,7 +72,9 @@ export function resolveBaselineReleaseRef(): string {
   }
   let tags: string[]
   try {
-    tags = git(['tag', '--list', 'v[0-9]*']).split('\n').filter(Boolean)
+    tags = git(['tag', '--list', 'v[0-9]*'])
+      .split('\n')
+      .filter((tag) => tag && compareReleaseTags(tag, MIN_BASELINE_RELEASE_TAG) >= 0)
   } catch (error) {
     throw new Error(
       `Cross-version harness could not list git tags in ${REPO_ROOT}: ${String(error)}. ` +
@@ -84,7 +88,7 @@ export function resolveBaselineReleaseRef(): string {
   const latest = releases.at(-1)
   if (!latest) {
     throw new Error(
-      'Cross-version harness found no tags matching v[0-9]*. ' +
+      'Cross-version harness found no tags matching v[0-9]* at or after 2.0.0. ' +
         'CI checkouts default to a shallow clone with no tags: use `actions/checkout` with `fetch-depth: 0`, ' +
         `or pin a ref with ${BASELINE_REF_ENV}.`
     )

@@ -81,52 +81,6 @@ describe('native chat transcript resolve polling', () => {
     expect(mocks.install).toHaveBeenCalledTimes(callsAfterUnsubscribe)
   })
 
-  it('retries WSL translation from shared observations, never installing the raw guest path', async () => {
-    setPlatform('win32')
-    const subscription = await subscribeNativeChatTranscript({
-      agent: 'codex',
-      sessionId: 'session-id',
-      transcriptPath: '/home/ada/.codex/sessions/rollout-session-id.jsonl',
-      resolvePollIntervalMs: 10,
-      onAppend: () => {}
-    })
-
-    await mocks.observation?.(['Ubuntu'])
-    expect(mocks.toHostReadable).toHaveBeenCalledTimes(1)
-    expect(mocks.install.mock.calls.some(([filePath]) => String(filePath).startsWith('/'))).toBe(
-      false
-    )
-
-    await mocks.observation?.(['Ubuntu'])
-    expect(mocks.toHostReadable).toHaveBeenCalledTimes(2)
-
-    subscription.unsubscribe()
-  })
-
-  it('installs the translated UNC path once the WSL transcript becomes readable', async () => {
-    setPlatform('win32')
-    const unc = '\\\\wsl.localhost\\Ubuntu\\home\\ada\\.codex\\sessions\\rollout-session-id.jsonl'
-    const engine = { unsubscribe: vi.fn(), watching: true }
-    mocks.toHostReadable.mockResolvedValue(unc)
-    mocks.install.mockResolvedValue(engine)
-
-    const subscription = await subscribeNativeChatTranscript({
-      agent: 'codex',
-      sessionId: 'session-id',
-      transcriptPath: '/home/ada/.codex/sessions/rollout-session-id.jsonl',
-      resolvePollIntervalMs: 10,
-      onAppend: () => {}
-    })
-
-    await mocks.observation?.(['Ubuntu'])
-    expect(mocks.install.mock.calls.some(([filePath]) => filePath === unc)).toBe(true)
-    // The resolve observer hands ownership to the installed watcher.
-    expect(mocks.toHostReadable).toHaveBeenCalledTimes(1)
-    expect(mocks.stopObservation).toHaveBeenCalledOnce()
-
-    subscription.unsubscribe()
-  })
-
   it('keeps resolving on every retry when no exact hook path is available', async () => {
     const subscription = await subscribeNativeChatTranscript({
       agent: 'claude',
@@ -173,32 +127,6 @@ describe('native chat transcript resolve polling', () => {
         onAppend: () => {}
       })
     ).rejects.toThrow('resolver crashed')
-  })
-
-  it('cancels queued WSL resolution when the subscription closes', async () => {
-    setPlatform('win32')
-    let receivedSignal: AbortSignal | undefined
-    mocks.toHostReadable.mockImplementation(
-      (_path: string, deps: { signal?: AbortSignal }) =>
-        new Promise<null>((_resolve, reject) => {
-          receivedSignal = deps.signal
-          deps.signal?.addEventListener('abort', () => reject(deps.signal?.reason), { once: true })
-        })
-    )
-    const subscription = await subscribeNativeChatTranscript({
-      agent: 'codex',
-      sessionId: 'session-id',
-      transcriptPath: '/home/ada/.codex/sessions/rollout-session-id.jsonl',
-      resolvePollIntervalMs: 10,
-      onAppend: () => {}
-    })
-
-    const observation = mocks.observation?.(['Ubuntu'])
-    await vi.waitFor(() => expect(receivedSignal).toBeDefined())
-    expect(receivedSignal?.aborted).toBe(false)
-    subscription.unsubscribe()
-    expect(receivedSignal?.aborted).toBe(true)
-    await observation
   })
 
   it('does not install after initial resolution is cancelled', async () => {

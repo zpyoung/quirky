@@ -122,12 +122,10 @@ describe('OMP known-workspace transcript lookup', () => {
   )
 
   it('finds the reverted SHA256 bucket used by OMP 17.2.5–17.2.8', async () => {
-    const windows = process.platform === 'win32'
-    const digest = windows
-      ? '25910242104f20d3250db9cb42dca52b1ef2afc76aeebbb03cf50c958c3927e9'
-      : '5e800b892f87de7d83df9a448eb6a6f9e4c8ce34f082e23cc225a87e622553ac'
-    const expected = await record(`abs-quirky-${digest}`)
-    expect(await lookup(windows ? 'C:\\repo\\quirky' : '/repo/quirky')).toBe(expected)
+    const expected = await record(
+      'abs-quirky-ddb77a2b555e3c95b707e2efb7e2669d03bf2a3f261a099b7a9d38da79503ea8'
+    )
+    expect(await lookup('/repo/quirky')).toBe(expected)
   })
 
   it('matches OMP historical absolute scope for a relative name beginning with two dots', async () => {

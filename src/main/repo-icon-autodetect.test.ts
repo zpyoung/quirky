@@ -251,7 +251,7 @@ describe('detectRepoIcon', () => {
     await gitExecFileAsync(['remote', 'add', 'origin', 'git@github.com:tmchow/quirky.git'], {
       cwd: repoPath
     })
-    await gitExecFileAsync(['remote', 'add', 'upstream', 'git@github.com:stablyai/orca.git'], {
+    await gitExecFileAsync(['remote', 'add', 'upstream', 'git@github.com:stablyai/quirky.git'], {
       cwd: repoPath
     })
 
@@ -259,15 +259,15 @@ describe('detectRepoIcon', () => {
       detectRepoIconAndUpstream({ repoPath, kind: 'git', executionHostId: 'local' })
     ).resolves.toEqual({
       gitRemoteIdentity: {
-        canonicalKey: 'github.com/stablyai/orca',
+        canonicalKey: 'github.com/stablyai/quirky',
         remoteName: 'upstream',
-        remoteUrl: 'git@github.com:stablyai/orca.git'
+        remoteUrl: 'git@github.com:stablyai/quirky.git'
       },
       repoIcon: {
         type: 'image',
         src: 'https://github.com/stablyai.png?size=64',
         source: 'github',
-        label: 'stablyai/orca'
+        label: 'stablyai/quirky'
       },
       // Why: fork parents resolve host-qualified so avatars/links stay on the fork's server.
       upstream: { owner: 'stablyai', repo: 'quirky', host: 'github.com' }

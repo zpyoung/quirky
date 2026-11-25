@@ -196,7 +196,7 @@ describe('filesystem-list-files', () => {
     expect(p2.kill).not.toHaveBeenCalled()
     expect(spawnMock).toHaveBeenCalledTimes(1)
     expect(spawnMock.mock.calls[0]?.[0]).toBe(BUNDLED_RG)
-    expect(bundledRipgrepCommandMock).toHaveBeenCalledWith({ wsl: false })
+    expect(bundledRipgrepCommandMock).toHaveBeenCalled()
     expect(spawnMock.mock.calls[0]?.[1]).not.toContain('--version')
   })
 
@@ -265,30 +265,6 @@ describe('filesystem-list-files', () => {
       '.env.local',
       'dist/generated.js'
     ])
-  })
-
-  it('spawns the bundled Linux rg inside the registered WSL runtime', async () => {
-    const p1 = createMockProcess()
-    getLocalGitOptionsForRegisteredWorktreeMock.mockReturnValue({ wslDistro: 'Ubuntu' })
-
-    spawnMock.mockReturnValue(p1)
-
-    const storeMock = {} as unknown as Store
-    const promise = listQuickOpenFiles('/repo', storeMock)
-
-    setTimeout(() => {
-      p1.stdout?.emit('data', 'src/index.ts\0')
-      p1.emit('close', 0, null)
-    }, 10)
-
-    await expect(promise).resolves.toEqual(['src/index.ts'])
-    expect(getLocalGitOptionsForRegisteredWorktreeMock).toHaveBeenCalledWith(
-      storeMock,
-      '/repo',
-      '/repo'
-    )
-    expect(bundledRipgrepCommandMock).toHaveBeenCalledWith({ wsl: true })
-    expect(spawnMock.mock.calls.every((call) => call[0] === '/bundled/linux/rg')).toBe(true)
   })
 
   it('keeps the host rg for a Windows-drive worktree under a WSL runtime', async () => {

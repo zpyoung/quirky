@@ -203,7 +203,7 @@ describe('hard-wrapped terminal HTTP clicks', () => {
     expect(openUrlMock).toHaveBeenCalledTimes(1)
     expect(openUrlMock).toHaveBeenCalledWith(FULL_URL)
     expect(new URL(URL_ROWS[0]).pathname).toHaveLength(136)
-    expect(`${new URL(FULL_URL).pathname}${new URL(FULL_URL).search}`).toHaveLength(811)
+    expect(`${new URL(FULL_URL).pathname}${new URL(FULL_URL).search}`).toHaveLength(813)
     expect(event.preventDefault).toHaveBeenCalled()
     expect(clearSelection).toHaveBeenCalled()
     disposable.dispose()
@@ -245,7 +245,7 @@ describe('hard-wrapped terminal HTTP clicks', () => {
 
     expect(openUrlMock).toHaveBeenCalledTimes(1)
     expect(openUrlMock).toHaveBeenCalledWith(FULL_URL)
-    expect(new URL(FRAMED_URL_ROWS[0]).pathname).toHaveLength(88)
+    expect(new URL(FRAMED_URL_ROWS[0]).pathname).toHaveLength(90)
   })
 
   it('reconstructs a URL that fills each cursor-positioned TUI row up to its frame', () => {
@@ -393,7 +393,7 @@ describe('hard-wrapped terminal HTTP clicks', () => {
   it('does not glue the next logical line onto a URL that ends mid-row (#8832)', () => {
     const { terminal, registrations } = makeTerminal({
       cols: 80,
-      urlRows: ['Repo: https://github.com/stablyai/orca/', 'Description: 123'],
+      urlRows: ['Repo: https://github.com/stablyai/quirky/', 'Description: 123'],
       softWrapped: false
     })
     const disposable = installHttpLinkClickFallback(terminal, { worktreeId: 'wt-1' })
@@ -404,7 +404,7 @@ describe('hard-wrapped terminal HTTP clicks', () => {
     fallback!(mouseEventForRow(0))
 
     expect(openUrlMock).toHaveBeenCalledOnce()
-    expect(openUrlMock).toHaveBeenCalledWith('https://github.com/stablyai/orca/')
+    expect(openUrlMock).toHaveBeenCalledWith('https://github.com/stablyai/quirky/')
     disposable.dispose()
   })
 

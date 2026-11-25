@@ -422,7 +422,7 @@ const PINNED: Readonly<Record<string, Partial<Record<WriterName, readonly string
     [APPLY]: [
       `entry/${GIT}|$order`,
       `group/${GIT}|$order`,
-      `group/${GIT}|1a5387f9-46df-5b0c-807c-4cf31d90223e`,
+      `group/${GIT}|f32927f5-3c79-5804-b825-3333840639f2`,
       'session/tabGroupLayouts',
       'session/tabGroups',
       'session/unifiedTabs',
@@ -438,7 +438,7 @@ const PINNED: Readonly<Record<string, Partial<Record<WriterName, readonly string
     [SAVE]: [
       `entry/${GIT}|$order`,
       `group/${GIT}|$order`,
-      `group/${GIT}|1a5387f9-46df-5b0c-807c-4cf31d90223e`,
+      `group/${GIT}|f32927f5-3c79-5804-b825-3333840639f2`,
       'session/tabGroupLayouts',
       'session/tabGroups',
       `terminalEntry/${GIT}|tab-b`
@@ -448,7 +448,7 @@ const PINNED: Readonly<Record<string, Partial<Record<WriterName, readonly string
     [APPLY]: [
       `entry/${GIT}|$order`,
       `group/${GIT}|$order`,
-      `group/${GIT}|1a5387f9-46df-5b0c-807c-4cf31d90223e`,
+      `group/${GIT}|f32927f5-3c79-5804-b825-3333840639f2`,
       'session/tabGroupLayouts',
       'session/tabGroups',
       'session/unifiedTabs',
@@ -464,7 +464,7 @@ const PINNED: Readonly<Record<string, Partial<Record<WriterName, readonly string
     [SAVE]: [
       `entry/${GIT}|$order`,
       `group/${GIT}|$order`,
-      `group/${GIT}|1a5387f9-46df-5b0c-807c-4cf31d90223e`,
+      `group/${GIT}|f32927f5-3c79-5804-b825-3333840639f2`,
       'session/tabGroupLayouts',
       'session/tabGroups',
       `terminalEntry/${GIT}|tab-b`

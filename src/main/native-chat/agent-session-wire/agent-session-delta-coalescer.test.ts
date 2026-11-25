@@ -204,13 +204,13 @@ describe('agent-session delta coalescer', () => {
 
     expect(emitted).toEqual([
       {
-        text: 'ééé\n[Quirky: streamed output truncated]',
+        text: 'éé\n[Quirky: streamed output truncated]',
         observedBytes: 48,
         truncated: true
       }
     ])
     expect(instance.snapshot('item-1')).toEqual({
-      text: 'ééé\n[Quirky: streamed output truncated]',
+      text: 'éé\n[Quirky: streamed output truncated]',
       observedBytes: 55,
       truncated: true
     })
@@ -271,7 +271,7 @@ describe('snapshot admission before assembly', () => {
 
     instance.append('unicode', `${'é'.repeat(20)}more`)
     clock.fire()
-    const truncated = 'ééé\n[Quirky: streamed output truncated]'
+    const truncated = 'éé\n[Quirky: streamed output truncated]'
     expect(shouldEmit).toHaveBeenLastCalledWith('unicode', truncated.length)
     expect(emitted.at(-1)).toEqual(['unicode', truncated])
     const calls = shouldEmit.mock.calls.length

@@ -41,7 +41,7 @@ const credentialFiles = [
 it('shares one bootstrap across the original modules and operating systems', () => {
   expect(job.strategy).toEqual({
     'fail-fast': false,
-    matrix: { os: ['ubuntu-22.04', 'macos-15', 'windows-2022'] }
+    matrix: { os: ['ubuntu-22.04', 'macos-15'] }
   })
   expect(job.name).toBe('ZCode credentials (${{ matrix.os }})')
   expect(account.run.split(/\s+/).slice(2)).toEqual(accountFiles)

@@ -7,11 +7,9 @@ import { spawnManagedProviderProcess } from './managed-provider-process'
 
 // The real fallback teardown; only the primitives that touch the OS are faked.
 const os = vi.hoisted(() => ({
-  taskkill: vi.fn(async (): Promise<boolean> => true),
   capture: vi.fn(async (): Promise<DescendantSnapshot | null> => null),
   verifySnapshot: vi.fn(async () => 'exited' as const)
 }))
-vi.mock('../windows-process-tree-kill', () => ({ terminateWindowsProcessTree: os.taskkill }))
 vi.mock('../pty-descendant-termination', () => ({ captureDescendantSnapshot: os.capture }))
 vi.mock('../pty-descendant-exit-verification', () => ({
   terminateDescendantSnapshotWithVerdict: os.verifySnapshot
@@ -47,21 +45,6 @@ function rootOnly(platform: NodeJS.Platform) {
 }
 
 describe('fallback teardown never claims descendants it did not observe', () => {
-  it.each([
-    { taskkill: true, tree: 'exited' },
-    { taskkill: false, tree: 'unverifiable' }
-  ] as const)(
-    "reports taskkill's own verdict after a Windows tree kill: taskkill $taskkill",
-    async ({ taskkill, tree }) => {
-      vi.useFakeTimers()
-      os.taskkill.mockResolvedValueOnce(taskkill)
-      const closing = rootOnly('win32').close()
-      await vi.advanceTimersByTimeAsync(1_500)
-      await expect(closing).resolves.toEqual({ root: 'exited', tree })
-      expect(os.taskkill).toHaveBeenCalledOnce()
-    }
-  )
-
   it('reports no observation when the POSIX process table cannot be read', async () => {
     vi.useFakeTimers()
     const closing = rootOnly('darwin').close()

@@ -7,6 +7,7 @@ import type * as FsPromises from 'node:fs/promises'
 import type * as FilesystemAuth from '../ipc/filesystem-auth'
 import type * as GitRunner from '../git/runner'
 import type * as BundledRipgrepPath from '../ripgrep/bundled-ripgrep-path'
+import type * as ProcessHost from '@quirky/process-host'
 
 // Mock signatures stay loose on payloads: suites assert call arguments and stub
 // resolved values, so real fs/git result types would only fight the fixtures.
@@ -34,9 +35,9 @@ export const closeWatcherInWatcherProcessMock: Mock<(rootPath: string) => Promis
 export const getLocalGitOptionsForRegisteredWorktreeMock: Mock<
   (store: unknown, worktreePath: string, repoPath?: string) => unknown
 > = vi.fn()
-export const bundledRipgrepCommandMock: Mock<(options?: { wsl?: boolean }) => string> = vi.fn()
-export const wslAwareSpawnMock: Mock<
-  (command: string, args: string[], options: unknown) => unknown
+export const bundledRipgrepCommandMock: Mock<() => string> = vi.fn()
+export const spawnProcessMock: Mock<
+  (spec: { program: string; args: string[]; cwd?: string }) => unknown
 > = vi.fn()
 export const watchMock: Mock<
   (rootPath: string, options: unknown, callback: WatchCallback) => unknown
@@ -87,9 +88,13 @@ export async function filesystemAuthModuleMock() {
 export async function gitRunnerModuleMock() {
   const actual = await vi.importActual<typeof GitRunner>('../git/runner')
   return {
-    ...actual,
-    wslAwareSpawn: wslAwareSpawnMock
+    ...actual
   }
+}
+
+export async function processHostModuleMock() {
+  const actual = await vi.importActual<typeof ProcessHost>('@quirky/process-host')
+  return { ...actual, spawnProcess: spawnProcessMock }
 }
 
 export async function bundledRipgrepPathModuleMock() {
@@ -116,11 +121,9 @@ export function resetRuntimeFileMocks(): void {
   watchMock.mockReset()
   bundledRipgrepCommandMock.mockReset()
   getLocalGitOptionsForRegisteredWorktreeMock.mockReset()
-  wslAwareSpawnMock.mockReset()
+  spawnProcessMock.mockReset()
   getLocalGitOptionsForRegisteredWorktreeMock.mockReturnValue({})
-  bundledRipgrepCommandMock.mockImplementation((options) =>
-    options?.wsl ? '/bundled/linux/rg' : '/bundled/rg'
-  )
+  bundledRipgrepCommandMock.mockReturnValue('/bundled/rg')
   readdirMock.mockResolvedValue([])
   lstatMock.mockRejectedValue(enoent())
   renameMock.mockResolvedValue(undefined)

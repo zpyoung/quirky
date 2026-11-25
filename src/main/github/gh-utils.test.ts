@@ -82,7 +82,7 @@ describe('github owner/repo resolution', () => {
       owner: 'acme',
       repo: 'widgets'
     })
-    expect(parseGitHubOwnerRepo('git@github.com:stablyai/orca.git')).toEqual({
+    expect(parseGitHubOwnerRepo('git@github.com:stablyai/quirky.git')).toEqual({
       owner: 'stablyai',
       repo: 'quirky'
     })
@@ -90,15 +90,15 @@ describe('github owner/repo resolution', () => {
       owner: 'TheBoredTeam',
       repo: 'boring.notch'
     })
-    expect(parseGitHubOwnerRepo('ssh://git@github.com/stablyai/orca.git')).toEqual({
+    expect(parseGitHubOwnerRepo('ssh://git@github.com/stablyai/quirky.git')).toEqual({
       owner: 'stablyai',
       repo: 'quirky'
     })
-    expect(parseGitHubOwnerRepo('ssh://git@ssh.github.com:443/stablyai/orca.git')).toEqual({
+    expect(parseGitHubOwnerRepo('ssh://git@ssh.github.com:443/stablyai/quirky.git')).toEqual({
       owner: 'stablyai',
       repo: 'quirky'
     })
-    expect(parseGitHubOwnerRepo('git@example.com:stablyai/orca.git')).toBeNull()
+    expect(parseGitHubOwnerRepo('git@example.com:stablyai/quirky.git')).toBeNull()
   })
 
   it('parses GitHub Enterprise host identity', () => {
@@ -118,7 +118,7 @@ describe('github owner/repo resolution', () => {
   it('prefers upstream for PR owner/repo resolution (#7331)', async () => {
     mockGitRemoteCommands({
       origin: 'git@github.com:fork/quirky.git\n',
-      upstream: 'git@github.com:stablyai/orca.git\n'
+      upstream: 'git@github.com:stablyai/quirky.git\n'
     })
 
     await expect(getOwnerRepo('/repo')).resolves.toEqual({ owner: 'stablyai', repo: 'quirky' })
@@ -140,7 +140,7 @@ describe('github owner/repo resolution', () => {
   it('falls back to origin when upstream is present but non-GitHub', async () => {
     mockGitRemoteCommands({
       origin: 'git@github.com:fork/quirky.git\n',
-      upstream: 'git@example.com:stablyai/orca.git\n'
+      upstream: 'git@example.com:stablyai/quirky.git\n'
     })
 
     await expect(getIssueOwnerRepo('/repo')).resolves.toEqual({ owner: 'fork', repo: 'quirky' })
@@ -151,7 +151,7 @@ describe('github owner/repo resolution', () => {
   it('does not mix origin and upstream cache entries for the same repo path', async () => {
     gitExecFileAsyncMock
       .mockResolvedValueOnce({ stdout: 'git@github.com:fork/quirky.git\n' })
-      .mockResolvedValueOnce({ stdout: 'git@github.com:stablyai/orca.git\n' })
+      .mockResolvedValueOnce({ stdout: 'git@github.com:stablyai/quirky.git\n' })
 
     await expect(getOwnerRepoForRemote('/repo', 'origin')).resolves.toEqual({
       owner: 'fork',
@@ -234,7 +234,7 @@ describe('github owner/repo resolution', () => {
     try {
       nowSpy.mockReturnValue(1_000)
       gitExecFileAsyncMock.mockResolvedValueOnce({
-        stdout: 'git@github.com:stablyai/orca.git\n'
+        stdout: 'git@github.com:stablyai/quirky.git\n'
       })
       await expect(getOwnerRepoForRemote('/repo-a', 'origin')).resolves.toEqual({
         owner: 'stablyai',
@@ -696,7 +696,7 @@ describe('resolveIssueSource', () => {
   it("'auto' + upstream exists → upstream, fellBack=false", async () => {
     mockGitRemoteCommands({
       origin: 'git@github.com:fork/quirky.git\n',
-      upstream: 'git@github.com:stablyai/orca.git\n'
+      upstream: 'git@github.com:stablyai/quirky.git\n'
     })
 
     await expect(resolveIssueSource('/repo', 'auto')).resolves.toEqual({
@@ -709,7 +709,7 @@ describe('resolveIssueSource', () => {
   it("'auto' + no github upstream → origin, fellBack=false", async () => {
     mockGitRemoteCommands({
       origin: 'git@github.com:solo/quirky.git\n',
-      upstream: 'git@example.com:stablyai/orca.git\n'
+      upstream: 'git@example.com:stablyai/quirky.git\n'
     })
 
     await expect(resolveIssueSource('/repo', 'auto')).resolves.toEqual({
@@ -720,7 +720,7 @@ describe('resolveIssueSource', () => {
 
   it("'upstream' + upstream exists → upstream, fellBack=false", async () => {
     gitExecFileAsyncMock.mockResolvedValueOnce({
-      stdout: 'git@github.com:stablyai/orca.git\n'
+      stdout: 'git@github.com:stablyai/quirky.git\n'
     })
 
     await expect(resolveIssueSource('/repo', 'upstream')).resolves.toEqual({
@@ -772,7 +772,7 @@ describe('resolveIssueSource', () => {
   it('undefined preference is treated identically to auto', async () => {
     mockGitRemoteCommands({
       origin: 'git@github.com:fork/quirky.git\n',
-      upstream: 'git@github.com:stablyai/orca.git\n'
+      upstream: 'git@github.com:stablyai/quirky.git\n'
     })
 
     await expect(resolveIssueSource('/repo', undefined)).resolves.toEqual({

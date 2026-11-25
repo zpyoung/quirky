@@ -496,7 +496,7 @@ describe('arch-aware packaging guard', () => {
     if (otherSherpaExpected && !otherSherpaInstalled) {
       expect(() => packHost(OTHER_ARCH)).toThrow(otherSherpa)
       expect(() => packHost(OTHER_ARCH)).toThrow('pnpm install:release')
-    } else if (process.platform !== 'win32') {
+    } else if (process.platform === 'darwin') {
       expect(() => packHost(OTHER_ARCH)).not.toThrow()
     }
   })

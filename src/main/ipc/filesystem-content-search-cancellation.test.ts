@@ -9,7 +9,7 @@ const {
   resolveAuthorizedPathMock,
   bundledRipgrepCommandMock,
   getLocalGitOptionsForRegisteredWorktreeMock,
-  wslAwareSpawnMock,
+  spawnMock,
   parseWslPathMock,
   toWindowsWslPathMock
 } = vi.hoisted(() => ({
@@ -17,7 +17,7 @@ const {
   resolveAuthorizedPathMock: vi.fn(),
   bundledRipgrepCommandMock: vi.fn(),
   getLocalGitOptionsForRegisteredWorktreeMock: vi.fn(),
-  wslAwareSpawnMock: vi.fn(),
+  spawnMock: vi.fn(),
   parseWslPathMock: vi.fn((_value: string): { distro: string } | null => null),
   toWindowsWslPathMock: vi.fn((value: string) => value)
 }))
@@ -34,8 +34,12 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('../git/runner', () => ({
-  gitExecFileAsync: vi.fn(),
-  wslAwareSpawn: wslAwareSpawnMock
+  gitExecFileAsync: vi.fn()
+}))
+
+vi.mock('../ripgrep/bundled-ripgrep-spawn', () => ({
+  spawnBundledRipgrep: (args: string[], options: unknown) =>
+    spawnMock(bundledRipgrepCommandMock(), args, options)
 }))
 
 vi.mock('../wsl', () => ({
@@ -134,7 +138,7 @@ describe('content search cancellation', () => {
     handlers.get('fs:cancelSearch')!({ sender }, { requestToken: 'owned' })
     authorize?.('/repo')
     await rejection
-    expect(wslAwareSpawnMock).not.toHaveBeenCalled()
+    expect(spawnMock).not.toHaveBeenCalled()
     expect(sender.eventNames()).toHaveLength(0)
   })
 
@@ -148,7 +152,7 @@ describe('content search cancellation', () => {
       oldChild.emit('close', null, 'SIGTERM')
       return true
     })
-    wslAwareSpawnMock.mockReturnValueOnce(oldChild).mockReturnValueOnce(latestChild)
+    spawnMock.mockReturnValueOnce(oldChild).mockReturnValueOnce(latestChild)
     const first = handlers.get('fs:search')!(
       { sender },
       { rootPath: '/repo', query: 'old', requestToken: 'same' }
@@ -173,7 +177,7 @@ describe('content search cancellation', () => {
     const sender = Object.assign(new EventEmitter(), { id: 7 })
     const child = createMockProcess()
     resolveAuthorizedPathMock.mockResolvedValue('/private/tmp/workspace')
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     const result = handlers.get('fs:search')!(
       { sender },
       { rootPath: '/tmp/workspace', query: 'needle' }
@@ -195,7 +199,7 @@ describe('content search cancellation', () => {
     await expect(result).resolves.toMatchObject({
       files: [{ filePath: '/tmp/workspace/example.txt', relativePath: 'example.txt' }]
     })
-    expect(wslAwareSpawnMock).toHaveBeenCalledWith(
+    expect(spawnMock).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(Array),
       expect.objectContaining({ cwd: '/private/tmp/workspace' })
@@ -213,7 +217,7 @@ describe('content search cancellation', () => {
     expect(isAbsolute(program)).toBe(true)
     const child = spawnProcess({ program, args: ['--json', '--line-buffered', 'needle', '-'] })
     const exited = new Promise((resolve) => child.once('close', resolve))
-    wslAwareSpawnMock.mockReturnValueOnce(child)
+    spawnMock.mockReturnValueOnce(child)
     const pending = handlers.get('fs:search')!(
       { sender },
       { rootPath: '/repo', query: 'fixture', requestToken: 'real' }
@@ -251,7 +255,7 @@ describe('content search cancellation', () => {
       })
       children.push(child)
       exits.push(new Promise((resolve) => child.once('close', resolve)))
-      wslAwareSpawnMock.mockReturnValueOnce(child)
+      spawnMock.mockReturnValueOnce(child)
       const request = handlers.get('fs:search')!(
         { sender },
         { rootPath: `/repo-${index}`, query: 'fixture', requestToken: `real-${index}` }

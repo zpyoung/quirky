@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest, ubuntu-latest]
         # Why: `pinned` runs the skills CLI version Quirky ships (SKILLS_CLI_VERSION).
         skills-cli: [pinned]
         include:

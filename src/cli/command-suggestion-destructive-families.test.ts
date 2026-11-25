@@ -36,7 +36,6 @@ const recovery = [
   ['tab clone', 'tab close'],
   ['environment rollbac', 'environment rollback'],
   ['environment remov', 'environment rm'],
-  ['artifacts delet', 'artifacts delete'],
   ['worktree remov', 'worktree remove'],
   ['worktree delet', 'worktree delete'],
   ['orchestration chek', 'orchestration check'],

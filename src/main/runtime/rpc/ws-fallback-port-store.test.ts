@@ -15,9 +15,9 @@ function makeUserDataPath(): string {
 
 describe('ws-fallback-port-store', () => {
   it('builds a deterministic ladder above the preferred port, none for an OS-assigned one', () => {
-    // 6769 stays free for a `pnpm dev` instance pinned beside packaged Quirky.
-    expect(wsFallbackPortLadder(6768)).toEqual(Array.from({ length: 30 }, (_, i) => 6770 + i))
-    expect(wsFallbackPortLadder(6769)).toEqual(Array.from({ length: 31 }, (_, i) => 6770 + i))
+    // 6779 stays free for a `pnpm dev` instance pinned beside packaged Quirky.
+    expect(wsFallbackPortLadder(6778)).toEqual(Array.from({ length: 30 }, (_, i) => 6780 + i))
+    expect(wsFallbackPortLadder(6779)).toEqual(Array.from({ length: 31 }, (_, i) => 6780 + i))
     expect(wsFallbackPortLadder(65530)).toEqual([65531, 65532, 65533, 65534, 65535])
     expect(wsFallbackPortLadder(0)).toEqual([])
   })

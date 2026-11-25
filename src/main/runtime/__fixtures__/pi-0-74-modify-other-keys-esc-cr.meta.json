@@ -4,6 +4,6 @@
   "command": ["pi"],
   "cols": 100,
   "rows": 30,
-  "note": "pi 0.74.0, Linux, isolated HOME, no CSI ?u reply so pi arms modifyOtherKeys only; typed abc, ESC CR (Quirky's legacy Shift+Enter), def: abc is submitted",
+  "note": "pi 0.74.0, Linux, isolated HOME, no CSI ?u reply so pi arms modifyOtherKeys only; typed abc, ESC CR (Quik's legacy Shift+Enter), def: abc is submitted",
   "exitCode": 129
 }

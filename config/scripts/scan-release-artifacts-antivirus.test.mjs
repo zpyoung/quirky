@@ -18,7 +18,7 @@ describe('antivirus detection report', () => {
       // Lowercase hex sha256, so a reporter's `shasum -a 256` output and ours
       // compare directly — that comparison is what makes a submission credible.
       expect(await hashFile(artifact)).toBe(
-        'e0c924608fdcda8536bd9cc86b0fce0ab2d54ecc1e8ed9673624c39cde7f7820'
+        '5e657b3dcc995a8023a4b3814d51669cfb51a0d877d047911beedd9724177d92'
       )
     } finally {
       await rm(directory, { recursive: true, force: true })

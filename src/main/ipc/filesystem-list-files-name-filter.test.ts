@@ -1,19 +1,17 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Store } from '../persistence'
-import type * as GitRunner from '../git/runner'
 import {
   pathMatchesFileNameFilterTokens,
   splitFileNameFilterTokens
 } from '../../shared/file-name-filter-tokens'
 
-const { wslAwareSpawnMock } = vi.hoisted(() => ({
-  wslAwareSpawnMock: vi.fn()
+const { spawnMock } = vi.hoisted(() => ({
+  spawnMock: vi.fn()
 }))
 
-vi.mock('../git/runner', async (importOriginal) => ({
-  ...(await importOriginal<typeof GitRunner>()),
-  wslAwareSpawn: wslAwareSpawnMock
+vi.mock('../ripgrep/bundled-ripgrep-spawn', () => ({
+  spawnBundledRipgrep: (args: string[], options: unknown) => spawnMock('/bundled/rg', args, options)
 }))
 
 import { listQuickOpenFiles } from './filesystem-list-files'
@@ -61,7 +59,7 @@ describe('listQuickOpenFiles name filter', () => {
   })
 
   it('counts only matches against the ripgrep cap', async () => {
-    wslAwareSpawnMock
+    spawnMock
       .mockImplementationOnce(() => fakeRipgrep('a.ts\0b.ts\0c.ts\0ios/AppDelegate.swift\0'))
       .mockImplementationOnce(() => fakeRipgrep(''))
 
@@ -79,7 +77,7 @@ describe('listQuickOpenFiles name filter', () => {
   })
 
   it('rejects with the bundled-ripgrep error when the filtered ignored pass cannot start', async () => {
-    wslAwareSpawnMock
+    spawnMock
       .mockImplementationOnce(() => fakeRipgrep('ios/AppDelegate.swift\0'))
       .mockImplementationOnce(() => fakeRipgrep('', null, -2))
 
@@ -97,7 +95,7 @@ describe('listQuickOpenFiles name filter', () => {
   })
 
   it('keeps primary matches when the ignored-file pass fails during a filtered scan', async () => {
-    wslAwareSpawnMock
+    spawnMock
       .mockImplementationOnce(() => fakeRipgrep('ios/AppDelegate.swift\0'))
       .mockImplementationOnce(() => fakeRipgrep('', 'SIGKILL'))
 
@@ -115,7 +113,7 @@ describe('listQuickOpenFiles name filter', () => {
   })
 
   it('still rejects an ignored-pass failure for unfiltered listings', async () => {
-    wslAwareSpawnMock
+    spawnMock
       .mockImplementationOnce(() => fakeRipgrep('a.ts\0'))
       .mockImplementationOnce(() => fakeRipgrep('', 'SIGKILL'))
 

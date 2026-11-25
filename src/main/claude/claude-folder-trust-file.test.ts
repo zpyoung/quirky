@@ -24,7 +24,6 @@ import {
   resolveLocalClaudeTrustConfig,
   toClaudeTrustKey
 } from './claude-folder-trust-file'
-import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth/runtime-auth-types'
 
 let root: string
 
@@ -268,15 +267,6 @@ describe('grantClaudeWorkspaceTrust', () => {
 })
 
 describe('resolveLocalClaudeTrustConfig', () => {
-  const wslAuth: ClaudeRuntimeAuthPreparation = {
-    configDir: '\\\\wsl.localhost\\Ubuntu\\home\\u\\.claude',
-    runtime: 'wsl',
-    wslDistro: 'Ubuntu',
-    wslLinuxConfigDir: '/home/u/.claude',
-    envPatch: {},
-    provenance: 'wsl:Ubuntu:system'
-  }
-
   it('reads the final spawn env for a host launch', () => {
     const target = resolveLocalClaudeTrustConfig({
       workspacePath: '/repo/wt',
@@ -285,32 +275,5 @@ describe('resolveLocalClaudeTrustConfig', () => {
       wslDistro: null
     })
     expect(target?.configFile).toBe(join('/cfg', '.claude.json'))
-  })
-
-  it("never writes the Windows host's file for a WSL launch it cannot map to the guest", () => {
-    for (const args of [
-      { claudeAuth: null, wslDistro: 'Ubuntu' },
-      { claudeAuth: { ...wslAuth, wslLinuxConfigDir: null }, wslDistro: 'Ubuntu' },
-      { claudeAuth: wslAuth, wslDistro: 'Ubuntu', workspacePath: 'C:\\repo\\wt' }
-    ]) {
-      expect(
-        resolveLocalClaudeTrustConfig({
-          workspacePath: '\\\\wsl.localhost\\Ubuntu\\home\\u\\wt',
-          env: { HOME: '/home/win' },
-          ...args
-        })
-      ).toBeNull()
-    }
-  })
-
-  it("targets the guest's own file and Linux keys for a WSL launch", () => {
-    const target = resolveLocalClaudeTrustConfig({
-      workspacePath: '\\\\wsl.localhost\\Ubuntu\\home\\u\\wt',
-      env: {},
-      claudeAuth: wslAuth,
-      wslDistro: 'Ubuntu'
-    })
-    expect(target?.keyStyle).toBe('posix')
-    expect(target?.toClaudePath?.('\\\\wsl.localhost\\Ubuntu\\home\\u\\wt')).toBe('/home/u/wt')
   })
 })

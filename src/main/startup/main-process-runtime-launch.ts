@@ -71,8 +71,8 @@ function installRuntimeRpc(
   if (isE2E && (!Number.isInteger(e2eWsPort) || e2eWsPort < 0 || e2eWsPort > 65_535)) {
     throw new Error(`Invalid QUIRKY_E2E_RUNTIME_WS_PORT value: ${requestedE2EWsPort}`)
   }
-  // Why: pin dev to 6769 so `pnpm dev` doesn't race packaged Quirky on 6768 and fall back to a random port, breaking deterministic mobile pairing/repro (STA-1511).
-  const devWsPort = is.dev && !isE2E ? 6769 : undefined
+  // Why: pin dev to 6779 so `pnpm dev` doesn't race packaged Quirky on 6778 and fall back to a random port, breaking deterministic mobile pairing/repro (STA-1511).
+  const devWsPort = is.dev && !isE2E ? 6779 : undefined
   const runtimeRpc = new QuirkyRuntimeRpcServer({
     runtime,
     // Why: mobile pairing needs the stable pre-setName() path (getCanonicalUserDataPath), not a late app.getPath('userData') that drops paired devices across restarts.

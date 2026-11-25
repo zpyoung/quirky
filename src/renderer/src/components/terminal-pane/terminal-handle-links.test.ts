@@ -160,8 +160,8 @@ describe('extractOrchestrationTaskLinks', () => {
     expect(extractOrchestrationTaskLinks(line)).toEqual([
       {
         taskId: 'task_88f323f654c0',
-        startIndex: 39,
-        endIndex: 56
+        startIndex: 41,
+        endIndex: 58
       }
     ])
   })

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { resolveAuthorizedPathMock, wslAwareSpawnMock } from './quirky-runtime-files-mock-registry'
+import { resolveAuthorizedPathMock, spawnProcessMock } from './quirky-runtime-files-mock-registry'
 import {
   createRuntimeFileCommands,
   useRuntimeFileCommandsLifecycle
@@ -17,8 +17,8 @@ vi.mock(
 vi.mock('../ipc/filesystem-auth', async () =>
   (await import('./quirky-runtime-files-mock-registry')).filesystemAuthModuleMock()
 )
-vi.mock('../git/runner', async () =>
-  (await import('./quirky-runtime-files-mock-registry')).gitRunnerModuleMock()
+vi.mock('@quirky/process-host', async () =>
+  (await import('./quirky-runtime-files-mock-registry')).processHostModuleMock()
 )
 vi.mock(
   '../ipc/local-worktree-runtime-options',
@@ -58,7 +58,7 @@ describe('RuntimeFileCommands', () => {
     })
     const child = createRuntimeSearchChild()
     resolveAuthorizedPathMock.mockResolvedValue('/repo')
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnProcessMock.mockReturnValue(child)
     const resultPromise = commands.searchRuntimeFiles('id:wt-1', {
       query: 'needle',
       maxResults: 10

@@ -13,7 +13,7 @@ it('requires exact failures with an owner, issue and unexpired review date', () 
     ...failure,
     message: 'expected focus',
     owner: '@owner',
-    issue: 'https://github.com/stablyai/orca/issues/123',
+    issue: 'https://github.com/zpyoung/quirky/issues/123',
     expires: '2026-10-01'
   }
   const now = new Date('2026-09-28')

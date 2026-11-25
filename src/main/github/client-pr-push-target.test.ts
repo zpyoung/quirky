@@ -61,11 +61,11 @@ describe('getPRForBranch', () => {
         }
       })
     })
-    getRemoteUrlForRepoMock.mockResolvedValueOnce('git@github.com:stablyai/orca.git')
+    getRemoteUrlForRepoMock.mockResolvedValueOnce('git@github.com:stablyai/quirky.git')
 
     const target = await getPullRequestPushTarget('/repo-root', 1738)
 
-    expect(ghExecFileAsyncMock).toHaveBeenCalledWith(['api', 'repos/stablyai/orca/pulls/1738'], {
+    expect(ghExecFileAsyncMock).toHaveBeenCalledWith(['api', 'repos/stablyai/quirky/pulls/1738'], {
       cwd: '/repo-root'
     })
     expect(target).toEqual({
@@ -133,7 +133,7 @@ describe('getPRForBranch', () => {
         }
       })
     })
-    getRemoteUrlForRepoMock.mockResolvedValueOnce('git@github.com:stablyai/orca.git')
+    getRemoteUrlForRepoMock.mockResolvedValueOnce('git@github.com:stablyai/quirky.git')
 
     await expect(getPullRequestPushTarget('/repo-root', 1738)).resolves.toEqual({
       pushTarget: {
@@ -153,10 +153,10 @@ describe('getPRForBranch', () => {
         head: {
           ref: 'fix-sidebar',
           repo: {
-            full_name: 'stablyai/orca',
+            full_name: 'stablyai/quirky',
             name: 'quirky',
-            clone_url: 'https://github.com/stablyai/orca.git',
-            ssh_url: 'git@github.com:stablyai/orca.git',
+            clone_url: 'https://github.com/stablyai/quirky.git',
+            ssh_url: 'git@github.com:stablyai/quirky.git',
             owner: { login: 'stablyai' }
           }
         }
@@ -367,7 +367,7 @@ describe('getPRForBranch', () => {
     )
     expect(ghExecFileAsyncMock).toHaveBeenNthCalledWith(
       2,
-      ['api', 'repos/stablyai/orca/pulls/1849'],
+      ['api', 'repos/stablyai/quirky/pulls/1849'],
       { cwd: '/repo-root' }
     )
   })

@@ -311,49 +311,6 @@ describe('settings navigation metadata', () => {
     expect(repoSection?.searchEntries.some((entry) => entry.title === 'Project Runtime')).toBe(true)
   })
 
-  it('surfaces Windows-host and universal terminal settings in Windows-host metadata', () => {
-    const sections = buildSettingsNavigationMetadata({
-      isMac: false,
-      isWindows: false,
-      isWindowsTerminalHost: true,
-      isWebClient: false,
-      repos: [repo]
-    })
-
-    const terminal = sections.find((section) => section.id === 'terminal')
-
-    expect(terminal?.searchEntries.some((entry) => entry.title === 'Default Shell')).toBe(true)
-    expect(terminal?.searchEntries.some((entry) => entry.title === 'PowerShell Version')).toBe(true)
-    // Right-click to paste is now exposed on every platform (#8322), so it is
-    // indexed even when only the terminal host — not the client — is Windows.
-    expect(terminal?.searchEntries.some((entry) => entry.title === 'Right-click to paste')).toBe(
-      true
-    )
-  })
-
-  it('does not expose local runtime settings from a remote Windows host', () => {
-    const sections = buildSettingsNavigationMetadata({
-      isMac: false,
-      isWindows: false,
-      isLocalWindowsHost: false,
-      isWindowsTerminalHost: true,
-      isWebClient: false,
-      repos: [repo]
-    })
-
-    const agents = sections.find((section) => section.id === 'agents')
-    const general = sections.find((section) => section.id === 'general')
-    const terminal = sections.find((section) => section.id === 'terminal')
-    const repoSection = sections.find((section) => section.id === 'repo-repo-1')
-
-    expect(agents?.searchEntries.some((entry) => entry.title === 'Agent Runtime')).toBe(false)
-    expect(general?.searchEntries.some((entry) => entry.title === 'Default Project Runtime')).toBe(
-      false
-    )
-    expect(terminal?.searchEntries.some((entry) => entry.title === 'Default Shell')).toBe(true)
-    expect(repoSection?.searchEntries.some((entry) => entry.title === 'Project Runtime')).toBe(true)
-  })
-
   it('keeps local runtime settings but hides remote Linux entries on a Windows desktop', () => {
     const sections = buildSettingsNavigationMetadata({
       isMac: false,

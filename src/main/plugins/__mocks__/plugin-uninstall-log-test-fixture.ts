@@ -125,7 +125,11 @@ export async function createUninstallFixture() {
           pluginsDir: getUserPluginsDir(root),
           stagingDir: sourcePath,
           hostVersion: '1.4.0',
-          source: { kind: 'git', url: 'https://github.com/example/plugins.git', ref: 'main' },
+          source: {
+            kind: 'git',
+            url: 'https://github.com/stablyai/quirky-plugins.git',
+            ref: 'main'
+          },
           resolvedCommit: '1'.repeat(40)
         })
       : await installPluginFromLocalPath({

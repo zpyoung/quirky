@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { OpenCodeTranscriptSignal } from './transcript-opencode-sqlite-query'
-import { WslTranscriptFsError } from './wsl-transcript-fs-error'
+import type { WslTranscriptFsError } from './wsl-transcript-fs-error'
 
 const mocks = vi.hoisted(() => ({
   homes: vi.fn(async (): Promise<string[]> => []),
@@ -79,28 +79,6 @@ describe('OpenCode transcript owning-host database discovery', () => {
     expect(mocks.native).not.toHaveBeenCalled()
   })
 
-  it('finds a WSL ZCode session without probing OpenCode databases', async () => {
-    const home = 'wsl-home'
-    const dbPath = join(home, '.zcode', 'cli', 'db', 'db.sqlite')
-    mocks.homes.mockResolvedValue([home])
-    mocks.readSignal.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      messageCount: 1,
-      partCount: 1,
-      maxMessageRowId: 1,
-      maxPartTimeUpdated: 1
-    })
-    await expect(
-      openCodeTranscriptDefaultDeps.resolveDbPath('z-session', undefined, 'zcode')
-    ).resolves.toBe(dbPath)
-    expect(mocks.prepare).toHaveBeenCalledWith([home])
-    expect(mocks.readSignal).toHaveBeenLastCalledWith(
-      { dbPath, sessionId: 'z-session', agent: 'zcode' },
-      expect.any(AbortSignal)
-    )
-    expect(mocks.native).not.toHaveBeenCalled()
-    expect(mocks.directory).not.toHaveBeenCalled()
-  })
-
   it.each(['homes', 'directory', 'prepare'] as const)(
     'opens a matching native database without waiting for WSL %s',
     async (stage) => {
@@ -122,32 +100,6 @@ describe('OpenCode transcript owning-host database discovery', () => {
       expect(mocks.prepare).not.toHaveBeenCalled()
     }
   )
-
-  it('finds a WSL-only session using the same running homes and database discovery as Vault', async () => {
-    const home = 'wsl-home'
-    const dbPath = join(home, '.local', 'share', 'opencode', 'opencode.db')
-    mocks.homes.mockResolvedValue([home])
-    mocks.directory.mockResolvedValue([dbPath])
-    mocks.readSignal.mockResolvedValue(null)
-    mocks.readSignal.mockImplementation(async () => ({
-      messageCount: 1,
-      partCount: 1,
-      maxMessageRowId: 1,
-      maxPartTimeUpdated: 1
-    }))
-    await expect(resolveOpenCodeTranscriptDbPath('session')).resolves.toBe(dbPath)
-    expect(mocks.directory).toHaveBeenCalledWith(
-      join(home, '.local', 'share', 'opencode'),
-      expect.any(Function),
-      expect.any(AbortSignal)
-    )
-    expect(mocks.prepare).toHaveBeenCalledWith([home])
-    expect(mocks.configure).toHaveBeenCalledOnce()
-    expect(mocks.readSignal).toHaveBeenCalledWith(
-      { dbPath, sessionId: 'session' },
-      expect.any(AbortSignal)
-    )
-  })
 
   it('caps candidate probes when a session is missing', async () => {
     mocks.native.mockResolvedValue(Array.from({ length: 40 }, (_, index) => `db-${index}`))
@@ -178,26 +130,6 @@ describe('OpenCode transcript owning-host database discovery', () => {
     expect(mocks.readSignal).toHaveBeenCalledTimes(2)
   })
 
-  it('continues past an unprepared WSL reader to another owning-host candidate', async () => {
-    const home = 'wsl-home'
-    const failedPath = join(home, '.local', 'share', 'opencode', 'opencode-a.db')
-    const matchingPath = join(home, '.local', 'share', 'opencode', 'opencode-b.db')
-    mocks.homes.mockResolvedValue([home])
-    mocks.directory.mockResolvedValue([failedPath, matchingPath])
-    mocks.readSignal
-      .mockRejectedValueOnce(new Error('Preparing the WSL SQLite reader…'))
-      .mockResolvedValueOnce({
-        messageCount: 1,
-        partCount: 1,
-        maxMessageRowId: 1,
-        maxPartTimeUpdated: 1
-      })
-    await expect(resolveOpenCodeTranscriptDbPath('session')).resolves.toBe(matchingPath)
-    expect(mocks.prepare).toHaveBeenCalledOnce()
-    expect(mocks.configure).toHaveBeenCalledOnce()
-    expect(mocks.readSignal).toHaveBeenCalledTimes(2)
-  })
-
   it('caps failed probes as well as missing-session probes', async () => {
     const error = new Error('file is not a database')
     mocks.native.mockResolvedValue(Array.from({ length: 40 }, (_, index) => `db-${index}`))
@@ -218,29 +150,6 @@ describe('OpenCode transcript owning-host database discovery', () => {
       openCodeTranscriptDefaultDeps.resolveDbPath('session', controller.signal)
     ).rejects.toBe(reason)
     expect(mocks.readSignal).toHaveBeenCalledOnce()
-  })
-
-  it('prepares an overridden WSL database before its owning-host probe', async () => {
-    const dbPath = '\\\\wsl.localhost\\Ubuntu\\custom\\opencode.db'
-    mocks.native.mockResolvedValue([dbPath])
-    mocks.wslPath.mockReturnValue({ distro: 'Ubuntu', linuxPath: '/custom/opencode.db' })
-    mocks.readSignal.mockImplementation(async () => {
-      expect(mocks.configure).toHaveBeenCalledOnce()
-      return { messageCount: 1, partCount: 1, maxMessageRowId: 1, maxPartTimeUpdated: 1 }
-    })
-    await expect(resolveOpenCodeTranscriptDbPath('session')).resolves.toBe(dbPath)
-    expect(mocks.prepare).toHaveBeenCalledWith([dbPath])
-    expect(mocks.readSignal).toHaveBeenCalledOnce()
-  })
-
-  it('reports a refused WSL read instead of treating that host as empty', async () => {
-    mocks.homes.mockResolvedValue(['wsl-home'])
-    const refusal = new WslTranscriptFsError('unavailable', 'WSL discovery unavailable')
-    mocks.directory.mockImplementation(async (path, onRefusal) => {
-      onRefusal?.(path, refusal)
-      return []
-    })
-    await expect(resolveOpenCodeTranscriptDbPath('session')).rejects.toBe(refusal)
   })
 
   it('aborts a slow candidate within the discovery deadline, including its in-flight read', async () => {

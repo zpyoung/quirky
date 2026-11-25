@@ -226,19 +226,6 @@ describe('createLocalGitProvider', () => {
     expect(git[fnName]).toHaveBeenCalledWith(...expected)
   })
 
-  it.each(cases)('%s keeps the WSL distro on every call', async (...c) => {
-    const [, call, fnName] = c
-    await call(createLocalGitProvider({ wslDistro: 'Ubuntu' }))
-    const args = git[fnName].mock.calls[0]
-    const options = args.at(-1)
-    if (fnName === 'getRemoteFileUrl' || fnName === 'getRemoteCommitUrl') {
-      // These read the Windows-hosted git directly, exactly as the local arm does today.
-      expect(git.awaitWindowsHostGitEnvironmentReady).toHaveBeenCalledWith({ cwd: WT })
-      return
-    }
-    expect(options).toMatchObject({ wslDistro: 'Ubuntu' })
-  })
-
   it('applies shared link paths to status and scoped stage-all only', async () => {
     const getSharedLinkPaths = vi.fn(() => ['node_modules'])
     const provider = createLocalGitProvider({ getSharedLinkPaths })

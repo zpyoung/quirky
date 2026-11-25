@@ -58,7 +58,7 @@ describe('getPRForBranch', () => {
             number: 78,
             title: 'Fork upstream branch PR',
             state: 'open',
-            html_url: 'https://github.com/stablyai/orca/pull/78',
+            html_url: 'https://github.com/stablyai/quirky/pull/78',
             updated_at: '2026-03-28T00:00:00Z',
             draft: false,
             mergeable: true,
@@ -72,7 +72,7 @@ describe('getPRForBranch', () => {
           number: 78,
           title: 'Hydrated fork upstream branch PR',
           state: 'OPEN',
-          url: 'https://github.com/stablyai/orca/pull/78',
+          url: 'https://github.com/stablyai/quirky/pull/78',
           statusCheckRollup: [],
           updatedAt: '2026-03-28T00:00:00Z',
           isDraft: false,
@@ -95,7 +95,7 @@ describe('getPRForBranch', () => {
       3,
       [
         'api',
-        'repos/stablyai/orca/pulls?head=fork-owner%3Acontributor%2Foriginal&state=all&per_page=1'
+        'repos/stablyai/quirky/pulls?head=fork-owner%3Acontributor%2Foriginal&state=all&per_page=1'
       ],
       { cwd: '/repo-root' }
     )
@@ -125,7 +125,7 @@ describe('getPRForBranch', () => {
             number: 6433,
             title: 'Recover Windows worktree deletes from long paths',
             state: 'open',
-            html_url: 'https://github.com/stablyai/orca/pull/6433',
+            html_url: 'https://github.com/stablyai/quirky/pull/6433',
             updated_at: '2026-06-26T00:00:00Z',
             draft: false,
             mergeable: true,
@@ -142,7 +142,7 @@ describe('getPRForBranch', () => {
           number: 6433,
           title: 'Recover Windows worktree deletes from long paths',
           state: 'OPEN',
-          url: 'https://github.com/stablyai/orca/pull/6433',
+          url: 'https://github.com/stablyai/quirky/pull/6433',
           statusCheckRollup: [],
           updatedAt: '2026-06-26T00:00:00Z',
           isDraft: false,
@@ -165,7 +165,7 @@ describe('getPRForBranch', () => {
       3,
       [
         'api',
-        'repos/stablyai/orca/pulls?head=brennanb2025%3Abrennanb2025%2Fworktree-remove-fix&state=all&per_page=1'
+        'repos/stablyai/quirky/pulls?head=brennanb2025%3Abrennanb2025%2Fworktree-remove-fix&state=all&per_page=1'
       ],
       { cwd: '/repo-root' }
     )

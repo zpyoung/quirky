@@ -44,7 +44,7 @@ describe('repository GitHub avatar resolution', () => {
         type: 'image',
         src: 'https://github.com/stablyai.png?size=64',
         source: 'github',
-        label: 'stablyai/orca'
+        label: 'stablyai/quirky'
       },
       upstream: { owner: 'stablyai', repo: 'quirky' }
     })
@@ -95,7 +95,7 @@ describe('repository GitHub avatar resolution', () => {
         type: 'image',
         src: 'https://github.com/stablyai.png?size=64',
         source: 'github',
-        label: 'stablyai/orca'
+        label: 'stablyai/quirky'
       }
     })
     apiMocks.repoUpstream.mockResolvedValueOnce(null)
@@ -139,7 +139,7 @@ describe('repository GitHub avatar resolution', () => {
         type: 'image',
         src: 'https://github.com/stablyai.png?size=64',
         source: 'github',
-        label: 'stablyai/orca'
+        label: 'stablyai/quirky'
       }
     })
 
@@ -169,7 +169,7 @@ describe('repository GitHub avatar resolution', () => {
         type: 'image',
         src: 'https://github.com/stablyai.png?size=64',
         source: 'github',
-        label: 'stablyai/orca'
+        label: 'stablyai/quirky'
       }
     })
     apiMocks.repoUpstream.mockResolvedValueOnce(null)
@@ -185,7 +185,7 @@ describe('repository GitHub avatar resolution', () => {
         type: 'image',
         src: 'https://github.com/stablyai.png?size=64',
         source: 'github',
-        label: 'stablyai/orca'
+        label: 'stablyai/quirky'
       },
       upstream: { owner: 'stablyai', repo: 'quirky' }
     })

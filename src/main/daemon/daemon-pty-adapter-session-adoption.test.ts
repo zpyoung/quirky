@@ -586,26 +586,6 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
       }
     })
 
-    it('reports the daemon session WSL owner', async () => {
-      const platform = Object.getOwnPropertyDescriptor(process, 'platform')
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      try {
-        const spawned = await adapter.spawn({
-          cols: 80,
-          rows: 24,
-          cwd: '\\\\wsl.localhost\\Ubuntu\\home\\jin\\repo'
-        })
-
-        const procs = await adapter.listProcesses()
-
-        expect(procs.find((process) => process.id === spawned.id)?.wslDistro).toBe('Ubuntu')
-      } finally {
-        if (platform) {
-          Object.defineProperty(process, 'platform', platform)
-        }
-      }
-    })
-
     it('retains authenticated identity and reports replacement across a same-endpoint reconnect', async () => {
       await adapter.listProcesses()
       const firstIdentity = adapter.getLastAuthenticatedDaemonIdentity()

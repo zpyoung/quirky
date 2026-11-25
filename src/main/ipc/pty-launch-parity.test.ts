@@ -17,8 +17,7 @@ import {
 import {
   POSIX_PATH,
   WIN_PATH,
-  WINDOW_LAUNCH_CASES,
-  WSL_PATH
+  WINDOW_LAUNCH_CASES
 } from '../../shared/launch-parity-window-cases.test-fixture'
 import { PLUS_LAUNCH_CASES } from '../../shared/launch-parity-plus-cases.test-fixture'
 import { WORKSPACE_START_LAUNCH_CASES } from '../../shared/launch-parity-workspace-start-cases.test-fixture'
@@ -741,19 +740,6 @@ describe('launch facts outside the tables', () => {
   })
 })
 
-const WSL_UBUNTU = { kind: 'wsl', distro: 'Ubuntu' } as const
-// What the renderer sends for a WSL project (it reads a never-saved \\wsl$ path the same way).
-const WSL_PROJECT_SENT = {
-  status: 'resolved',
-  runtime: {
-    kind: 'wsl',
-    hostPlatform: 'wsl',
-    projectId: 'repo-1',
-    distro: 'Ubuntu',
-    reason: 'project-override',
-    cacheKey: 'repo-1:wsl:Ubuntu'
-  }
-}
 const LOGIN_SHELL = String.raw`C:\Program Files\PowerShell\7\pwsh.exe`
 
 // Pins main's current spawn preflight (row 3, C5b): where the two lanes resolve a plain terminal's
@@ -804,35 +790,6 @@ describe('spawn preflight: where the lanes differ today', () => {
       result: { startupCwdFallback: { kind: 'worktree', cwd: POSIX_PATH } }
     })
     expect(facts.host).toMatchObject({ cwd: missing })
-  })
-
-  it.each([
-    {
-      name: 'a folder containing a WSL-project repo',
-      workspace: {
-        kind: 'folder',
-        path: String.raw`C:\Users\alice`,
-        repoPath: WIN_PATH,
-        projectRuntime: WSL_UBUNTU
-      } satisfies LaunchWorkspace,
-      host: { shellOverride: 'powershell.exe', terminalWindowsWslDistro: null }
-    },
-    {
-      name: 'a \\wsl$ repo with no saved runtime',
-      workspace: { kind: 'repo', path: WSL_PATH } satisfies LaunchWorkspace,
-      // The distro comes from the path, but the shell stays the settings' PowerShell.
-      host: { shellOverride: 'powershell.exe', terminalWindowsWslDistro: 'Ubuntu' }
-    }
-  ])('Windows plain terminal, $name: the window uses the sent runtime', async (c) => {
-    setMainPlatform('win32')
-    const lanes = startParityLanes(suite, { workspace: c.workspace })
-    const facts = await spawnBoth(lanes, c.workspace, { projectRuntime: WSL_PROJECT_SENT })
-
-    expect(facts.window).toMatchObject({
-      shellOverride: 'wsl.exe',
-      terminalWindowsWslDistro: 'Ubuntu'
-    })
-    expect(facts.host).toMatchObject(c.host)
   })
 
   // One resolution reads it for both lanes. Only an SSH-launched quirkyd has this env, and it has no

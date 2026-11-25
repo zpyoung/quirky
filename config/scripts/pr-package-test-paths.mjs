@@ -24,7 +24,6 @@ export const WINDOWS_BOUNDARY_TESTS = [
   'config/scripts/rebuild-native-deps-windows-process-tree.test.mjs',
   'config/scripts/rebuild-native-deps-node-pty.test.mjs',
   'config/scripts/ensure-native-runtime-job-ownership.test.mjs',
-  'config/scripts/verify-packaged-node-pty-job-ownership.test.mjs',
   'config/scripts/windows-pe-machine.test.mjs',
   'config/scripts/build-windows-cli-launcher.test.mjs',
   'config/scripts/verify-packaged-windows-agent-hook.test.mjs',

@@ -533,8 +533,8 @@ describe('SkillFreshnessUpdateDialog', () => {
     // Quirky's own rows sort first, and only they are checked.
     const rows = Array.from(container?.querySelectorAll('[data-skill-row]') ?? [])
     expect(rows.map((row) => row.getAttribute('data-skill-row'))).toEqual([
-      'quirky-cli',
       'orchestration',
+      'quirky-cli',
       'computer-use',
       'linear-tickets'
     ])
@@ -556,7 +556,7 @@ describe('SkillFreshnessUpdateDialog', () => {
     expect(container?.textContent).toContain('2 skills not installed by Quirky are unselected.')
 
     await clickButton('Update 2 skills')
-    expect(skillsApi.startUpdateRun).toHaveBeenLastCalledWith(['quirky-cli', 'orchestration'])
+    expect(skillsApi.startUpdateRun).toHaveBeenLastCalledWith(['orchestration', 'quirky-cli'])
   })
 
   it('counts the selection in the button once the user ticks a foreign copy', async () => {

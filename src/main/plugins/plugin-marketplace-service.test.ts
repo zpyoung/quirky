@@ -150,7 +150,7 @@ describe('PluginMarketplaceService', () => {
           id: 'stablyai.quirky-shortcuts',
           source: {
             kind: 'git',
-            url: 'git@github.com:stablyai/orca-shortcuts.git',
+            url: 'git@github.com:stablyai/quirky-shortcuts.git',
             ref: 'main'
           },
           categories: ['keybindings']
@@ -162,7 +162,7 @@ describe('PluginMarketplaceService', () => {
       fetcher: async () => fetched(officialMarketplace)
     })
 
-    await service.addSource(source('https://github.com/stablyai/orca-plugins.git'))
+    await service.addSource(source('https://github.com/stablyai/quirky-plugins.git'))
 
     await expect(service.listPlugins()).resolves.toEqual([
       expect.objectContaining({ pluginKey: 'stablyai.quirky-shortcuts', official: true })

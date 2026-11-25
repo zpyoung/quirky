@@ -4,11 +4,7 @@ import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getDefaultSettings } from '../../../../shared/constants'
-import type { Project } from '../../../../shared/project-types'
 import type { Repo } from '../../../../shared/repo-types'
-import type { TerminalTab } from '../../../../shared/terminal-tab-types'
-import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { useAppStore } from '../../store'
 import {
   getRepositoryPaneSearchEntries,
@@ -28,42 +24,6 @@ const repo: Repo = {
   badgeColor: '#000000',
   addedAt: 1,
   kind: 'git'
-}
-
-const project: Project = {
-  id: 'project-1',
-  displayName: 'Example Project',
-  badgeColor: '#000000',
-  sourceRepoIds: ['repo-1'],
-  createdAt: 1,
-  updatedAt: 1
-}
-
-function terminalTab(id: string, worktreeId: string): TerminalTab {
-  return {
-    id,
-    ptyId: null,
-    worktreeId,
-    title: 'Terminal',
-    customTitle: null,
-    color: null,
-    sortOrder: 0,
-    createdAt: 1
-  }
-}
-
-function activeAgent(paneKey: string, worktreeId: string): AgentStatusEntry {
-  return {
-    state: 'working',
-    prompt: 'Implement runtime switch',
-    updatedAt: 1,
-    stateStartedAt: 1,
-    agentType: 'codex',
-    paneKey,
-    tabId: paneKey.split(':')[0],
-    worktreeId,
-    stateHistory: []
-  }
 }
 
 beforeEach(() => {
@@ -171,52 +131,5 @@ describe('RepositoryPane search entries', () => {
         settingsSearchInputQuery: ''
       })
     }
-  })
-
-  it('warns about live terminals and active tasks before project runtime changes', () => {
-    const worktreeId = 'repo-1::/tmp/repo'
-    useAppStore.setState({
-      settingsSearchQuery: 'Example Repo',
-      settingsSearchInputQuery: 'Example Repo',
-      settings: getDefaultSettings('/tmp'),
-      tabsByWorktree: {
-        [worktreeId]: [terminalTab('tab-1', worktreeId), terminalTab('tab-2', worktreeId)]
-      },
-      ptyIdsByTabId: {
-        'tab-1': ['pty-1'],
-        'tab-2': ['pty-2']
-      },
-      agentStatusByPaneKey: {
-        'tab-2:0': activeAgent('tab-2:0', worktreeId)
-      }
-    })
-
-    act(() => {
-      root.render(
-        React.createElement(
-          TooltipProvider,
-          null,
-          React.createElement(RepositoryPane, {
-            repo,
-            project,
-            yamlHooks: null,
-            hasHooksFile: false,
-            hooksInspectionReady: true,
-            mayNeedUpdate: false,
-            updateRepo: vi.fn(),
-            removeProject: vi.fn(),
-            isLocalWindowsProject: true,
-            wslAvailable: true,
-            wslDistros: ['Ubuntu-24.04'],
-            wslCapabilitiesLoading: false,
-            updateProject: vi.fn()
-          })
-        )
-      )
-    })
-
-    expect(container.textContent).toContain('2 live terminals')
-    expect(container.textContent).toContain('1 active task')
-    expect(container.textContent).toContain('finish or restart')
   })
 })

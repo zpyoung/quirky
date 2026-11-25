@@ -261,30 +261,6 @@ describe('registerPtyHandlers', () => {
         )
         expect(spawnOptions.env.CLAUDE_CODE_CHILD_SESSION).toBe('1')
       })
-      it('prepends the bare-quirky CLI shim dir to PATH for packaged Linux spawns', async () => {
-        const originalPlatform = process.platform
-        Object.defineProperty(process, 'platform', {
-          configurable: true,
-          value: 'linux'
-        })
-        try {
-          // Why: overriding process.platform doesn't change the loaded node:path dialect; keep this synthetic PATH consistent.
-          const env = await daemonSpawnAndGetEnv({
-            PATH: ['/usr/local/bin', '/usr/bin'].join(delimiter)
-          })
-          const entries = env.PATH.split(delimiter)
-          const shimDir = join('/tmp/quirky-user-data', 'linux-quirky-cli-shim')
-          // Why: bare `quirky` must resolve to the Quirky CLI before /usr/bin/quirky (the GNOME screen reader) in Quirky terminals (#7904).
-          expect(entries.indexOf(shimDir)).toBeGreaterThanOrEqual(0)
-          expect(entries.indexOf(shimDir)).toBeLessThan(entries.indexOf('/usr/bin'))
-          expect(env.QUIRKY_CLI_COMMAND).toBeUndefined()
-        } finally {
-          Object.defineProperty(process, 'platform', {
-            configurable: true,
-            value: originalPlatform
-          })
-        }
-      })
       it('prepends the bundled CLI dir to PATH for packaged macOS spawns', async () => {
         const resourcesPathDescriptor = Object.getOwnPropertyDescriptor(process, 'resourcesPath')
         Object.defineProperty(process, 'resourcesPath', {

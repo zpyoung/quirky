@@ -57,7 +57,7 @@ describe('dev-electron-bundle-identity', () => {
   })
 
   it('keeps the bundle display name in step with the name safeStorage keys off', () => {
-    // Two independently hardcoded 'Quirky' strings: this one names the bundle (notifications,
+    // Two independently hardcoded 'Quirky Dev' strings: this one names the bundle (notifications,
     // System Settings), and getDevInstanceIdentity().appName drives app.setName, which decides the
     // Keychain service name. Drift would split the two without anything else failing.
     expect(DEV_BUNDLE_DISPLAY_NAME).toBe(getDevInstanceIdentity(true, {}).appName)

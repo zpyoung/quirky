@@ -38,7 +38,7 @@ function inventory(eligibleUpdateNames: string[]): SkillFreshnessInventory {
       topology: 'canonical-copy',
       status: 'outdated',
       currentPackageDigest: 'current',
-      lockSource: 'stablyai/orca',
+      lockSource: 'zpyoung/quirky',
       errorCategory: null
     })),
     eligibleUpdateNames,

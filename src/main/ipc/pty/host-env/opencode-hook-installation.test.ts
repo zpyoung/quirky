@@ -17,22 +17,10 @@ vi.mock('../../../../shared/app-environment', () => ({
 vi.mock('../../../agent-hooks/server', () => ({
   agentHookServer: { buildPtyEnv: () => ({ QUIRKY_AGENT_HOOK_PORT: '12345' }) }
 }))
-vi.mock('../../../agent-hooks/wsl-hook-relay-manager', () => ({
-  wslHookRelayManager: {
-    ensureForDistro: vi.fn(),
-    getGuestEndpointFilePath: () => '/guest/endpoint.json',
-    getOpenCodeOverlayDir: () => fixture.guestOverlay,
-    getGuestAgentPath: () => null
-  }
-}))
 vi.mock('../../../pi/titlebar-extension-service', () => ({
   piTitlebarExtensionService: { buildPtyEnv: () => ({}), buildFreshOmpEnv: () => ({}) }
 }))
 vi.mock('../../../cli/quirky-cli-child-path', () => ({ prependQuirkyCliDirToChildPath: () => {} }))
-vi.mock('../../../cli/wsl-managed-cli', () => ({
-  getManagedWslCliDir: () => undefined,
-  getWslCliCommandName: () => 'quirky-ide'
-}))
 
 let root: string
 let config: string
@@ -278,28 +266,6 @@ describe('OpenCode installation uses the current enabled agents', () => {
       expect(env.QUIRKY_OPENCODE_AGENT).toBeUndefined()
     }
   })
-
-  it('does not write a native plugin for WSL or inject a disabled guest overlay', () => {
-    const enabled = buildPtyHostEnv(
-      'wsl-enabled',
-      {},
-      { ...options, isWsl: true, launchAgent: 'opencode2' }
-    )
-    expect(enabled.OPENCODE_CONFIG_DIR).toBe(fixture.guestOverlay)
-    expect(existsSync(config)).toBe(false)
-    const disabled = buildPtyHostEnv(
-      'wsl-disabled',
-      {},
-      {
-        ...options,
-        isWsl: true,
-        disabledTuiAgents: ['opencode', 'opencode2']
-      }
-    )
-    expect(disabled.OPENCODE_CONFIG_DIR).toBeUndefined()
-    expect(disabled.QUIRKY_AGENT_HOOK_ENDPOINT).toBe('/guest/endpoint.json')
-    expect(existsSync(config)).toBe(false)
-  })
 })
 
 it.each(['source', 'no-source', 'user-config'])(
@@ -440,31 +406,6 @@ it.each([true, false])(
       expect(env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBe(enabled ? custom : undefined)
       expect(existsSync(plugin(stale, 'opencode'))).toBe(false)
     }
-  }
-)
-
-it.each([true, false])(
-  'drops host config for disabled WSL variants with explicit primary %s',
-  (explicit) => {
-    const overlay = 'C:\\Users\\fixture\\Quirky\\opencode-overlays\\old'
-    const source = 'C:\\Users\\fixture\\config\\opencode'
-    vi.stubEnv('QUIRKY_OPENCODE_CONFIG_DIR', overlay)
-    vi.stubEnv('QUIRKY_OPENCODE_SOURCE_CONFIG_DIR', source)
-    const env = buildPtyHostEnv(
-      'wsl-disabled-inherited',
-      {
-        OPENCODE_CONFIG_DIR: explicit ? source : overlay,
-        QUIRKY_OPENCODE_CONFIG_DIR: overlay,
-        QUIRKY_OPENCODE_SOURCE_CONFIG_DIR: source
-      },
-      { ...options, isWsl: true, disabledTuiAgents: ['opencode', 'opencode2'] }
-    )
-    expect(env.OPENCODE_CONFIG_DIR).toBeUndefined()
-    expect(env.QUIRKY_OPENCODE_CONFIG_DIR).toBeUndefined()
-    expect(env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
-    expect(env.QUIRKY_OPENCODE_AGENT).toBeUndefined()
-    expect(env.QUIRKY_AGENT_HOOK_ENDPOINT).toBe('/guest/endpoint.json')
-    expect(existsSync(config)).toBe(false)
   }
 )
 

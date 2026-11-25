@@ -176,9 +176,9 @@ describe('verifyPackagedQuirkydTemplate', () => {
   })
 
   // Design D2 reverses the old "unused, excluded" contract: SSH relays and managed quirkyd deploys
-  // materialize their slot from process.resourcesPath/quirkyd-template, so every desktop OS ships it.
-  it('ships the deployment template as a resource on every desktop OS, never its runtimes', async () => {
-    for (const platform of ['win', 'mac', 'linux']) {
+  // materialize their slot from process.resourcesPath/quirkyd-template, so the app ships it.
+  it('ships the deployment template as a resource, never its runtimes', async () => {
+    for (const platform of ['mac']) {
       expect(builderConfig[platform].extraResources).toContainEqual({
         from: 'out/quirkyd-template',
         to: 'quirkyd-template'

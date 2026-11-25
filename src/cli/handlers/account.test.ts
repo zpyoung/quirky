@@ -327,54 +327,6 @@ describe('account CLI handlers', () => {
     expect(deleteKeychainMock).not.toHaveBeenCalled()
   })
 
-  it('attributes a Codex account added through the WSL bridge to the cwd distro', async () => {
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-
-    await ACCOUNT_HANDLERS['account add'](
-      context('codex', false, String.raw`\\wsl$\Ubuntu\home\user`)
-    )
-
-    const sourceHome = spawnMock.mock.calls[0]?.[2].env.CODEX_HOME
-    expect(callMock).toHaveBeenCalledWith('accounts.addCodexFromHome', {
-      sourceHome,
-      runtime: 'wsl',
-      wslDistro: 'Ubuntu'
-    })
-  })
-
-  it('uses the explicit bridge distro over an ambient environment or another distro cwd', async () => {
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-    process.env.WSL_DISTRO_NAME = 'stale-Windows-value'
-    process.env.QUIRKY_CLI_WSL_DISTRO = 'Debian'
-
-    await ACCOUNT_HANDLERS['account add'](
-      context('claude', false, String.raw`\\wsl.localhost\Ubuntu-22.04\home\user`)
-    )
-
-    expect(callMock).toHaveBeenCalledWith(
-      'accounts.beginClaudeSignIn',
-      expect.objectContaining({ runtime: 'wsl', wslDistro: 'Debian' }),
-      { timeoutMs: 300000 }
-    )
-  })
-
-  it.each(['claude', 'codex'])(
-    'attributes %s from a Windows mount to the bridge distro',
-    async (agent) => {
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      process.env.QUIRKY_CLI_WSL_DISTRO = 'Ubuntu Work'
-      await ACCOUNT_HANDLERS['account add'](context(agent, false, String.raw`C:\work with spaces`))
-      expect(
-        callMock.mock.calls.some(
-          ([method, params]) =>
-            method ===
-              (agent === 'claude' ? 'accounts.beginClaudeSignIn' : 'accounts.addCodexFromHome') &&
-            params.wslDistro === 'Ubuntu Work'
-        )
-      ).toBe(true)
-    }
-  )
-
   it('ignores an ambient WSL distro in a native Windows account add', async () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     process.env.WSL_DISTRO_NAME = 'stale-Windows-value'

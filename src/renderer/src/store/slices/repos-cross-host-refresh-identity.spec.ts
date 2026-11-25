@@ -12,7 +12,7 @@ export function registerReposCrossHostRefreshIdentityTests(): void {
   // One project cloned on the local Mac and on a remote Quirky server under distinct repo ids —
   // the shape the compat merge exists to serve, and the only shape whose sourceRepoIds are
   // assembled from two hosts.
-  const SHARED_PROJECT_ID = 'github:stablyai/orca'
+  const SHARED_PROJECT_ID = 'github:stablyai/quirky'
 
   const localRepo: Repo = {
     id: 'local-repo',

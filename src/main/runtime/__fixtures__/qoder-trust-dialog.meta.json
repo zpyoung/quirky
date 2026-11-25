@@ -4,9 +4,9 @@
   "command": [
     "qodercli",
     "--config-dir",
-    "/tmp/quirky-qoder-probe/config",
+    "/tmp/quik-qoder-probe/config",
     "--cwd",
-    "/tmp/quirky-qoder-probe/workspace"
+    "/tmp/quik-qoder-probe/workspace"
   ],
   "cols": 100,
   "rows": 32,

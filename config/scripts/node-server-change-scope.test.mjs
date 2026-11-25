@@ -224,7 +224,6 @@ it.each([
   'src/main/sqlite/removed.test.ts',
   'src/main/quirkyd/quirkyd-entry.test.ts',
   'src/main/daemon/pty-subprocess/removed.test.ts',
-  'src/main/providers/agent-foreground-process-git-bash.win32.test.ts',
   'config/scripts/node-server-change-scope.test.mjs'
 ])('forces explicitly protected tests without relying on graph discovery: %s', async (file) => {
   const result = await classifyNodeServerChanges([file], async () => {
@@ -523,12 +522,8 @@ describe('the actual Bun build and profile-test dependency graph', () => {
     'src/shared/pty-running-work-probe.ts',
     'src/shared/pty-running-work-probe.test.ts',
     'src/main/runtime/quirky-runtime.ts',
-    'src/main/windows/windows-process-table.ts',
     'src/main/worker-thread-entry-path.ts',
     'config/scripts/zip-extractor-command.mjs',
-    'config/scripts/windows-process-tree-gyp-rebuild.mjs',
-    'config/scripts/windows-process-tree-prepared-addon.mjs',
-    'config/scripts/quirkyd-windows-prebuild-cache.mjs',
     'config/scripts/profile-state-worker-smoke.mjs',
     'config/scripts/vitest-host-ports-setup.ts',
     'tests/e2e/daemon-running-work-probe.unit.test.ts'

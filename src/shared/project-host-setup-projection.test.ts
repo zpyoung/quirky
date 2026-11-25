@@ -175,13 +175,13 @@ describe('project host setup projection', () => {
 
     expect(projection.projects).toHaveLength(1)
     expect(projection.projects[0]).toMatchObject({
-      id: 'github:stablyai/orca',
+      id: 'github:stablyai/quirky',
       sourceRepoIds: ['local-repo', 'remote-repo'],
       providerIdentity: { provider: 'github', owner: 'StablyAI', repo: 'Quirky' }
     })
-    expect(getProjectHostSetupsForProject(projection.setups, 'github:stablyai/orca')).toHaveLength(
-      2
-    )
+    expect(
+      getProjectHostSetupsForProject(projection.setups, 'github:stablyai/quirky')
+    ).toHaveLength(2)
   })
 
   it('keeps same-named github.com and GHES repositories in separate projects', () => {
@@ -260,7 +260,7 @@ describe('project host setup projection', () => {
           type: 'image',
           src: 'https://github.com/stablyai.png?size=64',
           source: 'github',
-          label: 'stablyai/orca'
+          label: 'stablyai/quirky'
         }
       }),
       repo({
@@ -279,13 +279,13 @@ describe('project host setup projection', () => {
 
     expect(projection.projects).toHaveLength(1)
     expect(projection.projects[0]).toMatchObject({
-      id: 'github:stablyai/orca',
+      id: 'github:stablyai/quirky',
       sourceRepoIds: ['local-repo', 'remote-repo'],
       providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
     })
-    expect(getProjectHostSetupsForProject(projection.setups, 'github:stablyai/orca')).toHaveLength(
-      2
-    )
+    expect(
+      getProjectHostSetupsForProject(projection.setups, 'github:stablyai/quirky')
+    ).toHaveLength(2)
   })
 
   it('uses git remote identity as a provider identity fallback', () => {
@@ -295,9 +295,9 @@ describe('project host setup projection', () => {
         path: '/Users/alice/stably/quirky',
         displayName: 'quirky',
         gitRemoteIdentity: {
-          canonicalKey: 'github.com/stablyai/orca',
+          canonicalKey: 'github.com/stablyai/quirky',
           remoteName: 'origin',
-          remoteUrl: 'git@github.com:stablyai/orca.git'
+          remoteUrl: 'git@github.com:stablyai/quirky.git'
         }
       }),
       repo({
@@ -308,14 +308,14 @@ describe('project host setup projection', () => {
           type: 'image',
           src: 'https://github.com/stablyai.png?size=64',
           source: 'github',
-          label: 'stablyai/orca'
+          label: 'stablyai/quirky'
         }
       })
     ])
 
     expect(projection.projects).toHaveLength(1)
     expect(projection.projects[0]).toMatchObject({
-      id: 'github:stablyai/orca',
+      id: 'github:stablyai/quirky',
       displayName: 'quirky',
       sourceRepoIds: ['canonical-local-repo', 'old-branch-checkout'],
       providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
@@ -532,7 +532,7 @@ describe('project host setup projection', () => {
     const projection = projectHostSetupProjectionFromRepos([targetRepo])
 
     expect(getProjectHostSetupWorktreeMeta(projection.setups, targetRepo)).toEqual({
-      projectId: 'github:stablyai/orca',
+      projectId: 'github:stablyai/quirky',
       hostId: 'ssh:openclaw%202',
       projectHostSetupId: 'remote-repo'
     })
@@ -559,7 +559,7 @@ describe('isGitHubBackedRepo', () => {
         type: 'image',
         src: 'https://github.com/stablyai.png?size=64',
         source: 'github',
-        label: 'stablyai/orca'
+        label: 'stablyai/quirky'
       }
     })
     expect(isGitHubBackedRepo(target)).toBe(true)

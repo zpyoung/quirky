@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import {
-  bundledRipgrepCommandMock,
-  getLocalGitOptionsForRegisteredWorktreeMock,
-  resolveAuthorizedPathMock,
-  wslAwareSpawnMock
-} from './quirky-runtime-files-mock-registry'
+import { resolveAuthorizedPathMock, spawnProcessMock } from './quirky-runtime-files-mock-registry'
 import {
   createRuntimeFileCommands,
   useRuntimeFileCommandsLifecycle
@@ -23,8 +18,8 @@ vi.mock(
 vi.mock('../ipc/filesystem-auth', async () =>
   (await import('./quirky-runtime-files-mock-registry')).filesystemAuthModuleMock()
 )
-vi.mock('../git/runner', async () =>
-  (await import('./quirky-runtime-files-mock-registry')).gitRunnerModuleMock()
+vi.mock('@quirky/process-host', async () =>
+  (await import('./quirky-runtime-files-mock-registry')).processHostModuleMock()
 )
 vi.mock(
   '../ipc/local-worktree-runtime-options',
@@ -63,8 +58,8 @@ describe('RuntimeFileCommands', () => {
     const firstChild = createRuntimeSearchChild()
     const secondChild = createRuntimeSearchChild()
     resolveAuthorizedPathMock.mockResolvedValue('/repo')
-    wslAwareSpawnMock.mockImplementation((_command, args: string[]) =>
-      args.includes('first') ? firstChild : secondChild
+    spawnProcessMock.mockImplementation((spec) =>
+      spec.args.includes('first') ? firstChild : secondChild
     )
     const controller = new AbortController()
     const first = commands.searchRuntimeFiles(
@@ -74,7 +69,7 @@ describe('RuntimeFileCommands', () => {
     )
     const firstRejected = expect(first).rejects.toMatchObject({ name: 'AbortError' })
     const second = commands.searchRuntimeFiles('id:wt-1', { query: 'second' })
-    await vi.waitFor(() => expect(wslAwareSpawnMock).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(spawnProcessMock).toHaveBeenCalledTimes(2))
     expect(firstChild.kill).not.toHaveBeenCalled()
     controller.abort()
     await firstRejected
@@ -92,7 +87,7 @@ describe('RuntimeFileCommands', () => {
       }))
     })
     resolveAuthorizedPathMock.mockResolvedValue('/repo')
-    wslAwareSpawnMock.mockImplementationOnce(() => {
+    spawnProcessMock.mockImplementationOnce(() => {
       throw Object.assign(new Error('spawn EMFILE'), { code: 'EMFILE' })
     })
     await expect(commands.searchRuntimeFiles('id:wt-1', { query: 'needle' })).rejects.toThrow(
@@ -104,7 +99,7 @@ describe('RuntimeFileCommands', () => {
     const { commands } = createRuntimeFileCommands()
     const child = createRuntimeSearchChild()
     resolveAuthorizedPathMock.mockResolvedValue('/canonical/repo')
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnProcessMock.mockReturnValue(child)
     const pending = commands.searchRuntimeFiles('id:wt-1', { query: 'needle' })
     await flushRuntimeSearchMicrotasks()
     child.stdout.emit(
@@ -123,9 +118,7 @@ describe('RuntimeFileCommands', () => {
     await expect(pending).resolves.toMatchObject({
       files: [{ filePath: '/canonical/repo/example.txt', relativePath: 'example.txt' }]
     })
-    expect(wslAwareSpawnMock).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(Array),
+    expect(spawnProcessMock).toHaveBeenCalledWith(
       expect.objectContaining({ cwd: '/canonical/repo' })
     )
   })
@@ -142,7 +135,7 @@ describe('RuntimeFileCommands', () => {
     const { commands } = createRuntimeFileCommands({ resolveRuntimeFileTarget })
     const child = createRuntimeSearchChild()
     resolveAuthorizedPathMock.mockResolvedValue('/repo')
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnProcessMock.mockReturnValue(child)
 
     const resultPromise = commands.searchRuntimeFiles('id:wt-1', {
       query: 'needle',
@@ -160,11 +153,8 @@ describe('RuntimeFileCommands', () => {
     expect(child.stderr.listenerCount('data')).toBe(0)
     expect(child.listenerCount('error')).toBe(0)
     expect(child.listenerCount('close')).toBe(0)
-    expect(bundledRipgrepCommandMock).toHaveBeenCalledWith({ wsl: false })
-    expect(wslAwareSpawnMock).toHaveBeenCalledWith(
-      '/bundled/rg',
-      expect.any(Array),
-      expect.objectContaining({ cwd: '/repo' })
+    expect(spawnProcessMock).toHaveBeenCalledWith(
+      expect.objectContaining({ program: '/bundled/rg', cwd: '/repo' })
     )
   })
 
@@ -182,7 +172,7 @@ describe('RuntimeFileCommands', () => {
       // Why a root that exists: an ENOENT spawn failure is also what a vanished workspace looks
       // like, so this stays about the binary only while the search root is reachable.
       resolveAuthorizedPathMock.mockResolvedValue(process.cwd())
-      wslAwareSpawnMock.mockReturnValue(child)
+      spawnProcessMock.mockReturnValue(child)
 
       const resultPromise = commands.searchRuntimeFiles('id:wt-1', {
         query: 'needle',
@@ -199,34 +189,11 @@ describe('RuntimeFileCommands', () => {
       }
 
       await expect(resultPromise).rejects.toThrow("Quirky's bundled search tool (ripgrep)")
-      expect(wslAwareSpawnMock).toHaveBeenCalledTimes(1)
+      expect(spawnProcessMock).toHaveBeenCalledTimes(1)
       expect(child.listenerCount('error')).toBe(0)
       expect(child.listenerCount('close')).toBe(0)
     }
   )
-
-  // Why close(97): the WSL wrapper's "cd failed" code. It is above rg's own 0/1/2, so a handler
-  // that checks it after the unavailable branch reports a broken install instead.
-  it('names the unreachable root when the WSL wrapper cannot enter it', async () => {
-    const resolveRuntimeFileTarget = vi.fn(async () => ({
-      worktree: { id: 'wt-1', repoId: 'repo-1', path: '/repo' },
-      executionHostId: 'local'
-    }))
-    const { commands } = createRuntimeFileCommands({ resolveRuntimeFileTarget })
-    const child = createRuntimeSearchChild()
-    Object.defineProperty(child, 'pid', { value: 1 })
-    resolveAuthorizedPathMock.mockResolvedValue('/repo')
-    wslAwareSpawnMock.mockReturnValue(child)
-
-    const resultPromise = commands.searchRuntimeFiles('id:wt-1', {
-      query: 'needle',
-      maxResults: 10
-    })
-    await flushRuntimeSearchMicrotasks()
-    child.emit('close', 97, null)
-
-    await expect(resultPromise).rejects.toThrow('Search root is not reachable: /repo')
-  })
 
   it("rejects when a runtime native launcher exits outside ripgrep's contract", async () => {
     const resolveRuntimeFileTarget = vi.fn(async () => ({
@@ -237,7 +204,7 @@ describe('RuntimeFileCommands', () => {
     const child = createRuntimeSearchChild()
     Object.defineProperty(child, 'pid', { value: 1 })
     resolveAuthorizedPathMock.mockResolvedValue('/repo')
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnProcessMock.mockReturnValue(child)
 
     const resultPromise = commands.searchRuntimeFiles('id:wt-1', {
       query: 'needle',
@@ -247,79 +214,5 @@ describe('RuntimeFileCommands', () => {
     child.emit('close', 127, null)
 
     await expect(resultPromise).rejects.toThrow("Quirky's bundled search tool (ripgrep)")
-  })
-
-  it('runs host rg for a Windows drive root even under a WSL project runtime', async () => {
-    const resolveRuntimeFileTarget = vi.fn(async () => ({
-      worktree: {
-        id: 'wt-1',
-        repoId: 'repo-1',
-        path: 'C:\\repo'
-      },
-      executionHostId: 'local'
-    }))
-    const { commands, store } = createRuntimeFileCommands({ resolveRuntimeFileTarget })
-    const child = createRuntimeSearchChild()
-    Object.defineProperty(child, 'pid', { value: 1 })
-    resolveAuthorizedPathMock.mockResolvedValue('C:\\repo')
-    getLocalGitOptionsForRegisteredWorktreeMock.mockReturnValue({ wslDistro: 'Ubuntu' })
-    wslAwareSpawnMock.mockReturnValue(child)
-
-    const resultPromise = commands.searchRuntimeFiles('id:wt-1', {
-      query: 'needle',
-      maxResults: 10
-    })
-    await flushRuntimeSearchMicrotasks()
-    child.emit('close', 0, null)
-
-    await expect(resultPromise).resolves.toMatchObject({ files: [] })
-    expect(getLocalGitOptionsForRegisteredWorktreeMock).toHaveBeenCalledWith(
-      store,
-      'C:\\repo',
-      'C:\\repo'
-    )
-    expect(bundledRipgrepCommandMock).toHaveBeenCalledWith({ wsl: false })
-    expect(wslAwareSpawnMock).toHaveBeenCalledWith(
-      '/bundled/rg',
-      expect.any(Array),
-      expect.objectContaining({ cwd: 'C:\\repo' })
-    )
-    expect(wslAwareSpawnMock.mock.calls[0]?.[2]).not.toHaveProperty('wslDistro')
-  })
-
-  it('routes runtime rg searches for a WSL filesystem root through the project runtime', async () => {
-    const wslRoot = '\\\\wsl.localhost\\Ubuntu\\home\\me\\repo'
-    const resolveRuntimeFileTarget = vi.fn(async () => ({
-      worktree: {
-        id: 'wt-1',
-        repoId: 'repo-1',
-        path: wslRoot
-      },
-      executionHostId: 'local'
-    }))
-    const { commands } = createRuntimeFileCommands({ resolveRuntimeFileTarget })
-    const child = createRuntimeSearchChild()
-    Object.defineProperty(child, 'pid', { value: 1 })
-    resolveAuthorizedPathMock.mockResolvedValue(wslRoot)
-    getLocalGitOptionsForRegisteredWorktreeMock.mockReturnValue({ wslDistro: 'Ubuntu' })
-    wslAwareSpawnMock.mockReturnValue(child)
-
-    const resultPromise = commands.searchRuntimeFiles('id:wt-1', {
-      query: 'needle',
-      maxResults: 10
-    })
-    await flushRuntimeSearchMicrotasks()
-    child.emit('close', 0, null)
-
-    await expect(resultPromise).resolves.toMatchObject({ files: [] })
-    expect(bundledRipgrepCommandMock).toHaveBeenCalledWith({ wsl: true })
-    expect(wslAwareSpawnMock).toHaveBeenCalledWith(
-      '/bundled/linux/rg',
-      expect.any(Array),
-      expect.objectContaining({
-        cwd: wslRoot,
-        wslDistro: 'Ubuntu'
-      })
-    )
   })
 })

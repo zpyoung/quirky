@@ -1,4 +1,5 @@
 import type { ModelManager } from './model-manager'
+import type * as SttWorkerPaths from './stt-worker-paths'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
@@ -126,6 +127,12 @@ type WorkerMessage = { type: string }
 
 vi.mock('worker_threads', () => ({
   Worker: MockWorker
+}))
+
+// The worker is mocked, so the recognizer only needs a path; macOS is the only platform that ships one.
+vi.mock('./stt-worker-paths', async (importOriginal) => ({
+  ...(await importOriginal<typeof SttWorkerPaths>()),
+  getSherpaModulePath: () => '/mock/sherpa-onnx'
 }))
 
 vi.mock('./model-catalog', () => ({

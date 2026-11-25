@@ -55,7 +55,6 @@ import {
 import { _resetWorkingDirectoryValidationStateForTest } from './working-directory-validation'
 import { getFishXdgDataDirsLaunchEnv } from '../fish-xdg-data-dirs-handoff'
 
-const WSL_UNC_DIR = '\\\\wsl.localhost\\Ubuntu\\home\\jin\\repo'
 const NATIVE_DIR = 'C:\\Users\\jin\\repo'
 
 describe('validateWorkingDirectory', () => {
@@ -69,53 +68,6 @@ describe('validateWorkingDirectory', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
-  })
-
-  it('accepts a WSL UNC worktree that exists inside the distro even when fs.statSync would fail', async () => {
-    // Why: the Win32 9P stat is the exact path that falsely reported ENOENT and
-    // broke opening WSL worktrees. The distro answer must win.
-    wslUncDirectoryExistsAsyncMock.mockResolvedValue(true)
-    existsSyncMock.mockReturnValue(false)
-
-    await expect(validateWorkingDirectory(WSL_UNC_DIR)).resolves.toBeUndefined()
-    expect(wslUncDirectoryExistsAsyncMock).toHaveBeenCalledWith(WSL_UNC_DIR)
-    // The fs fallback must not run when the distro confirmed existence.
-    expect(existsSyncMock).not.toHaveBeenCalled()
-    expect(statMock).not.toHaveBeenCalled()
-  })
-
-  it('returns to the event loop while the distro probe is still running', async () => {
-    const probe = Promise.withResolvers<boolean | null>()
-    wslUncDirectoryExistsAsyncMock.mockReturnValue(probe.promise)
-    let settled = false
-
-    const validation = validateWorkingDirectory(WSL_UNC_DIR).finally(() => {
-      settled = true
-    })
-    await new Promise((resolve) => setImmediate(resolve))
-    expect(settled).toBe(false)
-
-    probe.resolve(true)
-    await validation
-    expect(settled).toBe(true)
-  })
-
-  it('rejects a WSL UNC worktree that does not exist inside the distro', async () => {
-    wslUncDirectoryExistsAsyncMock.mockResolvedValue(false)
-
-    await expect(validateWorkingDirectory(WSL_UNC_DIR)).rejects.toThrow(/does not exist/)
-    expect(existsSyncMock).not.toHaveBeenCalled()
-    expect(statMock).not.toHaveBeenCalled()
-  })
-
-  it('falls back to the fs check when the distro answer is inconclusive', async () => {
-    wslUncDirectoryExistsAsyncMock.mockResolvedValue(null)
-    statMock.mockResolvedValue(dirStats(true))
-
-    await expect(validateWorkingDirectory(WSL_UNC_DIR)).resolves.toBeUndefined()
-    expect(wslUncDirectoryExistsAsyncMock).toHaveBeenCalledWith(WSL_UNC_DIR)
-    expect(statMock).toHaveBeenCalledWith(WSL_UNC_DIR)
-    expect(existsSyncMock).not.toHaveBeenCalled()
   })
 
   it('validates native Windows paths via fs without consulting the distro', async () => {
