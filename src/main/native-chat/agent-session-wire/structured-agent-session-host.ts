@@ -50,6 +50,13 @@ import {
   isAgentChatPermissionMode
 } from '../../../shared/agent-chat-permission-mode'
 import { sleepStructuredAgentSessionWorkspace } from './structured-agent-session-workspace-sleep'
+import {
+  createHostVisuals,
+  type VisualOpenInput,
+  type VisualPatchInput,
+  type VisualUpdateInput,
+  type VisualViewInput
+} from './structured-agent-session-visuals'
 export type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 
 export class StructuredAgentSessionHost {
@@ -59,6 +66,7 @@ export class StructuredAgentSessionHost {
   )
   private readonly turnObserver = createHostTurnObserver(() => this.deps)
   private readonly planObserver = createHostPlanObserver(() => this.deps)
+  private readonly visuals = createHostVisuals(() => this.deps)
   private readonly sessions = new StructuredAgentSessionConversations({
     deliver: (sessionId, journal) => {
       this.subscribers.publish(sessionId, journal)
@@ -375,6 +383,18 @@ export class StructuredAgentSessionHost {
       )?.working() ?? false
     )
   }
+
+  /** The `visual` items an agent shows with `quirky view`; a closed chat is opened to write them. */
+  openView = async (sessionId: string, input: VisualOpenInput) =>
+    this.visuals.open(sessionId, (await this.lifetime.conversation(sessionId)).journal, input)
+  updateView = async (sessionId: string, input: VisualUpdateInput) =>
+    this.visuals.update(sessionId, (await this.lifetime.conversation(sessionId)).journal, input)
+  patchView = async (sessionId: string, input: VisualPatchInput) =>
+    this.visuals.patch(sessionId, (await this.lifetime.conversation(sessionId)).journal, input)
+  closeView = async (sessionId: string, input: VisualViewInput) =>
+    this.visuals.close(sessionId, (await this.lifetime.conversation(sessionId)).journal, input)
+  readView = async (sessionId: string, input: VisualViewInput) =>
+    this.visuals.read((await this.lifetime.conversation(sessionId)).journal, input)
 
   /** One item's body by its journal key, without reducing the whole timeline. */
   readItemBody = async (sessionId: string, itemId: string) =>

@@ -28,7 +28,9 @@ import {
 } from './orchestration-session-caller-test-fixture'
 import {
   needsOrchestrationCallerResolution,
-  ORCHESTRATION_CALLER_PARAM
+  ORCHESTRATION_CALLER_PARAM,
+  resolveOrchestrationSessionCaller,
+  SESSION_CALLER_ONLY_METHODS
 } from './orchestration-session-caller'
 import { ORCHESTRATION_TARGET_PARAM } from '../orchestration/orchestration-party'
 
@@ -482,5 +484,38 @@ describe('orchestration session callers at the dispatch entry', () => {
     const run = resultOf(await h.dispatch(request)).run
     expect(run).toMatchObject({ coordinator_handle: 'term_worker' })
     expect(h.db.getRunRaw(idOf(run))?.coordinator_quirky_session_id).toBeNull()
+  })
+  describe('agentSession.view.* callers', () => {
+    const viewRequest = (sessionId?: string) =>
+      orchestrationRequest(
+        'agentSession.view.get',
+        { sessionId: SESSION_X, viewId: 'view-1' },
+        sessionId ? { sessionId } : {}
+      )
+
+    it('resolves a session claim and leaves a request with no claim alone', async () => {
+      expect(SESSION_CALLER_ONLY_METHODS.size).toBe(5)
+      expect(needsOrchestrationCallerResolution(viewRequest())).toBe(false)
+      expect(needsOrchestrationCallerResolution(viewRequest(SESSION_X))).toBe(true)
+
+      const resolved = await resolveOrchestrationSessionCaller(
+        h.runtime,
+        viewRequest(SESSION_X),
+        undefined
+      )
+
+      expect(resolved.caller?.sessionId).toBe(SESSION_X)
+    })
+
+    it('reports a refused claim as session-refused', async () => {
+      await expect(
+        resolveOrchestrationSessionCaller(h.runtime, viewRequest(SESSION_X), {
+          pairedDeviceId: 'device-1'
+        })
+      ).rejects.toMatchObject({ code: 'session-refused' })
+      await expect(
+        resolveOrchestrationSessionCaller(h.runtime, viewRequest('not-a-session'), undefined)
+      ).rejects.toMatchObject({ code: 'session-refused' })
+    })
   })
 })
