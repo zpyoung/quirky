@@ -17,6 +17,9 @@ import {
   type AgentStatusLiveEntryRejection
 } from './agent-status-live-entry-builder'
 import { reduceAgentStatusLiveUpdate } from './agent-status-live-reducer'
+import { settleAttentionRemovedBy } from './workspace-attention/attention-removal-follow-up'
+import { removePanesAttention } from './workspace-attention/subject-attention-transitions'
+import { startsNewAgentTurn } from './workspace-attention/agent-turn-start'
 import type { FreshnessLiveEntryDelta } from './agent-status-freshness-scheduler'
 import {
   agentStatusTabAlreadyHasProtectedOrGeneratedTitle,
@@ -68,66 +71,74 @@ export function createAgentStatusLiveActions(
     }
     let built: AgentStatusLiveEntryBuild | AgentStatusLiveEntryRejection | null = null
     let liveEntryDelta: FreshnessLiveEntryDelta | null = null
-    set((state) => {
-      const retirement = state.recentlyRetiredAgentStatusPaneKeys[paneKey]
-      if (
-        (retirement !== undefined &&
-          (typeof retirement !== 'string' || retirement !== metadata?.authorityRestartId)) ||
-        isRecentlyClosedAgentStatusTab(
-          state.recentlyClosedAgentStatusTabIds,
-          getTabIdFromPaneKey(paneKey)
-        )
-      ) {
-        return state
-      }
-      if (retirement !== undefined) {
-        const owner = resolvePaneKey(state, paneKey)
+    settleAttentionRemovedBy(set, get, () =>
+      set((state) => {
+        const retirement = state.recentlyRetiredAgentStatusPaneKeys[paneKey]
         if (
-          !owner.exists ||
-          payload.agentType !== 'omp' ||
-          (routing?.worktreeId !== undefined && routing.worktreeId !== owner.owningWorktreeId) ||
-          (routing?.connectionId !== undefined &&
-            routing.connectionId !== owner.repoConnectionId &&
-            (owner.repoConnectionResolved || routing.worktreeId !== owner.owningWorktreeId))
+          (retirement !== undefined &&
+            (typeof retirement !== 'string' || retirement !== metadata?.authorityRestartId)) ||
+          isRecentlyClosedAgentStatusTab(
+            state.recentlyClosedAgentStatusTabIds,
+            getTabIdFromPaneKey(paneKey)
+          )
         ) {
           return state
         }
-      }
-      built = buildAgentStatusLiveEntry({
-        state,
-        paneKey,
-        payload,
-        terminalTitle,
-        timing,
-        routing,
-        metadata,
-        updatedAt
-      })
-      if (!built.entry) {
-        return state
-      }
-      const previousEntries = state.agentStatusByPaneKey
-      const reduction = reduceAgentStatusLiveUpdate(state, built, updatedAt)
-      liveEntryDelta = {
-        previousEntries,
-        nextEntries: reduction.patch.agentStatusByPaneKey ?? previousEntries,
-        nextEntry: built.entry,
-        replacedEntry: previousEntries[built.entry.paneKey],
-        evictedEntries: reduction.evictedEntries
-      }
-      if (retirement !== undefined) {
-        // The host confirmed this retired group’s surviving owner; preserve that route for its next retirement.
-        for (const [key, id] of Object.entries(state.recentlyRetiredAgentStatusPaneKeys)) {
-          if (id === retirement && key !== paneKey && resolveAgentPaneAuthorityKey(key) === key) {
-            transferAgentPaneAuthorityAlias({ fromPaneKey: key, toPaneKey: paneKey })
+        if (retirement !== undefined) {
+          const owner = resolvePaneKey(state, paneKey)
+          if (
+            !owner.exists ||
+            payload.agentType !== 'omp' ||
+            (routing?.worktreeId !== undefined && routing.worktreeId !== owner.owningWorktreeId) ||
+            (routing?.connectionId !== undefined &&
+              routing.connectionId !== owner.repoConnectionId &&
+              (owner.repoConnectionResolved || routing.worktreeId !== owner.owningWorktreeId))
+          ) {
+            return state
           }
         }
-        const nextRetired = { ...state.recentlyRetiredAgentStatusPaneKeys }
-        delete nextRetired[paneKey]
-        return { ...reduction.patch, recentlyRetiredAgentStatusPaneKeys: nextRetired }
-      }
-      return reduction.patch
-    })
+        built = buildAgentStatusLiveEntry({
+          state,
+          paneKey,
+          payload,
+          terminalTitle,
+          timing,
+          routing,
+          metadata,
+          updatedAt
+        })
+        if (!built.entry) {
+          return state
+        }
+        const previousEntries = state.agentStatusByPaneKey
+        const reduction = reduceAgentStatusLiveUpdate(state, built, updatedAt)
+        if (startsNewAgentTurn(previousEntries[built.entry.paneKey], built.entry)) {
+          Object.assign(
+            reduction.patch,
+            removePanesAttention(state, new Set([built.entry.paneKey]))
+          )
+        }
+        liveEntryDelta = {
+          previousEntries,
+          nextEntries: reduction.patch.agentStatusByPaneKey ?? previousEntries,
+          nextEntry: built.entry,
+          replacedEntry: previousEntries[built.entry.paneKey],
+          evictedEntries: reduction.evictedEntries
+        }
+        if (retirement !== undefined) {
+          // The host confirmed this retired group’s surviving owner; preserve that route for its next retirement.
+          for (const [key, id] of Object.entries(state.recentlyRetiredAgentStatusPaneKeys)) {
+            if (id === retirement && key !== paneKey && resolveAgentPaneAuthorityKey(key) === key) {
+              transferAgentPaneAuthorityAlias({ fromPaneKey: key, toPaneKey: paneKey })
+            }
+          }
+          const nextRetired = { ...state.recentlyRetiredAgentStatusPaneKeys }
+          delete nextRetired[paneKey]
+          return { ...reduction.patch, recentlyRetiredAgentStatusPaneKeys: nextRetired }
+        }
+        return reduction.patch
+      })
+    )
     if (liveEntryDelta) {
       freshness.noteLiveEntryDelta(liveEntryDelta)
     }

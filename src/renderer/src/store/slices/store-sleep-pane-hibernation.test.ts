@@ -81,9 +81,6 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
         }
       },
       ptyIdsByTabId: { 'tab-1': ['pty-agent', 'pty-shell'] },
-      unreadTerminalTabs: { 'tab-1': true },
-      unreadTerminalPanes: { [targetPaneKey]: true, [siblingPaneKey]: true },
-      unreadAgentCompletionPanes: { [targetPaneKey]: true, [siblingPaneKey]: true },
       lastTerminalInputAtByPaneKey: { [targetPaneKey]: 1000, [siblingPaneKey]: 1100 },
       pendingIssueCommandSplitByTabId: { 'tab-1': { command: 'issue' } }
     })
@@ -111,6 +108,12 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
         { tabId: 'tab-1', worktreeId: wt },
         { providerSession: { key: 'session_id', id: 'sibling-session' } }
       )
+    // seeded after the rows: a pane's first working row is a new turn and reads its markers
+    store.setState({
+      unreadTerminalTabs: { 'tab-1': true },
+      unreadTerminalPanes: { [targetPaneKey]: true, [siblingPaneKey]: true },
+      unreadAgentCompletionPanes: { [targetPaneKey]: true, [siblingPaneKey]: true }
+    })
     const siblingSleepingRecordBefore =
       store.getState().sleepingAgentSessionsByPaneKey[siblingPaneKey]
 
