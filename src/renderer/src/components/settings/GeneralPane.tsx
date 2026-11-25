@@ -8,11 +8,13 @@ import { GeneralWorkspaceSettingsSection } from './GeneralWorkspaceSettingsSecti
 import {
   getGeneralCliSearchEntries,
   getGeneralEditorSearchEntries,
+  getGeneralImportSearchEntries,
   getGeneralNavigationSearchEntries,
   getGeneralPaneSearchEntries,
   getGeneralUpdateSearchEntries,
   getGeneralWorkspaceSearchEntries
 } from './general-search'
+import { ImportFromOrcaSettingsSection } from '../import-from-orca/ImportFromOrcaSettingsSection'
 import { RecentTabOrderControl } from './RecentTabOrderControl'
 import { SettingsSectionStack } from './SettingsSectionStack'
 import { matchesSettingsSearch } from './settings-search'
@@ -220,6 +222,9 @@ export function GeneralPane({
         wslAvailable={wslAvailable}
         wslCapabilitiesLoading={wslCapabilitiesLoading}
       />
+    ) : null,
+    matchesSettingsSearch(searchQuery, getGeneralImportSearchEntries()) ? (
+      <ImportFromOrcaSettingsSection key="import-from-orca" />
     ) : null,
     matchesSettingsSearch(searchQuery, getGeneralUpdateSearchEntries()) ? (
       <GeneralUpdateSettingsSection key="updates" />

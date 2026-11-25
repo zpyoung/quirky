@@ -17327,6 +17327,41 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "importFromOrca": {
+        "error": {
+          "sourceMissing": "No se encontraron datos de Orca Dev en este Mac.",
+          "sourceIncompatible": "Esta versión de Quirky no pudo leer los datos de Orca Dev.",
+          "keychainDenied": "Se denegó el acceso al elemento del llavero de Orca Dev, por lo que no se importaron los secretos.",
+          "writeFailed": "La importación falló y se revirtió todo lo que había escrito."
+        },
+        "report": {
+          "done": "Importación terminada.",
+          "failed": "La importación no terminó.",
+          "nothingNew": "No hay nada nuevo que importar.",
+          "imported": "Importado",
+          "keychainPrimary": "Los secretos se desbloquearon con el elemento del llavero de Orca Dev.",
+          "keychainFallback": "Los secretos se desbloquearon con el elemento de llavero alternativo de Orca Dev.",
+          "skippedSecrets": "Secretos omitidos: {{value0}}",
+          "copiedFiles": "Archivos y carpetas de cuenta copiados: {{value0}}",
+          "leftOut": "Omitido porque Quirky ya no lo admite: {{value0}}",
+          "notImported": "No importado por esta versión: {{value0}}"
+        },
+        "settings": {
+          "title": "Importar desde Orca Dev",
+          "description": "Trae lo nuevo de Orca Dev. Lo que eliminaste en Quirky sigue eliminado y no se borra nada en Quirky.",
+          "running": "Importando..."
+        },
+        "offer": {
+          "title": "¿Importar tu configuración desde Orca Dev?",
+          "description": "Quirky encontró Orca Dev en este Mac. Puedes traer tus repos, worktrees, ajustes, atajos, automatizaciones y cuentas vinculadas. Orca Dev solo se lee y no cambia, y las automatizaciones llegan en pausa.",
+          "keychainNote": "macOS pedirá una vez acceso al elemento del llavero de Orca Dev para que Quirky pueda volver a cifrar tus secretos guardados.",
+          "reload": "Recargar Quirky",
+          "close": "Cerrar",
+          "notNow": "Ahora no",
+          "running": "Importando...",
+          "import": "Importar desde Orca Dev"
+        }
       }
     },
     "i18n": {

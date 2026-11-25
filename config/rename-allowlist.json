@@ -26,7 +26,11 @@
     "onorca-cloud",
     "apps.apple.com/us/app/orca-ide",
     "no-orca-strings",
-    "Based on Orca"
+    "Based on Orca",
+    "Orca Dev",
+    "importFromOrca",
+    "ImportFromOrca",
+    "import-from-orca"
   ],
   "creditLines": [
     {

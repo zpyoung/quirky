@@ -76,6 +76,11 @@ const FloatingTerminalPanel = lazy(() =>
 // Why: lazy so the WebP asset + overlay module aren't fetched unless the experimental flag is on.
 const PetOverlay = lazy(() => import('../components/pet/PetOverlay'))
 // Why: lazy so onboarding's step modules + assets aren't fetched for users past first-launch.
+const ImportFromOrcaFirstLaunchOffer = lazy(() =>
+  import('../components/import-from-orca/ImportFromOrcaFirstLaunchOffer').then((module) => ({
+    default: module.ImportFromOrcaFirstLaunchOffer
+  }))
+)
 const OnboardingFlow = lazy(() => import('../components/onboarding/OnboardingFlow'))
 
 type BoundaryProps = {
@@ -351,6 +356,11 @@ export function AppRootSurfaces(props: {
           </RecoverableRenderErrorBoundary>
         </Suspense>
       ) : null}
+      <Suspense fallback={null}>
+        <OverlayBoundary boundaryId="overlay.import-from-orca-offer">
+          <ImportFromOrcaFirstLaunchOffer />
+        </OverlayBoundary>
+      </Suspense>
       {shouldMountDictationController ? (
         <Suspense fallback={null}>
           <OverlayBoundary boundaryId="overlay.dictation" resetKey={activeView}>

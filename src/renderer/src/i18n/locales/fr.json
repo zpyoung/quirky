@@ -17436,6 +17436,41 @@
         "a62f9db53d": "Annuler",
         "c77189bc0c": "Mettre à jour le filtre",
         "19af906d12": "Enregistrer le filtre"
+      },
+      "importFromOrca": {
+        "error": {
+          "sourceMissing": "Les données d'Orca Dev sont introuvables sur ce Mac.",
+          "sourceIncompatible": "Cette version de Quirky n'a pas pu lire les données d'Orca Dev.",
+          "keychainDenied": "L'accès à l'élément du trousseau d'Orca Dev a été refusé, les secrets n'ont donc pas été importés.",
+          "writeFailed": "L'importation a échoué et tout ce qu'elle avait écrit a été annulé."
+        },
+        "report": {
+          "done": "Importation terminée.",
+          "failed": "L'importation n'est pas terminée.",
+          "nothingNew": "Rien de nouveau à importer.",
+          "imported": "Importé",
+          "keychainPrimary": "Les secrets ont été déverrouillés avec l'élément du trousseau d'Orca Dev.",
+          "keychainFallback": "Les secrets ont été déverrouillés avec l'élément de trousseau de secours d'Orca Dev.",
+          "skippedSecrets": "Secrets ignorés : {{value0}}",
+          "copiedFiles": "Fichiers et dossiers de compte copiés : {{value0}}",
+          "leftOut": "Exclu car Quirky ne le prend plus en charge : {{value0}}",
+          "notImported": "Non importé par cette version : {{value0}}"
+        },
+        "settings": {
+          "title": "Importer depuis Orca Dev",
+          "description": "Récupérez les nouveautés d'Orca Dev. Les éléments supprimés dans Quirky restent supprimés et rien n'est effacé dans Quirky.",
+          "running": "Importation..."
+        },
+        "offer": {
+          "title": "Importer votre configuration depuis Orca Dev ?",
+          "description": "Quirky a trouvé Orca Dev sur ce Mac. Vous pouvez récupérer vos dépôts, worktrees, réglages, raccourcis, automatisations et comptes liés. Orca Dev est seulement lu et reste inchangé, et les automatisations arrivent en pause.",
+          "keychainNote": "macOS demandera une fois l'accès à l'élément du trousseau d'Orca Dev afin que Quirky puisse rechiffrer vos secrets enregistrés.",
+          "reload": "Recharger Quirky",
+          "close": "Fermer",
+          "notNow": "Pas maintenant",
+          "running": "Importation...",
+          "import": "Importer depuis Orca Dev"
+        }
       }
     },
     "i18n": {

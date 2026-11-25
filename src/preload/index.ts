@@ -35,6 +35,7 @@ import { settingsApi } from './api/settings-bridge'
 import { agentAwakeApi } from './api/agent-awake-bridge'
 import { localhostWorktreeLabelsApi } from './api/localhost-worktree-labels-bridge'
 import { keybindingsApi } from './api/keybindings-bridge'
+import { importFromOrcaApi } from './api/import-from-orca-bridge'
 import { codexAccountsApi } from './api/codex-accounts-bridge'
 import { claudeAccountsApi } from './api/claude-accounts-bridge'
 import { cliApi } from './api/cli-bridge'
@@ -121,6 +122,7 @@ const api = {
   agentAwake: agentAwakeApi,
   localhostWorktreeLabels: localhostWorktreeLabelsApi,
   keybindings: keybindingsApi,
+  importFromOrca: importFromOrcaApi,
   codexAccounts: codexAccountsApi,
   claudeAccounts: claudeAccountsApi,
   cli: cliApi,
