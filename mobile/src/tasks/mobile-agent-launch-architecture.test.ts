@@ -132,7 +132,7 @@ function scenario(
           }
           return new Promise((_, reject) => {
             rejectFirst = reject
-            void client.migrateTo(physical(1), 'relay')
+            void client.migrateTo(physical(1), 'tailscale')
           })
         }
         return response

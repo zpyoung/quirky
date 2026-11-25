@@ -26,10 +26,7 @@ describe('buildWorktreeSetLinkParams', () => {
 describe('buildWorktreeSetHostedReviewLinkParams', () => {
   it.each([
     ['github', 'linkedPR'],
-    ['gitlab', 'linkedGitLabMR'],
-    ['bitbucket', 'linkedBitbucketPR'],
-    ['azure-devops', 'linkedAzureDevOpsPR'],
-    ['gitea', 'linkedGiteaPR']
+    ['gitlab', 'linkedGitLabMR']
   ] as const)('maps %s reviews to the matching worktree field', (provider, key) => {
     expect(buildWorktreeSetHostedReviewLinkParams('repo42::/p', provider, 12)).toEqual({
       worktree: 'id:repo42::/p',

@@ -3,7 +3,7 @@
   "version": "2.0.0-rc.0",
   "description": "Next-gen IDE for parallel agentic development",
   "homepage": "https://github.com/zpyoung/quirky",
-  "author": "stablyai",
+  "author": "zpyoung",
   "bin": {
     "quirky": "./out/cli/index.js",
     "quirky-dev": "./config/scripts/quirky-dev.mjs"

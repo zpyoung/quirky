@@ -159,13 +159,13 @@ describe('fetchMobileWebBundle', () => {
     expect([...fetched.assets.keys()].sort()).toEqual(['assets/app.js', 'index.html'])
     expect(new TextDecoder().decode(fetched.assets.get('index.html'))).toBe('<h1>quirky</h1>')
     expect(new TextDecoder().decode(fetched.assets.get('assets/app.js'))).toBe('x=1')
-    expect(fetched.totalBytes).toBe(16)
+    expect(fetched.totalBytes).toBe(18)
     expect(fetched.manifest.buildId).toBe(host.manifest.buildId)
     expect(fetched.elapsedMs).toBeGreaterThanOrEqual(0)
     // One report per accepted chunk: four for index.html, one for app.js.
     expect(progress).toHaveLength(5)
-    expect(progress.at(-1)).toBe(16)
-    // 13 bytes at 4 per chunk is four requests, 3 bytes is one, plus the manifest.
+    expect(progress.at(-1)).toBe(18)
+    // 15 bytes at 4 per chunk is four requests, 3 bytes is one, plus the manifest.
     expect(host.calls.filter((call) => call.method === 'mobileWeb.bundle.chunk')).toHaveLength(5)
     expect(host.calls[0]!.method).toBe('mobileWeb.bundle.manifest')
     expect(host.calls[0]!.params).toEqual({})

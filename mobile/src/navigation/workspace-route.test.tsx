@@ -69,14 +69,10 @@ import {
   HostStatusGatesContext,
   useOptionalHostProtocolGates
 } from '../components/host-protocol-gates-context'
-import {
-  MOBILE_RELAY_HOSTS_LIST_METHOD,
-  type MobileRelayHost
-} from '../../../src/shared/mobile-relay-hosts-contract'
 import type { HostStatusGates } from '../transport/host-status-gates'
 import type { ConnectionState } from '../transport/types'
 import { createBridgePortPair } from '../mobile-web-shell/bridge/bridge-port-pair-test-harness'
-import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import { FakeSession } from '../transport/rpc-session-test-fake'
 import type { RpcClient } from '../transport/rpc-client'
 import { useWorkspaceClient } from '../transport/use-workspace-client'
 import { useWorkspaceExecutionHost } from './workspace-execution-host'
@@ -117,31 +113,13 @@ function desktopGates(hostCapabilities: string[], statusPending = false): HostSt
   }
 }
 
-type ServerReport = Pick<MobileRelayHost, 'health' | 'relay'>
-// The pairs the desktop's `mobileRelay.hosts.list` actually sends for a server.
-const RUNNING: ServerReport = { health: 'available', relay: 'ready' }
-const STOPPED: ServerReport = { health: 'connecting', relay: 'unavailable' }
-const NO_STATUS_YET: ServerReport = { health: 'available', relay: 'unavailable' }
-const FAILED: ServerReport = { health: 'error', relay: 'unavailable' }
-const TOO_OLD: ServerReport = { health: 'connecting', relay: 'update-needed' }
-
-/** The server as the desktop reports it in `mobileRelay.hosts.list`. */
-const serverReport: { current: ServerReport } = { current: RUNNING }
-
 /** A desktop whose own status is settled as given; a status it is asked for is the server's. */
 function desktop(serverCapabilities: string[] = []): FakeSession {
   const session = new FakeSession('connected')
   session.sendRequest.mockImplementation(async (method: string) => ({
     id: 'reply',
     ok: true,
-    result:
-      method === 'status.get'
-        ? { capabilities: serverCapabilities }
-        : method === MOBILE_RELAY_HOSTS_LIST_METHOD
-          ? {
-              hosts: [{ hostId: 'runtime:vm', label: 'vm', ...serverReport.current }]
-            }
-          : {},
+    result: method === 'status.get' ? { capabilities: serverCapabilities } : {},
     _meta: { runtimeId: 'runtime-1' }
   }))
   route.client = session
@@ -162,7 +140,6 @@ async function render(element: ReactElement, gates: HostStatusGates): Promise<Re
   below.client = null
   below.state = null
   below.capabilities = null
-  serverReport.current = RUNNING
   let renderer: ReactTestRenderer | null = null
   await act(async () => {
     renderer = create(createElement(HostStatusGatesContext.Provider, { value: gates }, element))
@@ -233,53 +210,6 @@ describe('a server workspace', () => {
     })
   })
 
-  it.each([
-    ['connecting while the desktop reconnects to a stopped server', STOPPED, 'connecting'],
-    [
-      'connecting while a reached server has not answered its status yet',
-      NO_STATUS_YET,
-      'connecting'
-    ],
-    ['disconnected once the desktop gives up on the server', FAILED, 'disconnected'],
-    [
-      'disconnected while the server is too old to relay to, whatever its health',
-      TOO_OLD,
-      'disconnected'
-    ]
-  ] as const)('reads as %s, and recovers', async (_why, report, expected) => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
-    try {
-      route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
-      desktop()
-      await render(screen, desktopGates(RELAYS))
-      expect(below.state).toBe('connected')
-      serverReport.current = report
-      await act(async () => {
-        vi.advanceTimersByTime(3000)
-      })
-      expect(below.state).toBe(expected)
-      serverReport.current = RUNNING
-      await act(async () => {
-        vi.advanceTimersByTime(3000)
-      })
-      expect(below.state).toBe('connected')
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('opens disconnected, not loading, when its server is already down', async () => {
-    route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
-    desktop()
-    serverReport.current = FAILED
-    await act(async () => {
-      create(
-        createElement(HostStatusGatesContext.Provider, { value: desktopGates(RELAYS) }, screen)
-      )
-    })
-    expect(below.state).toBe('disconnected')
-  })
-
   it('says so once the desktop has answered that it cannot reach the server', async () => {
     route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
     const session = desktop()
@@ -333,8 +263,5 @@ describe('the desktop’s own workspace', () => {
     expect(below.client).toBe(session)
     expect(below.state).toBe('connected')
     expect(below.capabilities).toEqual([...RELAYS, VAULT])
-    expect(session.sendRequest.mock.calls.map(([method]) => method)).not.toContain(
-      MOBILE_RELAY_HOSTS_LIST_METHOD
-    )
   })
 })

@@ -64,24 +64,25 @@
         "startedAt": 0
       }
     },
-    "0be231dddda1": {
+    "0edd13fb3c6f": {
       "crash": {
         "$rpc": "null"
       },
       "elements": {
         "ChevronLeft": 1,
-        "Pressable": 2,
+        "Pressable": 3,
         "RefreshCw": 1,
         "SafeAreaView": 1,
-        "Text": 4,
+        "Text": 5,
         "View": 4
       },
       "labels": ["Back", "Refresh agent sessions"],
       "text": [
         "Agent Session History",
         "quirky-history",
-        "Agent Session History Unavailable",
-        "Update Quirky on this host to browse agent session history."
+        "Unable to Load",
+        "Unknown method",
+        "Retry"
       ]
     },
     "14cef45e16d2": {
@@ -116,22 +117,7 @@
         }
       }
     },
-    "18ef6596b779": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "ChevronLeft": 1,
-        "Pressable": 3,
-        "RefreshCw": 1,
-        "SafeAreaView": 1,
-        "Text": 5,
-        "View": 4
-      },
-      "labels": ["Back", "Refresh agent sessions"],
-      "text": ["Agent Session History", "quirky-history", "Unable to Load", "Retry"]
-    },
-    "22141179786a": {
+    "15d430fcd22b": {
       "crash": {
         "$rpc": "null"
       },
@@ -148,7 +134,7 @@
         "Agent Session History",
         "quirky-history",
         "Unable to Load",
-        "Unknown method",
+        "outer refused",
         "Retry"
       ]
     },
@@ -257,27 +243,6 @@
         }
       }
     },
-    "4af220e500d6": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "ChevronLeft": 1,
-        "Pressable": 3,
-        "RefreshCw": 1,
-        "SafeAreaView": 1,
-        "Text": 5,
-        "View": 4
-      },
-      "labels": ["Back", "Refresh agent sessions"],
-      "text": [
-        "Agent Session History",
-        "quirky-history",
-        "Unable to Load",
-        "outer refused",
-        "Retry"
-      ]
-    },
     "4cebf6258ec1": {
       "name": "worktree.ps#1",
       "ordinal": 1,
@@ -374,6 +339,27 @@
         }
       }
     },
+    "62efdeedef03": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "ChevronLeft": 1,
+        "Pressable": 3,
+        "RefreshCw": 1,
+        "SafeAreaView": 1,
+        "Text": 5,
+        "View": 4
+      },
+      "labels": ["Back", "Refresh agent sessions"],
+      "text": [
+        "Agent Session History",
+        "quirky-history",
+        "Unable to Load",
+        "transport failure",
+        "Retry"
+      ]
+    },
     "6eacae1aa018": {
       "name": "status.get#2",
       "ordinal": 5,
@@ -444,27 +430,6 @@
         }
       }
     },
-    "7f2073d8dcc1": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "ChevronLeft": 1,
-        "Pressable": 3,
-        "RefreshCw": 1,
-        "SafeAreaView": 1,
-        "Text": 5,
-        "View": 4
-      },
-      "labels": ["Back", "Refresh agent sessions"],
-      "text": [
-        "Agent Session History",
-        "quirky-history",
-        "Unable to Load",
-        "transport failure",
-        "Retry"
-      ]
-    },
     "82a983e39762": {
       "name": "status.get#2",
       "ordinal": 5,
@@ -500,7 +465,7 @@
         }
       }
     },
-    "8cc4f2d607a6": {
+    "8370344c3996": {
       "crash": {
         "$rpc": "null"
       },
@@ -634,7 +599,42 @@
         }
       }
     },
-    "af9574769167": {
+    "c32906dfab54": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "ChevronLeft": 1,
+        "Pressable": 3,
+        "RefreshCw": 1,
+        "SafeAreaView": 1,
+        "Text": 5,
+        "View": 4
+      },
+      "labels": ["Back", "Refresh agent sessions"],
+      "text": ["Agent Session History", "quirky-history", "Unable to Load", "Retry"]
+    },
+    "c48c3dd18c0d": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "ChevronLeft": 1,
+        "Pressable": 2,
+        "RefreshCw": 1,
+        "SafeAreaView": 1,
+        "Text": 4,
+        "View": 4
+      },
+      "labels": ["Back", "Refresh agent sessions"],
+      "text": [
+        "Agent Session History",
+        "quirky-history",
+        "Agent Session History Unavailable",
+        "Update Quirky on this host to browse agent session history."
+      ]
+    },
+    "c6eb8240cba2": {
       "crash": {
         "$rpc": "null"
       },
@@ -660,7 +660,7 @@
       "ordinal": 6,
       "json": "{\"id\":\"frame-3\",\"deviceToken\":\"recording-device\",\"method\":\"status.get\"}"
     },
-    "d22bb2f62cea": {
+    "d32c3258ad1a": {
       "crash": {
         "$rpc": "null"
       },
@@ -733,7 +733,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "d22bb2f62cea",
+          "state": "d32c3258ad1a",
           "effects": []
         }
       },
@@ -745,7 +745,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "d22bb2f62cea",
+          "state": "d32c3258ad1a",
           "effects": []
         }
       },
@@ -757,7 +757,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "8cc4f2d607a6",
+          "state": "8370344c3996",
           "effects": []
         }
       },
@@ -769,7 +769,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "8cc4f2d607a6",
+          "state": "8370344c3996",
           "effects": []
         }
       },
@@ -781,7 +781,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "0be231dddda1",
+          "state": "c48c3dd18c0d",
           "effects": []
         }
       },
@@ -793,7 +793,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "0be231dddda1",
+          "state": "c48c3dd18c0d",
           "effects": []
         }
       },
@@ -805,7 +805,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "0be231dddda1",
+          "state": "c48c3dd18c0d",
           "effects": []
         }
       },
@@ -817,7 +817,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "4af220e500d6",
+          "state": "15d430fcd22b",
           "effects": []
         }
       },
@@ -829,7 +829,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "af9574769167",
+          "state": "c6eb8240cba2",
           "effects": []
         }
       },
@@ -841,7 +841,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "22141179786a",
+          "state": "0edd13fb3c6f",
           "effects": []
         }
       },
@@ -853,7 +853,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "7f2073d8dcc1",
+          "state": "62efdeedef03",
           "effects": []
         }
       },
@@ -865,7 +865,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "18ef6596b779",
+          "state": "c32906dfab54",
           "effects": []
         }
       }

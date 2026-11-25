@@ -31,25 +31,6 @@
         "startedAt": 0
       }
     },
-    "1813829924d9": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "Pressable": 2,
-        "Text": 6,
-        "View": 3
-      },
-      "labels": ["Send test notification"],
-      "text": [
-        "Having trouble receiving alerts?",
-        "Send a test through Quirky’s push service.",
-        "Send test notification",
-        "Send test notification",
-        "Troubleshooting",
-        "Accepted by Quirky’s push service. Check for the notification."
-      ]
-    },
     "649d12c8eb9b": {
       "name": "notifications.testPush#1",
       "ordinal": 1,
@@ -85,25 +66,7 @@
         }
       }
     },
-    "6967f95147f9": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "Pressable": 2,
-        "Text": 5,
-        "View": 3
-      },
-      "labels": ["Sending…"],
-      "text": [
-        "Having trouble receiving alerts?",
-        "Send a test through Quirky’s push service.",
-        "Send test notification",
-        "Sending…",
-        "Troubleshooting"
-      ]
-    },
-    "d86c08a509c4": {
+    "a399799faa16": {
       "crash": {
         "$rpc": "null"
       },
@@ -121,6 +84,24 @@
         "Troubleshooting"
       ]
     },
+    "c72a7d810f35": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "Pressable": 2,
+        "Text": 5,
+        "View": 3
+      },
+      "labels": ["Sending…"],
+      "text": [
+        "Having trouble receiving alerts?",
+        "Send a test through Quirky’s push service.",
+        "Send test notification",
+        "Sending…",
+        "Troubleshooting"
+      ]
+    },
     "eb79a9b3682a": {
       "status": "fulfilled",
       "startedAt": 0,
@@ -128,6 +109,25 @@
       "value": {
         "$rpc": "undefined"
       }
+    },
+    "f00545950686": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "Pressable": 2,
+        "Text": 6,
+        "View": 3
+      },
+      "labels": ["Send test notification"],
+      "text": [
+        "Having trouble receiving alerts?",
+        "Send a test through Quirky’s push service.",
+        "Send test notification",
+        "Send test notification",
+        "Troubleshooting",
+        "Accepted by Quirky’s push service. Check for the notification."
+      ]
     },
     "f68b017d64bd": {
       "name": "notifications.testPush#1",
@@ -146,7 +146,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "d86c08a509c4",
+          "state": "a399799faa16",
           "effects": []
         }
       },
@@ -159,7 +159,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "6967f95147f9",
+          "state": "c72a7d810f35",
           "effects": []
         }
       },
@@ -172,7 +172,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "1813829924d9",
+          "state": "f00545950686",
           "effects": []
         }
       }

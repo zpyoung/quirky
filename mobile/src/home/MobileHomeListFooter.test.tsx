@@ -39,7 +39,7 @@ function host(id: string, name: string, endpoint: string): HostProfile {
 }
 
 const desk = host('desk', 'Desk', 'ws://192.168.1.2:6768')
-const laptop = host('laptop', 'Laptop', 'wss://relay.example.com/mobile')
+const laptop = host('laptop', 'Laptop', 'wss://laptop.example.com/mobile')
 
 const server = host('server', 'Server', 'wss://ssh.example.com/mobile')
 
@@ -132,7 +132,7 @@ describe('MobileHomeListFooter tasks', () => {
     expect(tasksPicker().props.visible).toBe(true)
     expect(tasksPicker().props.options).toEqual([
       { value: 'desk', label: 'Desk', subtitle: '192.168.1.2:6768' },
-      { value: 'laptop', label: 'Laptop', subtitle: 'relay.example.com' }
+      { value: 'laptop', label: 'Laptop', subtitle: 'laptop.example.com' }
     ])
 
     act(() => tasksPicker().props.onSelect('laptop'))

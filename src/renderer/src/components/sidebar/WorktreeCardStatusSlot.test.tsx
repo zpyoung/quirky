@@ -215,8 +215,11 @@ describe('WorktreeCardStatusSlot', () => {
     expect(markup).not.toContain('lucide-bell')
   })
 
-  it('keeps legacy unread working cards on the unread bell control', () => {
-    mocks.status = 'working'
+  it.each([
+    ['working', 'Working'],
+    ['permission', 'Needs permission']
+  ])('lets a live %s status outrank the legacy unread bell', (status, label) => {
+    mocks.status = status
     const markup = renderToStaticMarkup(
       <WorktreeCardStatusSlot
         worktreeId="wt-1"
@@ -229,11 +232,10 @@ describe('WorktreeCardStatusSlot', () => {
       />
     )
 
+    // the button keeps the read action even though the bell glyph yields to live status
     expect(markup).toContain('aria-label="Mark as read"')
-    expect(markup).toContain('Mark as read')
-    expect(markup).toContain('Working')
-    expect(markup).toContain('text-agent-question')
-    expect(markup).not.toContain('agent-working-pulse')
+    expect(markup).toContain(`${label} · Mark as read`)
+    expect(markup).not.toContain('text-agent-question')
     expect(markup).not.toContain('data-worktree-unread-alert=""')
   })
 

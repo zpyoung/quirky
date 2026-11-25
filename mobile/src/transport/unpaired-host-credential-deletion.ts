@@ -3,8 +3,6 @@ import {
   clearHostCredentialWriteRevision,
   getHostCredentialWriteRevision
 } from './host-credential-write-revision'
-import { deleteMobileRelayCredentialBundle } from './mobile-relay-credential-bundle'
-import { deleteMobileRelayDirectUpgradeJournal } from './mobile-relay-direct-upgrade-journal'
 
 type DeletionDependencies = {
   waitForHostMutations: () => Promise<void>
@@ -38,16 +36,6 @@ export function createUnpairedHostCredentialDeletion(dependencies: DeletionDepen
     }
     assertWriteRevisionUnchanged(hostId, writeRevision)
     await deleteHostDeviceToken(hostId)
-    if (await shouldSkip(hostId, writeRevision)) {
-      return
-    }
-    assertWriteRevisionUnchanged(hostId, writeRevision)
-    await deleteMobileRelayCredentialBundle(hostId)
-    if (await shouldSkip(hostId, writeRevision)) {
-      return
-    }
-    assertWriteRevisionUnchanged(hostId, writeRevision)
-    await deleteMobileRelayDirectUpgradeJournal(hostId)
     if (await shouldSkip(hostId, writeRevision)) {
       return
     }

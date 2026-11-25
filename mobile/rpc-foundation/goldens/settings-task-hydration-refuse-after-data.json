@@ -213,11 +213,6 @@
         "$rpc": "null"
       }
     },
-    "2db932a72b8a": {
-      "name": "trustedQuirkyHooks",
-      "ordinal": 54,
-      "value": {}
-    },
     "2e5101281965": {
       "name": "githubKind",
       "ordinal": 141,
@@ -477,6 +472,13 @@
         "recent": []
       }
     },
+    "5a6d4bcc38e1": {
+      "name": "projectRepoNotInQuirky",
+      "ordinal": 27,
+      "value": {
+        "$rpc": "null"
+      }
+    },
     "60729092583d": {
       "name": "settings.get#1",
       "ordinal": 44,
@@ -553,17 +555,17 @@
       "ordinal": 62,
       "value": ["github", "linear"]
     },
-    "64bf72888fbb": {
+    "64cc23a40e67": {
+      "name": "ui.get#2",
+      "ordinal": 124,
+      "json": "{\"id\":\"frame-10\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
+    },
+    "64f449303539": {
       "name": "projectRepoNotInQuirky",
       "ordinal": 101,
       "value": {
         "$rpc": "null"
       }
-    },
-    "64cc23a40e67": {
-      "name": "ui.get#2",
-      "ordinal": 124,
-      "json": "{\"id\":\"frame-10\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
     },
     "653e1aa4f664": {
       "name": "status.get#2",
@@ -590,6 +592,11 @@
         "status": "pending",
         "startedAt": 0
       }
+    },
+    "6adea0fe7b75": {
+      "name": "trustedQuirkyHooks",
+      "ordinal": 128,
+      "value": {}
     },
     "6e8e6076a1ea": {
       "name": "linear.status#1",
@@ -730,13 +737,6 @@
       "ordinal": 125,
       "json": "{\"id\":\"frame-11\",\"deviceToken\":\"recording-device\",\"method\":\"preflight.check\"}"
     },
-    "7d8029e889cf": {
-      "name": "projectRepoNotInQuirky",
-      "ordinal": 27,
-      "value": {
-        "$rpc": "null"
-      }
-    },
     "8603614dae69": {
       "name": "showGitHubProjectSortPicker",
       "ordinal": 96,
@@ -805,11 +805,6 @@
       "name": "showGitHubProjectViewPicker",
       "ordinal": 21,
       "value": false
-    },
-    "8d73e3205bf5": {
-      "name": "trustedQuirkyHooks",
-      "ordinal": 128,
-      "value": {}
     },
     "8ef027c71140": {
       "name": "githubKind",
@@ -988,6 +983,11 @@
       "value": {
         "$rpc": "null"
       }
+    },
+    "a6e3fa569e72": {
+      "name": "trustedQuirkyHooks",
+      "ordinal": 54,
+      "value": {}
     },
     "a8c1273c757d": {
       "name": "showCreateTask",
@@ -1461,7 +1461,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1528,7 +1528,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1543,7 +1543,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1617,7 +1617,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1632,7 +1632,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1709,7 +1709,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1724,7 +1724,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1771,7 +1771,7 @@
             "f76a15db8eb4",
             "f585c3371e8f",
             "9842bc6a099d",
-            "64bf72888fbb",
+            "64f449303539",
             "9e245accc9ea",
             "f4c8257ac3bc",
             "a8c1273c757d",
@@ -1849,7 +1849,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1864,7 +1864,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1911,7 +1911,7 @@
             "f76a15db8eb4",
             "f585c3371e8f",
             "9842bc6a099d",
-            "64bf72888fbb",
+            "64f449303539",
             "9e245accc9ea",
             "f4c8257ac3bc",
             "a8c1273c757d",
@@ -1926,7 +1926,7 @@
             "01a6b0ebee33",
             "4ff45f7e9f6f",
             "e1d9e6a3a12a",
-            "8d73e3205bf5",
+            "6adea0fe7b75",
             "9071330b2f64",
             "afc0d629170b",
             "93ef57f390e9",

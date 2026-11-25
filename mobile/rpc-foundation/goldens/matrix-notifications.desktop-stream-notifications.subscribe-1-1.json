@@ -4,6 +4,14 @@
   "family": "notifications.desktop-stream",
   "namedDeltas": [],
   "values": {
+    "042c50488e5c": {
+      "name": "device-store.setItem",
+      "ordinal": 6,
+      "value": {
+        "key": "quirky:pushDismissalWatermarks:v1",
+        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-2\\\"]\",\"seq\":8,\"expiresAt\":1767312000000}]"
+      }
+    },
     "18a100fb6bae": {
       "name": "notifications.getMissedSince#1",
       "ordinal": 2,
@@ -84,27 +92,11 @@
         }
       ]
     },
-    "43a1a92c1eef": {
-      "name": "device-store.setItem",
-      "ordinal": 3,
-      "value": {
-        "key": "quirky:pushDismissalWatermarks:v1",
-        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-2\\\"]\",\"seq\":8,\"expiresAt\":1767312000000}]"
-      }
-    },
     "45aca32cac62": {
       "name": "notification-tray.dismiss",
       "ordinal": 7,
       "value": {
         "identifier": "tray-2"
-      }
-    },
-    "4924583cde9d": {
-      "name": "device-store.setItem",
-      "ordinal": 6,
-      "value": {
-        "key": "quirky:pushDismissalWatermarks:v1",
-        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-2\\\"]\",\"seq\":8,\"expiresAt\":1767312000000}]"
       }
     },
     "5359579cc62d": {
@@ -159,14 +151,6 @@
         }
       ]
     },
-    "806522730ba0": {
-      "name": "device-store.setItem",
-      "ordinal": 2,
-      "value": {
-        "key": "quirky:pushDismissalWatermarks:v1",
-        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-2\\\"]\",\"seq\":8,\"expiresAt\":1767312000000}]"
-      }
-    },
     "a0b2bcfcde77": {
       "running": false
     },
@@ -175,6 +159,22 @@
       "ordinal": 3,
       "value": {
         "identifier": "tray-2"
+      }
+    },
+    "adf75cabb315": {
+      "name": "device-store.setItem",
+      "ordinal": 3,
+      "value": {
+        "key": "quirky:pushDismissalWatermarks:v1",
+        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-2\\\"]\",\"seq\":8,\"expiresAt\":1767312000000}]"
+      }
+    },
+    "b2d895fc6dcd": {
+      "name": "device-store.setItem",
+      "ordinal": 4,
+      "value": {
+        "key": "quirky:pushDismissalWatermarks:v1",
+        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-1\\\"]\",\"seq\":7,\"expiresAt\":1767312000000}]"
       }
     },
     "c0f34fb4c2f6": {
@@ -209,6 +209,14 @@
         "$rpc": "undefined"
       }
     },
+    "ebfefd196460": {
+      "name": "device-store.setItem",
+      "ordinal": 2,
+      "value": {
+        "key": "quirky:pushDismissalWatermarks:v1",
+        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-2\\\"]\",\"seq\":8,\"expiresAt\":1767312000000}]"
+      }
+    },
     "eceafa6140cb": {
       "name": "streams-registered-at-teardown",
       "ordinal": 2,
@@ -230,14 +238,6 @@
       "ordinal": 5,
       "value": {
         "identifier": "tray-1"
-      }
-    },
-    "ff11f542ada5": {
-      "name": "device-store.setItem",
-      "ordinal": 4,
-      "value": {
-        "key": "quirky:pushDismissalWatermarks:v1",
-        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-1\\\"]\",\"seq\":7,\"expiresAt\":1767312000000}]"
       }
     }
   },
@@ -289,7 +289,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -301,7 +301,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "4924583cde9d", "45aca32cac62"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "042c50488e5c", "45aca32cac62"]
         }
       },
       {
@@ -314,7 +314,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "4924583cde9d", "45aca32cac62"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "042c50488e5c", "45aca32cac62"]
         }
       },
       {
@@ -327,7 +327,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "4924583cde9d", "45aca32cac62"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "042c50488e5c", "45aca32cac62"]
         }
       },
       {
@@ -363,7 +363,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["1a0189471376", "43a1a92c1eef", "c0f34fb4c2f6"]
+          "effects": ["1a0189471376", "adf75cabb315", "c0f34fb4c2f6"]
         }
       },
       {
@@ -376,7 +376,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["1a0189471376", "43a1a92c1eef", "c0f34fb4c2f6"]
+          "effects": ["1a0189471376", "adf75cabb315", "c0f34fb4c2f6"]
         }
       },
       {
@@ -389,7 +389,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["1a0189471376", "43a1a92c1eef", "c0f34fb4c2f6"]
+          "effects": ["1a0189471376", "adf75cabb315", "c0f34fb4c2f6"]
         }
       },
       {
@@ -402,7 +402,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["1a0189471376", "43a1a92c1eef", "c0f34fb4c2f6", "75b571e0e5f9"]
+          "effects": ["1a0189471376", "adf75cabb315", "c0f34fb4c2f6", "75b571e0e5f9"]
         }
       },
       {
@@ -438,7 +438,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["e2464612dc94", "43a1a92c1eef", "c0f34fb4c2f6"]
+          "effects": ["e2464612dc94", "adf75cabb315", "c0f34fb4c2f6"]
         }
       },
       {
@@ -451,7 +451,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["e2464612dc94", "43a1a92c1eef", "c0f34fb4c2f6"]
+          "effects": ["e2464612dc94", "adf75cabb315", "c0f34fb4c2f6"]
         }
       },
       {
@@ -464,7 +464,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["e2464612dc94", "43a1a92c1eef", "c0f34fb4c2f6"]
+          "effects": ["e2464612dc94", "adf75cabb315", "c0f34fb4c2f6"]
         }
       },
       {
@@ -477,7 +477,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["e2464612dc94", "43a1a92c1eef", "c0f34fb4c2f6", "75b571e0e5f9"]
+          "effects": ["e2464612dc94", "adf75cabb315", "c0f34fb4c2f6", "75b571e0e5f9"]
         }
       },
       {
@@ -513,7 +513,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["806522730ba0", "ac63e18df12c"]
+          "effects": ["ebfefd196460", "ac63e18df12c"]
         }
       },
       {
@@ -526,7 +526,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["806522730ba0", "ac63e18df12c"]
+          "effects": ["ebfefd196460", "ac63e18df12c"]
         }
       },
       {
@@ -539,7 +539,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["806522730ba0", "ac63e18df12c"]
+          "effects": ["ebfefd196460", "ac63e18df12c"]
         }
       },
       {
@@ -552,7 +552,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["806522730ba0", "ac63e18df12c", "2d36a975fe26"]
+          "effects": ["ebfefd196460", "ac63e18df12c", "2d36a975fe26"]
         }
       },
       {
@@ -588,7 +588,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["806522730ba0", "ac63e18df12c"]
+          "effects": ["ebfefd196460", "ac63e18df12c"]
         }
       },
       {
@@ -601,7 +601,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["806522730ba0", "ac63e18df12c"]
+          "effects": ["ebfefd196460", "ac63e18df12c"]
         }
       },
       {
@@ -614,7 +614,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["806522730ba0", "ac63e18df12c"]
+          "effects": ["ebfefd196460", "ac63e18df12c"]
         }
       },
       {
@@ -627,7 +627,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["806522730ba0", "ac63e18df12c", "2d36a975fe26"]
+          "effects": ["ebfefd196460", "ac63e18df12c", "2d36a975fe26"]
         }
       },
       {
@@ -663,7 +663,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["806522730ba0", "ac63e18df12c"]
+          "effects": ["ebfefd196460", "ac63e18df12c"]
         }
       },
       {
@@ -676,7 +676,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["806522730ba0", "ac63e18df12c"]
+          "effects": ["ebfefd196460", "ac63e18df12c"]
         }
       },
       {
@@ -689,7 +689,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["806522730ba0", "ac63e18df12c"]
+          "effects": ["ebfefd196460", "ac63e18df12c"]
         }
       },
       {
@@ -702,7 +702,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["806522730ba0", "ac63e18df12c", "2d36a975fe26"]
+          "effects": ["ebfefd196460", "ac63e18df12c", "2d36a975fe26"]
         }
       },
       {

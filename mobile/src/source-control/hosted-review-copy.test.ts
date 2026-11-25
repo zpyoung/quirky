@@ -10,10 +10,10 @@ describe('hostedReviewCopy', () => {
     })
   })
 
-  it('uses Pull Request labels for GitHub and other providers and undefined', () => {
+  it('uses Pull Request labels for GitHub, unsupported providers and undefined', () => {
     const pr = { shortLabel: 'PR', reviewLabel: 'pull request', titleLabel: 'Pull Request' }
     expect(hostedReviewCopy('github')).toEqual(pr)
-    expect(hostedReviewCopy('bitbucket')).toEqual(pr)
+    expect(hostedReviewCopy('unsupported')).toEqual(pr)
     expect(hostedReviewCopy(undefined)).toEqual(pr)
   })
 })

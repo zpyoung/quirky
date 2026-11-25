@@ -4,6 +4,38 @@
   "family": "files.explorer-screen",
   "namedDeltas": [],
   "values": {
+    "021557fd019d": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "ChevronLeft": 1,
+        "FlatList": 1,
+        "Pressable": 1,
+        "SafeAreaView": 1,
+        "Text": 2,
+        "View": 3
+      },
+      "labels": ["Back to session"],
+      "rows": ["dir:src", "file:README.md"],
+      "text": ["Files", "quirky-files"]
+    },
+    "081f2fa4de0e": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "ChevronLeft": 1,
+        "FlatList": 1,
+        "Pressable": 1,
+        "SafeAreaView": 1,
+        "Text": 2,
+        "View": 3
+      },
+      "labels": ["Back to session"],
+      "rows": ["dir:src", "file:README.md"],
+      "text": ["Files", "quirky-files", " - Showing first 5000"]
+    },
     "09c69b142397": {
       "name": "files.readDir#1",
       "ordinal": 1,
@@ -39,7 +71,7 @@
         }
       }
     },
-    "13db9ec07bae": {
+    "0c3130bc7934": {
       "crash": {
         "$rpc": "null"
       },
@@ -52,23 +84,7 @@
       },
       "labels": ["Back to session"],
       "rows": [],
-      "text": ["Files", "quirky-files", "outer refused", "Retry"]
-    },
-    "1fac8f3b8f44": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "ChevronLeft": 1,
-        "FlatList": 1,
-        "Pressable": 1,
-        "SafeAreaView": 1,
-        "Text": 2,
-        "View": 3
-      },
-      "labels": ["Back to session"],
-      "rows": ["dir:src", "file:README.md"],
-      "text": ["Files", "quirky-files"]
+      "text": ["Files", "quirky-files", "transport failure", "Retry"]
     },
     "33bb136847f8": {
       "name": "files.readDir#1",
@@ -105,36 +121,6 @@
           "ok": false
         }
       }
-    },
-    "345725f4b97d": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "ChevronLeft": 1,
-        "Pressable": 2,
-        "SafeAreaView": 1,
-        "Text": 4,
-        "View": 4
-      },
-      "labels": ["Back to session"],
-      "rows": [],
-      "text": ["Files", "quirky-files", "transport failure", "Retry"]
-    },
-    "406c76bf7ebe": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "ChevronLeft": 1,
-        "Pressable": 2,
-        "SafeAreaView": 1,
-        "Text": 4,
-        "View": 4
-      },
-      "labels": ["Back to session"],
-      "rows": [],
-      "text": ["Files", "quirky-files", "Unable to load files", "Retry"]
     },
     "4366cea5194d": {
       "name": "files.list#1",
@@ -350,7 +336,7 @@
         }
       }
     },
-    "6c25da20f340": {
+    "6c1da6596d9b": {
       "crash": {
         "$rpc": "null"
       },
@@ -363,12 +349,7 @@
       },
       "labels": ["Back to session"],
       "rows": [],
-      "text": [
-        "Files",
-        "quirky-files",
-        "The host sent a reply this app could not read (files.readDir)",
-        "Retry"
-      ]
+      "text": ["Files", "quirky-files", "Unable to load files", "Retry"]
     },
     "7135933422f5": {
       "name": "files.readDir#1",
@@ -451,7 +432,7 @@
       "ordinal": 2,
       "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"files.readDir\",\"params\":{\"worktree\":\"id:wt-files\",\"relativePath\":\"\"}}"
     },
-    "a0139a06ef98": {
+    "8a62d0ba28d6": {
       "crash": {
         "$rpc": "null"
       },
@@ -466,21 +447,20 @@
       "rows": [],
       "text": ["Files", "quirky-files", "No files found"]
     },
-    "b85511fb8929": {
+    "98f5e8cef81a": {
       "crash": {
         "$rpc": "null"
       },
       "elements": {
         "ChevronLeft": 1,
-        "FlatList": 1,
-        "Pressable": 1,
+        "Pressable": 2,
         "SafeAreaView": 1,
-        "Text": 2,
-        "View": 3
+        "Text": 4,
+        "View": 4
       },
       "labels": ["Back to session"],
-      "rows": ["dir:src", "file:README.md"],
-      "text": ["Files", "quirky-files", " - Showing first 5000"]
+      "rows": [],
+      "text": ["Files", "quirky-files", "outer refused", "Retry"]
     },
     "ba7f7b642df7": {
       "name": "files.readDir#1",
@@ -517,6 +497,42 @@
         }
       }
     },
+    "c57e9bd0e24c": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "ChevronLeft": 1,
+        "Pressable": 2,
+        "SafeAreaView": 1,
+        "Text": 4,
+        "View": 4
+      },
+      "labels": ["Back to session"],
+      "rows": [],
+      "text": [
+        "Files",
+        "quirky-files",
+        "The host sent a reply this app could not read (files.readDir)",
+        "Retry"
+      ]
+    },
+    "c57ef4775a38": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "ActivityIndicator": 1,
+        "ChevronLeft": 1,
+        "Pressable": 1,
+        "SafeAreaView": 1,
+        "Text": 2,
+        "View": 4
+      },
+      "labels": ["Back to session"],
+      "rows": [],
+      "text": ["Files", "quirky-files"]
+    },
     "e0b32411ccef": {
       "name": "files.readDir#1",
       "ordinal": 1,
@@ -549,22 +565,6 @@
           "isRpcDeliveryUnknown": true
         }
       }
-    },
-    "e91880eefe86": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "ActivityIndicator": 1,
-        "ChevronLeft": 1,
-        "Pressable": 1,
-        "SafeAreaView": 1,
-        "Text": 2,
-        "View": 4
-      },
-      "labels": ["Back to session"],
-      "rows": [],
-      "text": ["Files", "quirky-files"]
     },
     "eb79a9b3682a": {
       "status": "fulfilled",
@@ -628,7 +628,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "e91880eefe86",
+          "state": "c57ef4775a38",
           "effects": []
         }
       },
@@ -640,7 +640,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "1fac8f3b8f44",
+          "state": "021557fd019d",
           "effects": []
         }
       },
@@ -652,7 +652,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "6c25da20f340",
+          "state": "c57e9bd0e24c",
           "effects": []
         }
       },
@@ -664,7 +664,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "6c25da20f340",
+          "state": "c57e9bd0e24c",
           "effects": []
         }
       },
@@ -676,7 +676,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "6c25da20f340",
+          "state": "c57e9bd0e24c",
           "effects": []
         }
       },
@@ -688,7 +688,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "6c25da20f340",
+          "state": "c57e9bd0e24c",
           "effects": []
         }
       },
@@ -700,7 +700,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "6c25da20f340",
+          "state": "c57e9bd0e24c",
           "effects": []
         }
       },
@@ -712,7 +712,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "13db9ec07bae",
+          "state": "98f5e8cef81a",
           "effects": []
         }
       },
@@ -724,7 +724,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "406c76bf7ebe",
+          "state": "6c1da6596d9b",
           "effects": []
         }
       },
@@ -736,7 +736,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "b85511fb8929",
+          "state": "081f2fa4de0e",
           "effects": []
         }
       },
@@ -748,7 +748,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "345725f4b97d",
+          "state": "0c3130bc7934",
           "effects": []
         }
       },
@@ -760,7 +760,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "a0139a06ef98",
+          "state": "8a62d0ba28d6",
           "effects": []
         }
       }

@@ -342,7 +342,7 @@ export function TerminalErrorToast({
                 'If this persists, please'
               )}{' '}
               <a
-                href="https://github.com/stablyai/orca/issues"
+                href="https://github.com/zpyoung/quirky/issues"
                 style={{ color: 'inherit', textDecoration: 'underline' }}
               >
                 {translate(

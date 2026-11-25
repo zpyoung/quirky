@@ -31,12 +31,12 @@ describe('verify packaged plugin resources', () => {
         recursive: true
       })
       await writeFile(
-        join(launchRoot, 'stablyai.quirky-navigation-shortcuts', 'extra.json'),
+        join(launchRoot, 'zpyoung.quirky-navigation-shortcuts', 'extra.json'),
         '{"mutated":true}\n'
       )
 
       expect(() => verifyPackagedPluginResources(resourcesDir)).toThrow(
-        'packaged bytes do not match stablyai.quirky-navigation-shortcuts'
+        'packaged bytes do not match zpyoung.quirky-navigation-shortcuts'
       )
     } finally {
       await rm(resourcesDir, { recursive: true, force: true })
@@ -61,7 +61,7 @@ describe('verify packaged plugin resources', () => {
       // Every file is rewritten, so the first mismatch is whichever plugin sorts
       // first — don't pin a name a later branch can reorder.
       expect(() => verifyPackagedPluginResources(resourcesDir)).toThrow(
-        /packaged bytes do not match stablyai\./
+        /packaged bytes do not match zpyoung\./
       )
     } finally {
       await rm(resourcesDir, { recursive: true, force: true })

@@ -369,12 +369,12 @@ When there's no sibling, match the surrounding chrome — button sizes, icon wei
 
 `destructive` is for actions that lose data or can't be undone. **Cancel, Dismiss, Close, and Discard are not destructive** — they back the user out of an in-progress action and should stay quiet (default ghost button, no color, no keyboard chip, no animated affordance). Save the visual weight for the affirmative action so the two don't compete. Keyboard handlers can still honor Esc; the visible decoration is what stays minimal.
 
-## Cross-platform
+## Platforms
 
-Quirky runs on macOS, Linux, and Windows. Every UI change must hold up on all three, in both light and dark mode.
+The desktop app runs on macOS only, and every UI change must hold up in both light and dark mode. The web client can still open in a browser on Linux or Windows, so keep the modifier-key and label rules below.
 
-- **Modifier keys:** Never hardcode `e.metaKey`. Use `navigator.userAgent.includes('Mac')` to choose `metaKey` on Mac and `ctrlKey` on Linux/Windows. Electron menu accelerators should use `CmdOrCtrl`.
-- **Shortcut labels:** Display `⌘` / `⇧` on Mac; display `Ctrl+` / `Shift+` on other platforms. The label must reflect the actual binding for that platform.
+- **Modifier keys:** Never hardcode `e.metaKey`. Use `navigator.userAgent.includes('Mac')` to choose `metaKey` on Mac and `ctrlKey` elsewhere. Electron menu accelerators should use `CmdOrCtrl`.
+- **Shortcut labels:** Display `⌘` / `⇧` on Mac; display `Ctrl+` / `Shift+` in a non-Mac browser. The label must reflect the actual binding for that platform.
 - **Window chrome:** macOS shows traffic lights; the titlebar reserves an 80px gutter (`titlebar-traffic-light-pad`) so they don't overlap content. Don't put hit targets in that band on Mac.
 - **SSH:** Many users run Quirky on a remote machine. Loading states, focus management, and animations must hold up under 50–200 ms of extra latency. Test under simulated latency (or actual SSH) — local-only verification isn't enough. See _UX rules → 1_.
 

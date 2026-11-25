@@ -1,4 +1,3 @@
-import type { MobileRelayEndpoint } from '../../../src/shared/mobile-relay-credential-contract'
 import { HostProfileSchema } from './types'
 import type { HostCatalogEntry, HostProfile, StoredHostProfile } from './types'
 import { getNextHostNameFromHosts } from './host-names'
@@ -13,13 +12,6 @@ import {
   retryPendingHostCredentialCleanups,
   scheduleHostCredentialCleanup
 } from './host-credential-cleanup'
-import {
-  loadMobileRelayHostRoutingState,
-  removeMobileRelayHostRouting,
-  removeMobileRelayHostRoutings,
-  saveMobileRelayHostRouting
-} from './mobile-relay-host-overlay-store'
-import { scheduleOrphanedMobileRelayCleanup } from './mobile-relay-orphan-cleanup'
 import {
   getHostCredentialWriteRevision,
   markHostCredentialWrite,
@@ -64,21 +56,8 @@ async function doLoadHostListSnapshot(): Promise<hostListLoads.HostListSnapshot>
   if (!storedHosts) {
     return { catalog: [], profiles: [] }
   }
-  const overlayState = await loadMobileRelayHostRoutingState(
-    new Set(storedHosts.map(({ id }) => id))
-  )
-  const orphanWriteRevisions = new Map(
-    overlayState.orphanHostIds.map((hostId) => [hostId, getHostCredentialWriteRevision(hostId)])
-  )
-  await scheduleOrphanedMobileRelayCleanup({
-    hostIds: overlayState.orphanHostIds,
-    deleteCredential: (hostId) =>
-      deleteUnpairedHostCredentials(hostId, orphanWriteRevisions.get(hostId) ?? 0),
-    removeOverlay: removeOrphanOverlayIfUnpaired
-  })
   return joinHostCatalogCredentials({
     storedHosts,
-    relays: overlayState.relays,
     tokenCache,
     readToken: readHostDeviceToken,
     getRevision: hostListLoads.getHostListLoadRevision
@@ -137,44 +116,14 @@ async function cancelCleanupForDurablyStoredHosts(hostIds: Iterable<string>): Pr
   }).catch(() => undefined)
 }
 
-function removeOrphanOverlayIfUnpaired(hostId: string): Promise<void> {
-  return enqueueHostListMutation(async () => {
-    const hosts = await readStoredHostProfilesForMutation()
-    if (!hosts.some(({ id }) => id === hostId)) {
-      await removeMobileRelayHostRouting(hostId)
-    }
-  })
-}
-
 // The page's host-store sibling keeps its own no-op, so only the native store reaches persistence.
 export { updateHostDescriptor } from './host-descriptor-persistence'
-
-export class RelayRoutingHostRemovedError extends Error {}
-
-/**
- * Relay routing learned after pairing (re-resolution, rotation, direct upgrade). Routing only; the
- * row and token belong to pairing and Edit Host.
- */
-export async function setRelayRouting(hostId: string, relay: MobileRelayEndpoint): Promise<void> {
-  const wrote = await enqueueHostListMutation(async () => {
-    const hosts = await readStoredHostProfilesForMutation()
-    if (!hosts.some(({ id }) => id === hostId)) {
-      // Why: an in-flight relay learner must not resurrect a host the user removed.
-      throw new RelayRoutingHostRemovedError('mobile relay host was removed')
-    }
-    return saveMobileRelayHostRouting(hostId, relay)
-  })
-  if (wrote) {
-    hostListLoads.dropSharedHostListLoad()
-  }
-}
 
 /** Pairing only (a census fences the importers): it creates or re-pairs the whole host. */
 export async function savePairedHost(host: HostProfile): Promise<void> {
   const validated = HostProfileSchema.parse(host)
   const stored = toStoredHostProfile(validated)
   const duplicateHostIds = new Set<string>()
-  let updatedExistingHost = false
   let cleanupIntentRecordedBeforeMetadata = false
   let tokenCommittedBeforeMetadata = false
   try {
@@ -187,7 +136,6 @@ export async function savePairedHost(host: HostProfile): Promise<void> {
       }
       let next: StoredHostProfile[]
       if (index !== -1) {
-        updatedExistingHost = true
         // Why: an authoritative save is the safe point to collapse pre-existing duplicate rows to the preserved host id.
         next = hosts
           .filter(({ id }) => !duplicateHostIds.has(id))
@@ -229,19 +177,6 @@ export async function savePairedHost(host: HostProfile): Promise<void> {
   }
   // Why: a later removal owns its cleanup intent; cancel only while this publication remains authoritative.
   cancelCleanupForStoredHost(stored.id)
-  if (validated.relay) {
-    await saveMobileRelayHostRouting(stored.id, validated.relay)
-    hostListLoads.dropSharedHostListLoad()
-  }
-  const overlayRemovalIds = [...duplicateHostIds]
-  if (!validated.relay && updatedExistingHost) {
-    overlayRemovalIds.push(stored.id)
-  }
-  if (overlayRemovalIds.length > 0) {
-    // Why: reusing an id for direct-only re-pairing must not retain routing metadata from the previous transport state.
-    await removeMobileRelayHostRoutings(overlayRemovalIds)
-    hostListLoads.dropSharedHostListLoad()
-  }
   for (const duplicateHostId of duplicateHostIds) {
     try {
       await scheduleUnpairedHostCredentialCleanup(duplicateHostId)
@@ -270,12 +205,7 @@ export async function removeHost(hostId: string): Promise<void> {
     throw error
   }
   tokenCache.delete(hostId)
-  try {
-    await removeMobileRelayHostRouting(hostId)
-    hostListLoads.dropSharedHostListLoad()
-  } catch {
-    // Base removal is authoritative; a retained overlay can't resurrect the host and is cleaned on a later retry.
-  }
+  hostListLoads.dropSharedHostListLoad()
   // Why: keychain delete can stall/reject; await only the durable cleanup intent so removeHost can't freeze the UI.
   try {
     await scheduleUnpairedHostCredentialCleanup(hostId)

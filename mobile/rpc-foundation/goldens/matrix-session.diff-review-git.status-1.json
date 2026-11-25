@@ -70,7 +70,7 @@
         "startedAt": 0
       }
     },
-    "14804a5e414f": {
+    "1577ec1f968e": {
       "status": "fulfilled",
       "startedAt": 0,
       "settledAt": 0,
@@ -481,14 +481,6 @@
       "ordinal": 7,
       "json": "{\"id\":\"frame-3\",\"deviceToken\":\"recording-device\",\"method\":\"repo.list\"}"
     },
-    "55c07df45014": {
-      "branchCompare": "unloaded",
-      "diff": "unloaded",
-      "snapshot": {
-        "kind": "unavailable",
-        "message": "Update Quirky desktop to review changes on mobile."
-      }
-    },
     "5a46fcc976ac": {
       "name": "git.status#1",
       "ordinal": 1,
@@ -522,6 +514,14 @@
             "ok": false
           }
         }
+      }
+    },
+    "617e97a76b35": {
+      "branchCompare": "unloaded",
+      "diff": "unloaded",
+      "snapshot": {
+        "kind": "unavailable",
+        "message": "Update Quirky desktop to review changes on mobile."
       }
     },
     "80f12d7d71e7": {
@@ -1073,9 +1073,9 @@
           "sender": ["45d1ea7c0b42"],
           "payloads": ["168d1f64ca9b"],
           "settlements": {
-            "snapshot": "14804a5e414f"
+            "snapshot": "1577ec1f968e"
           },
-          "state": "55c07df45014",
+          "state": "617e97a76b35",
           "effects": []
         }
       },

@@ -39,7 +39,7 @@ const doubles = vi.hoisted((): Doubles => ({
 
 vi.mock('expo-crypto', () => ({ getRandomBytes: (length: number) => new Uint8Array(length) }))
 vi.mock('expo-file-system', () => ({ Directory: class {}, File: class {}, Paths: { cache: '' } }))
-vi.mock('../transport/mobile-endpoint-supervisor-support', () => ({
+vi.mock('../transport/encode-base64url', () => ({
   encodeBase64Url: () => 'session-id'
 }))
 vi.mock('../components/host-protocol-gates-context', () => ({

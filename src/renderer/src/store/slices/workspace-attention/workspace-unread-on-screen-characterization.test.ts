@@ -4,6 +4,7 @@ import { makeWorktree } from '../worktrees-slice-test-fixtures'
 import {
   completeAgentTurn,
   pointerDownInTab,
+  reportAgentWorking,
   ringBell,
   setWindowOnScreen,
   toggleUnreadByUser,
@@ -264,6 +265,41 @@ describe('the flag follows its markers', () => {
       ]
     `)
     expect(dismissedPaneKeys()).toEqual([[pane.paneKey]])
+  })
+
+  it('the agent starting a new turn off screen reads its finished turn', () => {
+    const { store } = createAttentionStore()
+    const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
+    completeAgentTurn(store, pane)
+    expect(store.getState().worktreesByRepo.repo1[0]!.isUnread).toBe(true)
+
+    reportAgentWorking(store, pane, { updatedAt: 2000 })
+    expect(store.getState().unreadAgentCompletionPanes).toEqual({})
+    expect(store.getState().worktreesByRepo.repo1[0]!.isUnread).toBe(false)
+    expect(dismissedPaneKeys()).toEqual([[pane.paneKey]])
+  })
+
+  it('background children working after the lead finished keep the finished turn unread', () => {
+    const { store } = createAttentionStore()
+    const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
+    completeAgentTurn(store, pane)
+
+    reportAgentWorking(store, pane, { updatedAt: 2000, leadState: 'done' })
+    expect(store.getState().unreadAgentCompletionPanes).toEqual({
+      [pane.paneKey]: 'agent-completion'
+    })
+    expect(store.getState().worktreesByRepo.repo1[0]!.isUnread).toBe(true)
+    expect(dismiss).not.toHaveBeenCalled()
+  })
+
+  it('a new turn keeps a Mark as unread that has no marker behind it', () => {
+    const { store } = createAttentionStore()
+    const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
+    toggleUnreadByUser(store, store.getState().worktreesByRepo.repo1[0]!)
+    expect(store.getState().worktreesByRepo.repo1[0]!.isUnread).toBe(true)
+
+    reportAgentWorking(store, pane, { updatedAt: 2000 })
+    expect(store.getState().worktreesByRepo.repo1[0]!.isUnread).toBe(true)
   })
 
   it('Mark as read removes every marker in the workspace and dismisses their panes', () => {

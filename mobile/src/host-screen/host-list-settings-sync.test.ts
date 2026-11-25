@@ -23,7 +23,7 @@ vi.mock('../transport/use-worktree-resync', () => ({
 }))
 
 import type { RpcClient } from '../transport/rpc-client'
-import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import { FakeSession } from '../transport/rpc-session-test-fake'
 import type { RpcResponse } from '../transport/types'
 import { useHostScreenIdentity } from './use-host-screen-identity'
 import { useHostViewSettings } from './use-host-view-settings'

@@ -86,7 +86,6 @@ function listProps(worktrees: Worktree[]) {
     isReadOnly: false,
     now: 1_000,
     reconnectAttempts: 0,
-    relayRecovery: { pairingRejected: false },
     sectionsResult: { rawSections: sections, sections, repoById: stable.repoById },
     settings: {
       activeFilterCount: 0,

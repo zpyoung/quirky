@@ -3,10 +3,6 @@ import {
   PairingOfferSchema,
   type PairingOffer
 } from '../../../src/shared/mobile-relay-pairing-offer'
-import {
-  MobileRelayEndpointSchema,
-  type MobileRelayEndpoint
-} from '../../../src/shared/mobile-relay-credential-contract'
 import { NODE_PLATFORM_NAMES } from './mobile-runtime-host-platform'
 import { salvagedOptional } from '../../../src/shared/zod-salvage'
 
@@ -46,7 +42,7 @@ export type RpcResponse = RpcSuccess | RpcFailure
 
 export type ConnectionLogLevel = 'info' | 'success' | 'warn' | 'error'
 
-export type MobileConnectionDiagnosticPath = 'lan' | 'tailscale' | 'relay'
+export type MobileConnectionDiagnosticPath = 'lan' | 'tailscale'
 
 export type ConnectionDiagnosticCode =
   | 'client-session-started'
@@ -58,11 +54,7 @@ export type ConnectionDiagnosticCode =
   | 'socket-closed'
   | 'liveness-timeout'
   | 'retry-scheduled'
-  | 'relay-dial-failed'
-  | 'relay-session-failed'
-  | 'relay-connected'
   | 'direct-connected'
-  | 'relay-credential-unavailable'
   | 'host-open-failed'
   // OTA web shell lifecycle; diagnostics only, never read as connection failures.
   | 'web-shell-flow'
@@ -80,8 +72,6 @@ export type ConnectionLogEntry = {
   detail?: string
   code?: ConnectionDiagnosticCode
   path?: MobileConnectionDiagnosticPath
-  // The relay close code behind a relay-dial-failed entry, so diagnostics need not read it out of `detail`.
-  relayCloseCode?: number
 }
 
 export type ConnectionLogSink = (entry: ConnectionLogEntry) => void
@@ -101,8 +91,6 @@ export type ConnectionState =
   | 'reconnecting'
   | 'auth-failed'
 
-// Why: a user-attention nudge must not tear down a healthy relay (probe it); only a
-// network-change nudge marks the socket suspect enough to replace it.
 export type ForegroundNudgeReason = 'focus' | 'app-resume' | 'network-change'
 
 export type HostProfile = {
@@ -119,8 +107,6 @@ export type HostProfile = {
   deviceToken: string
   publicKeyB64: string
   lastConnected: number
-  /** Relay routing, joined from the overlay; only `setRelayRouting` and pairing write it. */
-  relay?: MobileRelayEndpoint
 }
 
 export type HostCredentialStatus = 'ready' | 'temporarily-unavailable' | 'missing'
@@ -149,8 +135,7 @@ export const HostProfileSchema = z.object({
   endpoint: z.string().min(1),
   deviceToken: z.string().min(1),
   publicKeyB64: z.string().min(1),
-  lastConnected: z.number().finite(),
-  relay: MobileRelayEndpointSchema.optional()
+  lastConnected: z.number().finite()
 })
 
 // Why: persisted host record after the v0.0.3 keychain split. The

@@ -34,12 +34,6 @@ export function buildWorktreeSetHostedReviewLinkParams(
       return { ...base, linkedPR: number }
     case 'gitlab':
       return { ...base, linkedGitLabMR: number }
-    case 'bitbucket':
-      return { ...base, linkedBitbucketPR: number }
-    case 'azure-devops':
-      return { ...base, linkedAzureDevOpsPR: number }
-    case 'gitea':
-      return { ...base, linkedGiteaPR: number }
     // 'unsupported', and any token this build does not know: no linked* field to write.
     default:
       return base

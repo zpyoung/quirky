@@ -168,11 +168,11 @@ describe('fetchHomeHostWorktreeInfo', () => {
     expect(host.calls).toBe(3)
   })
 
-  it('re-reads through a relay→direct cutover, which never leaves connected', async () => {
+  it('re-reads through a path cutover, which never leaves connected', async () => {
     const store = infoStore()
-    const relay = fakeSession()
+    const previous = fakeSession()
     const direct = fakeSession()
-    const logical = createStableLogicalRpcClient(relay.client, 'relay')
+    const logical = createStableLogicalRpcClient(previous.client, 'tailscale')
     const gate = createHostConnectRefetchGate()
     const gateFires: ConnectionState[] = []
     logical.onStateChange((state) => {
@@ -183,10 +183,10 @@ describe('fetchHomeHostWorktreeInfo', () => {
     gate.observe(logical.getState())
 
     const loaded = fetchHomeHostWorktreeInfo(logical, 'host-1', store.setInfo, notDisposed)
-    relay.settle(catalogResponse(12, 2))
+    previous.settle(catalogResponse(12, 2))
     await loaded
 
-    // The supervisor's direct probe migrates while a refresh is on the wire.
+    // A cutover migrates while a refresh is on the wire.
     const interrupted = fetchHomeHostWorktreeInfo(logical, 'host-1', store.setInfo, notDisposed)
     await logical.migrateTo(direct.client, 'lan')
     await flush()

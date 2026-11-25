@@ -6,7 +6,6 @@ import {
   structuredAgentSessionTabId
 } from '../../../src/shared/structured-agent-session-projection'
 import type { RpcClient } from '../transport/rpc-client'
-import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
 import type { Worktree } from '../worktree/workspace-list-types'
 import { useHostScreenState } from './use-host-screen-state'
 import { useHostWorktreeActions } from './use-host-worktree-actions'
@@ -36,14 +35,9 @@ const nativeTabId = structuredAgentSessionTabId(sessionId)
 const terminalKey = `terminal:${sessionId}`
 const nativeKey = structuredAgentSessionPaneKey(nativeTabId, sessionId)
 describe('a workspace child opens its parent pane', () => {
-  it.each([
-    [terminalKey, undefined],
-    [nativeKey, undefined],
-    [terminalKey, 'runtime:server'],
-    [nativeKey, 'runtime:server']
-  ] as const)(
-    'selects parent %s on %s through the workspace action',
-    async (paneKey, executionHost) => {
+  it.each([[terminalKey], [nativeKey]] as const)(
+    'selects parent %s through the workspace action',
+    async (paneKey) => {
       const push = vi.fn()
       const replace = vi.fn()
       const sendRequest = vi.fn(async (_method: string, _params: unknown, _options?: unknown) => ({
@@ -52,13 +46,11 @@ describe('a workspace child opens its parent pane', () => {
       }))
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this action only sends activation; the scoped client never uses its other methods.
       const client = { sendRequest } as unknown as RpcClient
-      const row = { ...item, ...(executionHost ? { hostId: executionHost } : {}) }
       const held: { open?: (item: Worktree, paneKey?: string) => void } = {}
       function Probe() {
         const state = useHostScreenState('host', undefined)
         held.open = useHostWorktreeActions({
           client,
-          hostCapabilities: [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
           connState: 'connected',
           embedded: true,
           fetchWorktrees: async () => {},
@@ -78,11 +70,11 @@ describe('a workspace child opens its parent pane', () => {
         tree = create(createElement(Probe))
       })
       await act(async () => {
-        held.open?.(row, paneKey)
+        held.open?.(item, paneKey)
       })
       const target = replace.mock.calls[0]?.[0]
       expect(target).toBe(
-        `/h/host/session/folder-one?name=Folder${executionHost ? `&executionHost=${encodeURIComponent(executionHost)}` : ''}&paneKey=${encodeURIComponent(paneKey)}`
+        `/h/host/session/folder-one?name=Folder&paneKey=${encodeURIComponent(paneKey)}`
       )
       expect(sendRequest.mock.calls[0]?.slice(0, 2)).toEqual([
         'worktree.activate',
@@ -92,9 +84,7 @@ describe('a workspace child opens its parent pane', () => {
           navigation: 'caller'
         }
       ])
-      expect(sendRequest.mock.calls[0]?.[2]).toEqual(
-        executionHost ? { envelope: { executionHost } } : undefined
-      )
+      expect(sendRequest.mock.calls[0]?.[2]).toBeUndefined()
       expect(push).not.toHaveBeenCalled()
       await act(async () => {
         tree!.unmount()

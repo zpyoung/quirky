@@ -56,7 +56,7 @@ export async function readHydratedConnectionLog(
 export async function readConnectionDiagnosticsSnapshot(
   context: Pick<
     RpcClientContextValue,
-    'getState' | 'getReconnectAttempt' | 'getLastConnectedAt' | 'getActivePath' | 'getPendingPath'
+    'getState' | 'getReconnectAttempt' | 'getLastConnectedAt' | 'getActivePath'
   >,
   store: Pick<ConnectionLogStore, 'hydrate' | 'get'>,
   hostId: string
@@ -67,7 +67,6 @@ export async function readConnectionDiagnosticsSnapshot(
     reconnectAttempts: context.getReconnectAttempt(hostId),
     lastConnectedAt: context.getLastConnectedAt(hostId),
     activePath: context.getActivePath(hostId),
-    pendingPath: context.getPendingPath(hostId),
     entries
   }
 }
