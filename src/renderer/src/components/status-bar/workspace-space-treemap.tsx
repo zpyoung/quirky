@@ -159,7 +159,7 @@ export function WorkspaceSpaceTreemap({
               <span className="block min-w-0 text-[11px] font-medium leading-tight text-foreground">
                 <span className="block truncate">{rect.label}</span>
                 {area >= 180 ? (
-                  <span className="mt-0.5 block truncate text-muted-foreground">
+                  <span className="mt-0.5 block truncate">
                     {formatBytes(rect.sizeBytes)}
                   </span>
                 ) : null}
