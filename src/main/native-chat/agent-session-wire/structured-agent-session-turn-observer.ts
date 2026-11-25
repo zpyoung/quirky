@@ -73,8 +73,9 @@ type TurnBefore =
 
 type WatchedTurn = { turnId: string; before: Promise<TurnBefore> }
 
+// weak so an idle-released journal is not kept alive by the observer
 type SessionState = {
-  journal: TurnObserverJournal
+  journalRef: WeakRef<TurnObserverJournal>
   epoch: string
   sequence: number
   turns: Map<string, WatchedTurn>
@@ -119,12 +120,12 @@ export class StructuredAgentSessionTurnObserver {
     const state = this.states.get(sessionId)
     if (
       !state ||
-      state.journal !== journal ||
+      state.journalRef.deref() !== journal ||
       state.epoch !== cursor.epoch ||
       cursor.sequence < state.sequence
     ) {
       this.remember(sessionId, {
-        journal,
+        journalRef: new WeakRef(journal),
         epoch: cursor.epoch,
         sequence: cursor.sequence,
         turns: new Map(),
@@ -132,7 +133,7 @@ export class StructuredAgentSessionTurnObserver {
       })
       return
     }
-    this.settleWatched(sessionId, state)
+    this.settleWatched(sessionId, state, journal)
     if (cursor.sequence > state.sequence) {
       const floor = state.sequence
       state.sequence = cursor.sequence
@@ -155,9 +156,13 @@ export class StructuredAgentSessionTurnObserver {
     }
   }
 
-  private settleWatched(sessionId: string, state: SessionState): void {
+  private settleWatched(
+    sessionId: string,
+    state: SessionState,
+    journal: TurnObserverJournal
+  ): void {
     for (const [turnItemId, watched] of state.turns) {
-      const turn = readAgentJournalTurn(state.journal.itemBody(turnItemId) ?? undefined)
+      const turn = readAgentJournalTurn(journal.itemBody(turnItemId) ?? undefined)
       if (turn?.state === 'running') {
         continue
       }
@@ -167,7 +172,7 @@ export class StructuredAgentSessionTurnObserver {
       }
     }
     for (const [toolItemId, scope] of state.tests) {
-      const body = state.journal.itemBody(toolItemId)
+      const body = journal.itemBody(toolItemId)
       if (body?.kind === 'tool-call' && body.state === 'running') {
         continue
       }
@@ -303,7 +308,7 @@ export class StructuredAgentSessionTurnObserver {
 
   private editedPaths(state: SessionState, turnItemId: string): string[] {
     const paths: string[] = []
-    state.journal.visitItemsWithLinkage((_itemId, _sequence, body, attribution) => {
+    state.journalRef.deref()?.visitItemsWithLinkage((_itemId, _sequence, body, attribution) => {
       if (
         attribution.turnScope?.kind === 'turn' &&
         attribution.turnScope.turnItemId === turnItemId
@@ -331,11 +336,12 @@ export class StructuredAgentSessionTurnObserver {
     turnScope: AgentJournalTurnScope
   ): Promise<void> {
     // A rewind or restore replaced the rows this was derived from.
-    if (this.deps.canWrite?.() === false || state.journal.cursor().epoch !== state.epoch) {
+    const journal = state.journalRef.deref()
+    if (!journal || this.deps.canWrite?.() === false || journal.cursor().epoch !== state.epoch) {
       return
     }
     try {
-      await state.journal.appendItem(identity, body, {
+      await journal.appendItem(identity, body, {
         fence: this.deps.fence(sessionId),
         turnScope
       })
