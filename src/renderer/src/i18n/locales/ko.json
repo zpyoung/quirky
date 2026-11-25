@@ -17332,6 +17332,41 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "importFromOrca": {
+        "error": {
+          "sourceMissing": "이 Mac에서 Orca Dev 데이터를 찾을 수 없습니다.",
+          "sourceIncompatible": "이 버전의 Quirky에서는 Orca Dev 데이터를 읽을 수 없습니다.",
+          "keychainDenied": "Orca Dev 키체인 항목에 대한 접근이 거부되어 비밀 값을 가져오지 않았습니다.",
+          "writeFailed": "가져오기에 실패했고 기록된 모든 내용이 롤백되었습니다."
+        },
+        "report": {
+          "done": "가져오기가 완료되었습니다.",
+          "failed": "가져오기가 완료되지 않았습니다.",
+          "nothingNew": "가져올 새 항목이 없습니다.",
+          "imported": "가져옴",
+          "keychainPrimary": "비밀 값은 Orca Dev 키체인 항목으로 잠금 해제되었습니다.",
+          "keychainFallback": "비밀 값은 Orca Dev의 대체 키체인 항목으로 잠금 해제되었습니다.",
+          "skippedSecrets": "건너뛴 비밀 값: {{value0}}",
+          "copiedFiles": "복사한 파일 및 계정 폴더: {{value0}}",
+          "leftOut": "Quirky에서 더 이상 지원하지 않아 제외됨: {{value0}}",
+          "notImported": "이 버전에서 가져오지 않음: {{value0}}"
+        },
+        "settings": {
+          "title": "Orca Dev에서 가져오기",
+          "description": "Orca Dev의 새 항목을 가져옵니다. Quirky에서 삭제한 항목은 그대로 삭제된 상태로 유지되며 Quirky의 어떤 것도 삭제되지 않습니다.",
+          "running": "가져오는 중..."
+        },
+        "offer": {
+          "title": "Orca Dev에서 설정을 가져올까요?",
+          "description": "이 Mac에서 Orca Dev를 찾았습니다. 저장소, 워크트리, 설정, 단축키, 자동화, 연결된 계정을 가져올 수 있습니다. Orca Dev는 읽기만 하며 변경되지 않고, 자동화는 일시 중지된 상태로 들어옵니다.",
+          "keychainNote": "Quirky가 저장된 비밀 값을 다시 암호화할 수 있도록 macOS가 Orca Dev 키체인 항목에 대한 접근을 한 번 묻습니다.",
+          "reload": "Quirky 새로고침",
+          "close": "닫기",
+          "notNow": "나중에",
+          "running": "가져오는 중...",
+          "import": "Orca Dev에서 가져오기"
+        }
       }
     },
     "i18n": {

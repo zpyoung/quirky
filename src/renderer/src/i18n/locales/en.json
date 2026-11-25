@@ -17616,6 +17616,41 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "importFromOrca": {
+        "error": {
+          "sourceMissing": "Orca Dev data was not found on this Mac.",
+          "sourceIncompatible": "Orca Dev's data could not be read by this version of Quirky.",
+          "keychainDenied": "Access to the Orca Dev keychain item was denied, so secrets were not imported.",
+          "writeFailed": "The import failed and everything it wrote was rolled back."
+        },
+        "report": {
+          "done": "Import finished.",
+          "failed": "Import did not finish.",
+          "nothingNew": "Nothing new to import.",
+          "imported": "Imported",
+          "keychainPrimary": "Secrets were unlocked with the Orca Dev keychain item.",
+          "keychainFallback": "Secrets were unlocked with the fallback Orca Dev keychain item.",
+          "skippedSecrets": "Secrets skipped: {{value0}}",
+          "copiedFiles": "Copied files and account folders: {{value0}}",
+          "leftOut": "Left out because Quirky no longer supports them: {{value0}}",
+          "notImported": "Not imported by this version: {{value0}}"
+        },
+        "settings": {
+          "title": "Import from Orca Dev",
+          "description": "Bring over anything new from Orca Dev. Items you removed in Quirky stay removed, and nothing in Quirky is deleted.",
+          "running": "Importing..."
+        },
+        "offer": {
+          "title": "Import your setup from Orca Dev?",
+          "description": "Quirky found Orca Dev on this Mac. You can bring over your repos, worktrees, settings, keybindings, automations and linked accounts. Orca Dev is only read and stays unchanged, and automations arrive paused.",
+          "keychainNote": "macOS will ask once for access to Orca Dev's keychain item so Quirky can re-encrypt your saved secrets.",
+          "reload": "Reload Quirky",
+          "close": "Close",
+          "notNow": "Not now",
+          "running": "Importing...",
+          "import": "Import from Orca Dev"
+        }
       }
     },
     "i18n": {

@@ -255,6 +255,16 @@ type GeneralPaneSearchOptions = {
   includeProjectRuntime?: boolean
 }
 
+export const getGeneralImportSearchEntries = createLocalizedCatalog(() => [
+  {
+    title: translate('auto.components.importFromOrca.settings.title', 'Import from Orca Dev'),
+    description: translate(
+      'auto.components.importFromOrca.settings.description',
+      'Bring over anything new from Orca Dev. Items you removed in Quirky stay removed, and nothing in Quirky is deleted.'
+    )
+  }
+])
+
 export function getGeneralPaneSearchEntries(
   options: GeneralPaneSearchOptions = {}
 ): SettingsSearchEntry[] {
@@ -264,6 +274,7 @@ export function getGeneralPaneSearchEntries(
     ...(options.includeProjectRuntime === false ? [] : getGeneralProjectRuntimeSearchEntries()),
     ...getGeneralEditorSearchEntries(),
     ...getGeneralCliSearchEntries(),
-    ...getGeneralUpdateSearchEntries()
+    ...getGeneralUpdateSearchEntries(),
+    ...getGeneralImportSearchEntries()
   ]
 }

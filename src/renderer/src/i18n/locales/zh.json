@@ -17332,6 +17332,41 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "importFromOrca": {
+        "error": {
+          "sourceMissing": "在这台 Mac 上未找到 Orca Dev 的数据。",
+          "sourceIncompatible": "此版本的 Quirky 无法读取 Orca Dev 的数据。",
+          "keychainDenied": "对 Orca Dev 钥匙串项的访问被拒绝，因此未导入机密。",
+          "writeFailed": "导入失败，已回滚它写入的所有内容。"
+        },
+        "report": {
+          "done": "导入完成。",
+          "failed": "导入未完成。",
+          "nothingNew": "没有可导入的新内容。",
+          "imported": "已导入",
+          "keychainPrimary": "机密已使用 Orca Dev 钥匙串项解锁。",
+          "keychainFallback": "机密已使用 Orca Dev 的备用钥匙串项解锁。",
+          "skippedSecrets": "已跳过的机密：{{value0}}",
+          "copiedFiles": "已复制的文件和账户文件夹：{{value0}}",
+          "leftOut": "因 Quirky 不再支持而排除：{{value0}}",
+          "notImported": "此版本未导入：{{value0}}"
+        },
+        "settings": {
+          "title": "从 Orca Dev 导入",
+          "description": "导入 Orca Dev 中的新内容。你在 Quirky 中删除的项目不会恢复，Quirky 中的内容也不会被删除。",
+          "running": "正在导入..."
+        },
+        "offer": {
+          "title": "从 Orca Dev 导入你的设置？",
+          "description": "Quirky 在这台 Mac 上找到了 Orca Dev。你可以导入仓库、工作树、设置、快捷键、自动化和已关联的账户。Orca Dev 只会被读取，不会被修改，自动化将以暂停状态导入。",
+          "keychainNote": "macOS 会请求一次访问 Orca Dev 钥匙串项的权限，以便 Quirky 重新加密你保存的机密。",
+          "reload": "重新加载 Quirky",
+          "close": "关闭",
+          "notNow": "暂不",
+          "running": "正在导入...",
+          "import": "从 Orca Dev 导入"
+        }
       }
     },
     "i18n": {

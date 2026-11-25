@@ -59,6 +59,16 @@ import type { PtyApi } from './api/pty-api'
 import type { ProjectGroupsApi, ProjectsApi, RepositoryApi } from './api/repository-api'
 import type { RuntimeApi } from './api/runtime-api'
 import type { KeybindingsApi, SettingsApi } from './api/settings-api'
+import type {
+  ImportDetectResult,
+  ImportFromOrcaMode,
+  ImportReport
+} from '../shared/import-from-orca-types'
+
+type ImportFromOrcaApi = {
+  detect: () => Promise<ImportDetectResult>
+  run: (args: { mode: ImportFromOrcaMode }) => Promise<ImportReport>
+}
 import type { ShellApi } from './api/shell-api'
 import type { SpeechApi } from './api/speech-api'
 import type { SshApi } from './api/ssh-api'
@@ -112,6 +122,7 @@ export type PreloadApi = {
   agentAwake: AgentAwakeApi
   localhostWorktreeLabels: LocalhostWorktreeLabelsApi
   keybindings: KeybindingsApi
+  importFromOrca: ImportFromOrcaApi
   codexAccounts: CodexAccountsApi
   claudeAccounts: ClaudeAccountsApi
   cli: CliApi

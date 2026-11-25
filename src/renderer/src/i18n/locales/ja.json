@@ -17332,6 +17332,41 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "importFromOrca": {
+        "error": {
+          "sourceMissing": "このMacでOrca Devのデータが見つかりませんでした。",
+          "sourceIncompatible": "このバージョンのQuirkyではOrca Devのデータを読み取れませんでした。",
+          "keychainDenied": "Orca Devのキーチェーン項目へのアクセスが拒否されたため、シークレットはインポートされませんでした。",
+          "writeFailed": "インポートに失敗し、書き込まれた内容はすべて元に戻されました。"
+        },
+        "report": {
+          "done": "インポートが完了しました。",
+          "failed": "インポートは完了しませんでした。",
+          "nothingNew": "インポートする新しい項目はありません。",
+          "imported": "インポート済み",
+          "keychainPrimary": "シークレットはOrca Devのキーチェーン項目で復号されました。",
+          "keychainFallback": "シークレットはOrca Devのフォールバック用キーチェーン項目で復号されました。",
+          "skippedSecrets": "スキップしたシークレット: {{value0}}",
+          "copiedFiles": "コピーしたファイルとアカウントフォルダ: {{value0}}",
+          "leftOut": "Quirkyが対応しなくなったため除外: {{value0}}",
+          "notImported": "このバージョンではインポートされません: {{value0}}"
+        },
+        "settings": {
+          "title": "Orca Devからインポート",
+          "description": "Orca Devの新しい項目を取り込みます。Quirkyで削除した項目は復元されず、Quirky内のものは削除されません。",
+          "running": "インポート中..."
+        },
+        "offer": {
+          "title": "Orca Devから設定をインポートしますか？",
+          "description": "このMacでOrca Devが見つかりました。リポジトリ、ワークツリー、設定、キーバインド、オートメーション、連携アカウントを取り込めます。Orca Devは読み取るだけで変更されず、オートメーションは一時停止の状態で取り込まれます。",
+          "keychainNote": "Quirkyが保存済みのシークレットを再暗号化できるよう、macOSがOrca Devのキーチェーン項目へのアクセスを一度確認します。",
+          "reload": "Quirkyを再読み込み",
+          "close": "閉じる",
+          "notNow": "今はしない",
+          "running": "インポート中...",
+          "import": "Orca Devからインポート"
+        }
       }
     },
     "i18n": {
