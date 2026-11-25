@@ -14,11 +14,7 @@ vi.mock('child_process', () => ({
 
 import { fakeSpawnReturning } from '../../shared/__fixtures__/fake-spawned-child'
 import { ghExecFileAsync } from './runner'
-import {
-  _resetGhRateLimitBreaker,
-  getGhRateLimitBlockedUntilMs,
-  registerGhRateLimitResetProbe
-} from './gh-rate-limit-breaker'
+import { _resetGhRateLimitBreaker, getGhRateLimitBlockedUntilMs } from './gh-rate-limit-breaker'
 
 const PRIMARY_RATE_LIMIT_STDERR =
   'gh: API rate limit exceeded for user ID 1775218. Please wait. (HTTP 403)'
@@ -67,11 +63,11 @@ describe('ghExecFileAsync rate-limit breaker', () => {
     expect(spawnMock).toHaveBeenCalledTimes(2)
   })
 
-  it('keeps other GitHub hosts and WSL runtimes working when github.com is blocked', async () => {
+  it('keeps other GitHub hosts working when github.com is blocked', async () => {
     mockGhFailure(PRIMARY_RATE_LIMIT_STDERR)
     await expect(ghExecFileAsync(['api', 'repos/a/b/pulls'])).rejects.toThrow()
 
-    // The breaker scope now comes from options.host / GH_HOST / wslDistro, not
+    // The breaker scope now comes from options.host / GH_HOST, not
     // from sniffing argv — so an Enterprise host must be routed via options.host.
     mockGhSuccess('[]')
     await expect(
@@ -85,19 +81,7 @@ describe('ghExecFileAsync rate-limit breaker', () => {
         env: { ...process.env, GH_HOST: 'github.acme-corp.com' }
       })
     ).resolves.toMatchObject({ stdout: '[]' })
-    const originalPlatform = process.platform
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-    try {
-      await expect(
-        ghExecFileAsync(['api', 'repos/a/b/pulls'], { wslDistro: 'Ubuntu' })
-      ).resolves.toMatchObject({ stdout: '[]' })
-    } finally {
-      Object.defineProperty(process, 'platform', {
-        configurable: true,
-        value: originalPlatform
-      })
-    }
-    expect(spawnMock).toHaveBeenCalledTimes(5)
+    expect(spawnMock).toHaveBeenCalledTimes(4)
   })
 
   it.each([
@@ -145,37 +129,6 @@ describe('ghExecFileAsync rate-limit breaker', () => {
       getGhRateLimitBlockedUntilMs('core', Date.now(), 'native:github.acme-corp.com')
     ).not.toBeNull()
     expect(getGhRateLimitBlockedUntilMs('core', Date.now(), 'native:github.com')).toBeNull()
-  })
-
-  it('scopes a WSL UNC-cwd 403 to the distro runtime and probes that scope', async () => {
-    // Why: a \\wsl.localhost\... cwd routes gh through wsl.exe, so the 403
-    // belongs to the distro's account — the native scope must stay usable and
-    // the reset probe must be told which scope tripped.
-    const probe = vi.fn()
-    registerGhRateLimitResetProbe(probe)
-    const originalPlatform = process.platform
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-    try {
-      mockGhFailure(PRIMARY_RATE_LIMIT_STDERR)
-      await expect(
-        ghExecFileAsync(['api', 'repos/a/b/pulls'], {
-          cwd: '\\\\wsl.localhost\\Ubuntu\\home\\me\\repo'
-        })
-      ).rejects.toThrow()
-
-      expect(probe).toHaveBeenCalledWith('core', 'wsl:ubuntu:github.com')
-      expect(
-        getGhRateLimitBlockedUntilMs('core', Date.now(), 'wsl:ubuntu:github.com')
-      ).not.toBeNull()
-      expect(getGhRateLimitBlockedUntilMs('core', Date.now())).toBeNull()
-
-      mockGhSuccess('[]')
-      await expect(ghExecFileAsync(['api', 'repos/a/b/pulls'])).resolves.toMatchObject({
-        stdout: '[]'
-      })
-    } finally {
-      Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
-    }
   })
 
   it('never blocks the exempt rate_limit probe', async () => {

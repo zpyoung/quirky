@@ -2,7 +2,6 @@ import { EventEmitter } from 'node:events'
 import type { ChildProcess } from 'node:child_process'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Store } from '../persistence'
-import type * as GitRunner from '../git/runner'
 import type * as BundledRipgrepPath from '../ripgrep/bundled-ripgrep-path'
 import { isFileListingCancellation } from '../../shared/file-listing-cancellation'
 import { RipgrepUnavailableError } from '../../shared/ripgrep-process-availability'
@@ -11,17 +10,17 @@ const {
   bundledRipgrepCommandMock,
   getLocalGitOptionsForRegisteredWorktreeMock,
   resolveAuthorizedPathMock,
-  wslAwareSpawnMock
+  spawnMock
 } = vi.hoisted(() => ({
   bundledRipgrepCommandMock: vi.fn(),
   getLocalGitOptionsForRegisteredWorktreeMock: vi.fn(),
   resolveAuthorizedPathMock: vi.fn(),
-  wslAwareSpawnMock: vi.fn()
+  spawnMock: vi.fn()
 }))
 
-vi.mock('../git/runner', async (importOriginal) => ({
-  ...(await importOriginal<typeof GitRunner>()),
-  wslAwareSpawn: wslAwareSpawnMock
+vi.mock('../ripgrep/bundled-ripgrep-spawn', () => ({
+  spawnBundledRipgrep: (args: string[], options: unknown) =>
+    spawnMock(bundledRipgrepCommandMock(), args, options)
 }))
 
 vi.mock('./filesystem-auth', () => ({
@@ -83,7 +82,7 @@ describe('searchQuickOpenFilePaths', () => {
 
   it('preserves cancellation while an incomplete UTF-8 scalar is buffered', async () => {
     const child = createMockProcess()
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     const controller = new AbortController()
     const promise = searchQuickOpenFilePaths('/repo', UNUSED_STORE, {
       query: 'file',
@@ -98,7 +97,7 @@ describe('searchQuickOpenFilePaths', () => {
 
   it.each(['invalid', 'incomplete'] as const)('rejects %s UTF-8 filename bytes', async (kind) => {
     const child = createMockProcess()
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     const promise = searchQuickOpenFilePaths('/repo', UNUSED_STORE, { query: 'file', limit: 2 })
     await flushMicrotasks()
     child.stdout?.emit('data', Buffer.from(kind === 'invalid' ? [0xff] : [0xe2, 0x82]))
@@ -113,7 +112,7 @@ describe('searchQuickOpenFilePaths', () => {
 
   it('preserves control characters within ranked paths', async () => {
     const child = createMockProcess()
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     const promise = searchQuickOpenFilePaths('/repo', UNUSED_STORE, {
       query: 'target',
       limit: 2
@@ -126,7 +125,7 @@ describe('searchQuickOpenFilePaths', () => {
 
   it('rejects and stops an oversized path rather than ranking a truncated suffix', async () => {
     const child = createMockProcess()
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     const promise = searchQuickOpenFilePaths('/repo', UNUSED_STORE, {
       query: 'target',
       limit: 2
@@ -141,7 +140,7 @@ describe('searchQuickOpenFilePaths', () => {
 
   it('finds fuzzy matches after 100k paths without returning excluded worktrees', async () => {
     const child = createMockProcess()
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     const promise = searchQuickOpenFilePaths('/repo', {} as Store, {
       query: 's4354tgt',
       limit: 2,
@@ -149,9 +148,9 @@ describe('searchQuickOpenFilePaths', () => {
     })
     await flushMicrotasks()
 
-    expect(wslAwareSpawnMock).toHaveBeenCalledTimes(1)
-    expect(wslAwareSpawnMock.mock.calls[0][0]).toBe('/bundled/rg')
-    expect(wslAwareSpawnMock.mock.calls[0][1]).toContain('--no-ignore-vcs')
+    expect(spawnMock).toHaveBeenCalledTimes(1)
+    expect(spawnMock.mock.calls[0][0]).toBe('/bundled/rg')
+    expect(spawnMock.mock.calls[0][1]).toContain('--no-ignore-vcs')
     child.stdout?.emit(
       'data',
       `${Array.from({ length: 100_100 }, (_, index) => `data/payload-${index}.bin`).join('\0')}\0`
@@ -168,7 +167,7 @@ describe('searchQuickOpenFilePaths', () => {
 
   it('kills the host scan when a superseded query aborts', async () => {
     const child = createMockProcess()
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     const controller = new AbortController()
     const promise = searchQuickOpenFilePaths('/repo', {} as Store, {
       query: 'target',
@@ -183,73 +182,10 @@ describe('searchQuickOpenFilePaths', () => {
     expect(child.kill).toHaveBeenCalledOnce()
   })
 
-  it('spawns the bundled Linux rg inside the registered WSL runtime', async () => {
-    getLocalGitOptionsForRegisteredWorktreeMock.mockReturnValue({ wslDistro: 'Ubuntu' })
-    const child = createMockProcess()
-    wslAwareSpawnMock.mockReturnValue(child)
-
-    const promise = searchQuickOpenFilePaths('/repo', {} as Store, {
-      query: 'target',
-      limit: 32
-    })
-    await flushMicrotasks()
-    child.stdout?.emit('data', 'src/target.ts\0')
-    child.emit('close', 0, null)
-
-    await expect(promise).resolves.toMatchObject({ paths: ['src/target.ts'] })
-    expect(bundledRipgrepCommandMock).toHaveBeenCalledWith({ wsl: true })
-    expect(wslAwareSpawnMock).toHaveBeenCalledWith(
-      '/bundled/linux/rg',
-      expect.any(Array),
-      expect.objectContaining({ cwd: '/repo', wslDistro: 'Ubuntu' })
-    )
-  })
-
-  it('keeps the host rg for a Windows-drive worktree under a WSL runtime', async () => {
-    getLocalGitOptionsForRegisteredWorktreeMock.mockReturnValue({ wslDistro: 'Ubuntu' })
-    const child = createMockProcess()
-    wslAwareSpawnMock.mockReturnValue(child)
-
-    const promise = searchQuickOpenFilePaths('C:\\repo', {} as Store, {
-      query: 'target',
-      limit: 32
-    })
-    await flushMicrotasks()
-    child.stdout?.emit('data', 'src/target.ts\0')
-    child.emit('close', 0, null)
-
-    await expect(promise).resolves.toMatchObject({ paths: ['src/target.ts'] })
-    expect(bundledRipgrepCommandMock).not.toHaveBeenCalledWith({ wsl: true })
-    const spawnOptions = wslAwareSpawnMock.mock.calls[0]?.[2]
-    expect(spawnOptions).toMatchObject({ cwd: 'C:\\repo' })
-    expect(spawnOptions?.wslDistro).toBeUndefined()
-  })
-
-  it('keeps a symlink-following scan of a Windows-drive worktree in WSL', async () => {
-    getLocalGitOptionsForRegisteredWorktreeMock.mockReturnValue({ wslDistro: 'Ubuntu' })
-    const child = createMockProcess()
-    wslAwareSpawnMock.mockReturnValue(child)
-
-    const promise = searchQuickOpenFilePaths('C:\\repo', {} as Store, {
-      query: 'target',
-      limit: 32,
-      followSymlinks: true
-    })
-    await flushMicrotasks()
-    child.emit('close', 1, null)
-    await promise
-
-    expect(wslAwareSpawnMock).toHaveBeenCalledWith(
-      '/bundled/linux/rg',
-      expect.arrayContaining(['--follow']),
-      expect.objectContaining({ cwd: 'C:\\repo', wslDistro: 'Ubuntu' })
-    )
-  })
-
   it('retries a transient rg spawn failure instead of reporting the bundled rg broken', async () => {
     const failed = createMockProcess(false)
     const succeeded = createMockProcess()
-    wslAwareSpawnMock.mockReturnValueOnce(failed).mockReturnValueOnce(succeeded)
+    spawnMock.mockReturnValueOnce(failed).mockReturnValueOnce(succeeded)
     const promise = searchQuickOpenFilePaths('/repo', {} as Store, {
       query: 'sta4354gitignored',
       limit: 32
@@ -259,7 +195,7 @@ describe('searchQuickOpenFilePaths', () => {
     failed.emit('error', createSpawnError('EAGAIN'))
     await flushMicrotasks()
 
-    expect(wslAwareSpawnMock).toHaveBeenCalledTimes(2)
+    expect(spawnMock).toHaveBeenCalledTimes(2)
     succeeded.stdout?.emit('data', 'data/chunk-077568/sta-4354-gitignored-target.bin\0')
     succeeded.emit('close', 0, null)
 
@@ -272,10 +208,10 @@ describe('searchQuickOpenFilePaths', () => {
 
   it('retries a synchronous transient rg spawn failure', async () => {
     const succeeded = createMockProcess()
-    wslAwareSpawnMock.mockImplementationOnce(() => {
+    spawnMock.mockImplementationOnce(() => {
       throw createSpawnError('ENOMEM')
     })
-    wslAwareSpawnMock.mockReturnValueOnce(succeeded)
+    spawnMock.mockReturnValueOnce(succeeded)
 
     const promise = searchQuickOpenFilePaths('/repo', {} as Store, {
       query: 'target',
@@ -286,14 +222,14 @@ describe('searchQuickOpenFilePaths', () => {
     succeeded.emit('close', 0, null)
 
     await expect(promise).resolves.toMatchObject({ paths: ['src/target.ts'] })
-    expect(wslAwareSpawnMock).toHaveBeenCalledTimes(2)
+    expect(spawnMock).toHaveBeenCalledTimes(2)
   })
 
   // Why both events: a failed spawn emits 'error' and THEN 'close' with a negative code. Emitting
   // only 'error' lets the async cwd check win a race it loses in production.
   it('reports the bundled-ripgrep error when rg genuinely cannot start', async () => {
     const child = createMockProcess(false)
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     // Why a root that exists: an ENOENT spawn error is also what a vanished workspace looks like,
     // so this stays about the binary only while the search root is actually reachable.
     resolveAuthorizedPathMock.mockImplementation(async () => process.cwd())
@@ -307,14 +243,14 @@ describe('searchQuickOpenFilePaths', () => {
     child.emit('close', -2, null)
 
     await expect(promise).rejects.toThrow(BUNDLED_ERROR)
-    expect(wslAwareSpawnMock).toHaveBeenCalledTimes(1)
+    expect(spawnMock).toHaveBeenCalledTimes(1)
   })
 
   // Why close(97): the WSL wrapper's "cd failed" code. It is above rg's own 0/1/2, so a handler
   // that checks it after the unavailable branch reports a broken install instead.
   it('names the unreachable root when the WSL wrapper cannot enter it', async () => {
     const child = createMockProcess()
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     const promise = searchQuickOpenFilePaths('/repo', UNUSED_STORE, {
       query: 'target',
       limit: 32
@@ -328,7 +264,7 @@ describe('searchQuickOpenFilePaths', () => {
 
   it('names the unreachable root when the workspace is gone, not the bundled binary', async () => {
     const child = createMockProcess(false)
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     resolveAuthorizedPathMock.mockImplementation(async () => '/definitely/not/here')
     const promise = searchQuickOpenFilePaths('/repo', {} as Store, {
       query: 'target',
@@ -344,7 +280,7 @@ describe('searchQuickOpenFilePaths', () => {
 
   it('reports the bundled-ripgrep error when rg is unavailable on the retry', async () => {
     const failed = createMockProcess(false)
-    wslAwareSpawnMock.mockReturnValueOnce(failed).mockImplementationOnce(() => {
+    spawnMock.mockReturnValueOnce(failed).mockImplementationOnce(() => {
       throw new RipgrepUnavailableError()
     })
     const promise = searchQuickOpenFilePaths('/repo', {} as Store, {
@@ -356,12 +292,12 @@ describe('searchQuickOpenFilePaths', () => {
     failed.emit('error', createSpawnError('EAGAIN'))
 
     await expect(promise).rejects.toThrow(BUNDLED_ERROR)
-    expect(wslAwareSpawnMock).toHaveBeenCalledTimes(2)
+    expect(spawnMock).toHaveBeenCalledTimes(2)
   })
 
   it('does not retry a transient spawn failure after the query was superseded', async () => {
     const child = createMockProcess(false)
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     const controller = new AbortController()
     const promise = searchQuickOpenFilePaths('/repo', {} as Store, {
       query: 'target',
@@ -374,12 +310,12 @@ describe('searchQuickOpenFilePaths', () => {
     child.emit('error', createSpawnError('EAGAIN'))
 
     await expect(promise).rejects.toSatisfy(isFileListingCancellation)
-    expect(wslAwareSpawnMock).toHaveBeenCalledTimes(1)
+    expect(spawnMock).toHaveBeenCalledTimes(1)
   })
 
   it('reports cancellation when the query is superseded after a transient spawn failure', async () => {
     const child = createMockProcess(false)
-    wslAwareSpawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(child)
     const controller = new AbortController()
     const promise = searchQuickOpenFilePaths('/repo', {} as Store, {
       query: 'target',
@@ -393,7 +329,7 @@ describe('searchQuickOpenFilePaths', () => {
     controller.abort()
 
     await expect(promise).rejects.toSatisfy(isFileListingCancellation)
-    expect(wslAwareSpawnMock).toHaveBeenCalledTimes(1)
+    expect(spawnMock).toHaveBeenCalledTimes(1)
   })
 
   it('does not start a host scan for empty or oversized queries', async () => {
@@ -407,7 +343,7 @@ describe('searchQuickOpenFilePaths', () => {
       })
     ).resolves.toEqual({ paths: [], totalCount: 0, truncated: false })
 
-    expect(wslAwareSpawnMock).not.toHaveBeenCalled()
+    expect(spawnMock).not.toHaveBeenCalled()
     expect(resolveAuthorizedPathMock).not.toHaveBeenCalled()
   })
 })

@@ -1,22 +1,10 @@
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
-const {
-  lstatMock,
-  realpathMock,
-  trashItemMock,
-  tryDeleteWslUncPathMock,
-  WslDeleteValidationErrorMock
-} = vi.hoisted(() => ({
+const { lstatMock, realpathMock, trashItemMock } = vi.hoisted(() => ({
   lstatMock: vi.fn(),
   realpathMock: vi.fn(),
-  trashItemMock: vi.fn(),
-  tryDeleteWslUncPathMock: vi.fn(),
-  WslDeleteValidationErrorMock: class extends Error {
-    constructor(readonly reason: 'path-outside-known-roots' | 'unexpected-target-kind') {
-      super(reason)
-    }
-  }
+  trashItemMock: vi.fn()
 }))
 
 vi.mock('node:fs/promises', () => ({
@@ -26,11 +14,6 @@ vi.mock('node:fs/promises', () => ({
 
 vi.mock('electron', () => ({
   shell: { trashItem: trashItemMock }
-}))
-
-vi.mock('../wsl-unc-delete', () => ({
-  tryDeleteWslUncPath: tryDeleteWslUncPathMock,
-  WslDeleteValidationError: WslDeleteValidationErrorMock
 }))
 
 import { deleteAiVaultSessionFile } from './session-delete'
@@ -59,7 +42,6 @@ describe('deleteAiVaultSessionFile', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Default: not a WSL UNC path, so the fs-guard branch runs.
-    tryDeleteWslUncPathMock.mockResolvedValue(false)
   })
 
   it('trashes a regular file whose realpath matches the resolved path', async () => {
@@ -168,62 +150,6 @@ describe('deleteAiVaultSessionFile', () => {
     expect(result).toEqual({ outcome: 'rejected', agent: 'codex', reason: 'unsupported-agent' })
     expect(lstatMock).not.toHaveBeenCalled()
     expect(realpathMock).not.toHaveBeenCalled()
-    expect(trashItemMock).not.toHaveBeenCalled()
-    expect(tryDeleteWslUncPathMock).not.toHaveBeenCalled()
-  })
-
-  it('delegates a WSL UNC file to tryDeleteWslUncPath (non-recursive) and never calls trashItem', async () => {
-    const filePath = join(GEMINI_ROOT, 'project-a', 'session-1.json')
-    tryDeleteWslUncPathMock.mockResolvedValue(true)
-
-    const result = await deleteAiVaultSessionFile(baseArgs(filePath))
-
-    expect(result).toEqual({ outcome: 'deleted' })
-    expect(tryDeleteWslUncPathMock).toHaveBeenCalledWith(resolve(filePath), {
-      recursive: false,
-      approvedRoots: [resolve(GEMINI_ROOT)]
-    })
-    expect(lstatMock).not.toHaveBeenCalled()
-    expect(trashItemMock).not.toHaveBeenCalled()
-  })
-
-  it('deletes a WSL UNC directory-shaped session recursively, never via trashItem', async () => {
-    // The bug this guards: a directory removal (rovo/grok/claude dir) on a WSL
-    // UNC path used to skip the WSL branch and hit shell.trashItem, which
-    // cannot trash a WSL volume item — so it failed on Windows or was silently
-    // stranded by the 9P filesystem's unreliable lstat.
-    tryDeleteWslUncPathMock.mockResolvedValue(true)
-
-    const result = await deleteAiVaultSessionFile({
-      agent: 'rovo',
-      filePath: join(ROVO_ROOT, 'sess-1', 'metadata.json'),
-      executionHostId: 'local',
-      rootOptions: { rovoSessionsDir: ROVO_ROOT }
-    })
-
-    expect(result).toEqual({ outcome: 'deleted' })
-    expect(tryDeleteWslUncPathMock).toHaveBeenCalledWith(resolve(ROVO_ROOT, 'sess-1'), {
-      recursive: true,
-      approvedRoots: [resolve(ROVO_ROOT)]
-    })
-    expect(lstatMock).not.toHaveBeenCalled()
-    expect(trashItemMock).not.toHaveBeenCalled()
-  })
-
-  it('maps a WSL containment rejection to a delete rejection', async () => {
-    const filePath = join(GEMINI_ROOT, 'project-a', 'session-1.json')
-    tryDeleteWslUncPathMock.mockRejectedValue(
-      new WslDeleteValidationErrorMock('path-outside-known-roots')
-    )
-
-    const result = await deleteAiVaultSessionFile(baseArgs(filePath))
-
-    expect(result).toEqual({
-      outcome: 'rejected',
-      agent: 'gemini',
-      reason: 'path-outside-known-roots'
-    })
-    expect(lstatMock).not.toHaveBeenCalled()
     expect(trashItemMock).not.toHaveBeenCalled()
   })
 

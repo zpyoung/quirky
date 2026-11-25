@@ -27,11 +27,6 @@ const IN_CMD = {
   projectRuntime: { kind: 'windows-host', reason: 'global-default' }
 } as const
 const CMD_EXE = { shellOverride: 'cmd.exe', terminalWindowsWslDistro: null }
-const IN_WSL = {
-  shellOverride: 'wsl.exe',
-  projectRuntime: { kind: 'wsl', reason: 'project-override', distro: 'Ubuntu' }
-} as const
-const WSL_EXE = { shellOverride: 'wsl.exe', terminalWindowsWslDistro: 'Ubuntu' }
 const CMD = { terminalWindowsShell: 'cmd.exe' }
 
 const repo = (path: string, extra: Partial<LaunchWorkspace> = {}): LaunchWorkspace => ({
@@ -81,19 +76,6 @@ export const WORKSPACE_START_LAUNCH_CASES: WindowLaunchCase[] = [
       ...IN_CMD
     },
     CMD_EXE,
-    CMD
-  ),
-  start(
-    'work item, Windows C: repo, project WSL',
-    'win32',
-    repo(WIN_PATH, { projectRuntime: { kind: 'wsl', distro: 'Ubuntu' } }),
-    draft,
-    {
-      command: `${POSIX_CLAUDE} --prefill 'fix Bob'"'"'s bug'`,
-      agentCommand: POSIX_CLAUDE,
-      ...IN_WSL
-    },
-    WSL_EXE,
     CMD
   ),
   // A C: project never set to a runtime, with WSL as the terminal shell: the work item follows the

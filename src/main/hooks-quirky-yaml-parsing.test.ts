@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseQuirkyYaml } from './hooks'
 
 // Mock fs used by loadHooks
@@ -377,6 +377,11 @@ describe('parseQuirkyYaml', () => {
 })
 
 describe('hasUnrecognizedQuirkyYamlKeys', () => {
+  beforeEach(async () => {
+    const fs = await import('node:fs')
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+  })
+
   it('returns true when the file contains only keys this version does not handle', async () => {
     const fs = await import('node:fs')
     vi.mocked(fs.readFileSync).mockReturnValue('futureFeature: |\n  some config\n')

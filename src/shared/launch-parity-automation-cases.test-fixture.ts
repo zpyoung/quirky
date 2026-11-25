@@ -10,7 +10,7 @@ import {
   type LaunchWorkspace,
   type WindowProviderFacts
 } from './launch-parity-window-request.test-fixture'
-import { POSIX_PATH, WIN_PATH, WSL_PATH } from './launch-parity-window-cases.test-fixture'
+import { POSIX_PATH, WIN_PATH } from './launch-parity-window-cases.test-fixture'
 
 export type AutomationLaunchCase = {
   name: string
@@ -37,7 +37,6 @@ const AGENT_COMMAND = {
 } as const
 const ZSH = { shellOverride: '/bin/zsh' }
 const PWSH = { shellOverride: 'powershell.exe', terminalWindowsWslDistro: null }
-const WSL_EXE = { shellOverride: 'wsl.exe', terminalWindowsWslDistro: 'Ubuntu' }
 const repo = (path: string): LaunchWorkspace => ({ kind: 'repo', path })
 type AutomationCaseFields = Omit<AutomationLaunchCase, 'name' | 'agent' | 'title'> &
   Partial<Pick<AutomationLaunchCase, 'agent'>>
@@ -62,12 +61,6 @@ export const AUTOMATION_LAUNCH_CASES: AutomationLaunchCase[] = [
     workspace: repo(WIN_PATH),
     request: powershell,
     provider: PWSH
-  }),
-  automation('Windows wsl$ repo, no saved runtime', {
-    client: 'win32',
-    workspace: repo(WSL_PATH),
-    request: { ...posix, shellOverride: 'wsl.exe' },
-    provider: WSL_EXE
   }),
   automation('Linux repo, codex', {
     client: 'linux',

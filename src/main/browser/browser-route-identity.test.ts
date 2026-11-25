@@ -81,8 +81,8 @@ describe('browser route partition identity', () => {
   it('pins the derived partition and fingerprint against silent relocation', () => {
     expect(deriveBrowserRoutePartition(pinnedIdentity)).toEqual({
       partition:
-        'persist:quirky-browser-v1-955a5db671b210d053d64d1e557d8cdf1e60e1e6cb710a033f1b5cd1b61e6586',
-      bindingFingerprint: 'fe69d9d83ab889b68eeb185f12821e4e0e77dcc91fc4cb7672c88e7818a4ded7'
+        'persist:quirky-browser-v1-26f876431e59545a98b647c2dcf864d8ca3bb7cdfd34be0e0912fdc0d8b59574',
+      bindingFingerprint: '533bf3372267eec75ed35d4ba83c5b9048643a4032aa399b82da457c09a9db2c'
     })
   })
 
@@ -100,7 +100,7 @@ describe('browser route partition identity', () => {
       environmentId: 'environment-a'
     })
 
-    expect(scope).toBe('2821c92c85c9724ddb6136aeeec266a84fc5a9ea00f61faacef8db89bea79fb4')
+    expect(scope).toBe('91fa6750d685a2582cd78b2912cde48895d45fb308e76074848fe48834571996')
     expect(
       deriveBrowserRoutePartitionStorageScope({
         quirkyProfileId: 'quirky/profile:alpha',

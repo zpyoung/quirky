@@ -3,7 +3,6 @@ import { beforeEach, expect, it, vi } from 'vitest'
 type Handler = (event: unknown, args: { id: unknown; target?: unknown }) => Promise<boolean>
 
 type Mocks = {
-  wslRunsAnotherAccount: boolean | null
   handlers: Map<string, Handler>
   legacyDaemons: Map<number, Set<string>>
   startup: ReturnType<typeof vi.fn<() => Promise<void> | undefined>>
@@ -16,7 +15,6 @@ const mocks = vi.hoisted((): Mocks => ({
   legacyDaemons: new Map(),
   startup: vi.fn<() => Promise<void> | undefined>(),
   runsAnotherAccount: true,
-  wslRunsAnotherAccount: true,
   router: true
 }))
 vi.mock('../../pty-host-bindings', () => ({
@@ -30,14 +28,7 @@ vi.mock('../../../daemon/daemon-provider-state', () => ({
 }))
 vi.mock('../../../claude-accounts/claude-profile-installed-router', () => ({
   getClaudeProfileRouter: () =>
-    mocks.router ? { systemDefaultRunsAnotherAccount: () => mocks.runsAnotherAccount } : undefined,
-  getClaudeWslProfileRouter: () =>
-    mocks.router
-      ? {
-          systemDefaultRunsAnotherAccount: async (distro: string) =>
-            distro === 'Ubuntu' ? mocks.wslRunsAnotherAccount : null
-        }
-      : undefined
+    mocks.router ? { systemDefaultRunsAnotherAccount: () => mocks.runsAnotherAccount } : undefined
 }))
 
 import { installPtyClaudeOldTerminalIpcHandler } from './claude-old-terminal'
@@ -51,7 +42,6 @@ beforeEach(() => {
     [43, new Set(['v43-1'])]
   ])
   mocks.runsAnotherAccount = true
-  mocks.wslRunsAnotherAccount = true
   mocks.router = true
   installPtyClaudeOldTerminalIpcHandler({ getLocalPtyProviderStartupPromise: mocks.startup })
 })
@@ -70,21 +60,13 @@ it('answers true only for a pane whose daemon lacks the claude function', async 
   expect(mocks.startup).toHaveBeenCalled()
 })
 
-it("judges a pane by its own runtime's selection, and hides it when that is unknown", async () => {
+it("judges a pane by the host's account selection, and hides it when that is unknown", async () => {
   const ask = mocks.handlers.get('pty:openedBeforeClaudeAccounts')!
   mocks.runsAnotherAccount = false
   expect(await ask({}, { id: 'old-1', target: HOST })).toBe(false)
-  // A WSL pane asks its distro's router, not the host selection.
-  const ubuntu = { runtime: 'wsl', wslDistro: 'Ubuntu' }
-  expect(await ask({}, { id: 'old-1', target: ubuntu })).toBe(true)
-  mocks.wslRunsAnotherAccount = false
-  expect(await ask({}, { id: 'old-1', target: ubuntu })).toBe(false)
   // No account selected for the pane's runtime, no router, or no runtime at all: hidden.
   mocks.runsAnotherAccount = null
   expect(await ask({}, { id: 'old-1', target: HOST })).toBe(false)
-  expect(await ask({}, { id: 'old-1', target: { runtime: 'wsl', wslDistro: 'Debian' } })).toBe(
-    false
-  )
   expect(await ask({}, { id: 'old-1' })).toBe(false)
   mocks.router = false
   mocks.runsAnotherAccount = true

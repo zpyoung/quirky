@@ -439,32 +439,6 @@ describe('agent hooks CLI handler', () => {
     expect(process.exitCode).toBeUndefined()
   })
 
-  it('forwards WSL pane routing to the runtime exactly once', async () => {
-    const home = '/home/jin/.local/share/quirky/codex-runtime-home/home'
-    vi.stubEnv('CODEX_HOME', home)
-    vi.stubEnv('QUIRKY_CODEX_HOME', home)
-    vi.stubEnv('WSL_DISTRO_NAME', 'Ubuntu-24.04')
-    callMock.mockResolvedValue({ result: { state: 'installed' } })
-
-    await main(['agent', 'hooks', 'prepare-codex'], userDataPath)
-
-    expect(callMock).toHaveBeenCalledExactlyOnceWith(
-      'agentHooks.prepareCodexForWslPane',
-      { codexHome: home, quirkyCodexHome: home, wslDistro: 'Ubuntu-24.04' },
-      { timeoutMs: 50_000 }
-    )
-  })
-
-  it('fails open when WSL runtime preparation is unavailable', async () => {
-    vi.stubEnv('CODEX_HOME', '/home/jin/.local/share/quirky/codex-runtime-home/home')
-    vi.stubEnv('QUIRKY_CODEX_HOME', '/home/jin/.local/share/quirky/codex-runtime-home/home')
-    vi.stubEnv('WSL_DISTRO_NAME', 'Ubuntu')
-    callMock.mockRejectedValue(new Error('method_not_found'))
-
-    await expect(main(['agent', 'hooks', 'prepare-codex'], userDataPath)).resolves.toBeUndefined()
-    expect(process.exitCode).toBeUndefined()
-  })
-
   it('updates an established SQLite profile without rewriting its JSON export', async () => {
     const profileId = 'work-profile'
     const profileDirectory = join(userDataPath, 'profiles', profileId)

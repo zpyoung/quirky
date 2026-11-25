@@ -1,16 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import { globSync } from 'node:fs'
-import {
-  copyFile,
-  cp,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  stat,
-  symlink,
-  writeFile
-} from 'node:fs/promises'
+import { copyFile, cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
@@ -29,17 +19,8 @@ const builderConfig = require('../../../config/electron-builder.config.cjs') as 
   files?: string[]
   asarUnpack?: string[]
 }
-const linuxLauncherAsset = new URL('../../../resources/linux/bin/quirky-ide', import.meta.url)
 const darwinLauncherAsset = new URL('../../../resources/darwin/bin/quirky', import.meta.url)
 const unixLauncherFixtures = [
-  {
-    name: 'Linux',
-    asset: linuxLauncherAsset,
-    appDir: ['Quirky'],
-    launcher: ['resources', 'bin', 'quirky-ide'],
-    executable: ['quirky-ide'],
-    cli: ['resources', 'app.asar.unpacked', 'out', 'cli', 'index.js']
-  },
   {
     name: 'macOS',
     asset: darwinLauncherAsset,
@@ -137,11 +118,6 @@ describe('packaged CLI assets', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
-  })
-
-  itRunsUnixShell('keeps the Linux launcher executable in packaged resources', async () => {
-    const launcherStats = await stat(linuxLauncherAsset)
-    expect(launcherStats.mode & 0o111).not.toBe(0)
   })
 
   it('retries an incomplete listener-state write', async () => {
@@ -249,65 +225,11 @@ server.listen(0, '127.0.0.1', () => {
     }
   )
 
-  itRunsUnixShell(
-    'runs the Linux launcher from its packaged path and installed symlink',
-    async () => {
-      const root = await mkdtemp(join(tmpdir(), 'quirky-linux-cli-'))
-      try {
-        const appDir = join(root, 'Quirky')
-        const resourcesDir = join(appDir, 'resources')
-        const launcherDir = join(resourcesDir, 'bin')
-        const cliDir = join(resourcesDir, 'app.asar.unpacked', 'out', 'cli')
-        const launcherPath = join(launcherDir, 'quirky-ide')
-        const electronPath = join(appDir, 'quirky-ide')
-        const cliPath = join(cliDir, 'index.js')
-
-        await mkdir(launcherDir, { recursive: true })
-        await mkdir(cliDir, { recursive: true })
-        await copyFile(linuxLauncherAsset, launcherPath)
-        expect((await stat(launcherPath)).mode & 0o111).not.toBe(0)
-        await writeFile(cliPath, '', 'utf8')
-        await writeFile(
-          electronPath,
-          `#!/usr/bin/env bash
-printf 'electron=%s\\n' "$0"
-printf 'run_as_node=%s\\n' "\${ELECTRON_RUN_AS_NODE-}"
-printf 'arg=%s\\n' "$@"
-`,
-          { encoding: 'utf8', mode: 0o755 }
-        )
-
-        const direct = await execFileAsync(launcherPath, ['--help'])
-        expect(direct.stdout).toContain(`electron=${electronPath}`)
-        expect(direct.stdout).toContain('run_as_node=1')
-        expect(direct.stdout).toContain(`arg=${cliPath}`)
-        expect(direct.stdout).toContain('arg=--help')
-
-        const homeDir = join(root, 'home')
-        const commandDir = join(homeDir, '.local', 'bin')
-        const commandPath = join(commandDir, 'quirky-ide')
-        await mkdir(commandDir, { recursive: true })
-        await mkdir(join(homeDir, 'quirky'), { recursive: true })
-        await symlink(launcherPath, commandPath)
-
-        const symlinked = await execFileAsync(commandPath, ['--help'], {
-          env: { ...process.env, HOME: homeDir }
-        })
-        expect(symlinked.stdout).toContain(`electron=${electronPath}`)
-        expect(symlinked.stdout).toContain('run_as_node=1')
-        expect(symlinked.stdout).toContain(`arg=${cliPath}`)
-        expect(symlinked.stdout).toContain('arg=--help')
-      } finally {
-        await rm(root, { recursive: true, force: true })
-      }
-    }
-  )
-
   // Observe each launcher's actual child env and argv, including arguments with spaces.
   itRunsUnixShell.each(unixLauncherFixtures)(
     'sanitizes node env and forwards argv verbatim through the $name launcher',
     async (launcherFixture) => {
-      const root = await mkdtemp(join(tmpdir(), 'quirky-unix-cli-env-'))
+      const root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-unix-cli-env-')))
       try {
         const appDir = join(root, ...launcherFixture.appDir)
         const launcherPath = join(appDir, ...launcherFixture.launcher)
@@ -364,63 +286,6 @@ node -e 'console.log(JSON.stringify({
       }
     }
   )
-
-  itRunsUnixShell('keeps Linux serve on the CLI entrypoint in node mode', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'quirky-linux-cli-serve-'))
-    try {
-      const appDir = join(root, 'Quirky')
-      const resourcesDir = join(appDir, 'resources')
-      const launcherDir = join(resourcesDir, 'bin')
-      const cliDir = join(resourcesDir, 'app.asar.unpacked', 'out', 'cli')
-      const launcherPath = join(launcherDir, 'quirky-ide')
-      const appRunPath = join(appDir, 'AppRun')
-      const electronPath = join(appDir, 'quirky-ide')
-      const cliPath = join(cliDir, 'index.js')
-      const statePath = join(root, 'launch-state.json')
-
-      await mkdir(launcherDir, { recursive: true })
-      await mkdir(cliDir, { recursive: true })
-      await copyFile(linuxLauncherAsset, launcherPath)
-      await writeFile(cliPath, '', 'utf8')
-      // An accidental AppRun handoff would skip CLI validation and fail this contract.
-      await writeFile(
-        appRunPath,
-        `#!/usr/bin/env bash
-printf 'unexpected AppRun handoff\n' >&2
-exit 97
-`,
-        { encoding: 'utf8', mode: 0o755 }
-      )
-      await writeFile(
-        electronPath,
-        `#!/usr/bin/env node
-require('node:fs').writeFileSync(process.env.QUIRKY_TEST_LAUNCH_STATE, JSON.stringify({
-  argv: process.argv.slice(2),
-  runAsNode: process.env.ELECTRON_RUN_AS_NODE ?? null
-}))
-`,
-        { encoding: 'utf8', mode: 0o755 }
-      )
-
-      await execFileAsync(launcherPath, ['serve', '--recipe-json', '--project-root', '/tmp/repo'], {
-        env: { ...process.env, QUIRKY_TEST_LAUNCH_STATE: statePath }
-      })
-      const payload = JSON.parse(await readFile(statePath, 'utf8')) as {
-        argv: string[]
-        runAsNode: string | null
-      }
-      expect(payload.argv).toEqual([
-        cliPath,
-        'serve',
-        '--recipe-json',
-        '--project-root',
-        '/tmp/repo'
-      ])
-      expect(payload.runAsNode).toBe('1')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 })
 
 async function waitForListenerState(path: string): Promise<{ pid: number; port: number }> {

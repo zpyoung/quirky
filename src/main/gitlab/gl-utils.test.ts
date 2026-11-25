@@ -653,23 +653,4 @@ describe('glabHostEnvOptions', () => {
     expect(glabHostEnvOptions(null, 'conn-1')).toEqual({})
     expect(glabHostEnvOptions({ host: '' }, 'conn-1')).toEqual({})
   })
-
-  // Why: spawn env stops at the wsl.exe boundary, so Windows has to name the
-  // variable in WSLENV or glab in the distro never sees the host.
-  it('forwards GITLAB_HOST through WSLENV on Windows', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-
-    const { env } = glabHostEnvOptions(projectRef, 'conn-1')
-
-    expect(env?.GITLAB_HOST).toBe('gitlab.example.internal')
-    expect(env?.WSLENV?.split(':')).toContain('GITLAB_HOST')
-  })
-
-  it('leaves WSLENV alone off Windows', () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
-
-    const { env } = glabHostEnvOptions(projectRef, 'conn-1')
-
-    expect(env?.WSLENV).toBe(process.env.WSLENV)
-  })
 })

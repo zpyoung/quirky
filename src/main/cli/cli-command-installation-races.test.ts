@@ -15,7 +15,6 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const legacyReadlinkRace = vi.hoisted(() => ({ commandPath: '', replacementTarget: '' }))
 const reusedIdentity = vi.hoisted(() => ({
   path: '',
   dev: null as bigint | null,
@@ -39,18 +38,6 @@ vi.mock('node:fs/promises', async (importOriginal) => {
         dev: { value: reusedIdentity.dev },
         ino: { value: reusedIdentity.ino }
       }) as typeof stats
-    },
-    readlink: async (...args: Parameters<typeof actual.readlink>) => {
-      const [path] = args
-      if (path === legacyReadlinkRace.commandPath && legacyReadlinkRace.replacementTarget) {
-        const replacementTarget = legacyReadlinkRace.replacementTarget
-        legacyReadlinkRace.commandPath = ''
-        legacyReadlinkRace.replacementTarget = ''
-        await actual.unlink(path)
-        await actual.symlink(replacementTarget, path)
-        throw Object.assign(new Error('link vanished during inspection'), { code: 'ENOENT' })
-      }
-      return actual.readlink(...args)
     }
   }
 })
@@ -69,8 +56,6 @@ import type { CommandQuarantine } from './cli-command-filesystem-transaction'
 const createdRoots: string[] = []
 
 afterEach(async () => {
-  legacyReadlinkRace.commandPath = ''
-  legacyReadlinkRace.replacementTarget = ''
   reusedIdentity.path = ''
   reusedIdentity.dev = null
   reusedIdentity.ino = null
@@ -298,89 +283,5 @@ describe.skipIf(process.platform === 'win32')('CLI command filesystem races', ()
     expect(error.message).toContain(heldPath)
     await expect(readFile(heldPath, 'utf8')).resolves.toBe('foreign command')
     await expect(readlink(fixture.commandPath)).resolves.toBe(contenderTarget)
-  })
-
-  it('keeps a foreign legacy Linux command when readlink loses the inspection race', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'quirky-cli-legacy-race-'))
-    createdRoots.push(root)
-    const homePath = join(root, 'home')
-    const commandDirectory = join(homePath, '.local', 'bin')
-    const resourcesPath = join(root, 'resources')
-    const launcherPath = join(resourcesPath, 'bin', 'quirky-ide')
-    const legacyPath = join(commandDirectory, 'quirky')
-    const managedLegacyTarget = join(resourcesPath, 'bin', 'quirky')
-    const foreignTarget = join(root, 'foreign-quirky')
-    await mkdir(commandDirectory, { recursive: true })
-    await mkdir(dirname(launcherPath), { recursive: true })
-    await writeFile(launcherPath, '#!/usr/bin/env bash\n', { mode: 0o755 })
-    await symlink(managedLegacyTarget, legacyPath)
-
-    legacyReadlinkRace.commandPath = legacyPath
-    legacyReadlinkRace.replacementTarget = foreignTarget
-    const installer = new CliInstaller({
-      platform: 'linux',
-      isPackaged: true,
-      userDataPath: join(root, 'user-data'),
-      resourcesPath,
-      execPath: join(root, 'quirky-ide'),
-      appPath: join(root, 'resources', 'app.asar'),
-      homePath,
-      processPathEnv: commandDirectory
-    })
-
-    await expect(installer.install()).resolves.toMatchObject({ state: 'installed' })
-    await expect(readlink(legacyPath)).resolves.toBe(foreignTarget)
-  })
-
-  it('keeps a foreign legacy Linux command whose quarantined inode is reused', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'quirky-cli-legacy-identity-race-'))
-    createdRoots.push(root)
-    const homePath = join(root, 'home')
-    const commandDirectory = join(homePath, '.local', 'bin')
-    const resourcesPath = join(root, 'resources')
-    const launcherPath = join(resourcesPath, 'bin', 'quirky-ide')
-    const legacyPath = join(commandDirectory, 'quirky')
-    const managedTarget = join(resourcesPath, 'bin', 'quirky')
-    const foreignTarget = join(root, 'foreign-quirky')
-    await mkdir(commandDirectory, { recursive: true })
-    await mkdir(dirname(launcherPath), { recursive: true })
-    await writeFile(launcherPath, '#!/usr/bin/env bash\n', { mode: 0o755 })
-    await symlink(managedTarget, legacyPath)
-    const original = await lstat(legacyPath, { bigint: true })
-
-    class LegacyRaceInstaller extends CliInstaller {
-      protected override async quarantineCommandPath(commandPath: string) {
-        if (commandPath === legacyPath) {
-          await unlink(commandPath)
-          await symlink(foreignTarget, commandPath)
-        }
-        const quarantine = await super.quarantineCommandPath(commandPath)
-        if (commandPath === legacyPath && quarantine.snapshot) {
-          reusedIdentity.path = quarantine.heldPath
-          reusedIdentity.dev = original.dev
-          reusedIdentity.ino = original.ino
-          quarantine.snapshot.identity = {
-            ...quarantine.snapshot.identity,
-            dev: original.dev,
-            ino: original.ino
-          }
-        }
-        return quarantine
-      }
-    }
-
-    const installer = new LegacyRaceInstaller({
-      platform: 'linux',
-      isPackaged: true,
-      userDataPath: join(root, 'user-data'),
-      resourcesPath,
-      execPath: join(root, 'quirky-ide'),
-      appPath: join(root, 'resources', 'app.asar'),
-      homePath,
-      processPathEnv: commandDirectory
-    })
-
-    await expect(installer.install()).resolves.toMatchObject({ state: 'installed' })
-    await expect(readlink(legacyPath)).resolves.toBe(foreignTarget)
   })
 })

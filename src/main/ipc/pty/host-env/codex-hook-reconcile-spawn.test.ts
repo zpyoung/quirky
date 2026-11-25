@@ -34,7 +34,7 @@ vi.mock('../../../codex/codex-hook-reconcile', () => ({
 import { buildPtyHostEnv } from './assembly'
 
 // Why this file: a codex typed in a native pane reads ~/.codex, so each native
-// spawn rechecks Quirky's entry there; a WSL pane's Codex never reads it.
+// spawn rechecks Quirky's entry there.
 
 let root: string
 let options: BuildPtyHostEnvOptions
@@ -63,11 +63,5 @@ describe("a pane spawn rechecks Quirky's entry in ~/.codex", () => {
     buildPtyHostEnv('native-pane', {}, options)
 
     expect(fixture.scheduleCodexHookReconcile).toHaveBeenCalledTimes(1)
-  })
-
-  it('never on a WSL spawn', () => {
-    buildPtyHostEnv('wsl-pane', {}, { ...options, isWsl: true, wslDistro: 'Ubuntu' })
-
-    expect(fixture.scheduleCodexHookReconcile).not.toHaveBeenCalled()
   })
 })

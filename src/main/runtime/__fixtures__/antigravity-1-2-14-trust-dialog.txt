@@ -9,7 +9,7 @@
 
  ⣷  Signing in...[H[33;1mAccessing workspace:[m
 [K
-[1m/Users/xxxxxx/quirky-lanes/sta-8741-feasibility/ws-untrusted[m
+[1m/Users/xxxxxx/quik-lanes/sta-8741-feasibility/ws-untrusted[m
 [K
 Do you trust the contents of this project?
 [K

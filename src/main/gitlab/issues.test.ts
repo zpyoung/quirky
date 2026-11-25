@@ -38,6 +38,8 @@ import { addIssueComment, createIssue, getIssue, listIssues } from './issues'
 import { updateIssue } from './issue-update'
 import { listAssignableUsers, listLabels } from './project-label-and-member-lookup'
 
+const ENCODED_PROJECT = encodeURIComponent('stablyai/orca')
+
 /** Raw `glab api -i` stdout: status line, CRLF header lines, blank line, then the JSON body. */
 function glabIncludeOutput(headers: Record<string, string>, body: unknown): string {
   const headerLines = Object.entries(headers)
@@ -110,7 +112,7 @@ describe('gitlab issue operations', () => {
 
     await expect(getIssue('/repo-root', 923)).resolves.toMatchObject({ number: 923 })
     expect(glabExecFileAsyncMock).toHaveBeenCalledWith(
-      ['api', 'projects/stablyai%2Fquirky/issues/923'],
+      ['api', `projects/${ENCODED_PROJECT}/issues/923`],
       { cwd: '/repo-root' }
     )
   })
@@ -197,7 +199,7 @@ describe('gitlab issue operations', () => {
     )
     expect(glabApiWithHeadersMock).toHaveBeenCalledWith(
       [
-        'projects/stablyai%2Fquirky/issues?page=1&per_page=5&order_by=updated_at&sort=desc&state=opened'
+        `projects/${ENCODED_PROJECT}/issues?page=1&per_page=5&order_by=updated_at&sort=desc&state=opened`
       ],
       { cwd: '/repo-root', ...localGitOptions }
     )
@@ -230,7 +232,7 @@ describe('gitlab issue operations', () => {
 
     expect(glabApiWithHeadersMock).toHaveBeenCalledWith(
       [
-        'projects/stablyai%2Fquirky/issues?page=1&per_page=5&order_by=updated_at&sort=desc&state=opened'
+        `projects/${ENCODED_PROJECT}/issues?page=1&per_page=5&order_by=updated_at&sort=desc&state=opened`
       ],
       { cwd: '/repo-root' }
     )
@@ -246,7 +248,7 @@ describe('gitlab issue operations', () => {
 
     expect(glabApiWithHeadersMock).toHaveBeenCalledWith(
       [
-        'projects/stablyai%2Fquirky/issues?page=3&per_page=50&order_by=updated_at&sort=desc&state=opened'
+        `projects/${ENCODED_PROJECT}/issues?page=3&per_page=50&order_by=updated_at&sort=desc&state=opened`
       ],
       { cwd: '/repo-root' }
     )
@@ -365,7 +367,7 @@ describe('gitlab issue operations', () => {
         'api',
         '-X',
         'POST',
-        'projects/stablyai%2Fquirky/issues',
+        `projects/${ENCODED_PROJECT}/issues`,
         '-f',
         'title=New issue',
         '-f',
@@ -497,7 +499,14 @@ describe('gitlab issue operations', () => {
     })
 
     expect(glabExecFileAsyncMock).toHaveBeenCalledWith(
-      ['api', '-X', 'PUT', 'projects/stablyai%2Fquirky/issues/5', '-f', 'description=Updated body'],
+      [
+        'api',
+        '-X',
+        'PUT',
+        `projects/${ENCODED_PROJECT}/issues/5`,
+        '-f',
+        'description=Updated body'
+      ],
       { cwd: '/repo-root' }
     )
   })
@@ -509,19 +518,19 @@ describe('gitlab issue operations', () => {
     serveGlabApiPages(
       new Map([
         [
-          'projects/stablyai%2Fquirky/labels?per_page=100&page=1',
+          `projects/${ENCODED_PROJECT}/labels?per_page=100&page=1`,
           glabIncludeOutput({ 'X-Next-Page': '2', 'X-Page': '1', 'X-Total-Pages': '2' }, [
             { id: 1, name: 'bug', color: '#d9534f', is_project_label: true }
           ])
         ],
         [
-          'projects/stablyai%2Fquirky/labels?per_page=100&page=2',
+          `projects/${ENCODED_PROJECT}/labels?per_page=100&page=2`,
           glabIncludeOutput({ 'X-Next-Page': '', 'X-Page': '2', 'X-Total-Pages': '2' }, [
             { id: 4, name: 'feature', color: '#f0ad4e', is_project_label: false }
           ])
         ],
         [
-          'projects/stablyai%2Fquirky/members/all?per_page=100&page=1',
+          `projects/${ENCODED_PROJECT}/members/all?per_page=100&page=1`,
           glabIncludeOutput({ 'X-Next-Page': '', 'X-Page': '1' }, [
             {
               id: 12,
@@ -552,9 +561,9 @@ describe('gitlab issue operations', () => {
     ])
 
     expect(glabApiWithHeadersMock.mock.calls.map(([args]) => args)).toEqual([
-      ['--hostname', 'git.internal', 'projects/stablyai%2Fquirky/labels?per_page=100&page=1'],
-      ['--hostname', 'git.internal', 'projects/stablyai%2Fquirky/labels?per_page=100&page=2'],
-      ['--hostname', 'git.internal', 'projects/stablyai%2Fquirky/members/all?per_page=100&page=1']
+      ['--hostname', 'git.internal', `projects/${ENCODED_PROJECT}/labels?per_page=100&page=1`],
+      ['--hostname', 'git.internal', `projects/${ENCODED_PROJECT}/labels?per_page=100&page=2`],
+      ['--hostname', 'git.internal', `projects/${ENCODED_PROJECT}/members/all?per_page=100&page=1`]
     ])
     expect(glabExecFileAsyncMock).not.toHaveBeenCalled()
   })
@@ -564,9 +573,9 @@ describe('gitlab issue operations', () => {
     const fullPage = Array.from({ length: 100 }, (_, index) => ({ id: index, name: `l${index}` }))
     serveGlabApiPages(
       new Map([
-        ['projects/stablyai%2Fquirky/labels?per_page=100&page=1', glabIncludeOutput({}, fullPage)],
+        [`projects/${ENCODED_PROJECT}/labels?per_page=100&page=1`, glabIncludeOutput({}, fullPage)],
         [
-          'projects/stablyai%2Fquirky/labels?per_page=100&page=2',
+          `projects/${ENCODED_PROJECT}/labels?per_page=100&page=2`,
           glabIncludeOutput({}, [{ id: 100, name: 'last' }])
         ]
       ])
@@ -586,11 +595,11 @@ describe('gitlab issue operations', () => {
     serveGlabApiPages(
       new Map([
         [
-          'projects/stablyai%2Fquirky/labels?per_page=100&page=1',
+          `projects/${ENCODED_PROJECT}/labels?per_page=100&page=1`,
           glabIncludeOutput({ 'X-Next-Page': '1' }, [{ id: 1, name: 'bug' }])
         ],
         [
-          'projects/stablyai%2Fquirky/members/all?per_page=100&page=1',
+          `projects/${ENCODED_PROJECT}/members/all?per_page=100&page=1`,
           glabIncludeOutput({}, { message: '403 Forbidden' })
         ]
       ])
@@ -626,7 +635,7 @@ describe('gitlab issue operations', () => {
       }
     })
     expect(glabExecFileAsyncMock).toHaveBeenCalledWith(
-      ['api', '-X', 'POST', 'projects/stablyai%2Fquirky/issues/5/notes', '-f', 'body=Hello'],
+      ['api', '-X', 'POST', `projects/${ENCODED_PROJECT}/issues/5/notes`, '-f', 'body=Hello'],
       { cwd: '/repo-root' }
     )
   })
@@ -649,7 +658,7 @@ describe('gitlab issue operations', () => {
         'gitlab.example.com',
         '-X',
         'POST',
-        'projects/stablyai%2Fquirky/issues/5/notes',
+        `projects/${ENCODED_PROJECT}/issues/5/notes`,
         '-f',
         'body=Hello'
       ],

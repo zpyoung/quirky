@@ -290,18 +290,6 @@ describe('guard-env WSLENV forwarding (#7652)', () => {
     const env = promptGuardGitEnv({ PATH: '/usr/bin' }, 'darwin')
     expect(env.WSLENV).toBeUndefined()
   })
-
-  it('forwards GIT_SSH_COMMAND only when nonInteractiveGitEnv set the default itself', () => {
-    const defaulted = nonInteractiveGitEnv({ PATH: '/usr/bin' }, 'win32')
-    expect((defaulted.WSLENV ?? '').split(':')).toContain('GIT_SSH_COMMAND')
-
-    // A caller's Windows-specific ssh command must not leak into the distro.
-    const callerSet = nonInteractiveGitEnv(
-      { PATH: '/usr/bin', GIT_SSH_COMMAND: 'C:\\ssh\\ssh.exe' },
-      'win32'
-    )
-    expect((callerSet.WSLENV ?? '').split(':')).not.toContain('GIT_SSH_COMMAND')
-  })
 })
 
 describe('promptGuardShellEnv keeps the shell locale (#7652 x #7808)', () => {
@@ -336,20 +324,5 @@ describe('git env forces untranslated diagnostics (issue #7808)', () => {
     const env = nonInteractiveGitEnv({ PATH: '/usr/bin', LANG: 'fr_FR.UTF-8' })
     expect(env.LC_ALL).toBe('en_US.UTF-8')
     expect(env.LANGUAGE).toBe('en')
-  })
-})
-
-describe('redirectPortedHostnameToEnv WSLENV forwarding', () => {
-  it('names GITLAB_HOST in WSLENV so it can cross into a distro', async () => {
-    // A WSL-routed glab only sees Windows variables listed in WSLENV; without
-    // the entry the ported host is silently dropped and glab talks to
-    // gitlab.com (#12557).
-    const { redirectPortedHostnameToEnv } = await import('./runner')
-    const { options } = redirectPortedHostnameToEnv(
-      ['api', '--hostname', 'gitlab.example.com:8443'],
-      { env: { PATH: '/usr/bin' } }
-    )
-    expect(options.env?.GITLAB_HOST).toBe('gitlab.example.com:8443')
-    expect((options.env?.WSLENV ?? '').split(':')).toContain('GITLAB_HOST')
   })
 })

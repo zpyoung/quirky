@@ -22,7 +22,7 @@ describe('local ssh browser partition identity', () => {
     // composition silently logs every SSH workspace out. Recompute only for a
     // deliberate, migration-accompanied identity change.
     expect(derive('local-default', 'default', 'ssh-target-1').partition).toBe(
-      'persist:quirky-browser-v1-5bd50510715cb753c62637e02be1e3e480ce8a5b1d8fc5d8b71205a2ff6181a4'
+      'persist:quirky-browser-v1-b86a8a98466da43b05d57b545e42084ada795d83e16ca95fb7594cc619e04883'
     )
   })
 

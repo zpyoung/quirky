@@ -9,7 +9,7 @@ import { computeTrustedHash, type CodexTrustEntry } from './config-toml-trust'
 const QUIRKY_FORM_1_COMMAND =
   ': quirky-agent-hook-form=1; if [ -n "${QUIRKY_PANE_KEY-}" ] && [ -n "${QUIRKY_AGENT_HOOK_ROOT-}" ] && [ -f "${QUIRKY_AGENT_HOOK_ROOT-}/agent-hooks/codex-hook.sh" ]; then /bin/sh "${QUIRKY_AGENT_HOOK_ROOT-}/agent-hooks/codex-hook.sh" || :; elif [ -z "${QUIRKY_AGENT_HOOK_ROOT-}" ] && [ -n "${QUIRKY_PANE_KEY-}" ] && [ -n "${QUIRKY_AGENT_HOOK_PORT-}" ] && [ -f "${HOME-}/.quirky/agent-hooks/codex-hook.sh" ]; then /bin/sh "${HOME-}/.quirky/agent-hooks/codex-hook.sh" || :; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi'
 const REAL_INTERRUPT_HASH =
-  'sha256:78b430d1d7794c49e6d83a36964d4082d05ec72023ccc38244e97b8e08d054d2'
+  'sha256:1d26229a5db195dd233db40df18764a95df9eaa4d8bbfa08ac809680bb8e96ac'
 
 const INTERRUPT_ENTRY: CodexTrustEntry = {
   sourcePath: '/home/dev/.codex/hooks.json',

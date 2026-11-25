@@ -12,7 +12,6 @@ import type {
 
 export const POSIX_PATH = '/home/alice/repo'
 export const WIN_PATH = String.raw`C:\Users\alice\repo`
-export const WSL_PATH = String.raw`\\wsl$\Ubuntu\home\alice\repo`
 
 const SKIP = '--dangerously-skip-permissions'
 const POSIX_CLAUDE = `claude '${SKIP}'`
@@ -25,7 +24,6 @@ const cmd = { command: `${CMD_CLAUDE} "fix Bob's bug"`, agentCommand: CMD_CLAUDE
 const BRAIN = '.gemini/antigravity-ide/brain/ide-id/transcript_full.jsonl'
 const MAC_T = `/Users/alice/${BRAIN}`
 const WIN_T = `C:/Users/alice/${BRAIN}`
-const LINUX_T = `/home/alice/${BRAIN}`
 const reference = (path: string): string =>
   `Review the chat transcript at "${path}". Confirm your understanding of the previous conversation and continue from where it left off. This starts a new CLI conversation using the original transcript as a reference.`
 const agy = (path: string): WindowRequestFacts => ({
@@ -43,17 +41,11 @@ const folder = (path: string, extra: Partial<LaunchWorkspace> = {}): LaunchWorks
   path,
   ...extra
 })
-const WSL_UBUNTU = { kind: 'wsl', distro: 'Ubuntu' } as const
 const HOST_SENT = { projectRuntime: { kind: 'windows-host', reason: 'global-default' } } as const
-const WSL_SENT = {
-  projectRuntime: { kind: 'wsl', reason: 'project-override', distro: 'Ubuntu' }
-} as const
 const IN_PWSH = { shellOverride: 'powershell.exe' }
-const IN_WSL = { shellOverride: 'wsl.exe' }
 // Main runs a local pane in the settings shell; Windows adds the WSL distro it derived.
 const ZSH = { shellOverride: '/bin/zsh' }
 const PWSH = { shellOverride: 'powershell.exe', terminalWindowsWslDistro: null }
-const WSL_EXE = { shellOverride: 'wsl.exe', terminalWindowsWslDistro: 'Ubuntu' }
 const CMD_EXE = { shellOverride: 'cmd.exe', terminalWindowsWslDistro: null }
 const CMD = { terminalWindowsShell: 'cmd.exe' }
 
@@ -133,47 +125,7 @@ export const WINDOW_LAUNCH_CASES: WindowLaunchCase[] = [
     CMD_EXE,
     CMD
   ),
-  // A never-saved \\wsl$ project reads as a WSL project override from its path.
-  typed(
-    'Windows wsl$ repo, no saved runtime',
-    'win32',
-    repo(WSL_PATH),
-    { ...posix, ...IN_WSL, ...WSL_SENT },
-    WSL_EXE
-  ),
-  typed(
-    'Windows C: repo, project WSL',
-    'win32',
-    repo(WIN_PATH, { projectRuntime: WSL_UBUNTU }),
-    { ...posix, ...IN_WSL, ...WSL_SENT },
-    WSL_EXE
-  ),
-  typed(
-    'Windows C: repo, global default WSL',
-    'win32',
-    repo(WIN_PATH),
-    {
-      ...posix,
-      ...IN_WSL,
-      projectRuntime: { kind: 'wsl', reason: 'global-default', distro: 'Ubuntu' } as const
-    },
-    WSL_EXE,
-    { localWindowsRuntimeDefault: WSL_UBUNTU }
-  ),
   typed('Windows C: folder', 'win32', folder(WIN_PATH), { ...ps, ...IN_PWSH }, PWSH),
-  // The folder's \\wsl$ path makes its host Linux, matching the wsl.exe createTab picks from the path.
-  typed('Windows wsl$ folder', 'win32', folder(WSL_PATH), { ...posix, ...IN_WSL }, WSL_EXE),
-  // A folder borrows the runtime of a repo it contains (or equals).
-  typed(
-    'Windows folder containing a WSL-project repo',
-    'win32',
-    folder(String.raw`C:\Users\alice`, {
-      repoPath: WIN_PATH,
-      projectRuntime: WSL_UBUNTU
-    }),
-    { ...posix, ...IN_WSL, ...WSL_SENT },
-    WSL_EXE
-  ),
   // C3 (Antigravity continue) checks against rows 6.
   resume(MAC_T, `${POSIX_PATH}/pkg`)(
     'continue, macOS repo, transcript cwd',
@@ -205,15 +157,5 @@ export const WINDOW_LAUNCH_CASES: WindowLaunchCase[] = [
     },
     CMD_EXE,
     CMD
-  ),
-  // The \\wsl$ transcript path is rewritten to its Linux spelling; the Linux cwd goes out as is.
-  resume(`//wsl.localhost/Ubuntu/home/alice/${BRAIN}`, POSIX_PATH)(
-    'continue, Windows wsl$ WSL-project repo',
-    'win32',
-    repo(WSL_PATH, {
-      projectRuntime: WSL_UBUNTU
-    }),
-    { ...agy(LINUX_T), cwd: POSIX_PATH, ...IN_WSL, ...WSL_SENT },
-    WSL_EXE
   )
 ]

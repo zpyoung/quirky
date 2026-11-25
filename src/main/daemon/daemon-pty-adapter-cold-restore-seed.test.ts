@@ -1,7 +1,6 @@
 import './mock-descendant-sweep'
 /* Cold-restore seed transfer and the payload shapes handed back to the renderer. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { DaemonPtyAdapter } from './daemon-pty-adapter'
@@ -46,18 +45,9 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
   let server: DaemonServer
   let adapter: DaemonPtyAdapter
   let lastSubprocess: ReturnType<typeof createMockSubprocess>
-  let lastSpawnOpts: {
-    sessionId: string
-    cols: number
-    rows: number
-    cwd?: string
-    env?: Record<string, string>
-    command?: string
-  } | null
 
   beforeEach(async () => {
-    const harness = await startDaemonAdapterHarness((opts) => {
-      lastSpawnOpts = opts
+    const harness = await startDaemonAdapterHarness(() => {
       lastSubprocess = createMockSubprocess()
       return lastSubprocess
     })
@@ -66,7 +56,6 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
     tokenPath = harness.tokenPath
     server = harness.server
     adapter = harness.adapter
-    lastSpawnOpts = null
     getMacDaemonSystemResolverHealthMock.mockReset()
     getMacDaemonSystemResolverHealthMock.mockResolvedValue('unknown')
     getMacDaemonTccAttributionHealthMock.mockReset()
@@ -162,8 +151,7 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
         socketPath,
         tokenPath,
         protocolVersion: 29,
-        spawnSubprocess: (opts) => {
-          lastSpawnOpts = opts
+        spawnSubprocess: () => {
           lastSubprocess = createMockSubprocess()
           return lastSubprocess
         }
@@ -229,46 +217,6 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
         writers: Map<string, unknown>
       }
       expect(managerInternals.writers.has(sessionId)).toBe(false)
-    })
-
-    it('repairs legacy hostname UNC cwd for WSL spawn and cold-restore metadata', async () => {
-      const platform = Object.getOwnPropertyDescriptor(process, 'platform')
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      try {
-        const sessionId = 'wsl-legacy-cwd'
-        const sessionDir = join(historyDir, getHistorySessionDirName(sessionId))
-        mkdirSync(sessionDir, { recursive: true })
-        writeFileSync(
-          join(sessionDir, 'meta.json'),
-          JSON.stringify({
-            cwd: `\\\\${hostname()}\\home\\jin`,
-            cols: 80,
-            rows: 24,
-            startedAt: '2026-04-15T10:00:00Z',
-            endedAt: null,
-            exitCode: null
-          })
-        )
-        writeFileSync(join(sessionDir, 'scrollback.bin'), 'legacy WSL output\r\n')
-        historyAdapter = new DaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
-
-        const result = await historyAdapter.spawn({
-          cols: 80,
-          rows: 24,
-          cwd: '\\\\wsl.localhost\\Ubuntu\\home\\jin\\repo',
-          terminalWindowsWslDistro: 'Debian',
-          sessionId
-        })
-
-        const repaired = '\\\\wsl.localhost\\Ubuntu\\home\\jin'
-        expect(lastSpawnOpts?.cwd).toBe(repaired)
-        expect(result.coldRestore?.cwd).toBe(repaired)
-        expect(result.wslDistro).toBe('Ubuntu')
-      } finally {
-        if (platform) {
-          Object.defineProperty(process, 'platform', platform)
-        }
-      }
     })
 
     it('returns cold restore OSC link ranges from checkpoint history', async () => {
