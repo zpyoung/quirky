@@ -32,7 +32,9 @@
     "Orca Dev",
     "importFromOrca",
     "ImportFromOrca",
-    "import-from-orca"
+    "import-from-orca",
+    "orca.boot()",
+    "<p>orca</p>"
   ],
   "creditLines": [
     {

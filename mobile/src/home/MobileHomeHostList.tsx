@@ -104,11 +104,7 @@ const MobileHomeHostRow = memo(function MobileHomeHostRow(props: MobileHomeHostR
     state,
     reconnectAttempts: props.hostAttempts[item.id] ?? 0,
     lastConnectedAt: props.hostLastConnected[item.id] ?? null,
-    endpoint: item.endpoint,
-    pendingPath: connection?.pendingPath ?? null,
-    pairingRejected: connection?.pairingRejected ?? false,
-    relayHostReachability: connection?.relayHostReachability ?? 'connecting',
-    hostName: item.name
+    endpoint: item.endpoint
   })
   const open = useCallback(() => onOpen(item), [item, onOpen])
   const longPress = useCallback(() => onLongPress(item), [item, onLongPress])

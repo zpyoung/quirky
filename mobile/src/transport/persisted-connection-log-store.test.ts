@@ -33,11 +33,11 @@ describe('persisted connection log store', () => {
         message: 'Mobile client session started'
       },
       {
-        id: 'relay-failure',
+        id: 'socket-failure',
         ts: 1_000,
         level: 'error',
-        code: 'relay-session-failed',
-        message: 'Relay: active relay session failed'
+        code: 'socket-closed',
+        message: 'WebSocket closed'
       }
     ]
     vi.mocked(AsyncStorage.getItem).mockResolvedValue(JSON.stringify(stored))
@@ -50,7 +50,7 @@ describe('persisted connection log store', () => {
 
     expect(connectionLogStore.get('host-a').map((entry) => entry.code)).toEqual([
       'client-session-started',
-      'relay-session-failed',
+      'socket-closed',
       'client-session-started'
     ])
   })

@@ -12,9 +12,6 @@ function entry(
   return {
     hostId,
     path: 'lan',
-    pendingPath: null,
-    pairingRejected: false,
-    relayHostReachability: 'connecting',
     ...overrides
   }
 }
@@ -30,36 +27,24 @@ describe('projectHomeHostConnections', () => {
       },
       get path(): MobileConnectionPath {
         pathReads += 1
-        return 'relay'
-      },
-      pendingPath: null,
-      pairingRejected: false,
-      relayHostReachability: 'connecting'
+        return 'tailscale'
+      }
     }
 
-    const projection = projectHomeHostConnections([counted, entry('host-1', { path: 'relay' })])
+    const projection = projectHomeHostConnections([counted, entry('host-1', { path: 'tailscale' })])
 
     // Only the key is read; the row reads the rest straight off the entry.
     expect(hostIdReads).toBe(1)
     expect(pathReads).toBe(0)
     expect(projection['host-0']).toBe(counted)
-    expect(projection['host-1']?.path).toBe('relay')
-  })
-
-  it('carries every connection field through untouched', () => {
-    const offline = entry('desk', {
-      pendingPath: 'tailscale',
-      pairingRejected: true,
-      relayHostReachability: 'signed-out'
-    })
-    expect(projectHomeHostConnections([offline])['desk']).toEqual(offline)
+    expect(projection['host-1']?.path).toBe('tailscale')
   })
 
   it('keeps a host named __proto__ as an own key', () => {
-    const projection = projectHomeHostConnections([entry('__proto__', { path: 'relay' })])
+    const projection = projectHomeHostConnections([entry('__proto__', { path: 'tailscale' })])
 
     expect(Object.hasOwn(projection, '__proto__')).toBe(true)
-    expect(projection['__proto__']?.path).toBe('relay')
+    expect(projection['__proto__']?.path).toBe('tailscale')
     expect(Object.getPrototypeOf(projection)).toBe(Object.prototype)
   })
 })

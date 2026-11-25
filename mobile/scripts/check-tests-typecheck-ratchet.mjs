@@ -33,10 +33,6 @@ export const TESTS_OUTSIDE_PROGRAM = new Map([
   [
     'src/test-support/rpc-recording/recorded-request-params.test.ts',
     'Node-side: imports the desktop RPC dispatcher, checked against @types/node rather than RN libs'
-  ],
-  [
-    'src/transport/mobile-relay-browser-cancel-budget.test.ts',
-    'Node-side: imports @quirky/process-host, checked against @types/node rather than RN libs'
   ]
 ])
 

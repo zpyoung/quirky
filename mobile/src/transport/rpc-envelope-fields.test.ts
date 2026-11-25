@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { MobileRelayRpcStreams } from './mobile-relay-rpc-streams'
 import {
   DIRECT_WIRE_DEVICE_TOKEN,
   directWire,
@@ -9,26 +8,11 @@ import {
 import {
   RPC_TRANSPORT_FIELDS,
   buildDirectRpcWireRequest,
-  withRpcEnvelopeFields,
-  type RpcRequestFrame
+  withRpcEnvelopeFields
 } from './rpc-envelope-fields'
 import type { RpcResponse } from './types'
 
 const ENVELOPE = { executionHost: 'runtime:a' }
-
-function relayStreams() {
-  const frames: RpcRequestFrame[] = []
-  let counter = 0
-  const streams = new MobileRelayRpcStreams({
-    nextId: () => `relay-${++counter}`,
-    sendFrame: (frame) => {
-      frames.push(frame)
-      return true
-    },
-    waitForConnected: async () => undefined
-  })
-  return { streams, frames }
-}
 
 function answered(id: string): RpcResponse {
   return { id, ok: true, result: null, _meta: { runtimeId: 'runtime-1' } }
@@ -164,38 +148,6 @@ describe('direct transport envelope', () => {
       method: 'browser.screencast.unsubscribe',
       params: { subscriptionId: 'stale' },
       ...ENVELOPE
-    })
-  })
-})
-
-describe('relay transport envelope', () => {
-  it('keeps it on a session tabs unsubscribe deferred until the snapshot', async () => {
-    const { streams, frames } = relayStreams()
-    const dispose = streams.subscribe('session.tabs.subscribe', { worktree: 'w' }, () => {}, {
-      envelope: ENVELOPE
-    })
-    await Promise.resolve()
-    dispose()
-    expect(frames).toHaveLength(1)
-    streams.handleResponse(streaming(frames[0]!.id, { type: 'snapshot', tabs: [] }))
-    expect(frames.at(-1)).toMatchObject({
-      method: 'session.tabs.unsubscribe',
-      envelope: ENVELOPE
-    })
-  })
-
-  it('keeps it on a ready-id unsubscribe deferred until the ready', async () => {
-    const { streams, frames } = relayStreams()
-    const dispose = streams.subscribe('runtime.clientEvents.subscribe', {}, () => {}, {
-      envelope: ENVELOPE
-    })
-    await Promise.resolve()
-    dispose()
-    expect(frames).toHaveLength(1)
-    streams.handleResponse(streaming(frames[0]!.id, { type: 'ready', subscriptionId: 'server-1' }))
-    expect(frames.at(-1)).toMatchObject({
-      method: 'runtime.clientEvents.unsubscribe',
-      envelope: ENVELOPE
     })
   })
 })

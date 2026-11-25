@@ -118,7 +118,7 @@ describe('mobile rpc-client delivery ambiguity marking', () => {
       await Promise.resolve()
       expect(hasSentRequest(physical.socket, 'worktree.create')).toBe(sent)
 
-      await client.migrateTo(replacement.client, 'relay')
+      await client.migrateTo(replacement.client, 'tailscale')
 
       const error = await requestError
       expect(isLogicalClientCutoverError(error)).toBe(true)

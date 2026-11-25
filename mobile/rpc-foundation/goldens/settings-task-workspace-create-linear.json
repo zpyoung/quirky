@@ -16,7 +16,7 @@
         "$rpc": "null"
       }
     },
-    "2142af96648c": {
+    "33b2e7d86f65": {
       "name": "worktree.create#1",
       "ordinal": 6,
       "args": [
@@ -164,7 +164,7 @@
         "$rpc": "null"
       }
     },
-    "e0423a9e6995": {
+    "e088a13dd54d": {
       "name": "worktree.create#1",
       "ordinal": 7,
       "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"worktree.create\",\"params\":{\"repo\":\"id:repo-1\",\"name\":\"orc-1\",\"displayName\":\"ORC-1 Recorded issue\",\"displayNameKind\":\"generated\",\"linkedLinearIssue\":\"ORC-1\",\"setupDecision\":\"inherit\",\"activate\":true,\"startupDraft\":\"https://linear.app/quirky/issue/ORC-1\",\"createdWithAgent\":\"claude\"}}"
@@ -222,8 +222,8 @@
       {
         "id": "created",
         "observation": {
-          "sender": ["8ac371cf7234", "2142af96648c"],
-          "payloads": ["975f2ff9a730", "e0423a9e6995"],
+          "sender": ["8ac371cf7234", "33b2e7d86f65"],
+          "payloads": ["975f2ff9a730", "e088a13dd54d"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "submit": "eb79a9b3682a"

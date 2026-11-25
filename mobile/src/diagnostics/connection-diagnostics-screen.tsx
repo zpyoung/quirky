@@ -14,7 +14,6 @@ export function ConnectionDiagnosticsScreen({
   state,
   reconnectAttempts,
   activePath,
-  pendingPath,
   entries,
   writeClipboard,
   onBack,
@@ -26,7 +25,6 @@ export function ConnectionDiagnosticsScreen({
   state: ConnectionState
   reconnectAttempts: number
   activePath?: MobileConnectionDiagnosticPath
-  pendingPath?: MobileConnectionDiagnosticPath | null
   entries: readonly ConnectionLogEntry[]
   writeClipboard: (report: string) => Promise<unknown>
   onBack: () => void
@@ -34,9 +32,7 @@ export function ConnectionDiagnosticsScreen({
 }) {
   const [copiedHostId, setCopiedHostId] = useState<string | null>(null)
 
-  const diagnosisArgs = host
-    ? { endpoint: host.endpoint, state, activePath, pendingPath, entries }
-    : null
+  const diagnosisArgs = host ? { endpoint: host.endpoint, state, activePath, entries } : null
   const diagnosis = diagnosisArgs ? diagnoseConnection(diagnosisArgs) : null
   const hostId = host?.id ?? null
   const copied = copiedHostId !== null && copiedHostId === hostId

@@ -27,7 +27,6 @@ export function buildConnectionDiagnosticsReport(args: {
   desktopAppVersion?: string | null
   entries: readonly ConnectionLogEntry[]
   activePath?: MobileConnectionDiagnosticPath
-  pendingPath?: MobileConnectionDiagnosticPath | null
   /** The page bridge version this shell speaks. */
   bridgeProtocolVersion: number
   nowMs?: number
@@ -38,7 +37,6 @@ export function buildConnectionDiagnosticsReport(args: {
     endpoint: args.endpoint,
     state: args.state,
     activePath: args.activePath,
-    pendingPath: args.pendingPath,
     entries
   })
   const lines: string[] = []
@@ -54,9 +52,7 @@ export function buildConnectionDiagnosticsReport(args: {
   )
   lines.push(`State: ${args.state} (reconnect attempts: ${args.reconnectAttempts})`)
   if (args.activePath) {
-    lines.push(
-      `Path: active=${args.activePath}${args.pendingPath ? `; recovery=${args.pendingPath}` : ''}`
-    )
+    lines.push(`Path: active=${args.activePath}`)
   }
   lines.push(
     args.lastConnectedAt == null

@@ -1,6 +1,6 @@
 import type { ProviderLoadActionsModel } from './use-mobile-tasks-provider-load-actions'
 import { fetchJiraTaskIssues } from './mobile-jira-task-source'
-import { isHostedTaskRepo, useCallback, useEffect, useRef } from './mobile-tasks-dependencies'
+import { isHostedTaskRepo, useCallback } from './mobile-tasks-dependencies'
 import {
   GITHUB_REPO_CONCURRENCY,
   GITLAB_PER_PAGE,
@@ -46,7 +46,6 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
     selectedLinearTeamIds,
     selectedLinearWorkspaceId,
     effectiveRepoIds,
-    serverRepoList,
     setError,
     setGithubCurrentPage,
     setGithubPages,
@@ -293,23 +292,6 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
       tasksSupported
     ]
   )
-  // Server repos changing reload an unfiltered repo list quietly; when loadTasks changed too (the
-  // filter widened), its own effect already loads; Jira and Linear read issues independently.
-  const listedServerReposRef = useRef({ serverRepoList, loadTasks })
-  useEffect(() => {
-    const prev = listedServerReposRef.current
-    listedServerReposRef.current = { serverRepoList, loadTasks }
-    if (
-      prev.serverRepoList !== serverRepoList &&
-      prev.loadTasks === loadTasks &&
-      effectiveRepoIds.size === 0 &&
-      (provider === 'github' || provider === 'gitlab') &&
-      connState === 'connected' &&
-      taskStateHydrated
-    ) {
-      void loadTasks({ silent: true })
-    }
-  }, [serverRepoList, loadTasks, effectiveRepoIds.size, provider, connState, taskStateHydrated])
   return Object.assign(model, { loadTasks })
 }
 

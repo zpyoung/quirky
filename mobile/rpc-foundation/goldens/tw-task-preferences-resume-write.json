@@ -4,7 +4,7 @@
   "family": "settings-best-effort",
   "namedDeltas": [],
   "values": {
-    "083a573d9009": {
+    "1e9eabb8987b": {
       "name": "ui.set#2",
       "ordinal": 3,
       "args": [
@@ -46,6 +46,11 @@
         }
       }
     },
+    "5f091b0835f7": {
+      "name": "ui.set#2",
+      "ordinal": 4,
+      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"trustedQuirkyHooks\":{\"repo-1\":{\"setup\":{\"contentHash\":\"hash-1\",\"approvedAt\":1767225600000}}}}}"
+    },
     "8eac7ca88434": {
       "name": "ui.set#1",
       "ordinal": 1,
@@ -85,11 +90,6 @@
     },
     "ae0c8e22f430": {
       "preset": "all"
-    },
-    "b10dd246ebf0": {
-      "name": "ui.set#2",
-      "ordinal": 4,
-      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"trustedQuirkyHooks\":{\"repo-1\":{\"setup\":{\"contentHash\":\"hash-1\",\"approvedAt\":1767225600000}}}}}"
     },
     "b59e9062cf46": {
       "name": "ui.set#1",
@@ -134,8 +134,8 @@
       {
         "id": "awaited-trust-write-refused",
         "observation": {
-          "sender": ["8eac7ca88434", "083a573d9009"],
-          "payloads": ["b59e9062cf46", "b10dd246ebf0"],
+          "sender": ["8eac7ca88434", "1e9eabb8987b"],
+          "payloads": ["b59e9062cf46", "5f091b0835f7"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "resume": "eb79a9b3682a",

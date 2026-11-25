@@ -58,7 +58,6 @@ function listWith(fields: { actionError: string; setActionError: (value: string)
     noticeParam: undefined,
     now: 0,
     reconnectAttempts: 0,
-    relayRecovery: { pairingRejected: false },
     routeNotice: '',
     router: { push: () => {} },
     sectionsResult: { rawSections: [], sections: [], repoById: new Map() },

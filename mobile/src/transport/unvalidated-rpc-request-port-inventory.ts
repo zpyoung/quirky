@@ -37,12 +37,8 @@ export const UNVALIDATED_RPC_REQUEST_PORT_OWNERS: readonly UnvalidatedRpcRequest
   { file: 'src/mobile-web-shell/bridge-host-test-fakes.ts', references: 1 },
   // Implements the port over the device-to-host websocket.
   { file: 'src/transport/direct-rpc-client.ts', references: 3 },
-  // Fakes the port for the supervisor suites; a non-test file only because tsconfig excludes tests.
-  { file: 'src/transport/mobile-endpoint-supervisor-test-fakes.ts', references: 2 },
-  // Implements the port over a relay channel.
-  { file: 'src/transport/mobile-relay-physical-client.ts', references: 2 },
-  // Supplies the port for one relay session.
-  { file: 'src/transport/mobile-relay-rpc-session.ts', references: 1 },
+  // Fakes the port for client suites; a non-test file only because tsconfig excludes tests.
+  { file: 'src/transport/rpc-session-test-fake.ts', references: 2 },
   // A second raw sender: string method in, unread envelope out. Its callers are fenced too.
   { file: 'src/transport/request-single-flight.ts', references: 3 },
   // Owns connect-wait, timeout and replay bookkeeping for every raw request.
@@ -161,17 +157,11 @@ export const UNVALIDATED_RPC_REQUEST_PORT_PENDING: readonly UnvalidatedRpcReques
   // mounted over substitutes for its route and its insets.
   { file: 'src/tasks/mobile-tasks-source-family.test-support.ts', references: 1 },
 
-  // src/transport/ — what is left of pairing, probing and capability reads after step 4. The
-  // protocol gate, the retrying capability probe, the candidate race, credential rotation, the
-  // direct-to-relay upgrade, startup pairing recovery and first pairing all send through
-  // host-status-probe-operations.ts and mobile-relay-pairing-operations.ts now. Neither file below
-  // shares the pending list's stated reason, so each carries its own:
+  // src/transport/ — what is left of pairing, probing and capability reads. The protocol gate, the
+  // retrying capability probe and first pairing send through host-status-probe-operations.ts now.
+  // Neither file below shares the pending list's stated reason, so each carries its own:
   //
-  // Decorates one PairingCandidateClient with director recovery, forwarding whatever method it is
-  // handed. It IS the port for the candidate it wraps, so it cannot send through an operation; the
-  // one method string it did choose now comes from hostStatusProbe.
-  { file: 'src/transport/pairing-relay-candidate.ts', references: 4 },
-  // Its sender is the two physical clients' authenticated-but-not-yet-`connected` path, which is
+  // Its sender is the physical client's authenticated-but-not-yet-`connected` path, which is
   // not an RpcClient and is unreachable from the recording oracle, so a migration here could not
   // be shown to preserve behaviour. Its method and params are already shared constants.
   { file: 'src/transport/mobile-runtime-capability-negotiation.ts', references: 2 },

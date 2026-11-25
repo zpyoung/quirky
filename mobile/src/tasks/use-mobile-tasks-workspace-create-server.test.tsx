@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import { FakeSession } from '../transport/rpc-session-test-fake'
 import type { RpcResponse } from '../transport/types'
 import { routeTaskRepoCalls } from './task-repo-host-routing'
 import type { ActionableTaskItem, RepoSummary } from './mobile-tasks-legacy-foundation'

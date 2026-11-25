@@ -85,7 +85,7 @@ function host(id: string, lastConnected: number, extra: Partial<HostProfile> = {
 
 const HOSTS = [
   host('direct-recent', 50),
-  host('relay-recent', 40, { relayHostId: 'AbCdEf0123_-xyZ9' }),
+  host('lan-recent', 40),
   host('ssh-provider-recent', 30),
   host('folder-workspace-host', 20),
   host('offline-host', 10)
@@ -325,7 +325,7 @@ describe('settings host client lifecycle', () => {
     loadHostsMock.mockResolvedValue(HOSTS)
 
     const retainedHostId = 'direct-recent'
-    const sharedHostId = 'relay-recent'
+    const sharedHostId = 'lan-recent'
     const removedHostId = 'folder-workspace-host'
     const addedHostId = 'offline-host'
     function HostListApp({ settingsHostIds }: { settingsHostIds: string[] }) {
@@ -598,7 +598,7 @@ describe('settings host client lifecycle', () => {
   })
 
   it('releases a manual host after Home demotes or stops tracking it', async () => {
-    const manualHost = host('manual-relay-host', 1, { relayHostId: 'AbCdEf0123_-xyZ9' })
+    const manualHost = host('manual-host', 1)
     const clients: FakeClient[] = []
     connectMock.mockImplementation(() => {
       const client = makeFakeClient('reconnecting')
