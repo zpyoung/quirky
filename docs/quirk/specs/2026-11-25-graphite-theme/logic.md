@@ -4,7 +4,7 @@ Quirky gets back the look it had in v1: calm graphite surfaces, one teal accent,
 
 ## Status & amendments
 
-**Status:** Draft
+**Status:** Approved
 
 **Amendments:** none yet.
 
