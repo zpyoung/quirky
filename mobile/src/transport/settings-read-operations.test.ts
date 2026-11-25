@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { loadMobileNewTabAgentOptions } from '../session/mobile-new-tab-agent-loader'
 import { FLOATING_WORKSPACE_WORKTREE_ID } from '../session/floating-workspace'
-import { FakeSession } from './mobile-endpoint-supervisor-test-fakes'
+import { FakeSession } from './rpc-session-test-fake'
 import { markRpcDeliveryUnknown, isRpcDeliveryUnknown } from './rpc-delivery-ambiguity'
 import { LogicalClientCutoverError, isLogicalClientCutoverError } from './stable-logical-rpc-client'
 import {

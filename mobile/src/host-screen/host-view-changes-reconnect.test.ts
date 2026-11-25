@@ -18,7 +18,7 @@ vi.mock('../transport/use-worktree-resync', () => ({
   useWorktreeResync: () => ({ refreshing: false, onRefresh: async () => {} })
 }))
 
-import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import { FakeSession } from '../transport/rpc-session-test-fake'
 import type { ConnectionState, RpcResponse } from '../transport/types'
 import { useHostScreenState } from './use-host-screen-state'
 import { useHostViewSettings } from './use-host-view-settings'
@@ -56,7 +56,6 @@ function desktop() {
 // The feed's own reads are not under test; it only replaces the poll, as on a switched-on page.
 const SIDEBAR_FEED = { refresh: () => {}, changed: () => {}, onInstalled: () => () => {} }
 // Stable across renders, as the screen's own are: each is a dependency of the refresh lifecycle.
-const NO_CAPABILITIES: string[] = []
 const fetchRepoMetadata = async (): Promise<void> => {}
 
 let renderer: ReactTestRenderer | null = null
@@ -78,7 +77,6 @@ async function mountScreen(client: FakeSession) {
       connState,
       embedded: true,
       fetchRepoMetadata,
-      hostCapabilities: NO_CAPABILITIES,
       hostId: 'host-1',
       sidebarFeed: SIDEBAR_FEED,
       state,

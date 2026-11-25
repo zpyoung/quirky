@@ -16,8 +16,8 @@ const entries: ConnectionLogEntry[] = [
 ]
 
 const duplicateEntries: ConnectionLogEntry[] = [
-  { id: 'relay-1', ts: 1, level: 'info', message: 'Relay recovery started' },
-  { id: 'relay-1', ts: 2, level: 'warn', message: 'Relay retry scheduled' }
+  { id: 'retry-1', ts: 1, level: 'info', message: 'Connection attempt started' },
+  { id: 'retry-1', ts: 2, level: 'warn', message: 'Retry scheduled' }
 ]
 
 describe('ConnectionLog', () => {

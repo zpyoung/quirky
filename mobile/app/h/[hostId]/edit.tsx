@@ -131,7 +131,7 @@ export default function EditHostScreen() {
     router.back()
 
     if (nextEndpoint !== undefined) {
-      // Why: the live client, even one riding the relay, and its primed profile hold the old address.
+      // Why: the live client and its primed profile hold the old address.
       refreshHostClient(host.id)
     }
   }

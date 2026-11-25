@@ -167,7 +167,7 @@ describe("the phone's status stream across the logical client's sessions", () =>
     first.finish(FORBIDDEN)
 
     const next = new PhysicalSession()
-    await logical.migrateTo(next, 'relay')
+    await logical.migrateTo(next, 'tailscale')
 
     expect(first.statusSubscribes()).toBe(1)
     expect(next.statusSubscribes()).toBe(0)
@@ -180,7 +180,7 @@ describe("the phone's status stream across the logical client's sessions", () =>
     first.finish({ type: 'end' })
 
     const next = new PhysicalSession()
-    await logical.migrateTo(next, 'relay')
+    await logical.migrateTo(next, 'tailscale')
 
     expect(next.statusSubscribes()).toBe(1)
     expect(next.streams.size).toBe(1)
@@ -193,7 +193,7 @@ describe("the phone's status stream across the logical client's sessions", () =>
     mobileStructuredSessionStatusFeed(logical).subscribe(() => {})
 
     const next = new PhysicalSession()
-    await logical.migrateTo(next, 'relay')
+    await logical.migrateTo(next, 'tailscale')
 
     expect(next.statusSubscribes()).toBe(1)
   })

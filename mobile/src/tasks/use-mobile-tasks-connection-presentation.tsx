@@ -3,20 +3,11 @@ import { classifyConnection } from './mobile-tasks-dependencies'
 import { PROVIDER_EMPTY_LABELS } from './mobile-task-view-options'
 
 export function useMobileTasksConnectionPresentation(model: ProviderViewProjectionModel) {
-  const {
-    connState,
-    githubMode,
-    lastConnectedAt,
-    provider,
-    query,
-    reconnectAttempts,
-    relayRecovery
-  } = model
+  const { connState, githubMode, lastConnectedAt, provider, query, reconnectAttempts } = model
   const headerVerdict = classifyConnection({
     state: connState,
     reconnectAttempts,
-    lastConnectedAt,
-    ...relayRecovery
+    lastConnectedAt
   })
   const emptyLabel =
     connState !== 'connected'

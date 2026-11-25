@@ -2,8 +2,6 @@ import { openExternalLink } from '../platform/external-link'
 import { Pressable, Text, View } from 'react-native'
 import { Moon, Pin, PinOff } from 'lucide-react-native'
 import { buildWorktreeNavigationActions } from '../agent-history/worktree-navigation-actions'
-import { workspaceRouteHref } from '../navigation/workspace-execution-host'
-import { useWorkspaceServer } from '../transport/workspace-server'
 import { ActionSheetContent } from '../components/ActionSheetModal'
 import { BottomDrawer } from '../components/BottomDrawer'
 import { ConfirmModal } from '../components/ConfirmModal'
@@ -20,7 +18,6 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
     actions,
     catalog,
     client,
-    connState,
     existingWorktreePaths,
     hostCapabilities,
     hostId,
@@ -28,13 +25,6 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
     state
   } = controller
   const actionTarget = state.actionTarget
-  // A server row's screens are offered by what that server supports, not the desktop.
-  const actionServer = useWorkspaceServer({
-    client,
-    connState,
-    desktopCapabilities: hostCapabilities,
-    executionHost: actionTarget?.hostId
-  })
 
   return (
     <>
@@ -95,25 +85,18 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
                       hostId,
                       worktreeId: actionTarget.worktreeId,
                       worktreeName: actionTarget.displayName || actionTarget.repo,
-                      executionHost: actionServer.routeHost,
-                      hostCapabilities:
-                        actionServer.server?.gates.hostCapabilities ?? hostCapabilities,
+                      hostCapabilities,
                       navigate: actions.navigateFromHostList,
                       onDone: () => state.setActionTarget(null)
                     }),
-                    // Server sleep is not offered yet; the desktop would sleep its own id.
-                    ...(actionServer.server
-                      ? []
-                      : [
-                          {
-                            label: 'Sleep',
-                            icon: Moon,
-                            onPress: () => {
-                              actions.putWorktreeToSleep(actionTarget)
-                              state.setActionTarget(null)
-                            }
-                          }
-                        ]),
+                    {
+                      label: 'Sleep',
+                      icon: Moon,
+                      onPress: () => {
+                        actions.putWorktreeToSleep(actionTarget)
+                        state.setActionTarget(null)
+                      }
+                    },
                     {
                       label: isWorktreePinned(actionTarget, state.pinnedIds) ? 'Unpin' : 'Pin',
                       icon: isWorktreePinned(actionTarget, state.pinnedIds) ? PinOff : Pin,
@@ -159,7 +142,6 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         ref={state.newWorktreeModalRef}
         routeVisible={showNewWorktree}
         client={client}
-        hostCapabilities={hostCapabilities}
         hostId={hostId}
         hostLabelById={state.hostLabelById}
         existingWorktreePaths={existingWorktreePaths}
@@ -170,13 +152,10 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         onVisibleChange={(visible) => {
           state.newWorktreeModalVisibleRef.current = visible
         }}
-        onCreated={(worktreeId, worktreeName, warning, executionHost) => {
+        onCreated={(worktreeId, worktreeName, warning) => {
           void catalog.fetchWorktrees({ allowDuringModal: true })
           actions.navigateFromHostList(
-            workspaceRouteHref(
-              hostNewWorktreeSessionRoute(hostId, worktreeId, worktreeName, warning),
-              executionHost
-            )
+            hostNewWorktreeSessionRoute(hostId, worktreeId, worktreeName, warning)
           )
         }}
         onRouteVisibleChange={actions.setShowNewWorktreeVisible}

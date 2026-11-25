@@ -3,7 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { JiraIssue } from '../../../src/shared/jira-types'
 import { mountFixture } from '../test-support/rpc-recording/recorder-fixture-shape'
-import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import { FakeSession } from '../transport/rpc-session-test-fake'
 import type { RepoSummary } from './mobile-tasks-provider-detail-types'
 import { useHostRepoList, type HostRepoListResource } from './use-host-repo-list'
 import { useMobileTasksTaskListLoading } from './use-mobile-tasks-task-list-loading'
@@ -44,7 +44,6 @@ function mountJira(fetchRepos: () => Promise<RepoSummary[]>) {
   client.sendRequest.mockResolvedValue({ id: 'jira-test', ok: true, result: [issue] })
   const setItems = vi.fn()
   const setError = vi.fn()
-  const serverRepoList: RepoSummary[] = []
   const effectiveRepoIds = new Set<string>()
   const holder: {
     repos?: HostRepoListResource<RepoSummary>
@@ -66,7 +65,6 @@ function mountJira(fetchRepos: () => Promise<RepoSummary[]>) {
         jiraConnection: { connected: true, selection: 'site-a' },
         jiraFilter: 'assigned',
         effectiveRepoIds,
-        serverRepoList,
         linearConnected: false,
         loadGenerationRef: { current: 0 },
         provider: 'jira',

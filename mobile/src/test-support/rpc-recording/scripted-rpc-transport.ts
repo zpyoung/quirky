@@ -402,7 +402,7 @@ export class ScriptedRpcTransport {
   }
 
   async cutover(): Promise<void> {
-    await this.logical.migrateTo(this.session(), 'relay')
+    await this.logical.migrateTo(this.session(), 'tailscale')
   }
 
   dispose(): void {

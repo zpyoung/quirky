@@ -20,7 +20,6 @@ import {
   WORKSPACE_VIEW_SHARED_NOTE
 } from '../worktree/workspace-options-copy'
 import { resolveWorktreeHostId } from '../worktree/worktree-host-context-labels'
-import { withServerHosts } from '../worktree/server-workspaces'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import type { HostScreenController } from './use-host-screen-controller'
 import { DrillRow, OptionRowList } from './workspace-option-rows'
@@ -37,24 +36,15 @@ function useWorkspaceOptionHosts(controller: HostScreenController): WorkspaceOpt
   return useMemo(() => {
     const ids = new Set<ExecutionHostId>([LOCAL_EXECUTION_HOST_ID])
     state.repoHostIdByRepoId.forEach((id) => ids.add(id))
-    state.serverWorkspaces.hosts.forEach((host) => ids.add(host.hostId))
     displayWorktrees.forEach((row) => ids.add(resolveWorktreeHostId(row, state.repoHostIdByRepoId)))
-    const hostLabelById = withServerHosts(
-      state.hostLabelById,
-      state.serverWorkspaces.hosts,
-      (host) => host.label
-    )
     return [...ids].map((id) => ({
       id,
-      label: getHostContextLabel(id, { hostLabelById, hostPlatform: state.hostPlatform })
+      label: getHostContextLabel(id, {
+        hostLabelById: state.hostLabelById,
+        hostPlatform: state.hostPlatform
+      })
     }))
-  }, [
-    displayWorktrees,
-    state.repoHostIdByRepoId,
-    state.serverWorkspaces.hosts,
-    state.hostLabelById,
-    state.hostPlatform
-  ])
+  }, [displayWorktrees, state.repoHostIdByRepoId, state.hostLabelById, state.hostPlatform])
 }
 
 /** The desktop sidebar's Workspace options, rendered from the shared option list. */
@@ -108,9 +98,7 @@ function WorkspaceOptionsContent({
     newCardStyle: state.view.newCardStyle,
     hasRemoteHosts: hosts.some((host) => parseExecutionHostId(host.id)?.kind !== 'local'),
     projectCount: controller.sectionsResult.uniqueRepos.length,
-    // Why the host's say-so: a host that keeps the filter to itself cannot apply the phone's value.
-    mayHaveServerHosts:
-      state.view.sharesOtherClientFilter === true && state.serverWorkspaces.hosts.length > 0
+    mayHaveServerHosts: false
   })
 
   // The open option; it falls back to the main sheet once the option stops showing.

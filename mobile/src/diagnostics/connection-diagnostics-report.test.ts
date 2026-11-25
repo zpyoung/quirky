@@ -85,25 +85,25 @@ describe('buildConnectionDiagnosticsReport', () => {
       appVersion: '0.0.46',
       bridgeProtocolVersion: 1,
       activePath: 'tailscale',
-      pendingPath: 'relay',
       entries: [
         {
-          id: 'relay-failure',
+          id: 'connect-failure',
           ts: NOW - 5_000,
           level: 'error',
-          message: 'Relay: relay dial failed',
-          detail:
-            'RelayDirectorHttpError: relay director resolve failed (503); retry after 30000ms; resumeToken=secret-resume-token'
+          message: 'WebSocket connect timeout',
+          detail: 'resumeToken=secret-resume-token'
         }
       ],
       nowMs: NOW
     })
 
     expect(report).toContain(
-      'Likely cause: Relay service was temporarily unavailable and asked Quirky to retry in 30s.'
+      'Likely cause: The saved Tailscale endpoint did not answer before the connection timeout.'
     )
-    expect(report).toContain('Path: active=tailscale; recovery=relay')
-    expect(report).toContain('Next step: Keep Quirky open; recovery should retry automatically.')
+    expect(report).toContain('Path: active=tailscale')
+    expect(report).toContain(
+      'Next step: Check the local/VPN network and confirm the desktop is awake.'
+    )
     expect(report).toContain('resumeToken=[redacted]')
     expect(report).not.toContain('secret-resume-token')
   })
@@ -123,7 +123,7 @@ describe('buildConnectionDiagnosticsReport', () => {
           id: 'json-secret',
           ts: NOW,
           level: 'error',
-          message: 'Relay failed',
+          message: 'Connect failed',
           detail: '{"resumeToken":"json-secret","authorization":"Bearer bearer-secret"}'
         }
       ],

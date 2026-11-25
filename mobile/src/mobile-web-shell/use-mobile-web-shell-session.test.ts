@@ -71,7 +71,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   default: { getItem: async () => null, setItem: async () => undefined }
 }))
 vi.mock('expo-file-system', () => ({ Directory: class {}, File: class {}, Paths: { cache: '' } }))
-vi.mock('../transport/mobile-endpoint-supervisor-support', () => ({
+vi.mock('../transport/encode-base64url', () => ({
   encodeBase64Url: () => 'session-id'
 }))
 vi.mock('../components/host-protocol-gates-context', () => ({

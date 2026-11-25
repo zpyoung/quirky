@@ -44,11 +44,6 @@ function controllerWith(forceReconnectHost: ForceReconnect) {
     lastConnectedAt: null,
     onHideSidebar: undefined,
     reconnectAttempts: 20,
-    relayRecovery: {
-      pendingPath: null,
-      pairingRejected: false,
-      relayHostReachability: 'connecting'
-    },
     settings: { activeFilterCount: 0 },
     state: { hostName: 'Desk', view: { groupBy: 'none' }, showSearch: false }
   }

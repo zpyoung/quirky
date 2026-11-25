@@ -3,7 +3,6 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 import type { RpcClient } from '../transport/rpc-client'
-import { MobileRelayRpcStreams } from '../transport/mobile-relay-rpc-streams'
 import { RpcClientStreamRegistry } from '../transport/rpc-client-stream-registry'
 import type { RpcResponse } from '../transport/types'
 import {
@@ -148,24 +147,6 @@ function directRig(): TransportRig {
   }
 }
 
-function relayRig(): TransportRig {
-  const sent: SentRequest[] = []
-  let nextId = 0
-  const streams = new MobileRelayRpcStreams({
-    nextId: () => `relay-${++nextId}`,
-    sendFrame: (request) => {
-      sent.push(request)
-      return true
-    },
-    waitForConnected: async () => {}
-  })
-  return {
-    client: testClient(streams.subscribe.bind(streams)),
-    sent,
-    reply: (response) => streams.handleResponse(response)
-  }
-}
-
 describe('useMobileNativeChatSession host-ended stream', () => {
   let renderer: ReactTestRenderer | null = null
   let state: MobileNativeChatSession | null = null
@@ -223,10 +204,7 @@ describe('useMobileNativeChatSession host-ended stream', () => {
       : undefined
   }
 
-  it.each([
-    ['direct', directRig],
-    ['relay', relayRig]
-  ])(
+  it.each([['direct', directRig]])(
     'settles a chat feed the host ended on a %s connection as an error, not ready',
     async (_label, makeRig) => {
       const rig = makeRig()
@@ -251,10 +229,7 @@ describe('useMobileNativeChatSession host-ended stream', () => {
     }
   )
 
-  it.each([
-    ['direct', directRig],
-    ['relay', relayRig]
-  ])(
+  it.each([['direct', directRig]])(
     'leaving and re-entering an ended %s chat resubscribes with a fresh token',
     async (_label, makeRig) => {
       const rig = makeRig()
@@ -380,10 +355,7 @@ describe('useMobileNativeChatSession feeds across stacked screens', () => {
     expect(states.get('under')?.status).toBe('ready')
   })
 
-  it.each([
-    ['direct', directRig],
-    ['relay', relayRig]
-  ])(
+  it.each([['direct', directRig]])(
     'names each %s chat feed by its own token on replay and unsubscribe',
     async (_label, makeRig) => {
       const rig = makeRig()

@@ -79,16 +79,14 @@ describe('connection diagnostics screen data', () => {
       getState: vi.fn(() => state),
       getReconnectAttempt: vi.fn(() => 2),
       getLastConnectedAt: vi.fn(() => 1),
-      getActivePath: vi.fn(() => 'relay' as const),
-      getPendingPath: vi.fn(() => null)
+      getActivePath: vi.fn(() => 'lan' as const)
     }
 
     await expect(readConnectionDiagnosticsSnapshot(context, store, 'host-a')).resolves.toEqual({
       state: 'reconnecting',
       reconnectAttempts: 2,
       lastConnectedAt: 1,
-      activePath: 'relay',
-      pendingPath: null,
+      activePath: 'lan',
       entries: [{ id: 'new', ts: 2, level: 'warn', message: 'new event' }]
     })
     expect(context.getState).toHaveBeenCalledAfter(store.hydrate)

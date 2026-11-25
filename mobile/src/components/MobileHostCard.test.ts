@@ -269,7 +269,7 @@ describe('MobileHostCard', () => {
           },
           state: 'connected',
           verdict: { kind: 'normal', label: 'Connected' },
-          path: 'relay',
+          path: 'tailscale',
           worktreeInfo: {
             hostId: 'desk',
             totalWorktrees: 0,
@@ -287,47 +287,13 @@ describe('MobileHostCard', () => {
 
     const navigationButton = renderer.root.findAllByType('Pressable')[0]
     expect(navigationButton.props.accessibilityLabel).toBe(
-      'Open Desk, Connected, Quirky Relay, Worktree list unavailable'
+      'Open Desk, Connected, Direct via Tailscale, Worktree list unavailable'
     )
     expect(
       renderer.root
         .findAllByType('Text')
         .some((node) => node.children.includes('Worktree list unavailable'))
     ).toBe(true)
-  })
-
-  it('includes visible offline recovery guidance in the navigation label', async () => {
-    const consoleError = suppressRendererDeprecation()
-    await act(async () => {
-      renderer = create(
-        createElement(MobileHostCard, {
-          host: {
-            id: 'desk',
-            name: 'Desk',
-            endpoint: 'ws://192.168.1.2:6768',
-            deviceToken: 'token',
-            publicKeyB64: 'key',
-            lastConnected: 1
-          },
-          state: 'reconnecting',
-          verdict: {
-            kind: 'unreachable',
-            label: "Can't reach desktop",
-            reason: 'never-connected'
-          },
-          path: 'lan',
-          onPress: vi.fn(),
-          onLongPress: vi.fn(),
-          onOpenActions: vi.fn()
-        })
-      )
-    })
-    consoleError.mockRestore()
-
-    const navigationButton = renderer.root.findAllByType('Pressable')[0]
-    expect(navigationButton.props.accessibilityLabel).toBe(
-      "Open Desk, Can't reach desktop, Update desktop Quirky and sign in to connect from anywhere"
-    )
   })
 
   it('renders the verdict detail as a second line and announces it', async () => {
@@ -341,15 +307,7 @@ describe('MobileHostCard', () => {
             endpoint: 'ws://192.168.1.2:6768',
             deviceToken: 'token',
             publicKeyB64: 'key',
-            lastConnected: 1,
-            relay: {
-              v: 1 as const,
-              directorUrl: 'https://relay-staging.onorca.dev',
-              cellUrl: 'https://c1.relay-staging.onorca.dev',
-              assignmentEpoch: 4,
-              relayHostId: 'AbCdEf0123_-xyZ9',
-              e2eeFraming: 2 as const
-            }
+            lastConnected: 1
           },
           state: 'connecting',
           verdict: {

@@ -32,7 +32,6 @@ export function createNativeDiagnosticsOperations(
           desktopAppVersion,
           entries: snapshot.entries,
           activePath: snapshot.activePath,
-          pendingPath: snapshot.pendingPath,
           bridgeProtocolVersion: BRIDGE_PROTOCOL_VERSION
         }),
         appVersion,
