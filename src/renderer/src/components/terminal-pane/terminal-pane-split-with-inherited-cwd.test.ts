@@ -88,7 +88,6 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
       expect(mocks.splitWebRuntimeTerminal).toHaveBeenCalledWith(
         'remote:web-env-1@@terminal-1',
         'vertical',
-        source,
         { worktreeId: 'worktree-1', tabId: 'tab-1', leafId: 'leaf-1' }
       )
       expect(splitPane).not.toHaveBeenCalled()

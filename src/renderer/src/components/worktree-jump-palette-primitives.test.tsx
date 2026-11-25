@@ -119,7 +119,7 @@ it('folds the worktree into the repo chip and drops it when it repeats the repo 
         repoName="quirky"
         repoRanges={[]}
         worktreeName="quirky"
-        worktreeRanges={[{ start: 0, end: 4 }]}
+        worktreeRanges={[{ start: 0, end: 6 }]}
       />
     </TooltipProvider>
   )

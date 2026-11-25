@@ -9,7 +9,7 @@ import {
 
 describe('getSmartGitHubSubmitIntent', () => {
   it('treats GitHub issue and pull URLs as submit-time source intent', () => {
-    expect(getSmartGitHubSubmitIntent('https://github.com/stablyai/orca/pull/2049')).toEqual({
+    expect(getSmartGitHubSubmitIntent('https://github.com/stablyai/quirky/pull/2049')).toEqual({
       kind: 'link',
       host: 'github.com',
       owner: 'stablyai',
@@ -17,7 +17,7 @@ describe('getSmartGitHubSubmitIntent', () => {
       number: 2049,
       type: 'pr'
     })
-    expect(getSmartGitHubSubmitIntent('https://github.com/stablyai/orca/issues/2050')).toEqual({
+    expect(getSmartGitHubSubmitIntent('https://github.com/stablyai/quirky/issues/2050')).toEqual({
       kind: 'link',
       host: 'github.com',
       owner: 'stablyai',
@@ -59,7 +59,7 @@ describe('getSmartGitHubSubmitIntent', () => {
 
   it('finds an embedded GitHub item URL when prose punctuation touches the URL', () => {
     expect(
-      getSmartGitHubSubmitIntent('review (https://github.com/stablyai/orca/pull/2049), please')
+      getSmartGitHubSubmitIntent('review (https://github.com/stablyai/quirky/pull/2049), please')
     ).toEqual({
       kind: 'link',
       host: 'github.com',
@@ -69,16 +69,16 @@ describe('getSmartGitHubSubmitIntent', () => {
       type: 'pr'
     })
 
-    expect(getSmartGitHubSubmitIntent('fix https://github.com/stablyai/orca/issues/2050.')).toEqual(
-      {
-        kind: 'link',
-        host: 'github.com',
-        owner: 'stablyai',
-        repo: 'quirky',
-        number: 2050,
-        type: 'issue'
-      }
-    )
+    expect(
+      getSmartGitHubSubmitIntent('fix https://github.com/stablyai/quirky/issues/2050.')
+    ).toEqual({
+      kind: 'link',
+      host: 'github.com',
+      owner: 'stablyai',
+      repo: 'quirky',
+      number: 2050,
+      type: 'issue'
+    })
   })
 
   it('treats #number as source intent but leaves plain numbers as names', () => {

@@ -8646,7 +8646,6 @@
       "src/renderer/src/hooks/useReadOnScreenAttention.test.ts": 1280,
       "src/renderer/src/hooks/useResetCountdownClock.test.ts": 246,
       "src/renderer/src/hooks/useRetiredWorktreeNames.test.ts": 586,
-      "src/renderer/src/hooks/useSettingsNavigationMetadata.capability-owner.test.tsx": 709,
       "src/renderer/src/hooks/useSettingsNavigationMetadata.language-switch.test.tsx": 3222,
       "src/renderer/src/hooks/useSettingsNavigationMetadata.test.ts": 2270,
       "src/renderer/src/hooks/useSidebarResize.test.ts": 36,
