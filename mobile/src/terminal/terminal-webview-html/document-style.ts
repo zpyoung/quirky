@@ -101,9 +101,9 @@ export const TERMINAL_DOCUMENT_ELEMENT_STYLE = `  #terminal-container {
     left: 50%; top: 22px;
     transform: translateX(-50%);
     width: 14px; height: 14px;
-    background: #7aa2f7;
+    background: #5fd0d6;
     border-radius: 50%;
-    border: 2px solid #c0caf5;
+    border: 2px solid #eceef2;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   }
   .sel-handle.start::before { top: 8px; }
@@ -113,7 +113,7 @@ export const TERMINAL_DOCUMENT_ELEMENT_STYLE = `  #terminal-container {
     left: 50%; top: 22px;
     transform: translateX(-50%);
     width: 2px; height: 16px;
-    background: #7aa2f7;
+    background: #5fd0d6;
   }
   .sel-handle.end::before { top: 22px; }
   .sel-handle.end::after {
@@ -122,12 +122,12 @@ export const TERMINAL_DOCUMENT_ELEMENT_STYLE = `  #terminal-container {
     left: 50%; top: 6px;
     transform: translateX(-50%);
     width: 2px; height: 16px;
-    background: #7aa2f7;
+    background: #5fd0d6;
   }
   #sel-menu {
     position: absolute;
     pointer-events: auto;
-    background: #2a2f4a;
+    background: #22242b;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
     display: flex;
@@ -140,13 +140,13 @@ export const TERMINAL_DOCUMENT_ELEMENT_STYLE = `  #terminal-container {
   #sel-menu button {
     background: transparent;
     border: none;
-    color: #c0caf5;
+    color: #eceef2;
     font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     padding: 10px 16px;
     cursor: pointer;
   }
-  #sel-menu button:active { background: #414868; }
-  #sel-menu button + button { border-left: 1px solid #414868; }`
+  #sel-menu button:active { background: rgba(95, 208, 214, 0.16); }
+  #sel-menu button + button { border-left: 1px solid #24262c; }`
 
 /**
  * Both halves, in the order the WebView's `<head>` carries them.
