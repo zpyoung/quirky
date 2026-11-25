@@ -15,7 +15,7 @@ import { InterruptedRow } from './InterruptedRow'
 import { ModeMarkerRow } from './ModeMarkerRow'
 import { PlanChip } from './PlanChip'
 import { Prose } from './Prose'
-import { VisualChip } from './VisualChip'
+import { VisualBlock } from './VisualBlock'
 
 const timeOf = (at: number): string =>
   new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -94,7 +94,7 @@ function BlockView({
     case 'plan':
       return <PlanChip item={block.item} />
     case 'visual':
-      return <VisualChip item={block.item} />
+      return <VisualBlock item={block.item} />
     case 'agents':
       return <AgentsCard agentIds={block.agentIds} roster={roster} />
     case 'mode':

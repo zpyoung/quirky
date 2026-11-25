@@ -41,6 +41,13 @@ describe('cacheMsRemaining', () => {
     expect(cacheMsRemaining([turnRow(undefined, 50)], 'claude', 2_000)).toBeNull()
   })
 
+  it('ignores later subagent turns when counting the session agent cache', () => {
+    const subagent = { ...turnRow(200_000, 50), itemId: 'turn-sub', agentId: 'sub-1', sequence: 2 }
+    const nested = { ...turnRow(250_000, 50), itemId: 'turn-nested', parentAgentId: 'sub-1' }
+    expect(cacheMsRemaining([turnRow(1_000, 50), subagent, nested], 'claude', 61_000)).toBe(240_000)
+    expect(cacheMsRemaining([subagent], 'claude', 61_000)).toBeNull()
+  })
+
   it('formats minutes and padded seconds', () => {
     expect(formatCacheClock(247_000)).toBe('4:07')
   })

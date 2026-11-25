@@ -1,6 +1,13 @@
 import { useSyncExternalStore } from 'react'
 
-export type TurnLineComment = { id: string; path: string; line: number; text: string }
+/** `side` says which file `line` counts in: 'old' only for a removed line, 'new' for added and context lines. */
+export type TurnLineComment = {
+  id: string
+  path: string
+  line: number
+  side: 'old' | 'new'
+  text: string
+}
 
 const EMPTY: readonly TurnLineComment[] = []
 const comments = new Map<string, readonly TurnLineComment[]>()
@@ -23,7 +30,7 @@ function publish(key: string, next: readonly TurnLineComment[]): void {
 }
 
 export function addTurnComment(key: string, comment: Omit<TurnLineComment, 'id'>): void {
-  const id = `${comment.path}:${comment.line}:${(comments.get(key)?.length ?? 0) + Date.now()}`
+  const id = `${comment.path}:${comment.side}:${comment.line}:${(comments.get(key)?.length ?? 0) + Date.now()}`
   publish(key, [...(comments.get(key) ?? EMPTY), { ...comment, id }])
 }
 
@@ -52,7 +59,12 @@ export function useTurnComments(key: string): readonly TurnLineComment[] {
   )
 }
 
-/** One message for the agent: a `path:line — comment` line per note, in the order they were made. */
+/** One message for the agent: a `path:line — comment` line per note, in the order they were made; a removed line is suffixed ` (removed)`. */
 export function composeCommentsMessage(notes: readonly TurnLineComment[]): string {
-  return notes.map((note) => `${note.path}:${note.line} — ${note.text.trim()}`).join('\n')
+  return notes
+    .map(
+      (note) =>
+        `${note.path}:${note.line}${note.side === 'old' ? ' (removed)' : ''} — ${note.text.trim()}`
+    )
+    .join('\n')
 }

@@ -44,6 +44,39 @@ function stripQuotes(line: string, limit: number): { text: string; quotes: numbe
 
 const leadingSpaces = (line: string) => line.length - line.trimStart().length
 
+/** Visual width of the leading whitespace, with a tab advancing to the next multiple of 4. */
+function leadingColumns(line: string): number {
+  let columns = 0
+  for (const char of line) {
+    if (char === ' ') {
+      columns += 1
+    } else if (char === '\t') {
+      columns += 4 - (columns % 4)
+    } else {
+      break
+    }
+  }
+  return columns
+}
+
+/** Removes up to `width` columns of indentation, keeping any remainder of a tab as spaces. */
+function stripColumns(line: string, width: number): string {
+  let columns = 0
+  let index = 0
+  while (index < line.length && columns < width) {
+    const char = line[index]
+    if (char === ' ') {
+      columns += 1
+    } else if (char === '\t') {
+      columns += 4 - (columns % 4)
+    } else {
+      break
+    }
+    index += 1
+  }
+  return ' '.repeat(Math.max(0, columns - width)) + line.slice(index)
+}
+
 /** Fences in blockquotes and list items are found with their container markers and indentation removed. */
 function* fences(markdown: string): Generator<Fence> {
   let open: OpenFence | null = null
@@ -64,7 +97,7 @@ function* fences(markdown: string): Generator<Fence> {
           yield closeFence(open, true)
           open = null
         } else {
-          open.lines.push(line.slice(Math.min(open.indent, leadingSpaces(line))))
+          open.lines.push(stripColumns(line, Math.min(open.indent, leadingColumns(line))))
         }
         continue
       }

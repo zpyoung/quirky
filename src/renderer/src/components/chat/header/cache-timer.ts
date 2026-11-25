@@ -6,7 +6,7 @@ export const CLAUDE_CACHE_TTL_MS = 300_000
 const WARNING_MS = 60_000
 
 /**
- * Milliseconds left on the cache of the newest turn, or null when there is nothing to count:
+ * Milliseconds left on the cache of the newest turn of the session's own agent (subagent turns are skipped), or null when there is nothing to count:
  * not Claude, no settled turn, no cached tokens in its context usage, or the cache has expired.
  */
 export function cacheMsRemaining(
@@ -18,7 +18,11 @@ export function cacheMsRemaining(
     return null
   }
   for (let index = items.length - 1; index >= 0; index -= 1) {
-    const turn = readAgentJournalTurn(items[index]?.body)
+    const item = items[index]
+    if (item?.agentId !== undefined || item?.parentAgentId !== undefined) {
+      continue
+    }
+    const turn = readAgentJournalTurn(item?.body)
     if (!turn) {
       continue
     }
