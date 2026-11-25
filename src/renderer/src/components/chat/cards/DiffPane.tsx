@@ -3,8 +3,10 @@ import { MessageSquarePlus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { translate } from '@/i18n/i18n'
 import { parsePatchLines, type PatchLine } from './patch-lines'
 import { addTurnComment, removeTurnComment, type TurnLineComment } from './turn-comment-store'
+import { positionKeyed } from '../position-keyed'
 
 type Numbered = Extract<PatchLine, { kind: 'context' | 'added' | 'removed' }>
 
@@ -27,14 +29,14 @@ function CommentForm({
       <Textarea
         autoFocus
         rows={2}
-        aria-label="Comment on this line"
-        placeholder="Comment for the agent"
+        aria-label={translate('components.chat.cards.commentOnThisLine', 'Comment on this line')}
+        placeholder={translate('components.chat.cards.commentForAgent', 'Comment for the agent')}
         value={text}
         onChange={(event) => setText(event.target.value)}
       />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="xs" onClick={onCancel}>
-          Cancel
+          {translate('components.chat.cards.cancel', 'Cancel')}
         </Button>
         <Button
           type="button"
@@ -42,7 +44,7 @@ function CommentForm({
           disabled={text.trim() === ''}
           onClick={() => onSave(text.trim())}
         >
-          Add comment
+          {translate('components.chat.cards.addComment', 'Add comment')}
         </Button>
       </div>
     </div>
@@ -70,17 +72,13 @@ export function DiffPane({
   return (
     <div
       role="table"
-      aria-label={`Changes to ${path}`}
+      aria-label={translate('components.chat.cards.changesTo', 'Changes to {{path}}', { path })}
       className="chat-diff max-h-96 overflow-auto border-t border-border font-mono text-chat-code scrollbar-sleek"
     >
-      {lines.map((line, index) => {
+      {positionKeyed(lines).map(({ key, item: line }, index) => {
         if (line.kind === 'hunk') {
           return (
-            <div
-              key={index}
-              role="row"
-              className="chat-diff-hunk px-3 py-0.5 text-muted-foreground"
-            >
+            <div key={key} role="row" className="chat-diff-hunk px-3 py-0.5 text-muted-foreground">
               {line.text}
             </div>
           )
@@ -89,7 +87,7 @@ export function DiffPane({
         const side = commentSide(line)
         const attached = own.filter((comment) => comment.line === number && comment.side === side)
         return (
-          <div key={index}>
+          <div key={key}>
             <div
               role="row"
               data-diff-line={line.kind}
@@ -108,7 +106,13 @@ export function DiffPane({
               {commentKey !== null && (
                 <button
                   type="button"
-                  aria-label={`Comment on line ${number}`}
+                  aria-label={translate(
+                    'components.chat.cards.commentOnLine',
+                    'Comment on line {{number}}',
+                    {
+                      number
+                    }
+                  )}
                   onClick={() => setComposing(index)}
                   className="mr-2 shrink-0 rounded-md p-0.5 text-muted-foreground opacity-0 hover:bg-accent focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/line:opacity-100"
                 >
@@ -125,7 +129,7 @@ export function DiffPane({
                 {commentKey !== null && (
                   <button
                     type="button"
-                    aria-label="Remove comment"
+                    aria-label={translate('components.chat.cards.removeComment', 'Remove comment')}
                     onClick={() => removeTurnComment(commentKey, comment.id)}
                     className="shrink-0 rounded-md p-0.5 text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >

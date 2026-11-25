@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import type { RuntimeClientTarget } from '../../../../../shared/runtime-client-target'
 import type { PanelLinkOpener } from './panel-link-opening'
 import { useVisualSpec } from './use-visual-spec'
@@ -34,14 +35,18 @@ export function VisualItemCard({
   if (state.kind === 'loading') {
     return (
       <p role="status" className="native-chat-view-muted">
-        Loading {title}…
+        {translate('components.chat.panels.visualLoading', 'Loading {{title}}…', { title })}
       </p>
     )
   }
   if (state.kind === 'failed') {
     return (
       <p role="alert" className="native-chat-view-error">
-        {`Could not load ${title}: ${state.message}`}
+        {translate(
+          'components.chat.panels.visualLoadFailed',
+          'Could not load {{title}}: {{message}}',
+          { title, message: state.message }
+        )}
       </p>
     )
   }

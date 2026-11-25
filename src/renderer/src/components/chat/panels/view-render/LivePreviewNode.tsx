@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { localPreviewUrl } from './local-preview-url'
@@ -17,13 +18,16 @@ export function LivePreviewNode({ props }: { props: NodeProps }) {
         {url !== null && (
           <Button size="xs" variant="outline" onClick={() => openPreview(url)}>
             <ExternalLink />
-            Open preview
+            {translate('components.chat.viewRender.openPreview', 'Open preview')}
           </Button>
         )}
       </div>
       {url === null && (
         <p role="alert" className="native-chat-view-error">
-          Only localhost and 127.0.0.1 previews can open.
+          {translate(
+            'components.chat.viewRender.previewLocalOnly',
+            'Only localhost and 127.0.0.1 previews can open.'
+          )}
         </p>
       )}
       {caption !== '' && <figcaption className="native-chat-view-muted">{caption}</figcaption>}

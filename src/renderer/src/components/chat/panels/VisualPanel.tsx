@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -49,24 +50,35 @@ export function VisualPanel({
     visuals[0]
 
   return (
-    <section className="native-chat-panel-panel" aria-label="Visuals" data-visual-panel>
+    <section
+      className="native-chat-panel-panel"
+      aria-label={translate('components.chat.panels.visualPanelLabel', 'Visuals')}
+      data-visual-panel
+    >
       <header className="native-chat-panel-panel-header">
-        <h3 className="native-chat-panel-panel-title">Visuals</h3>
+        <h3 className="native-chat-panel-panel-title">
+          {translate('components.chat.panels.visualTitle', 'Visuals')}
+        </h3>
         <Button
           className="ml-auto"
           size="icon-xs"
           variant="ghost"
-          aria-label="Close visuals"
+          aria-label={translate('components.chat.panels.visualClose', 'Close visuals')}
           onClick={onClose}
         >
           <X />
         </Button>
       </header>
       {selected === undefined ? (
-        <p className="native-chat-panel-muted native-chat-panel-pad">No visuals yet.</p>
+        <p className="native-chat-panel-muted native-chat-panel-pad">
+          {translate('components.chat.panels.visualNone', 'No visuals yet.')}
+        </p>
       ) : (
         <>
-          <ul className="native-chat-panel-version-list" aria-label="Visuals">
+          <ul
+            className="native-chat-panel-version-list"
+            aria-label={translate('components.chat.panels.visualList', 'Visuals')}
+          >
             {visuals.map((item) => (
               <li key={item.body.viewId}>
                 <button
@@ -79,7 +91,11 @@ export function VisualPanel({
                   <span className="native-chat-panel-clip">
                     {item.body.title ?? item.body.viewId}
                   </span>
-                  {item.body.closed === true && <Badge variant="outline">closed</Badge>}
+                  {item.body.closed === true && (
+                    <Badge variant="outline">
+                      {translate('components.chat.panels.visualClosed', 'closed')}
+                    </Badge>
+                  )}
                 </button>
               </li>
             ))}

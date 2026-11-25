@@ -1,5 +1,6 @@
 import { GitFork } from 'lucide-react'
 import type { RenderItemOf } from '../chat-turns'
+import { translate } from '@/i18n/i18n'
 
 /** Opens a forked chat: says which chat it continues. */
 export function ForkRow({ item }: { item: RenderItemOf<'fork'> }): React.JSX.Element {
@@ -12,7 +13,11 @@ export function ForkRow({ item }: { item: RenderItemOf<'fork'> }): React.JSX.Ele
     >
       <GitFork className="size-3.5 shrink-0" aria-hidden="true" />
       <span className="min-w-0 truncate">
-        {fromTitle ? `Forked from ${fromTitle}` : 'Forked from another chat'}
+        {fromTitle
+          ? translate('components.chat.turn.forkedFrom', 'Forked from {{title}}', {
+              title: fromTitle
+            })
+          : translate('components.chat.turn.forkedFromAnother', 'Forked from another chat')}
       </span>
     </div>
   )

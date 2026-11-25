@@ -148,15 +148,20 @@ export const ChatSessionComposer = forwardRef<ComposerHandle, ChatSessionCompose
       ]
     )
 
-    const onSubmit: ComposerSubmit = (text, attachments) => {
+    const onSubmit: ComposerSubmit = (text, attachments, options) => {
       if (sendBlockedReason !== null) {
         onError(sendBlockedReason)
         return false
       }
       onError(null)
-      return sendThroughLaunch(text, attachments.length > 0, () =>
-        controller.send(text, attachments)
-      )
+      const steer = options?.intent === 'steer'
+      return sendThroughLaunch(text, attachments.length > 0, () => {
+        const sent = controller.send(text, attachments)
+        if (steer && sent === 'queued') {
+          controller.queuedMessages.steerNewest()
+        }
+        return sent
+      })
     }
     const onRunCommand = (command: ComposerCommand): void => {
       if (!isAgentSessionConversationCommand(command.name)) {

@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import type { ViewNode, ViewSpec } from '../../../../../../shared/view-spec/view-spec-types'
@@ -34,14 +35,14 @@ export function ViewCard({
   closed = false,
   framed = true,
   worktreeId,
-  onOpenLink = openPanelLink,
+  onOpenLink,
   readWorkspaceImage
 }: ViewCardProps) {
   const runtime = useMemo<ViewRuntime>(
     () => ({
       viewId,
       workspaceRoot,
-      openLink: onOpenLink,
+      openLink: onOpenLink ?? ((href) => openPanelLink(href, worktreeId)),
       openPreview: (url) => openPanelPreview(url, worktreeId),
       readWorkspaceImage:
         readWorkspaceImage ??
@@ -52,7 +53,9 @@ export function ViewCard({
   if (closed) {
     return (
       <p role="status" className="native-chat-view-muted" data-view-record={viewId}>
-        {spec.title} closed
+        {translate('components.chat.viewRender.viewClosed', '{{title}} closed', {
+          title: spec.title
+        })}
       </p>
     )
   }
@@ -65,7 +68,11 @@ export function ViewCard({
     >
       <header className="native-chat-view-row">
         <h3 className="native-chat-view-title">{spec.title}</h3>
-        {hasInteractiveHtml(spec.root) && <Badge variant="outline">sandboxed · no network</Badge>}
+        {hasInteractiveHtml(spec.root) && (
+          <Badge variant="outline">
+            {translate('components.chat.viewRender.sandboxed', 'sandboxed · no network')}
+          </Badge>
+        )}
       </header>
       <ViewRuntimeContext.Provider value={runtime}>
         <ViewNodeRenderer node={spec.root} />

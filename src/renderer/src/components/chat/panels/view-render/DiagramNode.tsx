@@ -12,6 +12,8 @@ export function fenceFor(source: string): string {
  * A Mermaid diagram drawn by the same fence renderer chat replies use, so it gets the same strict
  * security level, remote image refusal and svg sanitising; a diagram it refuses shows its source.
  */
+const MERMAID_FENCE_LANGUAGE = 'mermaid'
+
 export function DiagramNode({ props }: { props: NodeProps }) {
   const source = asString(props.source)
   const caption = asString(props.caption)
@@ -19,7 +21,10 @@ export function DiagramNode({ props }: { props: NodeProps }) {
   const fence = fenceFor(source)
   return (
     <figure data-view-node="diagram" className="native-chat-view-figure">
-      <ChatMarkdown text={`${fence}mermaid\n${source}\n${fence}`} onOpenLink={openLink} />
+      <ChatMarkdown
+        text={`${fence}${MERMAID_FENCE_LANGUAGE}\n${source}\n${fence}`}
+        onOpenLink={openLink}
+      />
       {caption !== '' && <figcaption className="native-chat-view-muted">{caption}</figcaption>}
     </figure>
   )

@@ -1,4 +1,5 @@
 import type { AgentJournalMessageItem } from '../../../../../shared/agent-session-journal-types'
+import { translate } from '@/i18n/i18n'
 import { NativeChatRewindAction } from '../../native-chat/NativeChatRewindAction'
 import { AgentsCard } from '../cards/AgentsCard'
 import { ChangesCard } from '../cards/ChangesCard'
@@ -44,14 +45,14 @@ function UserMessage({ turn }: { turn: ChatTurn }): React.JSX.Element | null {
   return (
     <div className="group/user flex flex-col items-end gap-1" data-chat-row="user">
       <div
-        aria-label="Your message"
+        aria-label={translate('components.chat.turn.yourMessage', 'Your message')}
         className="max-w-[80%] rounded-lg border border-border bg-accent px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere]"
       >
         {text !== '' && <p className="whitespace-pre-wrap">{text}</p>}
         {images.length > 0 && (
           <div
             className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground"
-            aria-label="Attached images"
+            aria-label={translate('components.chat.turn.attachedImages', 'Attached images')}
           >
             {images.map((path) => (
               <span key={path} title={path}>
@@ -124,7 +125,16 @@ function blockKey(block: ChatBlock, index: number): string {
       return `activity-${block.calls[0]?.itemId ?? index}`
     case 'agents':
       return `agents-${index}`
-    default:
+    case 'ask':
+    case 'changes':
+    case 'error':
+    case 'file-change':
+    case 'fork':
+    case 'mode':
+    case 'plan':
+    case 'status':
+    case 'test-result':
+    case 'visual':
       return block.item.itemId
   }
 }
@@ -136,7 +146,9 @@ export function Turn({ turn, index }: { turn: ChatTurn; index: number }): React.
   return (
     <section
       className="flex min-w-0 flex-col gap-2"
-      aria-label={`Turn ${index + 1}`}
+      aria-label={translate('components.chat.turn.turnAria', 'Turn {{number}}', {
+        number: index + 1
+      })}
       data-turn-key={turn.key}
     >
       <div
@@ -144,7 +156,12 @@ export function Turn({ turn, index }: { turn: ChatTurn; index: number }): React.
         className="my-1.5 flex items-center gap-2 text-2xs uppercase tracking-wide text-chat-foreground-faint"
       >
         <span className="h-px flex-1 bg-border" />
-        <span>{`Turn ${index + 1} · ${timeOf(turn.at)}`}</span>
+        <span>
+          {translate('components.chat.turn.turnHeading', 'Turn {{number}} · {{time}}', {
+            number: index + 1,
+            time: timeOf(turn.at)
+          })}
+        </span>
         <span className="h-px flex-1 bg-border" />
       </div>
       <UserMessage turn={turn} />
@@ -153,12 +170,20 @@ export function Turn({ turn, index }: { turn: ChatTurn; index: number }): React.
       ))}
       {end?.state === 'stopped' && (
         <div className="text-xs text-chat-foreground-faint">
-          {duration ? `Stopped after ${duration}` : 'Stopped'}
+          {duration
+            ? translate('components.chat.turn.stoppedAfter', 'Stopped after {{duration}}', {
+                duration
+              })
+            : translate('components.chat.turn.stopped', 'Stopped')}
         </div>
       )}
       {end?.state === 'failed' && (
         <div className="text-xs text-destructive">
-          {duration ? `Turn failed after ${duration}` : 'Turn failed'}
+          {duration
+            ? translate('components.chat.turn.failedAfter', 'Turn failed after {{duration}}', {
+                duration
+              })
+            : translate('components.chat.turn.failed', 'Turn failed')}
         </div>
       )}
       {end?.state === 'interrupted' && (

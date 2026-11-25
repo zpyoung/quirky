@@ -1,5 +1,7 @@
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
 import { readRuntimeFilePreview } from '@/runtime/runtime-file-read-client'
+import { readRuntimeDirectory } from '@/runtime/runtime-file-mutation-client'
+import { assertNoSymlinkInPath } from '../panels/view-render/workspace-image-read'
 import { resolveWorkspaceImagePath } from '../panels/view-render/workspace-image-path'
 import type { WorkspaceImage } from '../panels/view-render/view-runtime'
 
@@ -21,6 +23,9 @@ export function workspaceImageReaderFor(
     if (!resolved.ok) {
       throw new Error(resolved.reason)
     }
+    await assertNoSymlinkInPath(context.worktreePath ?? '', resolved.relativePath, (dirPath) =>
+      readRuntimeDirectory(context, dirPath)
+    )
     const file = await readRuntimeFilePreview(context, resolved.absolutePath)
     if (file.isImage !== true || file.mimeType === undefined || !IMAGE_MIME.test(file.mimeType)) {
       throw new Error('the file is not an image')

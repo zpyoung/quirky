@@ -7,16 +7,31 @@ import type {
 } from '../../../../../shared/native-chat-types'
 import type { StructuredAgentSubagentRoster } from '../../../../../shared/structured-agent-session-subagent-roster'
 import { cn } from '@/lib/utils'
+import { translate } from '@/i18n/i18n'
 import { FOLD_AT } from '../chat-turns'
 import { Card } from './Card'
 
-const STATE_WORDS: Record<NativeChatSubagentState, string> = {
-  working: 'working',
-  idle: 'idle',
-  completed: 'completed',
-  failed: 'failed',
-  stopped: 'stopped',
-  unverifiable: 'lost contact'
+function stateWord(state: NativeChatSubagentState): string {
+  switch (state) {
+    case 'working':
+      return translate('components.chat.cards.agentStateWorking', 'working')
+    case 'idle':
+      return translate('components.chat.cards.agentStateIdle', 'idle')
+    case 'completed':
+      return translate('components.chat.cards.agentStateCompleted', 'completed')
+    case 'failed':
+      return translate('components.chat.cards.agentStateFailed', 'failed')
+    case 'stopped':
+      return translate('components.chat.cards.agentStateStopped', 'stopped')
+    case 'unverifiable':
+      return translate('components.chat.cards.agentStateLostContact', 'lost contact')
+  }
+}
+
+function agentNoun(count: number): string {
+  return count === 1
+    ? translate('components.chat.cards.agentSingular', 'agent')
+    : translate('components.chat.cards.agentPlural', 'agents')
 }
 
 function entryFor(roster: StructuredAgentSubagentRoster, id: string): NativeChatSubagentEntry {
@@ -26,7 +41,7 @@ function entryFor(roster: StructuredAgentSubagentRoster, id: string): NativeChat
 function countsLine(entries: readonly NativeChatSubagentEntry[]): string {
   const counts = new Map<string, number>()
   for (const entry of entries) {
-    const word = STATE_WORDS[normalizeSubagentState(entry.state)]
+    const word = stateWord(normalizeSubagentState(entry.state))
     counts.set(word, (counts.get(word) ?? 0) + 1)
   }
   return [...counts].map(([word, count]) => `${count} ${word}`).join(' · ')
@@ -49,10 +64,12 @@ function AgentRow({ entry }: { entry: NativeChatSubagentEntry }): React.JSX.Elem
       <span className="min-w-0 truncate font-medium" title={entry.label}>
         {entry.label}
       </span>
-      <span className="shrink-0 text-xs text-muted-foreground">{STATE_WORDS[state]}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{stateWord(state)}</span>
       {entry.tokens !== undefined && (
         <span className="shrink-0 text-xs text-muted-foreground">
-          {`${new Intl.NumberFormat('en', { notation: 'compact' }).format(entry.tokens)} tokens`}
+          {translate('components.chat.cards.agentTokens', '{{tokens}} tokens', {
+            tokens: new Intl.NumberFormat('en', { notation: 'compact' }).format(entry.tokens)
+          })}
         </span>
       )}
     </li>
@@ -70,10 +87,10 @@ export function AgentsCard({
   const entries = agentIds.map((id) => entryFor(roster, id))
   const folded = entries.length >= FOLD_AT
   const [open, setOpen] = useState(!folded)
-  const noun = entries.length === 1 ? 'agent' : 'agents'
+  const noun = agentNoun(entries.length)
   return (
     <Card
-      label="Agents"
+      label={translate('components.chat.cards.agentsLabel', 'Agents')}
       ariaLabel={`${entries.length} ${noun}`}
       header={
         folded ? (

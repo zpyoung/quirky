@@ -60,10 +60,11 @@ export function remarkHtmlAllowlist() {
         return
       }
       const text: Text = { type: 'text', value: node.value }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a parent of an html node is a Parent
       const replacement = PHRASING_PARENTS.has((parent as Parent).type)
         ? text
         : { type: 'paragraph' as const, children: [text] }
-      // SAFETY: an html node sits where a paragraph or phrasing content is allowed, and the replacement matches its parent
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an html node sits where a paragraph or phrasing content is allowed, and the replacement matches its parent
       ;(parent.children as RootContent[]).splice(index, 1, replacement)
     })
   }

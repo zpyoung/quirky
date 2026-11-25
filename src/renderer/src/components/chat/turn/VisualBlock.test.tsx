@@ -6,8 +6,18 @@ import { ChatTurnEnvContext, type ChatTurnEnv } from './chat-turn-env'
 import { VisualBlock } from './VisualBlock'
 
 vi.mock('../panels/VisualItemCard', () => ({
-  VisualItemCard: ({ workspaceRoot }: { workspaceRoot: string | null }) => (
-    <div data-testid="inline-card" data-root={String(workspaceRoot)} />
+  VisualItemCard: ({
+    workspaceRoot,
+    readWorkspaceImage
+  }: {
+    workspaceRoot: string | null
+    readWorkspaceImage?: unknown
+  }) => (
+    <div
+      data-testid="inline-card"
+      data-root={String(workspaceRoot)}
+      data-reader={String(readWorkspaceImage !== undefined)}
+    />
   )
 }))
 
@@ -45,9 +55,10 @@ const env: ChatTurnEnv = {
   hostServesV1ChatMethods: true
 }
 
-function renderBlock(item: RenderItemOf<'visual'>): void {
+function renderBlock(item: RenderItemOf<'visual'>, overrides: Partial<ChatTurnEnv> = {}): void {
+  const value: ChatTurnEnv = Object.assign({}, env, overrides)
   render(
-    <ChatTurnEnvContext.Provider value={env}>
+    <ChatTurnEnvContext.Provider value={value}>
       <VisualBlock item={item} />
     </ChatTurnEnvContext.Provider>
   )
@@ -58,6 +69,16 @@ describe('VisualBlock', () => {
     renderBlock(visual('inline'))
     expect(screen.getByTestId('inline-card').getAttribute('data-root')).toBe('null')
     expect(screen.getByRole('button', { name: 'Open in panel' })).toBeTruthy()
+  })
+
+  it('hands the chat workspace root and image reader to an inline visual', () => {
+    renderBlock(visual('inline'), {
+      workspaceRoot: '/work/repo',
+      readWorkspaceImage: vi.fn()
+    })
+    const card = screen.getByTestId('inline-card')
+    expect(card.getAttribute('data-root')).toBe('/work/repo')
+    expect(card.getAttribute('data-reader')).toBe('true')
   })
 
   it('keeps a pane visual as a chip', () => {

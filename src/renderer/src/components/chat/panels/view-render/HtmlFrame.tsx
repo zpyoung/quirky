@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isNavigatedMessage, frameDocument, wrapperDocument } from './html-frame-document'
 
@@ -73,7 +74,12 @@ export function HtmlFrame({
         }}
       />
       {navigated && (
-        <p className="native-chat-view-error">The page tried to navigate and was reset.</p>
+        <p className="native-chat-view-error">
+          {translate(
+            'components.chat.viewRender.pageNavigated',
+            'The page tried to navigate and was reset.'
+          )}
+        </p>
       )}
     </>
   )

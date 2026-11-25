@@ -1,9 +1,10 @@
+import { translate } from '@/i18n/i18n'
 import type { ReactNode } from 'react'
 import { asItems, asNumber, asString, oneOf, type NodeProps } from './view-prop-readers'
 
-const SHAPES = ['box', 'ellipse', 'line', 'arrow', 'text'] as const
+const GLYPH_KINDS = ['box', 'ellipse', 'line', 'arrow', 'text'] as const
 
-/** A small stable pseudo-random offset for the nth wobble of a shape, so a redraw looks the same. */
+/** A small stable pseudo-random offset for the nth wobble of a glyph, so a redraw looks the same. */
 function wobble(seed: number, step: number, amount: number): number {
   const x = Math.sin(seed * 12.9898 + step * 78.233) * 43758.5453
   return (x - Math.floor(x) - 0.5) * 2 * amount
@@ -44,15 +45,15 @@ function arrowHead(x: number, y: number, x2: number, y2: number): string {
   return `M ${wing(0.45)} L ${x2} ${y2} L ${wing(-0.45)}`
 }
 
-function sketchShape(shape: NodeProps, seed: number): ReactNode {
-  const kind = oneOf(shape.kind, SHAPES, 'box')
-  const x = asNumber(shape.x) ?? 0
-  const y = asNumber(shape.y) ?? 0
-  const w = asNumber(shape.w) ?? 0
-  const h = asNumber(shape.h) ?? 0
-  const x2 = asNumber(shape.x2) ?? x
-  const y2 = asNumber(shape.y2) ?? y
-  const label = asString(shape.label)
+function sketchGlyph(glyph: NodeProps, seed: number): ReactNode {
+  const kind = oneOf(glyph.kind, GLYPH_KINDS, 'box')
+  const x = asNumber(glyph.x) ?? 0
+  const y = asNumber(glyph.y) ?? 0
+  const w = asNumber(glyph.w) ?? 0
+  const h = asNumber(glyph.h) ?? 0
+  const x2 = asNumber(glyph.x2) ?? x
+  const y2 = asNumber(glyph.y2) ?? y
+  const label = asString(glyph.label)
   const text = (cx: number, cy: number) => (
     <text
       className="native-chat-view-sketch-text"
@@ -110,18 +111,20 @@ function sketchShape(shape: NodeProps, seed: number): ReactNode {
 export function SketchNode({ props }: { props: NodeProps }) {
   const width = Math.max(1, asNumber(props.width) ?? 320)
   const height = Math.max(1, asNumber(props.height) ?? 200)
-  const shapes = asItems(props.shapes)
-  const names = shapes.map((shape) => asString(shape.label)).filter(Boolean)
+  const glyphs = asItems(props.shapes)
+  const names = glyphs.map((glyph) => asString(glyph.label)).filter(Boolean)
   return (
     <figure data-view-node="sketch" className="native-chat-view-figure">
       <svg
         role="img"
-        aria-label={`Sketch: ${names.join(', ')}`}
+        aria-label={translate('components.chat.viewRender.sketchLabel', 'Sketch: {{names}}', {
+          names: names.join(', ')
+        })}
         viewBox={`0 0 ${width} ${height}`}
         className="native-chat-view-sketch"
       >
-        {shapes.map((shape, index) => (
-          <g key={index}>{sketchShape(shape, index + 1)}</g>
+        {glyphs.map((glyph, index) => (
+          <g key={index}>{sketchGlyph(glyph, index + 1)}</g>
         ))}
       </svg>
     </figure>

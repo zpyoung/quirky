@@ -1,4 +1,6 @@
+import { translate } from '@/i18n/i18n'
 import { asItems, asNumber, asString, type NodeProps } from './view-prop-readers'
+import { positionKeyed } from '../../position-keyed'
 
 const BAR_HEIGHT = 6
 const PLOT_WIDTH = 100
@@ -22,10 +24,10 @@ export function BarChartNode({ props }: { props: NodeProps }) {
       role="img"
       aria-label={summary}
     >
-      {series.map((entry, index) => {
+      {positionKeyed(series).map(({ key, item: entry }) => {
         const width = largest > 0 ? (Math.max(0, entry.value) / largest) * PLOT_WIDTH : 0
         return (
-          <div key={index} className="native-chat-view-bar-row">
+          <div key={key} className="native-chat-view-bar-row">
             <span className="native-chat-view-mono">{entry.label}</span>
             <svg
               viewBox={`0 0 ${PLOT_WIDTH} ${BAR_HEIGHT}`}
@@ -66,7 +68,7 @@ export function LineChartNode({ props }: { props: NodeProps }) {
   if (points.length === 0) {
     return (
       <div data-view-node="line-chart" className="native-chat-view-muted">
-        No points.
+        {translate('components.chat.viewRender.noPoints', 'No points.')}
       </div>
     )
   }
@@ -94,7 +96,12 @@ export function LineChartNode({ props }: { props: NodeProps }) {
       aria-label={summary}
     >
       <div className="native-chat-view-muted">
-        {low === high ? withUnit(low, unit) : `${withUnit(low, unit)} to ${withUnit(high, unit)}`}
+        {low === high
+          ? withUnit(low, unit)
+          : translate('components.chat.viewRender.pointRange', '{{low}} to {{high}}', {
+              low: withUnit(low, unit),
+              high: withUnit(high, unit)
+            })}
       </div>
       <svg
         viewBox={`0 0 ${PLOT_WIDTH} ${PLOT_HEIGHT}`}

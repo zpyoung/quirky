@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/no-reflect-get, anti-slop/no-reflect-apply, anti-slop/no-object-parameters -- patches and probes platform image loaders, which have no typed surface */
 const ASSET_KEY = /@\{[^}]*?["']?\b(?:img|image|icon)["']?\s*:/i
 const MARKUP_OPEN = '(?:<|&lt;|&#0*60;|&#x0*3c;|#60;|#lt;)'
 const IMAGE_MARKUP = new RegExp(

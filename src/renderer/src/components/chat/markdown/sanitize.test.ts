@@ -29,7 +29,7 @@ async function hastOf(markdown: string): Promise<Node> {
     .use(rehypeUndoubleClobber)
   const tree = await processor.run(processor.parse(markdown))
   const root: Root = tree
-  // SAFETY: hast Root and the structural Node used for assertions describe the same tree
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: hast Root and the structural Node used for assertions describe the same tree
   return root as unknown as Node
 }
 
@@ -71,7 +71,9 @@ describe('untrusted sanitize schema', () => {
     const [summary] = elements(tree, 'summary')
     expect(attributes(details)).toEqual([])
     expect(attributes(summary)).toEqual([])
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: elements() found the tag asserted just above
     expect(textOf(summary as Node)).toBe('Why')
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: elements() found the tag asserted just above
     expect(textOf(details as Node)).toContain('Because <b>bold</b>')
   })
 

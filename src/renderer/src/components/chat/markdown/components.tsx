@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { Children, Fragment, cloneElement, createContext, isValidElement, useContext } from 'react'
 import type { ComponentProps, MouseEvent, ReactNode } from 'react'
 import type { Components, CustomRenderer, ExtraProps } from 'streamdown'
@@ -183,7 +184,16 @@ function Span({ children, node, ...rest }: ComponentProps<'span'> & ExtraProps) 
       return <span className="qmd-source">{textOf(children)}</span>
     }
     return (
-      <RenderError inline message={`Couldn't typeset: ${katexMessage(rest.title)}`}>
+      <RenderError
+        inline
+        message={translate(
+          'components.chat.markdown.typesetFailedKatex',
+          "Couldn't typeset: {{reason}}",
+          {
+            reason: katexMessage(rest.title)
+          }
+        )}
+      >
         <span className="qmd-source">{textOf(children)}</span>
       </RenderError>
     )
@@ -194,7 +204,16 @@ function Span({ children, node, ...rest }: ComponentProps<'span'> & ExtraProps) 
       return <span className="qmd-source">{failure.tex}</span>
     }
     return (
-      <RenderError inline message={`Couldn't typeset: ${explainMath(failure.tex)}`}>
+      <RenderError
+        inline
+        message={translate(
+          'components.chat.markdown.typesetFailedMath',
+          "Couldn't typeset: {{reason}}",
+          {
+            reason: explainMath(failure.tex)
+          }
+        )}
+      >
         <span className="qmd-source">{failure.tex}</span>
       </RenderError>
     )
@@ -206,7 +225,7 @@ function InlineCode({ children, ...rest }: ComponentProps<'code'> & ExtraProps) 
   const files = useContext(FilesContext)
   const insideLink = useContext(InsideLinkContext)
   const text = textOf(children)
-  const marked: unknown = Reflect.get(rest, 'data-path-candidate')
+  const marked: unknown = 'data-path-candidate' in rest ? rest['data-path-candidate'] : undefined
   const candidate =
     typeof marked === 'string' ? marked : isPathCandidate(text) && !insideLink ? text : undefined
   const resolved = candidate ? files[candidate] : undefined
@@ -325,7 +344,7 @@ function FenceCode({ node, className, children }: ComponentProps<'code'> & Extra
 }
 
 function Code(props: ComponentProps<'code'> & ExtraProps) {
-  return 'data-block' in (props as object) ? <FenceCode {...props} /> : <InlineCode {...props} />
+  return 'data-block' in Object(props) ? <FenceCode {...props} /> : <InlineCode {...props} />
 }
 
 /** The Streamdown component overrides that carry the chat's rules. Module-level so the map keeps one identity. */

@@ -1,7 +1,9 @@
+import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { asItems, asString, isRecord, oneOf, type NodeProps } from './view-prop-readers'
+import { positionKeyed } from '../../position-keyed'
 
 /** Answering from a panel has no host method yet, so controls render and do nothing. */
 export const CONTROLS_UNAVAILABLE_HINT = "Answering from the panel isn't available yet"
@@ -46,8 +48,8 @@ export function FieldNode({ props }: { props: NodeProps }) {
         aria-label={prompt}
         className="native-chat-view-column native-chat-view-tight"
       >
-        {options.map((option, index) => (
-          <Button key={index} size="sm" variant="outline" disabled>
+        {positionKeyed(options).map(({ key, item: option }) => (
+          <Button key={key} size="sm" variant="outline" disabled>
             {asString(option.label)}
             {asString(option.description) !== '' && (
               <span className="native-chat-view-muted">{asString(option.description)}</span>
@@ -60,10 +62,10 @@ export function FieldNode({ props }: { props: NodeProps }) {
     control = (
       <div role="group" aria-label={prompt} className="native-chat-view-row">
         <Button size="sm" variant="outline" disabled>
-          Yes
+          {translate('components.chat.viewRender.confirmYes', 'Yes')}
         </Button>
         <Button size="sm" variant="outline" disabled>
-          No
+          {translate('components.chat.viewRender.confirmNo', 'No')}
         </Button>
       </div>
     )

@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { translate } from '@/i18n/i18n'
 import type { StructuredAgentContextUsage } from '../../../../../shared/structured-agent-session-context-usage'
 import type { RuntimeClientTarget } from '../../../../../shared/runtime-client-target'
 import { forkStructuredAgentSession } from '@/runtime/structured-agent-session-v1-chat-client'
@@ -18,28 +19,46 @@ export type ChatHeaderStatus =
   | { kind: 'ready'; agentsRunning: number }
   | { kind: 'done'; agentsRunning: number }
 
-const FORK_FAILURE_WORDS = {
-  unsupported: "This agent can't fork a chat.",
-  busy: 'Wait for the turn to finish, then fork.',
-  failed: 'Could not fork this chat.'
-} as const
+function forkFailureWords(reason: 'unsupported' | 'busy' | 'failed'): string {
+  switch (reason) {
+    case 'unsupported':
+      return translate('components.chat.header.forkUnsupported', "This agent can't fork a chat.")
+    case 'busy':
+      return translate('components.chat.header.forkBusy', 'Wait for the turn to finish, then fork.')
+    case 'failed':
+      return translate('components.chat.header.forkFailed', 'Could not fork this chat.')
+  }
+}
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 })
 
 function agentsRunningWords(count: number): string {
-  return count > 0 ? ` · ${count} ${count === 1 ? 'agent' : 'agents'} running` : ''
+  if (count <= 0) {
+    return ''
+  }
+  return count === 1
+    ? translate('components.chat.header.agentRunningOne', ' · {{count}} agent running', { count })
+    : translate('components.chat.header.agentsRunningMany', ' · {{count}} agents running', {
+        count
+      })
 }
 
 function statusWords(status: ChatHeaderStatus, now: number): string {
   switch (status.kind) {
     case 'working':
-      return `Working · ${formatElapsed(now - (status.startedAt ?? now))}`
+      return translate('components.chat.header.working', 'Working · {{elapsed}}', {
+        elapsed: formatElapsed(now - (status.startedAt ?? now))
+      })
     case 'waiting':
-      return 'Waiting on you'
+      return translate('components.chat.header.waitingOnYou', 'Waiting on you')
     case 'ready':
-      return `Ready${agentsRunningWords(status.agentsRunning)}`
+      return translate('components.chat.header.ready', 'Ready{{agents}}', {
+        agents: agentsRunningWords(status.agentsRunning)
+      })
     case 'done':
-      return `Done${agentsRunningWords(status.agentsRunning)}`
+      return translate('components.chat.header.done', 'Done{{agents}}', {
+        agents: agentsRunningWords(status.agentsRunning)
+      })
   }
 }
 
@@ -74,7 +93,7 @@ function TitleField({
     return (
       <Input
         ref={input}
-        aria-label="Chat title"
+        aria-label={translate('components.chat.header.chatTitle', 'Chat title')}
         defaultValue={title}
         maxLength={200}
         onBlur={save}
@@ -94,7 +113,9 @@ function TitleField({
   return onRename ? (
     <button
       type="button"
-      aria-label={`Rename chat: ${title}`}
+      aria-label={translate('components.chat.header.renameChat', 'Rename chat: {{title}}', {
+        title
+      })}
       onClick={() => setEditing(true)}
       className="block max-w-full cursor-text truncate rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
@@ -155,7 +176,7 @@ export function ChatHeader({
           return
         }
         setForkUnsupported(result.reason === 'unsupported')
-        toast.error(FORK_FAILURE_WORDS[result.reason])
+        toast.error(forkFailureWords(result.reason))
       })
       .finally(() => setForking(false))
   }
@@ -179,17 +200,43 @@ export function ChatHeader({
       {contextUsage && (
         <span
           className="shrink-0"
-          title={`${contextUsage.usedTokens.toLocaleString()} of ${contextUsage.windowTokens.toLocaleString()} tokens${contextUsage.estimated ? ' (estimated)' : ''}`}
+          title={
+            contextUsage.estimated
+              ? translate(
+                  'components.chat.header.contextTokensEstimated',
+                  '{{used}} of {{window}} tokens (estimated)',
+                  {
+                    used: contextUsage.usedTokens.toLocaleString(),
+                    window: contextUsage.windowTokens.toLocaleString()
+                  }
+                )
+              : translate('components.chat.header.contextTokens', '{{used}} of {{window}} tokens', {
+                  used: contextUsage.usedTokens.toLocaleString(),
+                  window: contextUsage.windowTokens.toLocaleString()
+                })
+          }
         >
-          {`${compact.format(contextUsage.usedTokens)} / ${compact.format(contextUsage.windowTokens)} tokens`}
+          {translate(
+            'components.chat.header.contextTokensCompact',
+            '{{used}} / {{window}} tokens',
+            {
+              used: compact.format(contextUsage.usedTokens),
+              window: compact.format(contextUsage.windowTokens)
+            }
+          )}
         </span>
       )}
       {cacheMsLeft !== null && (
         <span
           className={cn('shrink-0', cacheExpiresSoon(cacheMsLeft) && 'text-chat-warning')}
-          title="Time left before the agent's prompt cache expires"
+          title={translate(
+            'components.chat.header.cacheTimeLeft',
+            "Time left before the agent's prompt cache expires"
+          )}
         >
-          {`Cache ${formatCacheClock(cacheMsLeft)}`}
+          {translate('components.chat.header.cacheClock', 'Cache {{clock}}', {
+            clock: formatCacheClock(cacheMsLeft)
+          })}
         </span>
       )}
       {forkAvailable && !forkUnsupported && (
@@ -198,11 +245,15 @@ export function ChatHeader({
           variant="ghost"
           size="xs"
           disabled={turnBusy || forking}
-          title={turnBusy ? 'Available when the turn ends' : 'Fork this chat'}
+          title={
+            turnBusy
+              ? translate('components.chat.header.forkWhenTurnEnds', 'Available when the turn ends')
+              : translate('components.chat.header.forkThisChat', 'Fork this chat')
+          }
           onClick={fork}
         >
           <GitFork aria-hidden="true" />
-          Fork
+          {translate('components.chat.header.fork', 'Fork')}
         </Button>
       )}
     </header>

@@ -4,6 +4,7 @@
     "LICENSE",
     "CHANGELOG.md",
     "docs/quirk/specs/2026-11-24-orca-based-quirky/**",
+  "docs/quirk/specs/2026-11-25-native-chat-port/**",
     "src/main/import-from-orca/**",
     "src/shared/repo-config-paths.ts",
     "src/shared/repo-config-paths.test.ts",

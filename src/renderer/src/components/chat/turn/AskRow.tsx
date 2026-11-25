@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { translate } from '@/i18n/i18n'
 import { agentSessionPromptQuestions } from '../../../../../shared/agent-session-question-answer'
 import type { AgentSessionPromptResponse } from '../../../../../shared/agent-session-question-answer'
 import {
@@ -16,10 +17,10 @@ type AskItem = RenderItemOf<'approval'> | RenderItemOf<'question'>
 function resolvedWords(item: AskItem): string {
   const { resolution } = item.body
   if (resolution.state === 'cancelled') {
-    return 'Dismissed'
+    return translate('components.chat.turn.askDismissed', 'Dismissed')
   }
   const chosen = item.body.options.find((option) => option.id === resolution.selectedOptionId)
-  return chosen ? chosen.label : 'Answered'
+  return chosen ? chosen.label : translate('components.chat.turn.askAnswered', 'Answered')
 }
 
 function ApprovalControls({ item }: { item: RenderItemOf<'approval'> }): React.JSX.Element {
@@ -62,7 +63,7 @@ function ApprovalControls({ item }: { item: RenderItemOf<'approval'> }): React.J
             disabled={submitting}
             onClick={() => cancelAsk(item)}
           >
-            Cancel
+            {translate('components.chat.turn.askCancel', 'Cancel')}
           </Button>
         ) : (
           body.options.map((option, index) => (
@@ -101,7 +102,9 @@ export function AskRow({ item }: { item: AskItem }): React.JSX.Element {
       >
         <span className="min-w-0 truncate">{title}</span>
         <span className="shrink-0">
-          {item.body.resolution.state === 'pending' ? 'Waiting' : resolvedWords(item)}
+          {item.body.resolution.state === 'pending'
+            ? translate('components.chat.turn.askWaiting', 'Waiting')
+            : resolvedWords(item)}
         </span>
       </div>
     )

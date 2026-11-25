@@ -22,7 +22,10 @@ import {
   type BackgroundTaskGroup
 } from '../../../../../shared/background-task-roster'
 import { backgroundTasksHeaderContent } from '@/components/native-chat/background-task-header-content'
-import { backgroundTaskGroupLabel, buildBackgroundTaskGroups } from '@/components/native-chat/background-task-roster'
+import {
+  backgroundTaskGroupLabel,
+  buildBackgroundTaskGroups
+} from '@/components/native-chat/background-task-roster'
 import { sayBackgroundTaskTranslated as say } from '@/components/native-chat/background-task-words-text'
 
 /** Border-box width at the live root font size; no viewport media query, so a

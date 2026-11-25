@@ -7,12 +7,19 @@ const IMAGE_MIME = /^image\/[a-z0-9.+-]+$/i
  * Throws when any component of `relativePath` under `workspaceRoot` is a symlink, because the
  * app-wide allowlist only checks the canonical path against every registered project, so a link
  * could otherwise reach a sibling project. The root itself may be reached through a link.
+ * `listDirectory` is the owner's own directory listing, so a remote workspace is checked on its host.
  */
-async function assertNoSymlinkInPath(workspaceRoot: string, relativePath: string): Promise<void> {
+export async function assertNoSymlinkInPath(
+  workspaceRoot: string,
+  relativePath: string,
+  listDirectory: (dirPath: string) => Promise<readonly { name: string; isSymlink: boolean }[]> = (
+    dirPath
+  ) => window.api.fs.readDir({ dirPath })
+): Promise<void> {
   const segments = relativePath.split('/')
   let directory = workspaceRoot.replace(/\/+$/, '')
   for (const segment of segments) {
-    const entries = await window.api.fs.readDir({ dirPath: directory })
+    const entries = await listDirectory(directory)
     const entry = entries.find((candidate) => candidate.name === segment)
     if (!entry) {
       throw new Error('the file does not exist')

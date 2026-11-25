@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import type { AgentJournalRenderItem } from '../../../../../shared/agent-session-journal-types'
 import type { AgentJournalVisualItem } from '../../../../../shared/agent-session-journal-v1-items'
 import { validateViewSpec } from '../../../../../shared/view-spec/view-spec-validation'
@@ -83,10 +84,22 @@ export async function loadVisualSpec(
     return { kind: 'failed', message: error instanceof Error ? error.message : String(error) }
   }
   if (full === null || !isVisualItem(full)) {
-    return { kind: 'failed', message: 'The host no longer has this visual.' }
+    return {
+      kind: 'failed',
+      message: translate(
+        'components.chat.panels.visualHostMissing',
+        'The host no longer has this visual.'
+      )
+    }
   }
   if (full.body.spec.truncated) {
-    return { kind: 'failed', message: 'This visual is too large to show.' }
+    return {
+      kind: 'failed',
+      message: translate(
+        'components.chat.panels.visualTooLarge',
+        'This visual is too large to show.'
+      )
+    }
   }
   return specFromText(full.body.spec.head)
 }
