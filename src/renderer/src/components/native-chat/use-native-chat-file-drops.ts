@@ -1,5 +1,4 @@
 import { useCallback, useLayoutEffect, useRef } from 'react'
-import type { NativeChatComposerProps } from './native-chat-composer-types'
 import {
   useNativeChatExternalAttachments,
   type UseNativeChatExternalAttachmentsArgs
@@ -9,8 +8,11 @@ import { useNativeChatFileAttachmentActions } from './use-native-chat-file-attac
 import { useNativeChatPaneFileDropClaim } from './NativeChatPaneFileDropSurface'
 import type { NativeChatAttachmentFocusOptions } from './native-chat-resolved-path-ownership'
 
-type Args = UseNativeChatExternalAttachmentsArgs &
-  Pick<NativeChatComposerProps, 'paneKey' | 'draftScopeKey' | 'targetPtyId' | 'structuredTransport'>
+type Args = UseNativeChatExternalAttachmentsArgs & {
+  paneKey: string
+  draftScopeKey?: string
+  targetPtyId?: string | null
+}
 
 export function useNativeChatFileDrops(args: Args) {
   const external = useNativeChatExternalAttachments(args)
@@ -19,9 +21,9 @@ export function useNativeChatFileDrops(args: Args) {
     args.paneKey,
     args.draftScopeKey,
     args.targetPtyId,
-    args.structuredTransport?.sessionId,
-    args.structuredTransport?.worktreeId,
-    args.structuredTransport?.runtimeEnvironmentId
+    args.structuredSession?.sessionId,
+    args.structuredWorktreeId,
+    args.structuredSession?.runtimeEnvironmentId
   ])
   const destinationRef = useRef(destinationKey)
   useLayoutEffect(() => {

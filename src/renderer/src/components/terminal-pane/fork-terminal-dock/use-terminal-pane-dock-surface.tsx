@@ -130,7 +130,6 @@ export function useTerminalPaneDockSurface(controller: TerminalPaneController): 
                 recoveryPhase: dockRawRecoveryPhaseByPaneId[pane.id] ?? null,
                 sshDisconnected: sshConnectionUnavailable
               })}
-              readTerminalScreen={() => pane.serializeAddon.serialize({ scrollback: 0 })}
               onInitialize={() => terminalDock.ensurePaneDockDefault(paneKey, agent)}
               onCommitGutterRows={(rows) => terminalDock.commitGutterRows(paneKey, rows)}
               onEffectiveMountedChange={(mounted) =>

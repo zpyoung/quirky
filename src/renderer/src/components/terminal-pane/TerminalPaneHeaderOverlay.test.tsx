@@ -78,7 +78,6 @@ function renderOverlay({
   onRenameSubmit = vi.fn(),
   canContinueAgentSessionInNewSession = false,
   onContinueAgentSessionInNewSession = vi.fn(),
-  canShowTerminal = false,
   canResumeInNewNativeChat = false,
   renameValue = '',
   renamingPaneId = null,
@@ -94,7 +93,6 @@ function renderOverlay({
   onRenameSubmit?: ReturnType<typeof vi.fn>
   canContinueAgentSessionInNewSession?: boolean
   onContinueAgentSessionInNewSession?: ReturnType<typeof vi.fn>
-  canShowTerminal?: boolean
   canResumeInNewNativeChat?: boolean
   renameValue?: string
   renamingPaneId?: number | null
@@ -144,8 +142,6 @@ function renderOverlay({
         onContinueAgentSessionInNewSession={
           onContinueAgentSessionInNewSession as (pane: ManagedPane) => void
         }
-        canShowTerminal={canShowTerminal}
-        onShowTerminal={vi.fn()}
         canResumeInNewNativeChat={canResumeInNewNativeChat}
         onSplitPane={vi.fn()}
         onBeginPaneDrag={vi.fn()}
@@ -191,7 +187,7 @@ afterEach(() => {
 })
 
 describe('TerminalPaneHeaderOverlay', () => {
-  it('offers Continue in Chat UI instead of a chat view switch, on the active pane only', () => {
+  it('offers Continue in Chat UI on the active pane only', () => {
     const { container } = renderOverlay({ paneTitles: {}, canResumeInNewNativeChat: true })
 
     const resumeButtons = [...container.querySelectorAll('button')].filter(
@@ -201,18 +197,6 @@ describe('TerminalPaneHeaderOverlay', () => {
     expect(resumeButtons[0]?.closest('.pane-title-bar')?.hasAttribute('data-active-pane')).toBe(
       true
     )
-    expect(container.querySelector('button[aria-label="Show chat view"]')).toBeNull()
-  })
-
-  it('keeps Show terminal as the way back from chat view', () => {
-    const { container } = renderOverlay({
-      paneTitles: {},
-      canShowTerminal: true,
-      canResumeInNewNativeChat: true
-    })
-
-    expect(container.querySelector('button[aria-label="Show terminal"]')).not.toBeNull()
-    expect(container.textContent).not.toContain('Continue in Chat UI')
   })
 
   it('keeps the titled split-pane X as remove-title only', () => {

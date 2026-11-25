@@ -15,12 +15,44 @@ it('orders enabled chats, unavailable providers and CLI rows', () => {
     { kind: 'cli', agent: 'gemini' }
   ])
 })
-it.each([true, false])('uses workspace installation for unchosen agents: %s', (installed) => {
+it.each([true, false])(
+  'lists an agent with a chat definition whether or not it is installed: %s',
+  (installed) => {
+    expect(
+      buildNewTabAgentMenuRows({
+        ...input,
+        detectedOnHost: installed ? ['opencode'] : [],
+        chatAgents: ['opencode']
+      })
+    ).toEqual(
+      installed
+        ? [{ kind: 'chat', agent: 'opencode' }]
+        : [{ kind: 'chat-unavailable', agent: 'opencode', reason: 'not-installed' }]
+    )
+  }
+)
+
+it('starts installed chat agents, disables uninstalled ones and gives agents without a chat definition no chat row', () => {
   expect(
     buildNewTabAgentMenuRows({
       ...input,
-      detectedOnHost: installed ? ['opencode'] : [],
+      detectedOnHost: ['claude', 'gemini'],
+      chatAgents: ['claude', 'opencode']
+    })
+  ).toEqual([
+    { kind: 'chat', agent: 'claude' },
+    { kind: 'chat-unavailable', agent: 'opencode', reason: 'not-installed' },
+    { kind: 'cli', agent: 'gemini' }
+  ])
+})
+
+it('hides a chat agent the owner switched off', () => {
+  expect(
+    buildNewTabAgentMenuRows({
+      ...input,
+      settings: { ...input.settings, nativeChatProviders: { opencode: false } },
+      detectedOnHost: ['opencode'],
       chatAgents: ['opencode']
     })
-  ).toEqual(installed ? [{ kind: 'chat', agent: 'opencode' }] : [])
+  ).toEqual([{ kind: 'cli', agent: 'opencode' }])
 })

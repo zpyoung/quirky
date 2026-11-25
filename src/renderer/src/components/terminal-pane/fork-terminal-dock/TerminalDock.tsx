@@ -1,17 +1,12 @@
-import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import type { AgentType } from '../../../../../shared/agent-status-types'
-import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { TerminalDockComposer } from './TerminalDockComposer'
-import type { AgentComposerHandle } from '../../native-chat/fork-agent-composer/agent-composer-types'
-import { resolveComposerSendTier } from '../../native-chat/fork-agent-composer/composer-send-tier'
+import type { ComposerHandle } from '../../chat/composer/composer-types'
 import { DEFAULT_GUTTER_ROWS } from './terminal-dock-pane-state'
-import { useNativeChatPasteBridge } from '../../native-chat/use-native-chat-paste-bridge'
 import { NativeChatPaneFileDropSurface } from '../../native-chat/NativeChatPaneFileDropSurface'
-import { NATIVE_CHAT_APPEARANCE_ROOT_CLASS } from '../../native-chat/native-chat-appearance-style'
-import { useNativeChatStoreAppearanceStyle } from '../../native-chat/use-native-chat-store-appearance-style'
-import type { NativeChatComposerHandle } from '../../native-chat/native-chat-composer-types'
+import { useDockWindowRefocus } from './use-dock-window-refocus'
 
 // Row height mirrors the composer field's text-sm/leading-5 (20px) so a
 // gutterRows count tracks visible textarea lines; the remainder covers the
@@ -92,10 +87,6 @@ export type TerminalDockProps = {
   /** True while a gutter-resize drag is live; suspends auto-undock re-evaluation so
    *  intermediate rows crossing a threshold can't undock/remount before release. */
   gutterDragActive?: boolean
-  /** Reads the hosting pane's current terminal screen for verified clear/submit observation. */
-  readTerminalScreen?: () => string | null
-  /** True only for local native ConPTY versions whose wrap markers are not reliable. */
-  isLocalConptyBelowWrapMarkers?: boolean
   /** True while the pane is in raw passthrough mode: xterm (not the composer) owns keyboard
    *  focus, so the composer greys out and stops accepting pointer interaction. */
   passthroughActive?: boolean
@@ -108,43 +99,18 @@ export type TerminalDockProps = {
  *  keystroke. Unmounts below a pane height derived from the current
  *  gutterRows and re-mounts above a strictly greater derived threshold
  *  so a 1px resize jitter can't flap it. */
-export const TerminalDock = forwardRef<AgentComposerHandle, TerminalDockProps>(
+export const TerminalDock = forwardRef<ComposerHandle, TerminalDockProps>(
   function TerminalDock(props, ref): React.JSX.Element | null {
     const { terminalTabId, paneKey, targetPtyId, agent, paneHeightPx, disabledReason } = props
     const gutterRows = props.gutterRows ?? DEFAULT_GUTTER_ROWS
     const mounted = useAutoUndock(paneHeightPx, gutterRows, props.gutterDragActive ?? false)
-    const sendTier = isTuiAgent(agent)
-      ? resolveComposerSendTier(agent, {
-          isLocalConptyBelowWrapMarkers: props.isLocalConptyBelowWrapMarkers ?? false
-        })
-      : 'input'
-    const composerRef = useRef<NativeChatComposerHandle>(null)
-    // Why: the root only exists once auto-undock lets the dock render, and a ref mutation
-    // would not re-run the bridge's subscribe effect — so track the node as state and hand
-    // the bridge a fresh ref identity each time it appears.
+    const composerRef = useRef<ComposerHandle>(null)
     const [rootNode, setRootNode] = useState<HTMLDivElement | null>(null)
-    const rootRef = useMemo(() => ({ current: rootNode }), [rootNode])
-    // Why: TerminalPane owns Cmd/Ctrl+V for the whole pane and preventDefaults the keydown
-    // before a paste event exists; the root's data-native-chat-root marker makes it yield,
-    // and this bridge is what then claims the event for the composer.
-    const questionAnswerInputRef = useRef<HTMLInputElement>(null)
-    // Why: the dock's cards and composer sit outside the chat view's appearance root, so without
-    // this the chat width and type settings would not reach them.
-    const appearanceStyle = useNativeChatStoreAppearanceStyle()
-    useNativeChatPasteBridge({ rootRef, composerRef, questionAnswerInputRef })
-    // Why: exposes the mounted composer's imperative handle to the host so it can move
-    // keyboard focus onto the dock (dock entry, passthrough exit) without reaching past this
-    // component's own mount/auto-undock gating.
-    useImperativeHandle(
-      ref,
-      () => ({
-        focus: () => composerRef.current?.focus() ?? false,
-        insertTypedText: (text) => composerRef.current?.insertTypedText(text) ?? false,
-        handlePasteEvent: (event) => composerRef.current?.handlePasteEvent(event),
-        pasteFromClipboard: () => composerRef.current?.pasteFromClipboard()
-      }),
-      []
-    )
+    // Why: exposes the mounted composer's focus to the host so it can move keyboard focus onto the
+    // dock (dock entry, passthrough exit) without reaching past this component's mount/auto-undock
+    // gating.
+    useImperativeHandle(ref, () => ({ focus: () => composerRef.current?.focus() }), [])
+    useDockWindowRefocus(rootNode, composerRef)
 
     const onMountedChangeRef = useRef(props.onMountedChange)
     onMountedChangeRef.current = props.onMountedChange
@@ -192,11 +158,9 @@ export const TerminalDock = forwardRef<AgentComposerHandle, TerminalDockProps>(
         </div>
         <div className="relative min-h-0 flex-1">
           <div className="h-full overflow-visible" inert={props.passthroughActive || undefined}>
-            <div
-              className={cn(NATIVE_CHAT_APPEARANCE_ROOT_CLASS, 'h-full')}
-              style={appearanceStyle}
-            >
-              <NativeChatPaneFileDropSurface className="relative h-full">
+            {/* bottom-anchored: growth goes up over the terminal, since a taller dock would resize the PTY */}
+            <div className="absolute inset-x-0 bottom-0 z-30 bg-background">
+              <NativeChatPaneFileDropSurface className="relative">
                 <TerminalDockComposer
                   ref={composerRef}
                   terminalTabId={terminalTabId}
@@ -204,10 +168,6 @@ export const TerminalDock = forwardRef<AgentComposerHandle, TerminalDockProps>(
                   targetPtyId={targetPtyId}
                   agent={agent}
                   canSend={disabledReason === null && !props.passthroughActive}
-                  sendTier={sendTier}
-                  readTerminalScreen={props.readTerminalScreen}
-                  answerInputRef={questionAnswerInputRef}
-                  onSendOutcome={(_outcome) => {}}
                 />
               </NativeChatPaneFileDropSurface>
             </div>

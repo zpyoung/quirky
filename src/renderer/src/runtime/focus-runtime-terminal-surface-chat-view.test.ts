@@ -14,7 +14,7 @@ const SECOND_PANE_ID = 2
 
 const unregisterCallbacks: (() => void)[] = []
 
-/** The cover class TerminalPaneNativeChatPortal renders over the still-mounted xterm. */
+/** The cover class a chat pane renders over the still-mounted xterm. */
 function makePaneContainer(covered: boolean, leafId = LEAF_ID): HTMLElement {
   const container = document.createElement('div')
   container.setAttribute('data-leaf-id', leafId)

@@ -1,4 +1,4 @@
-import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
+import type { NativeChatComposerImageAttachment } from './native-chat-composer-image-attachment'
 import type { JSONContent } from '@tiptap/react'
 import type {
   NativeChatComposerDraftImage,

@@ -31,7 +31,6 @@ import { useStructuredAgentSessionStop } from './use-structured-agent-session-st
 import { useStructuredAgentSessionTransport } from './use-structured-agent-session-transport'
 import { useStructuredAgentSessionOptions } from './use-structured-agent-session-options'
 import type { StructuredAgentSessionLaunchView } from './use-native-chat-provisional-launch'
-import { useStructuredAgentSessionThreadGoal } from './use-structured-agent-session-thread-goal'
 import { useStructuredAgentSessionContextUsage } from './use-structured-agent-session-context-usage'
 import { useStructuredAgentSessionRailOutline } from './use-structured-agent-session-rail-outline'
 import { useStructuredAgentSessionQueuedMessages } from './use-structured-agent-session-queued-messages'
@@ -112,7 +111,6 @@ export function useStructuredAgentSession(args: {
     sendSource,
     unavailable,
     threadGoal: threadGoalSupport,
-    reportedThreadGoal,
     contextUsage: contextUsageSupport,
     rewind: rewindSupport,
     acceptsImages
@@ -208,14 +206,6 @@ export function useStructuredAgentSession(args: {
     (!commandPending.current || hostStatesTurnScopes(transportState.journalItems)) &&
     rewind.admitsSend() &&
     sends.send(...input)
-  const threadGoal = useStructuredAgentSessionThreadGoal({
-    journalItems: transportState.journalItems,
-    journalEpoch: state.epoch,
-    support: threadGoalSupport,
-    reported: reportedThreadGoal,
-    mutate,
-    send
-  })
   const transcriptPending = useMemo(
     () => pendingSendsOutsideQueuedCards(pending, queuedMessageIds, isWorking),
     [isWorking, pending, queuedMessageIds]
@@ -312,6 +302,8 @@ export function useStructuredAgentSession(args: {
     }),
     stopPressed: stopControl.pressed,
     queuedMessages: queuedController,
+    /** The runtime fence the queued list was read under; null until the host publishes one. */
+    fence: transportState.fence,
     /** A send made now while the agent works is held as a queued card: the host queues, and this
      *  send asks it to (the setting is on and no pending prompt blocks the queue). */
     sendsQueue: structuredAgentSessionNewSendsQueue(queue),
@@ -331,7 +323,6 @@ export function useStructuredAgentSession(args: {
     setStructuredOption,
     /** Why the host's catalog probe says no chat can start here; the chat shows it as a notice. */
     unavailable,
-    threadGoal,
     contextUsage,
     /** Whether this session takes images, by its options report; undefined until it answers. */
     acceptsImages

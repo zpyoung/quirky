@@ -1,4 +1,4 @@
-import { findDockComposerTextarea } from '@/components/terminal-pane/fork-terminal-dock/dock-composer-focus-redirect'
+import { findDockComposerInput } from '@/components/terminal-pane/fork-terminal-dock/dock-composer-focus-redirect'
 import { refreshTerminalImeInputContext } from '@/components/terminal-pane/terminal-ime-input-context-refresh'
 import { UNCOVERED_TERMINAL_LEAF_SELECTOR } from '@/components/terminal-pane/native-chat-covered-pane'
 import { requestNativeChatComposerFocus } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
@@ -26,7 +26,7 @@ function focusTerminalHelper(helper: HTMLElement, options: FocusTerminalTabSurfa
       return
     }
   }
-  const dockComposer = findDockComposerTextarea(helper)
+  const dockComposer = findDockComposerInput(helper)
   if (dockComposer) {
     dockComposer.focus()
     return

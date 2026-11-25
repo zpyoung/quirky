@@ -50,10 +50,6 @@ vi.mock('../../store', async () => {
   return { useAppStore }
 })
 
-vi.mock('../native-chat/use-native-chat-toggle-shortcut', () => ({
-  useNativeChatToggleShortcut: () => {}
-}))
-
 vi.mock('./TerminalOverlaySlot', () => ({
   TerminalOverlaySlot: () => {
     harness.slotRenders += 1

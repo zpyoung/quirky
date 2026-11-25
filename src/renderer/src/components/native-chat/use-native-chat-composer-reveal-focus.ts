@@ -2,16 +2,21 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { shouldPreserveEditableFocus } from '@/components/terminal-pane/pane-helpers'
 import { scheduleNextFrame } from '@/components/terminal-pane/terminal-ime-input-context-refresh'
-import type { NativeChatComposerHandle } from './NativeChatComposer'
 
 /** Focus attempts per reveal, including recovery from delayed programmatic restoration. */
 const REVEAL_FOCUS_FRAMES = 6
 const PENDING_FOCUS_MS = 1000
 
 const revealedComposerReclaims = new Map<string, () => void>()
-const mountedComposers = new Set<RefObject<NativeChatComposerHandle | null>>()
+const mountedComposers = new Set<RefObject<NativeChatComposerFocusHandle | null>>()
 let pendingFocusRequest: { tabId: string | null; cancel: () => void } | null = null
 let focusRequestGeneration = 0
+
+/** What revealing a chat needs from its composer: take focus, and say whether a node is inside it. */
+export type NativeChatComposerFocusHandle = {
+  focus: () => boolean
+  contains: (node: Node | null) => boolean
+}
 
 export type NativeChatComposerFocusIntent = {
   request: (tabId: string) => void
@@ -69,7 +74,7 @@ export type NativeChatComposerRevealFocusArgs = {
   /** The tab whose activation re-runs the claim (the terminal tab for a chat view over a TUI). */
   tabId: string
   rootRef: RefObject<HTMLElement | null>
-  composerRef: RefObject<NativeChatComposerHandle | null>
+  composerRef: RefObject<NativeChatComposerFocusHandle | null>
   isVisible: boolean
   /** This pane's split group is the focused one; false keeps a revealed sibling from fighting. */
   isFocusedGroup: boolean

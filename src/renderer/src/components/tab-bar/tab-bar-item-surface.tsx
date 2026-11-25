@@ -1,12 +1,6 @@
 import React from 'react'
-import { canToggleNativeChat } from '../native-chat/native-chat-availability'
-import { resolveNativeChatTabAgentEvidence } from './native-chat-tab-agent-evidence'
 import type { DropIndicator } from './drop-indicator'
-import {
-  resolveEditorTabGitStatus,
-  resolveTerminalItemTab,
-  type TabBarItem
-} from './tab-bar-item-model'
+import { resolveEditorTabGitStatus, type TabBarItem } from './tab-bar-item-model'
 import type { TabBarProps } from './tab-bar-props'
 import type { TabBarRuntimeModel } from './use-tab-bar-runtime-model'
 import type { TabBarItemActions } from './use-tab-bar-item-actions'
@@ -28,10 +22,6 @@ export type TabBarItemSurfaceRuntime = Pick<
   TabBarRuntimeModel,
   | 'resolvedGroupId'
   | 'generatedTabTitlesEnabled'
-  | 'unifiedTabByVisibleId'
-  | 'tabAgentTypesByTabId'
-  | 'nativeChatTabWideFallbackUnsafeTabsById'
-  | 'nativeChatTranscriptIsLocalReadable'
   | 'managedBrowserCreationEnabled'
   | 'statusByRelativePath'
 >
@@ -65,10 +55,6 @@ export function renderTabBarItems({
   const {
     resolvedGroupId,
     generatedTabTitlesEnabled,
-    unifiedTabByVisibleId,
-    tabAgentTypesByTabId,
-    nativeChatTabWideFallbackUnsafeTabsById,
-    nativeChatTranscriptIsLocalReadable,
     managedBrowserCreationEnabled,
     statusByRelativePath
   } = runtime
@@ -99,30 +85,6 @@ export function renderTabBarItems({
   }
 
   return items.map((item, index) => {
-    let canToggleViewMode = false
-    let isChatView = false
-    let viewModeTabId: string | undefined
-    if (item.type === 'terminal') {
-      const terminalTab = resolveTerminalItemTab(item.data, generatedTabTitlesEnabled)
-      const unifiedTabForItem = unifiedTabByVisibleId.get(item.id)
-      // Carry the agent *identity* (not just "an agent exists") so the native-chat gate can reject agents like Grok.
-      const resolvedAgent = resolveNativeChatTabAgentEvidence(terminalTab, unifiedTabForItem)
-      // Key the live-agent lookup by the backing terminal tab id: agent-status pane keys use it, not the unified tab id.
-      const detectedAgent = tabAgentTypesByTabId[terminalTab.id] ?? null
-      const tabWideFallbackSafe = nativeChatTabWideFallbackUnsafeTabsById[terminalTab.id] !== true
-      canToggleViewMode =
-        unifiedTabForItem !== undefined &&
-        canToggleNativeChat({
-          contentType: 'terminal',
-          launchAgent: tabWideFallbackSafe ? terminalTab.launchAgent : null,
-          detectedAgent,
-          resolvedAgent: tabWideFallbackSafe ? resolvedAgent : null,
-          nativeChatTranscriptIsLocalReadable,
-          isChatViewMode: unifiedTabForItem.viewMode === 'chat'
-        })
-      isChatView = unifiedTabForItem?.viewMode === 'chat'
-      viewModeTabId = unifiedTabForItem?.id
-    }
     return (
       <TabBarItemRow
         key={item.id}
@@ -138,9 +100,6 @@ export function renderTabBarItems({
         isExpanded={item.type === 'terminal' && expandedPaneByTabId[item.id] === true}
         dropIndicator={dropIndicatorByVisibleId.get(item.id) ?? null}
         includeTopTabBorder={includeTopTabBorder}
-        canToggleViewMode={canToggleViewMode}
-        isChatView={isChatView}
-        viewModeTabId={viewModeTabId}
         canDuplicate={item.type === 'browser' && managedBrowserCreationEnabled}
         canCloseSplitPane={props.onCloseSplitPane !== undefined}
         gitStatus={

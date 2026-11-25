@@ -1,13 +1,4 @@
-import {
-  PanelLeftClose,
-  PanelRightClose,
-  Pin,
-  PinOff,
-  Pencil,
-  SquareTerminal,
-  X,
-  ListX
-} from 'lucide-react'
+import { PanelLeftClose, PanelRightClose, Pin, PinOff, Pencil, X, ListX } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -113,15 +104,6 @@ type SortableTabContextMenuProps = {
   onRenameOpen: () => void
   onSetTabColor: (tabId: string, color: string | null) => void
   onTogglePin: () => void
-  /** True when this tab is an agent terminal that can switch between the terminal
-   *  and native chat views; gates the "Switch view" menu item. Structured
-   *  sessions never qualify — they have no terminal underneath. */
-  canToggleViewMode?: boolean
-  /** True when the tab is currently showing the native chat view (drives the
-   *  item's label/icon between "chat" and "terminal"). */
-  isChatView?: boolean
-  /** Toggle the tab between terminal and native chat view. */
-  onToggleViewMode?: () => void
   canSplitTerminal?: boolean
   /** Set only for a native chat tab. */
   nativeChat?: NativeChatTabSession
@@ -150,9 +132,6 @@ export function SortableTabContextMenu({
   onRenameOpen,
   onSetTabColor,
   onTogglePin,
-  canToggleViewMode = false,
-  isChatView = false,
-  onToggleViewMode,
   canSplitTerminal = true,
   nativeChat
 }: SortableTabContextMenuProps): React.JSX.Element {
@@ -162,9 +141,6 @@ export function SortableTabContextMenu({
 
   const closeShortcut = useOptionalShortcutLabel('tab.close')
   const renameShortcut = useOptionalShortcutLabel('tab.rename')
-  // Why: switching a tab into chat view is hidden while that toggle is removed; a tab already in
-  // chat view keeps its way back.
-  const showTerminalViewSwitch = canToggleViewMode && isChatView && onToggleViewMode !== undefined
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
@@ -187,23 +163,11 @@ export function SortableTabContextMenu({
           splitDownShortcut={splitDownShortcut}
           showTerminalSplit={canSplitTerminal}
         />
-        {showTerminalViewSwitch ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onToggleViewMode}>
-              <SquareTerminal className="size-3.5 shrink-0" />
-              {translate(
-                'components.tab.bar.SortableTabContextMenu.switchToTerminalView',
-                'Continue with Terminal Agent'
-              )}
-            </DropdownMenuItem>
-          </>
-        ) : null}
         <TabSessionSurfaceSwitchMenuItems
           key={sessionSwitchOpening}
           tab={tab}
           nativeChat={nativeChat}
-          leadingSeparator={!showTerminalViewSwitch}
+          leadingSeparator
           onComplete={onSessionSwitchComplete}
         />
         <DropdownMenuSeparator />

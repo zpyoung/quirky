@@ -6,8 +6,10 @@ import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-labe
 import { AGENT_SESSION_V1_CHAT_METHODS_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-runtime-capabilities'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
-import type { StructuredPromptItem } from '../native-chat/use-structured-agent-session'
-import type { useStructuredAgentSession } from '../native-chat/use-structured-agent-session'
+import type {
+  StructuredPromptItem,
+  useStructuredAgentSession
+} from '../native-chat/use-structured-agent-session'
 import { ChatHeader, type ChatHeaderStatus } from './header/ChatHeader'
 import { projectChatTurns } from './chat-turns'
 import { ChatTurnEnvContext, type ChatTurnEnv } from './turn/chat-turn-env'
@@ -198,10 +200,14 @@ export function ChatView({
               {findBar && <div className="absolute top-2 right-3 z-10">{findBar}</div>}
               <div
                 ref={scroller}
+                data-native-chat-scroll=""
                 onScroll={onScroll}
                 className="chat-view-list h-full overflow-y-auto scrollbar-sleek"
               >
-                <div className="mx-auto flex w-full max-w-(--chat-content-max-width) flex-col gap-4 px-3 py-4 sm:px-4">
+                <div
+                  data-native-chat-transcript-column=""
+                  className="mx-auto flex w-full max-w-(--chat-content-max-width) flex-col gap-4 px-3 py-4 sm:px-4"
+                >
                   {controller.hasOlder && (
                     <div className="flex justify-center">
                       <Button
