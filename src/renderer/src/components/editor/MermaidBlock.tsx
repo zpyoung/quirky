@@ -97,7 +97,7 @@ export default function MermaidBlock({
         // and render(), which would make markdown preview fall back to the
         // broken foreignObject label path again.
         const colors = readMermaidThemeColors()
-        mermaid.initialize(getMermaidConfig(isDark, htmlLabels, isDark ? colors : undefined))
+        mermaid.initialize(getMermaidConfig(isDark, htmlLabels, colors))
         const { svg } = await mermaid.render(`mermaid-${id}`, content)
         if (!cancelled) {
           // Why: although mermaid uses DOMPurify internally, we add an explicit

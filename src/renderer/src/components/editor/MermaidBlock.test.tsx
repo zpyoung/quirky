@@ -8,7 +8,11 @@ const mermaid = vi.hoisted(() => ({
   render: vi.fn<(id: string, content: string) => Promise<{ svg: string }>>(),
   sanitize: vi.fn<(svg: string) => string>()
 }))
+const themeColors = vi.hoisted(() => ({
+  read: vi.fn<() => Record<string, string> | undefined>()
+}))
 vi.mock('mermaid', () => ({ default: mermaid }))
+vi.mock('./mermaid-theme-colors', () => ({ readMermaidThemeColors: themeColors.read }))
 vi.mock('dompurify', () => ({ default: { sanitize: mermaid.sanitize } }))
 
 import MermaidBlock from './MermaidBlock'
@@ -21,6 +25,8 @@ beforeEach(() => {
   mermaid.render.mockReset()
   mermaid.render.mockResolvedValue({ svg: diagram })
   mermaid.sanitize.mockReset().mockImplementation((svg) => svg)
+  mermaid.initialize.mockReset()
+  themeColors.read.mockReset().mockReturnValue(undefined)
 })
 afterEach(cleanup)
 
@@ -59,6 +65,36 @@ describe('MermaidBlock rendering', () => {
     rerender(<MermaidBlock content={partial} isDark={false} onExpand={onExpand} />)
     await screen.findByText(/Diagram error: Parse error/)
     expect(screen.queryByRole('button', { name: 'Expand diagram' })).toBeNull()
+  })
+
+  it.each([true, false])('themes the diagram from the tokens when isDark is %s', async (isDark) => {
+    const colors = {
+      background: isDark ? '#16171b' : '#ffffff',
+      foreground: isDark ? '#eceef2' : '#1b1d22',
+      primary: isDark ? '#22242b' : '#e7e9ef',
+      secondary: isDark ? '#22242b' : '#e7e9ef',
+      tertiary: isDark ? '#16171b' : '#ffffff',
+      border: isDark ? '#24262c' : '#e3e5ea',
+      line: isDark ? '#7c828d' : '#646b76'
+    }
+    themeColors.read.mockReturnValue(colors)
+    const onExpand = vi.fn()
+    const { container } = render(
+      <MermaidBlock content={complete} isDark={isDark} onExpand={onExpand} />
+    )
+    await waitFor(() => expect(container.querySelector('svg')).not.toBeNull())
+    expect(mermaid.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: 'base',
+        themeVariables: expect.objectContaining({
+          darkMode: isDark,
+          background: colors.background,
+          lineColor: colors.line
+        })
+      })
+    )
+    fireEvent.click(container.querySelector('svg')!)
+    expect(onExpand).toHaveBeenCalledWith({ svg: diagram, background: colors.background })
   })
 
   it('keeps the displayed source in place until the SVG is ready', async () => {

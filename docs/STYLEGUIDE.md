@@ -4,7 +4,7 @@ This is the **UI/visual design** doc for Quirky — color tokens, typography, co
 
 ## Overview
 
-Quirky is an Electron desktop app for orchestrating coding agents across git worktrees. Quirky's chrome is **monochrome and quiet** — neutral grays carry it, color is reserved for state (selection ring, destructive, git decorations). The native chat transcript is a documented exception, where color is load-bearing rather than decorative — see [Tool activity colors](#tool-activity-colors). The product spends most of its time hosting other people's tools (Monaco, xterm, Markdown previews), so Quirky's own UI should recede and frame.
+Quirky is an Electron desktop app for orchestrating coding agents across git worktrees. Quirky's chrome is **graphite and quiet** — blue-leaning graphite surfaces carry it, one teal accent marks the action and the focus, and every other hue is reserved for state (agent status, destructive, git decorations). The native chat transcript is a documented exception, where color is load-bearing rather than decorative — see [Tool activity colors](#tool-activity-colors). The product spends most of its time hosting other people's tools (Monaco, xterm, Markdown previews), so Quirky's own UI should recede and frame.
 
 When in doubt:
 
@@ -27,11 +27,29 @@ Never hardcode a hex value in component code if a variable already covers it. If
 
 Role tokens come in pairs: a **surface** and a **foreground** that meets contrast on it. Always use them together — this governs the surface/foreground pairs below.
 
+The palette is graphite plus one teal accent. Two canvases carry it: the **surface** (`background`, `card`, `editor-surface`) holds work, and the **rail** (`sidebar`, `worktree-sidebar`, the status bar and the native window background) frames it.
+
+| Role             | Dark      | Light     |
+| ---------------- | --------- | --------- |
+| Rail             | `#0c0d0f` | `#eef0f3` |
+| Surface          | `#16171b` | `#ffffff` |
+| Selected / muted | `#22242b` | `#e7e9ef` |
+| Border           | `#24262c` | `#e3e5ea` |
+| Text             | `#eceef2` | `#1b1d22` |
+| Muted text       | `#7c828d` | `#646b76` |
+| Accent (teal)    | `#5fd0d6` | `#14808a` |
+| Agent working    | `#6fb3ff` | `#2f74c0` |
+| Agent needs you  | `#e5b454` | `#a56e08` |
+| Agent failed     | `#ef6b73` | `#d6455d` |
+| Agent done       | `#4cc38a` | `#1f9d63` |
+
+Teal is the only accent: `primary`, `ring`, links and the selected-row bar. Status hues (`--agent-working`, `--agent-question`, `--agent-done`, `--agent-failed`) mark agent state and nothing else, and each status also carries a glyph or label. Body text clears 4.5:1 and status marks clear 3:1 on both canvases; `graphite-token-contrast.test.ts` enforces it.
+
 **Categorical tokens are the exception.** `--git-graph-lane-1` through `-5` and the `--tool-*` family (see [Tool activity colors](#tool-activity-colors)) are standalone hues, not surface/foreground pairs. A categorical token has no paired foreground, so it must clear a measured contrast floor against every surface it's drawn on instead.
 
 | Role                                                      | Use it for                                                  | Don't use it for                                    |
 | --------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------- |
-| `background` / `foreground`                               | App canvas, default text                                    | Cards, popovers, sidebar (have their own)           |
+| `background` / `foreground`                               | App surface, default text                                   | Cards, popovers, sidebar (have their own)           |
 | `card` / `card-foreground`                                | Panels lifted off the canvas                                | The canvas itself                                   |
 | `popover` / `popover-foreground`                          | Floating menus, dropdowns, hovercards                       | Inline UI                                           |
 | `primary` / `primary-foreground`                          | The single affirmative action in a flow (Save, Confirm)     | Decorative accents; hover states; secondary actions |
@@ -43,10 +61,11 @@ Role tokens come in pairs: a **surface** and a **foreground** that meets contras
 | `border`                                                  | All hairlines: dividers, input outlines, card edges         | Heavy emphasis; that's `ring`                       |
 | `input`                                                   | Form field background only                                  | Anywhere outside form fields                        |
 | `ring`                                                    | Focus-visible outlines, active selection halos              | Persistent decoration                               |
-| `sidebar` (+ variants)                                    | The worktree sidebar and its children                       | Other panels                                        |
+| `sidebar` (+ variants)                                    | The rail: worktree sidebar and its children                 | Other panels                                        |
 | `editor-surface`                                          | Background of Monaco / markdown editor panes                | App chrome                                          |
+| `code-background` / `code-header`                         | Code blocks, inline code and diff-adjacent code surfaces    | Panels and cards                                    |
 
-The `sidebar` family expands into `--sidebar`, `--sidebar-foreground`, `--sidebar-primary`, `--sidebar-primary-foreground`, `--sidebar-accent`, `--sidebar-accent-foreground`, `--sidebar-border`, and `--sidebar-ring` — use them inside the worktree sidebar so its hover/selected/focus states stay consistent and don't bleed into other panels. `editor-surface` is its own token (not just `background`) because Monaco and the markdown editor have a slightly darker surface in dark mode to match VS Code conventions; reach for it whenever you're rendering an editor pane.
+The `sidebar` family expands into `--sidebar`, `--sidebar-foreground`, `--sidebar-primary`, `--sidebar-primary-foreground`, `--sidebar-accent`, `--sidebar-accent-foreground`, `--sidebar-border`, and `--sidebar-ring` — use them inside the worktree sidebar so its hover/selected/focus states stay consistent and don't bleed into other panels. `editor-surface` is its own token (not just `background`) so an editor pane can diverge from the app surface later; reach for it whenever you're rendering an editor pane.
 
 The warning family also provides `--status-warning` for compact marks and `--status-warning-border` for outlines. Pair warning surfaces with their foreground token and explicit status text; lost contact never implies that remote work exited.
 
@@ -68,21 +87,21 @@ Use these _only_ for git status. Don't reuse them for unrelated state colors —
 
 ### Tool activity colors
 
-The native chat transcript colors tool lines on one axis: five hues answer _what kind of work is this?_ Each category also carries a lucide glyph, so hue is never the sole encoder. Contrast is measured against the app canvas (`#ffffff` light, `#0a0a0a` dark):
+The native chat transcript colors tool lines on one axis: five hues answer _what kind of work is this?_ Each category also carries a lucide glyph, so hue is never the sole encoder. Contrast is measured against both graphite canvases: the surface (`#ffffff` light, `#16171b` dark) and the rail (`#eef0f3` light, `#0c0d0f` dark):
 
-| Token           | Light     | on canvas | Dark      | on canvas | Meaning              | Example tools          |
-| --------------- | --------- | --------- | --------- | --------- | -------------------- | ---------------------- |
-| `--tool-read`   | `#2f6a96` | 5.80:1    | `#8ab4d8` | 9.05:1    | Reading a file       | Read, NotebookRead     |
-| `--tool-write`  | `#8a6100` | 5.54:1    | `#e3b341` | 10.17:1   | Modifying your files | Edit, MultiEdit, Write |
-| `--tool-exec`   | `#24707a` | 5.72:1    | `#79bfc4` | 9.49:1    | Running a command    | Bash, terminal, shell  |
-| `--tool-search` | `#4f4fc4` | 6.47:1    | `#9a9ae6` | 7.67:1    | Locating something   | Grep, Glob             |
-| `--tool-net`    | `#6a4fb0` | 6.25:1    | `#b39ddb` | 8.26:1    | Reaching the network | WebFetch, WebSearch    |
+| Token           | Light     | on surface | on rail | Dark      | on surface | on rail | Meaning              | Example tools          |
+| --------------- | --------- | ---------- | ------- | --------- | ---------- | ------- | -------------------- | ---------------------- |
+| `--tool-read`   | `#2f6a96` | 5.80:1     | 5.08:1  | `#8ab4d8` | 8.19:1     | 8.89:1  | Reading a file       | Read, NotebookRead     |
+| `--tool-write`  | `#8a6100` | 5.54:1     | 4.85:1  | `#e3b341` | 9.20:1     | 9.99:1  | Modifying your files | Edit, MultiEdit, Write |
+| `--tool-exec`   | `#24707a` | 5.72:1     | 5.01:1  | `#79bfc4` | 8.58:1     | 9.32:1  | Running a command    | Bash, terminal, shell  |
+| `--tool-search` | `#4f4fc4` | 6.47:1     | 5.66:1  | `#9a9ae6` | 6.94:1     | 7.54:1  | Locating something   | Grep, Glob             |
+| `--tool-net`    | `#6a4fb0` | 6.25:1     | 5.48:1  | `#b39ddb` | 7.47:1     | 8.11:1  | Reaching the network | WebFetch, WebSearch    |
 
-`--tool-write` is the only warm hue, and that's deliberate: amber means the agent touched your files. The four cool hues recede into chrome; the one warm hue is the thing worth noticing. An unrecognized tool name takes no category and renders exactly as it does today — neutral, no glyph. Quirky hosts agents whose tool vocabularies it doesn't control, so a classifier that guessed would mislabel third-party tools with confident color.
+`--tool-write` is the only warm tool hue, and that's deliberate: gold means the agent touched your files. The four cool hues recede into chrome; the one warm hue is the thing worth noticing. It is a transcript hue, separate from the amber `--agent-question` status mark, and it always sits beside a glyph. An unrecognized tool name takes no category and renders exactly as it does today — neutral, no glyph. Quirky hosts agents whose tool vocabularies it doesn't control, so a classifier that guessed would mislabel third-party tools with confident color.
 
 Any tool hue must clear a contrast floor:
 
-- **4.5:1 minimum** against the canvas for **text** drawn in a tool hue, in both themes.
+- **4.5:1 minimum** against the surface and the rail for **text** drawn in a tool hue, in both themes.
 - **3:1 minimum** for **non-text** marks (the category dot on a collapsed tool run) against both `--background` and `--muted` — a dot can land on either.
 - **Hue is never the sole encoder.** Every colored role also carries a glyph, position, or weight difference, so desaturating the transcript — or viewing it with red-green color vision deficiency — loses no information.
 
@@ -96,7 +115,7 @@ A common point of drift. Use these conventions for any list-style row (worktrees
 
 - **Idle:** transparent background.
 - **Hover:** `bg-accent` (in the worktree sidebar, `bg-sidebar-accent`).
-- **Keyboard-selected (cmdk highlight):** do **not** rely on flat `bg-accent` alone on light popover/dialog surfaces — `--accent` (#f5f5f5) is nearly identical to `--background` (#fff), so the cursor vanishes. Use the jump-palette recipe in `main.css` (`.jump-palette-item[data-selected='true']`): `color-mix` foreground into background (~12%) plus an inset ring. Expose the mix as `--jump-palette-selection-surface` when nested cutouts (status pips) must match. The `data-selected` attribute is set by `cmdk` automatically.
+- **Keyboard-selected (cmdk highlight):** do **not** rely on flat `bg-accent` alone on light popover/dialog surfaces — `--accent` (#e7e9ef) is nearly identical to `--background` (#fff), so the cursor vanishes. Use the jump-palette recipe in `main.css` (`.jump-palette-item[data-selected='true']`): `color-mix` foreground into background (~12%) plus an inset ring. Expose the mix as `--jump-palette-selection-surface` when nested cutouts (status pips) must match. The `data-selected` attribute is set by `cmdk` automatically.
 - **Persistent "current" / "active" row** (e.g. the worktree the user is viewing): also `bg-accent`, _plus_ a `data-current="true"` attribute so CSS or future styling can distinguish it from the cmdk highlight.
 - **Don't:** hardcode `bg-[#ededed]` / `bg-[#333333]` or invent a "selected" color. Mix from existing tokens (`foreground`/`background`/`accent`) so light/dark stay aligned.
 
@@ -142,7 +161,8 @@ The chat root (`.native-chat-appearance`) redefines these steps as ratios of the
 - **Secondary text on the chat canvas** (transcript rows, notices, labels between messages) uses `text-chat-foreground-faint`. `text-muted-foreground` is for text on a lifted surface inside the chat: cards, menus, popovers and the docks above the composer.
 - **Row hover** in the transcript is `hover:bg-accent/20`. Buttons, menu items and card controls use `hover:bg-accent`.
 - **Focus rings:** full-width transcript rows use the inset ring (`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`) so it isn't clipped by the scroll container; standalone controls use `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`. Inside the chat `--ring` is `--chat-focus-ring`, which clears 3:1 on the canvas; don't lower its opacity.
-- **State colours in the chat:** warnings use `text-chat-warning`; diff lines use `text-chat-diff-added` / `text-chat-diff-removed`; what the reader has not seen yet uses `text-chat-unread`. They are mixed toward the foreground so they pass text contrast in light and dark. Don't use raw palette colours (`text-yellow-500`) or the git decoration tokens for text on a tinted row.
+- **State colours in the chat:** warnings use `text-chat-warning`; diff lines use `text-chat-diff-added` / `text-chat-diff-removed`; what the reader has not seen yet uses `text-chat-unread`. They pass text contrast in light and dark. Don't use raw palette colours (`text-yellow-500`) or the git decoration tokens for text on a tinted row.
+- **Code in the chat:** block and inline code sit on `--code-background` (`bg-chat-code-surface` resolves to it). When the chat follows the terminal palette, the code surface is mixed from the terminal colours instead, so don't read `--code-background` directly inside chat components.
 
 ## Radius
 
