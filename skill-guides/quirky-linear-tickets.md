@@ -1,5 +1,5 @@
 ---
-name: linear-tickets
+name: quirky-linear-tickets
 description: >-
   Linear ticket work through Quirky's CLI. Use when working from a linked Linear
   issue, finishing work with a PR/MR link and a completion comment, moving a

@@ -16,8 +16,8 @@ Use it when you need ownership, completion tracking, or a DAG. For one-off promp
 
 <Callout title="Legacy commands retired">
   `quirky orchestration run` and `run-stop` (and `coordinator-start` / `coordinator-stop`) perform
-  **no effects**. They return recovery text pointing at `quirky skills get orchestration --full`.
-  Use the Run + worker-start flow below.
+  **no effects**. They return recovery text pointing at `quirky skills get quirky-orchestration
+  --full`. Use the Run + worker-start flow below.
 </Callout>
 
 ## Core model
@@ -195,5 +195,5 @@ Use `quirky orchestration run-create` + tasks + workers when you want a durable 
 Command flags evolve with the app. After install, agents should run:
 
 ```bash
-quirky skills get orchestration --full
+quirky skills get quirky-orchestration --full
 ```

@@ -151,20 +151,20 @@ describe('LinearAgentSkillInstallCta', () => {
     expect(rendered.textContent).not.toContain('Not installed')
   })
 
-  it('updates through the legacy skill name when only linear-tickets is installed', async () => {
+  it('updates through the legacy skill name when only quirky-linear-tickets is installed', async () => {
     mocks.skillState.installed = true
     mocks.skillState.skills = [
       discoveredSkill({
-        name: 'linear-tickets',
-        directoryPath: '/Users/test/.agents/skills/linear-tickets',
-        skillFilePath: '/Users/test/.agents/skills/linear-tickets/SKILL.md'
+        name: 'quirky-linear-tickets',
+        directoryPath: '/Users/test/.agents/skills/quirky-linear-tickets',
+        skillFilePath: '/Users/test/.agents/skills/quirky-linear-tickets/SKILL.md'
       })
     ]
 
     const rendered = await renderCta()
 
     expect(rendered.textContent).toContain(
-      `npx skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${QUIRKY_BUILD_COMMIT} --skill linear-tickets --global`
+      `npx skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${QUIRKY_BUILD_COMMIT} --skill quirky-linear-tickets --global`
     )
   })
 

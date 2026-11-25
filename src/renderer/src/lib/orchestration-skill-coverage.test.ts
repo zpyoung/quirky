@@ -9,14 +9,14 @@ import {
 function skill(overrides: Partial<DiscoveredSkill>): DiscoveredSkill {
   return {
     id: 'skill-1',
-    name: 'orchestration',
+    name: 'quirky-orchestration',
     description: null,
     providers: ['agent-skills'],
     sourceKind: 'home',
     sourceLabel: 'Agent skills home',
     rootPath: '/Users/test/.agents/skills',
-    directoryPath: '/Users/test/.agents/skills/orchestration',
-    skillFilePath: '/Users/test/.agents/skills/orchestration/SKILL.md',
+    directoryPath: '/Users/test/.agents/skills/quirky-orchestration',
+    skillFilePath: '/Users/test/.agents/skills/quirky-orchestration/SKILL.md',
     installed: true,
     updatedAt: null,
     ...overrides
@@ -46,7 +46,7 @@ describe('orchestration skill agent coverage', () => {
         providers: ['agent-skills'],
         sourceKind: 'home',
         rootPath: '/Users/test/.agents/skills',
-        directoryPath: '/Users/test/.agents/skills/orchestration'
+        directoryPath: '/Users/test/.agents/skills/quirky-orchestration'
       })
     ]
 
@@ -69,7 +69,7 @@ describe('orchestration skill agent coverage', () => {
         providers: ['claude'],
         sourceKind: 'home',
         rootPath: '/Users/test/.claude/skills',
-        directoryPath: '/Users/test/.claude/skills/orchestration'
+        directoryPath: '/Users/test/.claude/skills/quirky-orchestration'
       })
     ]
 
@@ -89,7 +89,7 @@ describe('orchestration skill agent coverage', () => {
             sourceKind: 'plugin',
             sourceLabel: 'Codex plugin cache',
             rootPath: '/Users/test/.codex/plugins/cache',
-            directoryPath: '/Users/test/.codex/plugins/cache/vendor/orchestration'
+            directoryPath: '/Users/test/.codex/plugins/cache/vendor/quirky-orchestration'
           })
         ],
         [source('/Users/test/.codex/plugins/cache', 'codex', 'plugin')]
@@ -109,7 +109,8 @@ describe('orchestration skill agent coverage', () => {
             sourceKind: 'plugin',
             sourceLabel: 'Claude plugin',
             rootPath: '/Users/test/.claude/plugins/repos/vendor/pack/skills',
-            directoryPath: '/Users/test/.claude/plugins/repos/vendor/pack/skills/orchestration'
+            directoryPath:
+              '/Users/test/.claude/plugins/repos/vendor/pack/skills/quirky-orchestration'
           })
         ],
         [source('/Users/test/.claude/plugins/repos/vendor/pack/skills', 'claude', 'plugin')]
@@ -126,7 +127,7 @@ describe('orchestration skill agent coverage', () => {
             providers: ['agent-skills'],
             sourceKind: 'repo',
             rootPath: '/workspace/.agents/skills',
-            directoryPath: '/workspace/.agents/skills/orchestration'
+            directoryPath: '/workspace/.agents/skills/quirky-orchestration'
           })
         ],
         [source('/workspace/.agents/skills', null, 'repo')]
@@ -144,7 +145,7 @@ describe('orchestration skill agent coverage', () => {
             providers: ['claude'],
             sourceKind: 'home',
             rootPath: '/Users/test/.claude/skills',
-            directoryPath: '/Users/test/.claude/skills/orchestration'
+            directoryPath: '/Users/test/.claude/skills/quirky-orchestration'
           })
         ],
         [source('/Users/test/.claude/skills', 'claude')]
@@ -157,37 +158,37 @@ describe('orchestration skill agent coverage', () => {
       {
         agent: 'grok',
         rootPath: '/Users/test/.grok/skills',
-        directoryPath: '/Users/test/.grok/skills/orchestration'
+        directoryPath: '/Users/test/.grok/skills/quirky-orchestration'
       },
       {
         agent: 'opencode',
         rootPath: '/Users/test/.config/opencode/skills',
-        directoryPath: '/Users/test/.config/opencode/skills/orchestration'
+        directoryPath: '/Users/test/.config/opencode/skills/quirky-orchestration'
       },
       {
         agent: 'pi',
         rootPath: '/Users/test/.pi/agent/skills',
-        directoryPath: '/Users/test/.pi/agent/skills/orchestration'
+        directoryPath: '/Users/test/.pi/agent/skills/quirky-orchestration'
       },
       {
         agent: 'omp',
         rootPath: '/Users/test/.omp/agent/skills',
-        directoryPath: '/Users/test/.omp/agent/skills/orchestration'
+        directoryPath: '/Users/test/.omp/agent/skills/quirky-orchestration'
       },
       {
         agent: 'gemini',
         rootPath: '/Users/test/.gemini/skills',
-        directoryPath: '/Users/test/.gemini/skills/orchestration'
+        directoryPath: '/Users/test/.gemini/skills/quirky-orchestration'
       },
       {
         agent: 'antigravity',
         rootPath: '/Users/test/.gemini/antigravity/skills',
-        directoryPath: '/Users/test/.gemini/antigravity/skills/orchestration'
+        directoryPath: '/Users/test/.gemini/antigravity/skills/quirky-orchestration'
       },
       {
         agent: 'cursor',
         rootPath: '/Users/test/.cursor/skills',
-        directoryPath: '/Users/test/.cursor/skills/orchestration'
+        directoryPath: '/Users/test/.cursor/skills/quirky-orchestration'
       }
     ]
     for (const { agent, rootPath, directoryPath } of cases) {
@@ -217,7 +218,7 @@ describe('orchestration skill agent coverage', () => {
         providers: ['codex', 'claude', 'agent-skills'],
         rootPath: roots[0].path,
         rootPaths: roots.map((root) => root.path),
-        directoryPath: '/Users/test/.codex/skills/orchestration'
+        directoryPath: '/Users/test/.codex/skills/quirky-orchestration'
       })
     ]
 
@@ -248,7 +249,7 @@ describe('orchestration skill agent coverage', () => {
         providers: ['codex', 'agent-skills'],
         rootPath: codexRoot.path,
         rootPaths: [codexRoot.path, repoRoot.path],
-        directoryPath: '/Users/test/.codex/skills/orchestration'
+        directoryPath: '/Users/test/.codex/skills/quirky-orchestration'
       })
     ]
 
@@ -264,7 +265,7 @@ describe('orchestration skill agent coverage', () => {
         providers: ['claude'],
         sourceKind: 'home',
         rootPath: '/Users/test/.claude/skills',
-        directoryPath: '/Users/test/.claude/skills/orchestration'
+        directoryPath: '/Users/test/.claude/skills/quirky-orchestration'
       })
     ]
 
@@ -282,7 +283,7 @@ describe('orchestration skill agent coverage', () => {
         providers: ['claude'],
         sourceKind: 'home',
         rootPath: '/Users/test/.claude/skills',
-        directoryPath: '/Users/test/.claude/skills/orchestration'
+        directoryPath: '/Users/test/.claude/skills/quirky-orchestration'
       })
     ]
 
@@ -295,7 +296,7 @@ describe('orchestration skill agent coverage', () => {
         providers: ['claude'],
         sourceKind: 'home',
         rootPath: '/Users/test/.claude/skills',
-        directoryPath: '/Users/test/.claude/skills/orchestration'
+        directoryPath: '/Users/test/.claude/skills/quirky-orchestration'
       })
     ]
 
@@ -312,7 +313,7 @@ describe('orchestration skill agent coverage', () => {
         providers: ['agent-skills'],
         sourceKind: 'home',
         rootPath: '/Users/test/.config/opencode/skills',
-        directoryPath: '/Users/test/.config/opencode/skills/orchestration'
+        directoryPath: '/Users/test/.config/opencode/skills/quirky-orchestration'
       })
     ]
 
@@ -329,7 +330,7 @@ describe('orchestration skill agent coverage', () => {
         providers: ['claude'],
         sourceKind: 'home',
         rootPath: '/Users/test/.claude/skills',
-        directoryPath: '/Users/test/.claude/skills/orchestration'
+        directoryPath: '/Users/test/.claude/skills/quirky-orchestration'
       })
     ]
 
@@ -346,7 +347,7 @@ describe('orchestration skill agent coverage', () => {
         providers: ['claude'],
         sourceKind: 'home',
         rootPath: '/Users/test/.claude/skills',
-        directoryPath: '/Users/test/.claude/skills/orchestration'
+        directoryPath: '/Users/test/.claude/skills/quirky-orchestration'
       })
     ]
 

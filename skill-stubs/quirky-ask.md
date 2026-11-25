@@ -7,7 +7,7 @@ can never drift from the binary that will actually run your commands.
 Engage `quirky ask` whenever you need a genuine human decision you cannot determine by
 reading code, config, or tests — not for permission to proceed, and not the same as
 `quirky orchestration ask`, which is worker-to-coordinator agent messaging inside an
-orchestration run (see the orchestration skill for that). Triggers include "quirky ask",
+orchestration run (see the quirky-orchestration skill for that). Triggers include "quirky ask",
 "ask the user", "ask a question and wait for the answer", or needing the user to choose
 between options, confirm a decision, or supply a non-secret value.
 

@@ -115,4 +115,4 @@ QUIRKY emulator kill --json
 ```
 
 See also: `quirky-emulator` for iOS simulators, `quirky-cli` for terminals, worktrees, and the
-built-in browser, and `computer-use` for desktop UI outside the emulator.
+built-in browser, and `quirky-computer-use` for desktop UI outside the emulator.

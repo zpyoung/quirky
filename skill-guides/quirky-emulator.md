@@ -101,4 +101,4 @@ QUIRKY emulator kill --device "iPhone 16 Pro" --json
 ```
 
 See also: `quirky-emulator-android` for Android devices, `quirky-cli` for terminals, worktrees,
-and the built-in browser, and `computer-use` for desktop UI outside the simulator.
+and the built-in browser, and `quirky-computer-use` for desktop UI outside the simulator.

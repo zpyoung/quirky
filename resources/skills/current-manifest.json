@@ -2,82 +2,18 @@
   "schemaVersion": 3,
   "skills": [
     {
-      "name": "computer-use",
-      "sourcePath": "skills/computer-use",
-      "packageDigest": "e758bbfb5ff8c420633af7acd975b3a7436a1a19063c76e5d7bf0bb2afe24855",
-      "files": [
-        {
-          "path": "SKILL.md",
-          "size": 2261,
-          "executable": false,
-          "classification": "text",
-          "exactSha256": "b3a8758ec52626ca3e6e525778fb27189e06832f01d1df0873a837a9709fbc10",
-          "textNormalizedSha256": "b3a8758ec52626ca3e6e525778fb27189e06832f01d1df0873a837a9709fbc10",
-          "identitySha256": "b3a8758ec52626ca3e6e525778fb27189e06832f01d1df0873a837a9709fbc10"
-        }
-      ]
-    },
-    {
-      "name": "jira-tickets",
-      "sourcePath": "skills/jira-tickets",
-      "packageDigest": "05103133cc03c311da586cf37860cf4cdd4feb2fc05ffd900e0b91580c597191",
-      "files": [
-        {
-          "path": "SKILL.md",
-          "size": 2175,
-          "executable": false,
-          "classification": "text",
-          "exactSha256": "339bc84e05a8b5f760f852db260c2c314e75a1c8dfcdf59f36d3b41a5b14ff00",
-          "textNormalizedSha256": "339bc84e05a8b5f760f852db260c2c314e75a1c8dfcdf59f36d3b41a5b14ff00",
-          "identitySha256": "339bc84e05a8b5f760f852db260c2c314e75a1c8dfcdf59f36d3b41a5b14ff00"
-        }
-      ]
-    },
-    {
-      "name": "linear-tickets",
-      "sourcePath": "skills/linear-tickets",
-      "packageDigest": "03d0b5edbcea2b3d5045490c7c0fbc1a82d629fa6c1a05f2ad73e1b5f61dbeb9",
-      "files": [
-        {
-          "path": "SKILL.md",
-          "size": 2281,
-          "executable": false,
-          "classification": "text",
-          "exactSha256": "f602b509d4b9827af6e4ec8bd78e152fc619049b7403881eda8ff4f911983d0f",
-          "textNormalizedSha256": "f602b509d4b9827af6e4ec8bd78e152fc619049b7403881eda8ff4f911983d0f",
-          "identitySha256": "f602b509d4b9827af6e4ec8bd78e152fc619049b7403881eda8ff4f911983d0f"
-        }
-      ]
-    },
-    {
-      "name": "orchestration",
-      "sourcePath": "skills/orchestration",
-      "packageDigest": "99b2e0af87bfd19c783ab019d6469aae40357d94682dc7a922a98415356495b8",
-      "files": [
-        {
-          "path": "SKILL.md",
-          "size": 3737,
-          "executable": false,
-          "classification": "text",
-          "exactSha256": "d70b11fa8849eecafc67332ab23cf1adb5bbf4e587441e2567fdcf491b859b27",
-          "textNormalizedSha256": "d70b11fa8849eecafc67332ab23cf1adb5bbf4e587441e2567fdcf491b859b27",
-          "identitySha256": "d70b11fa8849eecafc67332ab23cf1adb5bbf4e587441e2567fdcf491b859b27"
-        }
-      ]
-    },
-    {
       "name": "quirky-ask",
       "sourcePath": "skills/quirky-ask",
-      "packageDigest": "cee43395c1b734a2a099d17a6ef9fac979db1c6b88f941bb8ad92368ff64dbb9",
+      "packageDigest": "ace1a8f27bd949dabd33fda9e0635273c982cfe7ad2c4e4baf5621a49ab1bcb7",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 3724,
+          "size": 3738,
           "executable": false,
           "classification": "text",
-          "exactSha256": "a0cb5ee27ef402e55dc004a2e2e73876f150a3d8c95714f84328ce899f41af81",
-          "textNormalizedSha256": "a0cb5ee27ef402e55dc004a2e2e73876f150a3d8c95714f84328ce899f41af81",
-          "identitySha256": "a0cb5ee27ef402e55dc004a2e2e73876f150a3d8c95714f84328ce899f41af81"
+          "exactSha256": "44433e30f7c0e1d1bd485195746c7429afaa9ce381a71ea804106ee17f80ac16",
+          "textNormalizedSha256": "44433e30f7c0e1d1bd485195746c7429afaa9ce381a71ea804106ee17f80ac16",
+          "identitySha256": "44433e30f7c0e1d1bd485195746c7429afaa9ce381a71ea804106ee17f80ac16"
         }
       ]
     },
@@ -94,6 +30,22 @@
           "exactSha256": "882944d4e9d183eddfdcabf334197bd09d3a128a038f518bc53e4de7f02a8afb",
           "textNormalizedSha256": "882944d4e9d183eddfdcabf334197bd09d3a128a038f518bc53e4de7f02a8afb",
           "identitySha256": "882944d4e9d183eddfdcabf334197bd09d3a128a038f518bc53e4de7f02a8afb"
+        }
+      ]
+    },
+    {
+      "name": "quirky-computer-use",
+      "sourcePath": "skills/quirky-computer-use",
+      "packageDigest": "c138ef4fce2e1289f42bde5d508be0e34645528b1c72d7fd29ce141c3be06197",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 2275,
+          "executable": false,
+          "classification": "text",
+          "exactSha256": "95bfc2c54679d22bd6d5bb65356d6e7ad9f371893f92c12daa810378966abd4d",
+          "textNormalizedSha256": "95bfc2c54679d22bd6d5bb65356d6e7ad9f371893f92c12daa810378966abd4d",
+          "identitySha256": "95bfc2c54679d22bd6d5bb65356d6e7ad9f371893f92c12daa810378966abd4d"
         }
       ]
     },
@@ -162,6 +114,22 @@
       ]
     },
     {
+      "name": "quirky-jira-tickets",
+      "sourcePath": "skills/quirky-jira-tickets",
+      "packageDigest": "c325a8b314aac9ee5d38392f9026584f78d47bf17128a3cf37a202dd49f0a3a7",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 2189,
+          "executable": false,
+          "classification": "text",
+          "exactSha256": "d9eab6c6f06400013a4ee46d00752ce1cf6c29c45ab88a6f8b85decb996ab9dc",
+          "textNormalizedSha256": "d9eab6c6f06400013a4ee46d00752ce1cf6c29c45ab88a6f8b85decb996ab9dc",
+          "identitySha256": "d9eab6c6f06400013a4ee46d00752ce1cf6c29c45ab88a6f8b85decb996ab9dc"
+        }
+      ]
+    },
+    {
       "name": "quirky-ledger",
       "sourcePath": "skills/quirky-ledger",
       "packageDigest": "2de8e10f15f3b2e951ecb455cea7f4ddc63c169d21079da41e2ee67a662c399c",
@@ -194,6 +162,22 @@
       ]
     },
     {
+      "name": "quirky-linear-tickets",
+      "sourcePath": "skills/quirky-linear-tickets",
+      "packageDigest": "415240f5cac46bddd2c5d93f0c7fd64bac25dfe4e64f0f25e74794b6c1aaec98",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 2295,
+          "executable": false,
+          "classification": "text",
+          "exactSha256": "5618df20367522183b7e38d69307d28ad290083859360eeca24339f2f5924fd9",
+          "textNormalizedSha256": "5618df20367522183b7e38d69307d28ad290083859360eeca24339f2f5924fd9",
+          "identitySha256": "5618df20367522183b7e38d69307d28ad290083859360eeca24339f2f5924fd9"
+        }
+      ]
+    },
+    {
       "name": "quirky-loop",
       "sourcePath": "skills/quirky-loop",
       "packageDigest": "926aefaa943c97aa1bf38dc99104972cb18d16123682235b7e0ae52dd9a476fa",
@@ -206,6 +190,22 @@
           "exactSha256": "aa1176ebf05a9e71321860c592a2c4d2ffedf70d420600f1af1287bbf63714fc",
           "textNormalizedSha256": "aa1176ebf05a9e71321860c592a2c4d2ffedf70d420600f1af1287bbf63714fc",
           "identitySha256": "aa1176ebf05a9e71321860c592a2c4d2ffedf70d420600f1af1287bbf63714fc"
+        }
+      ]
+    },
+    {
+      "name": "quirky-orchestration",
+      "sourcePath": "skills/quirky-orchestration",
+      "packageDigest": "db694d15aadf661b0315545831177682a92a81f6ca0b5023037fcf074e16cb89",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "size": 3765,
+          "executable": false,
+          "classification": "text",
+          "exactSha256": "cff5cb7d1c6d8b561a3680d3a3659854c6be3247df2fa59cf7efefbb54dd25a1",
+          "textNormalizedSha256": "cff5cb7d1c6d8b561a3680d3a3659854c6be3247df2fa59cf7efefbb54dd25a1",
+          "identitySha256": "cff5cb7d1c6d8b561a3680d3a3659854c6be3247df2fa59cf7efefbb54dd25a1"
         }
       ]
     },

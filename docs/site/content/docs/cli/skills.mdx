@@ -16,13 +16,13 @@ Quirky ships **skills** that agents install into their skill directories. Public
 
 ## Installable Quirky skills
 
-Use `npx skills add` with the public Quirky repo and the skill name. Default agent setup usually installs `quirky-cli`, `computer-use`, and `orchestration`.
+Use `npx skills add` with the public Quirky repo and the skill name. Default agent setup usually installs `quirky-cli`, `quirky-computer-use`, and `quirky-orchestration`.
 
 | Skill                                                   | Install                                                                                     | Use it for                                                    |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | [`quirky-cli`](#quirky-cli)                             | `npx skills add https://github.com/stablyai/orca --skill quirky-cli --global`               | Worktrees, terminals, files, automations, embedded browser.   |
-| [`orchestration`](#orchestration)                       | `npx skills add https://github.com/stablyai/orca --skill orchestration --global`            | Multi-agent Runs, tasks, supervised workers, messages, gates. |
-| [`computer-use`](#computer-use)                         | `npx skills add https://github.com/stablyai/orca --skill computer-use --global`             | Desktop apps via accessibility trees and safe UI actions.     |
+| [`quirky-orchestration`](#quirky-orchestration)         | `npx skills add https://github.com/stablyai/orca --skill quirky-orchestration --global`     | Multi-agent Runs, tasks, supervised workers, messages, gates. |
+| [`quirky-computer-use`](#quirky-computer-use)           | `npx skills add https://github.com/stablyai/orca --skill quirky-computer-use --global`      | Desktop apps via accessibility trees and safe UI actions.     |
 | [`quirky-linear`](#quirky-linear)                       | `npx skills add https://github.com/stablyai/orca --skill quirky-linear --global`            | Linear ticket read/write through `quirky linear`.             |
 | [`quirky-emulator`](#quirky-emulator)                   | `npx skills add https://github.com/stablyai/orca --skill quirky-emulator --global`          | iOS Simulator control.                                        |
 | [`quirky-emulator-android`](#quirky-emulator-android)   | `npx skills add https://github.com/stablyai/orca --skill quirky-emulator-android --global`  | Android emulator/device via adb.                              |
@@ -39,9 +39,9 @@ After `npx skills add`, agents see a short stub that says:
 ```bash
 quirky skills list
 quirky skills get quirky-cli
-quirky skills get orchestration --references
-quirky skills get orchestration --reference recovery-and-cleanup
-quirky skills get orchestration --full
+quirky skills get quirky-orchestration --references
+quirky skills get quirky-orchestration --reference recovery-and-cleanup
+quirky skills get quirky-orchestration --full
 quirky skills get quirky-linear --json
 ```
 
@@ -61,14 +61,14 @@ When Quirky ships a newer skill package than the one installed globally, the app
 Manual equivalent (desktop Settings shows the same pinned form for the running build):
 
 ```bash
-npx skills@1.7.2 add https://github.com/stablyai/orca/tree/<commit> --skill quirky-cli --skill orchestration --global
+npx skills@1.7.2 add https://github.com/stablyai/orca/tree/<commit> --skill quirky-cli --skill quirky-orchestration --global
 ```
 
 On headless hosts (SSH, containers, CI, `quirky serve`) with no Settings UI, use the local CLI wrappers — they resolve the same `npx` commands, add non-interactive flags, and do **not** need a running Quirky runtime:
 
 ```bash
 quirky skills install                                      # list installable names
-quirky skills install --skill quirky-cli --skill orchestration
+quirky skills install --skill quirky-cli --skill quirky-orchestration
 quirky skills install --skill quirky-cli --agent claude-code,codex
 quirky skills install --all --dry-run
 quirky skills update --all
@@ -94,18 +94,18 @@ npx skills add https://github.com/stablyai/orca --skill quirky-cli --global
 
 After install, load the version-matched command guide with `quirky skills get quirky-cli`. See [Quirky CLI](/docs/cli/overview).
 
-## orchestration
+## quirky-orchestration
 
 ```bash
-npx skills add https://github.com/stablyai/orca --skill orchestration --global
+npx skills add https://github.com/stablyai/orca --skill quirky-orchestration --global
 ```
 
-Use this when an agent should coordinate other agents through Runs, tasks, supervised workers, and decision gates. See [Orchestration](/docs/cli/orchestration). Always load `quirky skills get orchestration --full` before mutating orchestration state — the legacy `orchestration run` command is retired.
+Use this when an agent should coordinate other agents through Runs, tasks, supervised workers, and decision gates. See [Orchestration](/docs/cli/orchestration). Always load `quirky skills get quirky-orchestration --full` before mutating orchestration state — the legacy `orchestration run` command is retired.
 
-## computer-use
+## quirky-computer-use
 
 ```bash
-npx skills add https://github.com/stablyai/orca --skill computer-use --global
+npx skills add https://github.com/stablyai/orca --skill quirky-computer-use --global
 ```
 
 Use this when an agent needs to inspect and operate local desktop app windows. See [Computer use](/docs/cli/computer-use).

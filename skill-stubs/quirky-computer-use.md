@@ -7,7 +7,7 @@ This discovery stub loads the version-matched guide from the Quirky executable u
 ## Load the version-matched guide before running Quirky commands
 
 ```text
-QUIRKY skills get computer-use
+QUIRKY skills get quirky-computer-use
 ```
 
 <!-- shared: no-guessing -->

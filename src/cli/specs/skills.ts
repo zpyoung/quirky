@@ -29,9 +29,9 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
     ],
     examples: [
       'quirky skills get quirky-cli',
-      'quirky skills get orchestration --full',
-      'quirky skills get orchestration --references',
-      'quirky skills get orchestration --reference recovery-and-cleanup'
+      'quirky skills get quirky-orchestration --full',
+      'quirky skills get quirky-orchestration --references',
+      'quirky skills get quirky-orchestration --reference recovery-and-cleanup'
     ]
   },
   {
@@ -63,7 +63,7 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
     ],
     examples: [
       'quirky skills install',
-      'quirky skills install --skill quirky-cli --skill orchestration',
+      'quirky skills install --skill quirky-cli --skill quirky-orchestration',
       'quirky skills install --skill quirky-cli --local',
       'quirky skills install --skill quirky-cli --agent claude-code,codex',
       'quirky skills install --all --dry-run'
@@ -92,7 +92,7 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
     ],
     examples: [
       'quirky skills update',
-      'quirky skills update --skill quirky-cli --skill orchestration',
+      'quirky skills update --skill quirky-cli --skill quirky-orchestration',
       'quirky skills update --skill quirky-cli --local',
       'quirky skills update --all --dry-run'
     ]

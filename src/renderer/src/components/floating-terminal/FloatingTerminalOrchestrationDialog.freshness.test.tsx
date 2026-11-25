@@ -123,7 +123,7 @@ describe('FloatingTerminalOrchestrationDialog freshness', () => {
   it('refreshes the local freshness verdict after presence re-check completes', async () => {
     const freshnessInventory = vi
       .fn()
-      .mockResolvedValueOnce(inventory(['orchestration']))
+      .mockResolvedValueOnce(inventory(['quirky-orchestration']))
       .mockResolvedValueOnce(inventory([]))
     window.api = {
       skills: { freshnessInventory },

@@ -27,7 +27,7 @@ describe('bundled skill descriptions', () => {
     .map((entry) => entry.name)
 
   it('discovers the bundled skills', () => {
-    expect(skillNames).toContain('orchestration')
+    expect(skillNames).toContain('quirky-orchestration')
   })
 
   it.each(skillNames)('%s keeps description within the Agent Skills spec limit', (name) => {

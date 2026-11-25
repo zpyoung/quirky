@@ -14,7 +14,7 @@ Use `QUIRKY linear` when Linear is the source of task context or ticket updates.
 
 `QUIRKY` is a placeholder for the executable you resolved in the stub; substitute it before running.
 
-`quirky-linear` and `linear-tickets` are skill names, not CLI namespaces. Always run
+`quirky-linear` and `quirky-linear-tickets` are skill names, not CLI namespaces. Always run
 `QUIRKY linear ...` commands.
 
 Prefer `--json` for agent-driven calls. Use plain chat updates when no Linear-linked task exists or when the user did not ask to touch Linear.

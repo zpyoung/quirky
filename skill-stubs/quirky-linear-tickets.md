@@ -8,7 +8,7 @@ This discovery stub uses the legacy name `linear-tickets` for `quirky-linear`; b
 ## Load the version-matched guide before running Quirky commands
 
 ```text
-QUIRKY skills get linear-tickets
+QUIRKY skills get quirky-linear-tickets
 ```
 
 <!-- shared: no-guessing -->

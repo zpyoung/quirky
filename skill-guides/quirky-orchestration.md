@@ -1,5 +1,5 @@
 ---
-name: orchestration
+name: quirky-orchestration
 description: >-
   Coordinate supervised Quirky workers: threaded messages, blocking ask/reply,
   task dispatch, worker_done/escalation waits, task DAGs, decision gates,
@@ -181,9 +181,9 @@ and do not end the coordinator turn until it returns none.
 ## Conditional references
 
 This compact guide is sufficient for the normal local loop. At an action gate
-below, run `QUIRKY skills get orchestration --reference references/<file>.md` and
+below, run `QUIRKY skills get quirky-orchestration --reference references/<file>.md` and
 read only that document; `--references` lists the names. If the CLI rejects
-`--reference`, run `QUIRKY skills get orchestration --full` once instead: it
+`--reference`, run `QUIRKY skills get quirky-orchestration --full` once instead: it
 returns this exact kernel and every reference, so read only the named one. If an
 older CLI rejects `--full`, keep this kernel's safety floor, use that command's
 `--help`, and never guess newer flags.
