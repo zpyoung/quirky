@@ -12,15 +12,14 @@ import {
 import { gitExecFileAsync, gitStreamStdout } from '../../../git/runner'
 import { turnChangesIdentity } from '../../../native-chat/agent-session-timeline/turn-changes-item'
 import { resolveAgentSessionLaunchDirectory } from '../../agent-session-launch-directory'
+import { isRecord } from '../../../../shared/agent-status-child-work-value-guards'
 import { defineMethod } from '../core'
 import { requireInstalledStructuredHost } from './structured-agent-session-gate'
 
 export const TURN_DIFF_MAX_BYTES = 512 * 1024
 
 const TREE_PROBE_FAILED_WITH_EXIT_CODE = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  typeof (error as { code?: unknown }).code === 'number'
+  isRecord(error) && typeof error.code === 'number'
 
 export type TurnDiffSource = {
   itemBody: (itemId: string) => Promise<AgentJournalItemBody | null>

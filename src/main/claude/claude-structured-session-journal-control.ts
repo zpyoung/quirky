@@ -6,7 +6,6 @@ import type { StructuredAgentSessionEventSink } from '../native-chat/agent-sessi
 import type { ClaudeStreamJsonConnection } from './claude-stream-json-connection'
 import type { ClaudeJournalTranslator } from './claude-journal-translator-contract'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
-import type { ClaudeGoalBackgroundWork } from './claude-background-task-tracker'
 import type { ClaudeInitProof } from './claude-structured-init-proof'
 import type {
   ClaudeAcquisitionAttempt,
@@ -16,8 +15,7 @@ import type {
 export function createClaudeSessionJournalTranslator(
   sink: StructuredAgentSessionEventSink | undefined,
   fallbackIdPrefix: string,
-  failure: Parameters<typeof createClaudeJournalFailureHandler>[0],
-  goalBackgroundWork: () => ClaudeGoalBackgroundWork
+  failure: Parameters<typeof createClaudeJournalFailureHandler>[0]
 ): ClaudeJournalTranslator | null {
   const { attempt } = failure
   return sink
@@ -25,7 +23,6 @@ export function createClaudeSessionJournalTranslator(
         sink,
         account: () => attempt.account,
         fallbackIdPrefix,
-        goalBackgroundWork,
         onBackgroundTaskJournalFailure: createClaudeJournalFailureHandler(failure),
         bindPromptItemId: (itemId, promptKey) =>
           attempt.prompts.bindJournalItemId(itemId, promptKey)

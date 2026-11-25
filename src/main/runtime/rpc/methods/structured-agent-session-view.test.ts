@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { agentJournalItemKey } from '../../../../shared/agent-session-journal-item-key'
-import type { AgentJournalItemBody } from '../../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalItemBody,
+  AgentJournalTurnScope
+} from '../../../../shared/agent-session-journal-types'
 import { AgentSessionViewError } from '../../../native-chat/agent-session-wire/agent-session-view-error'
 import type { StructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-host'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
@@ -15,12 +18,12 @@ import { STRUCTURED_AGENT_SESSION_VIEW_METHODS } from './structured-agent-sessio
 const SESSION = 'session-alpha'
 const SPEC = { title: 'Plan', root: { type: 'markdown', props: { text: 'hello' } } }
 
-type Write = { itemId: string; body: AgentJournalItemBody; turnScope: unknown }
+type Write = { itemId: string; body: AgentJournalItemBody; turnScope: AgentJournalTurnScope }
 
 function fakeJournal(runningTurnItemId?: string) {
-  const items = new Map<string, { body: AgentJournalItemBody; turnScope: unknown }>()
+  const items = new Map<string, { body: AgentJournalItemBody; turnScope: AgentJournalTurnScope }>()
   const writes: Write[] = []
-  const put = (itemId: string, body: AgentJournalItemBody, turnScope: unknown) => {
+  const put = (itemId: string, body: AgentJournalItemBody, turnScope: AgentJournalTurnScope) => {
     items.set(itemId, { body, turnScope })
     writes.push({ itemId, body, turnScope })
   }
@@ -28,7 +31,7 @@ function fakeJournal(runningTurnItemId?: string) {
     itemBody: (itemId) => items.get(itemId)?.body ?? null,
     item: (itemId) => {
       const held = items.get(itemId)
-      return held ? { turnScope: held.turnScope as never } : null
+      return held ? { turnScope: held.turnScope } : null
     },
     runningTurn: () => (runningTurnItemId ? { item: { itemId: runningTurnItemId } } : null),
     appendItem: async (identity, body, options) => {
@@ -129,7 +132,9 @@ describe('agentSession.view.*', () => {
       placement: 'inline',
       title: 'Plan'
     })
-    expect(JSON.parse((bodyOf() as { spec: { head: string } }).spec.head)).toEqual(SPEC)
+    const body = bodyOf()
+    expect(body?.kind).toBe('visual')
+    expect(JSON.parse(body?.kind === 'visual' ? body.spec.head : '')).toEqual(SPEC)
   })
 
   it('open places a visual opened mid-turn in that turn', async () => {

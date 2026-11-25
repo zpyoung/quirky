@@ -41,9 +41,6 @@ export type StructuredAgentSessionComposerOptions = {
   runConversationCommand?: (
     command: AgentSessionConversationCommand
   ) => Promise<Omit<StructuredAgentSessionCommandOutcome, 'handled'>>
-  /** Present only where the host can set this session's goal; otherwise `/goal`
-   *  stays message text the agent acts on itself. */
-  setThreadGoalObjective?: (objective: string) => Promise<boolean>
 }
 
 /** What the chat shows a refused command waiting on: the agent working, a pending prompt, its
@@ -148,32 +145,10 @@ export function isLoneStructuredAgentSessionConversationCommand(text: string): b
   )
 }
 
-/** `/goal …`, which the host answers only where it can set this session's goal. */
-export function isStructuredAgentSessionGoalCommand(text: string): boolean {
-  return commandParts(text)?.name === 'goal'
-}
-
-/** `/clear`, `/compact` and `/goal …` change the conversation; option and picker commands do not. */
+/** `/clear` and `/compact` change the conversation; option and picker commands do not. */
 export function structuredAgentSessionCommandChangesConversation(text: string): boolean {
   const command = commandParts(text)
-  return (
-    command?.name === 'clear' ||
-    command?.name === 'compact' ||
-    (command?.name === 'goal' && command.argument !== '')
-  )
-}
-
-/** `/goal` with nothing after it: an entrance to goal mode, not an objective. */
-export function isBareStructuredAgentSessionGoalCommand(text: string): boolean {
-  const command = commandParts(text)
-  return command?.name === 'goal' && command.argument === ''
-}
-
-/** The objective a goal-mode draft names. A `/goal …` typed there out of habit
- *  names the same objective it would outside goal mode, never the literal command. */
-export function structuredAgentSessionGoalObjective(text: string): string {
-  const command = commandParts(text)
-  return command?.name === 'goal' ? command.argument : text.trim()
+  return command?.name === 'clear' || command?.name === 'compact'
 }
 
 function unavailable(name: string): StructuredAgentSessionCommandOutcome {
@@ -189,17 +164,6 @@ export async function dispatchStructuredAgentSessionComposerCommand(
   controller: StructuredAgentSessionComposerOptions
 ): Promise<StructuredAgentSessionCommandOutcome> {
   const command = commandParts(text)
-  if (command?.name === 'goal' && controller.setThreadGoalObjective) {
-    if (!command.argument) {
-      return { handled: true, accepted: false, error: 'Describe the goal after /goal.' }
-    }
-    // A refusal reaches the user through the session's own error surface.
-    return {
-      handled: true,
-      accepted: await controller.setThreadGoalObjective(command.argument),
-      error: null
-    }
-  }
   if (!command || !isStructuredAgentSessionComposerCommand(text, controller.agent)) {
     return { handled: false, accepted: false, error: null }
   }

@@ -52,7 +52,6 @@ export function createCodexJournalTranslator(
     genericFrames,
     items,
     compactions,
-    goals,
     prompts
   } = createCodexJournalTranslatorWriters(deps)
   const flushStreams = (): CodexJournalTranslationAdmission =>
@@ -182,7 +181,6 @@ export function createCodexJournalTranslator(
         prompts.pending.clear()
         turnBoundaries.clear()
         compactions.clear()
-        goals.clear()
         return CODEX_JOURNAL_ADMITTED
       }
       if (event.type === 'notification') {
@@ -217,10 +215,6 @@ export function createCodexJournalTranslator(
       const compaction = compactions.handle(event)
       if (compaction) {
         return publishActivity(event, compaction)
-      }
-      const goal = goals.handle(event)
-      if (goal) {
-        return publishActivity(event, goal)
       }
       // The session's own thread fills the window its chat shows; a child's frame measures its own.
       if (
@@ -283,7 +277,6 @@ export function createCodexJournalTranslator(
       genericFrames.dispose()
       turnBoundaries.clear()
       compactions.clear()
-      goals.dispose()
     }
   }
 }

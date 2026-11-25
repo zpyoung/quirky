@@ -34,7 +34,6 @@ import {
   AGENT_SESSION_HISTORY_DIRECTIONS,
   AGENT_SESSION_HISTORY_MAX_LIMIT
 } from '../agent-session-wire'
-import { AGENT_SESSION_THREAD_GOAL_OBJECTIVE_MAX_LENGTH } from '../agent-session-thread-goal-wire'
 
 // Four Claude questions with all four generated choices occupy 610 chars when fully percent-encoded.
 export const MAX_RESPONSE_OPTION_ID_LENGTH = AGENT_SESSION_RESPONSE_OPTION_ID_MAX_LENGTH
@@ -388,25 +387,6 @@ export const ConversationCommandParams = z
      *  `agent-session.queued-commands.v1` is advertised. A /clear never waits: its operation
      *  fingerprints no `delivery`, so one sent with it is refused as a conflict. */
     delivery: z.literal('queue-if-active').optional()
-  })
-  .strict()
-
-export const ThreadGoalParams = z
-  .object({
-    envelope: MutationEnvelope,
-    change: z.discriminatedUnion('kind', [
-      z
-        .object({
-          kind: z.literal('set'),
-          objective: z
-            .string()
-            .max(AGENT_SESSION_THREAD_GOAL_OBJECTIVE_MAX_LENGTH)
-            .refine((value) => value.trim().length > 0, 'Objective is empty')
-        })
-        .strict(),
-      z.object({ kind: z.literal('status'), status: z.enum(['active', 'paused']) }).strict(),
-      z.object({ kind: z.literal('clear') }).strict()
-    ])
   })
   .strict()
 

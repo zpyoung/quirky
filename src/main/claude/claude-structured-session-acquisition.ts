@@ -68,20 +68,12 @@ export async function acquireClaudeSession({
   // Frames are admitted only after launch resolution proves the provider session
   // this acquisition owns. Keep the check ahead of every stateful consumer.
   const initProof = createClaudeInitProof()
-  const translator = createClaudeSessionJournalTranslator(
-    input.events,
-    String(input.fence),
-    {
-      attempt,
-      initProof,
-      callbacks,
-      sessionId
-    },
-    () =>
-      liveSession && sessions.get(sessionId) === liveSession
-        ? liveSession.backgroundTasks.goalBackgroundWork
-        : 'unverifiable'
-  )
+  const translator = createClaudeSessionJournalTranslator(input.events, String(input.fence), {
+    attempt,
+    initProof,
+    callbacks,
+    sessionId
+  })
   const onMessage = (message: Record<string, unknown>): void => {
     const init = readClaudeInit(message)
     if (readClaudeFrameString(message, 'session_id') !== expectedProviderSessionId) {

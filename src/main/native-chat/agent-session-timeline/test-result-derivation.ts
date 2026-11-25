@@ -2,6 +2,7 @@ import type {
   AgentJournalToolCallItem,
   AgentJournalToolCallState
 } from '../../../shared/agent-session-journal-types'
+import { isRecord } from '../../../shared/agent-status-child-work-value-guards'
 import { stripAnsiEscapeSequences } from '../../../shared/ansi-escape-sequences'
 import type { AgentJournalTestResultItem } from '../../../shared/agent-session-journal-v1-items'
 
@@ -92,10 +93,10 @@ export function shellCommandOf(
     return null
   }
   const { input } = call
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+  if (!isRecord(input)) {
     return null
   }
-  const command = (input as Record<string, unknown>).command
+  const command = input.command
   if (typeof command === 'string') {
     return command.trim() === '' ? null : command
   }

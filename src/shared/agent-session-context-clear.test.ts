@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   AgentJournalItemBody,
   AgentJournalRenderItem,
-  AgentJournalSubmission,
-  AgentJournalThreadGoal
+  AgentJournalSubmission
 } from './agent-session-journal-types'
 import {
   agentSessionCurrentContextRows,
@@ -13,10 +12,6 @@ import {
   isNativeChatContextClear,
   latestAgentSessionContextClearSequence
 } from './agent-session-context-clear'
-import {
-  currentAgentSessionThreadGoal,
-  currentAgentSessionThreadGoalSourceBySequence
-} from './agent-session-thread-goal'
 import {
   activeStructuredAgentSessionTurnId,
   newestStructuredAgentSessionTurn
@@ -68,16 +63,6 @@ const oldPrompt = row(4, {
   options: [],
   resolution: { state: 'pending', selectedOptionId: null, resolvedBy: null, resolvedAt: null }
 })
-const goal: AgentJournalThreadGoal = {
-  objective: 'Old goal',
-  status: 'active',
-  tokenBudget: null,
-  tokensUsed: 1,
-  timeUsedSeconds: 1,
-  createdAt: 1,
-  updatedAt: 1
-}
-const goalRow = row(2, { kind: 'status', text: 'Goal set', threadGoal: { state: 'set', goal } })
 const usageRow = row(3, {
   kind: 'turn',
   turnId: 'old-turn',
@@ -154,20 +139,6 @@ describe('completed context clear projections', () => {
     })
     expect(activeStructuredAgentSessionTurnId(rows)).toBe('new-turn')
     expect(owesStructuredAgentSessionWork(rows, [oldSend, currentSend], 3)).toBe(true)
-  })
-
-  it('resets the current goal in sorted snapshots and unordered host maps', () => {
-    expect(currentAgentSessionThreadGoal([goalRow, clear])).toBeNull()
-    expect(currentAgentSessionThreadGoalSourceBySequence([clear, goalRow])?.goal).toBeNull()
-    const newGoal = row(6, {
-      kind: 'status',
-      text: 'Goal set',
-      threadGoal: { state: 'set', goal: { ...goal, objective: 'New goal' } }
-    })
-    expect(
-      currentAgentSessionThreadGoalSourceBySequence([newGoal, goalRow, clear])?.goal?.objective
-    ).toBe('New goal')
-    expect(currentAgentSessionThreadGoal([goalRow], clear.sequence)).toBeUndefined()
   })
 
   it('does not use earlier usage or stale whole-journal facts after a loaded clear', () => {

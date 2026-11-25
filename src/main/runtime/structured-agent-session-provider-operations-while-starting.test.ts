@@ -29,8 +29,6 @@ import {
 const CALLER = { callerKey: 'provider-operations-test' }
 let root: string | undefined
 let operations = 0
-/** The attach that opened the chat; a reconnecting view replays it. */
-let openedWith: Parameters<StructuredAgentSessionHost['attach']>[1] | undefined
 
 afterEach(async () => {
   await stopStructuredAgentSessionRuntime()
@@ -92,7 +90,6 @@ async function openChat(
   params.envelope.clientOperationId = operationId()
   const attached = await host.attach(CALLER, params)
   expect(attached, JSON.stringify(attached)).toMatchObject({ ok: true })
-  openedWith = params
   return host
 }
 
@@ -210,27 +207,4 @@ it('answers a rewind asked of a resting Codex chat from the thread it opens, lea
   expect(host.deps.store.getRecord(SESSION)?.rewind).toBeUndefined()
   expect(await send(host, 'still sends')).toMatchObject({ ok: true })
   await eventually(() => expect(child.prompts()).toEqual(['first turn', 'still sends']))
-})
-
-it('keeps a goal waiting on a starting Codex chat through a re-attach, then sets it once the thread is open', async () => {
-  const child = codexScriptedChild()
-  const host = await openChat(child)
-  const change = { kind: 'set' as const, objective: 'Ship the release' }
-
-  const goal = host.changeThreadGoal(CALLER, {
-    envelope: envelope(host, 'agentSession.threadGoal', { change }),
-    change
-  })
-  expect(await settlesSoon(goal)).toBe(false)
-  // A view reconnects while the chat is still starting: its replayed attach keeps the live child.
-  if (!openedWith) {
-    throw new Error('the chat was not opened')
-  }
-  expect(await host.attach(CALLER, openedWith)).toMatchObject({ ok: true, replayed: true })
-  expect(child.spawns()).toBe(1)
-  expect(await settlesSoon(goal)).toBe(false)
-  child.releaseHandshake()
-
-  expect(await goal).toMatchObject({ ok: true })
-  expect(child.requests().some(({ method }) => method === 'thread/goal/set')).toBe(true)
 })

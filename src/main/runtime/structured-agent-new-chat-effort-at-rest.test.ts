@@ -43,7 +43,6 @@ const unused = (): never => {
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the registry only checks that declared capabilities have these methods; the at-rest read calls none.
 const ADAPTER = {
   compact: unused,
-  changeThreadGoal: unused,
   rewind: unused,
   recoverRewind: unused
 } as unknown as StructuredAgentSessionAdapter
@@ -200,7 +199,6 @@ function host(agent: string, record: AgentSessionRecord) {
     child: null,
     params: { provider: agent },
     journal: {
-      threadGoal: () => null,
       visitItems: () => {},
       submissions: () => [],
       contextUsage: () => null,

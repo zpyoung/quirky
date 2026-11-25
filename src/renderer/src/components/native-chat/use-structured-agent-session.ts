@@ -110,7 +110,6 @@ export function useStructuredAgentSession(args: {
     setStructuredOption,
     sendSource,
     unavailable,
-    threadGoal: threadGoalSupport,
     contextUsage: contextUsageSupport,
     rewind: rewindSupport,
     acceptsImages
@@ -171,7 +170,7 @@ export function useStructuredAgentSession(args: {
     state.epoch
   )
 
-  const contextFloor = contextUsageSupport?.contextFloor ?? threadGoalSupport?.contextFloor
+  const contextFloor = contextUsageSupport?.contextFloor
   const railOutline = useStructuredAgentSessionRailOutline({
     sessionId,
     target,

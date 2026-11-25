@@ -17,6 +17,7 @@ import {
 import type { AgentJournalVisualItem } from '../../../shared/agent-session-journal-v1-items'
 import {
   applyViewPatch,
+  checkViewSpec,
   parseViewPatch,
   validateViewSpec,
   ViewPatchError
@@ -283,8 +284,11 @@ function visualBody(input: {
 }
 
 function readSpec(body: VisualBody): ViewSpec {
-  // SAFETY: the host wrote this payload from a validated ViewSpec and never truncates it.
-  return JSON.parse(body.spec.head) as ViewSpec
+  const checked = checkViewSpec(JSON.parse(body.spec.head))
+  if (!checked.ok) {
+    throw new Error('a stored visual no longer validates as a view spec')
+  }
+  return checked.spec
 }
 
 /** A visual opened mid-turn belongs to that turn, so its chip sits beside the turn's work. */

@@ -368,7 +368,7 @@ describe('options at rest', () => {
 
   it('answers the provider-level features of a chat at rest (P2-17)', async () => {
     await restingChat()
-    // A runtime that declares Codex's goal and rewind, as production registers it.
+    // A runtime that declares Codex's rewind, as production registers it.
     setStructuredAgentSessionHost(await rig.restart({ agents: claudeAndCodexDeclared() }))
     Object.assign(rig.host.deps.adapter, {
       rewindSupport: (_id: string, agent?: string) =>
@@ -377,7 +377,7 @@ describe('options at rest', () => {
     const [options] = await call('agentSession.options', { sessionId: SESSION })
     expect(options).toMatchObject({
       ok: true,
-      result: { threadGoal: { current: null }, rewind: { supported: true } }
+      result: { rewind: { supported: true } }
     })
     expect(rig.adapter.acquire).not.toHaveBeenCalled()
     expect(rig.adapter.readOptions).not.toHaveBeenCalled()

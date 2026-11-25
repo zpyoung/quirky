@@ -18,8 +18,7 @@ const patch = (...ops: ViewPatchOp[]) => ({ ops })
 
 function failureOf(ops: unknown[], spec: ViewSpec = base): string {
   try {
-    // SAFETY: the cases deliberately pass malformed ops to prove they are refused.
-    applyViewPatch(spec, { ops: ops as ViewPatchOp[] })
+    applyViewPatch(spec, { ops })
   } catch (error) {
     expect(error).toBeInstanceOf(ViewPatchError)
     return error instanceof Error ? error.message : ''
@@ -151,8 +150,7 @@ describe('applyViewPatch', () => {
       value: 'x'
     }))
     expect(failureOf(many)).toBe('ops: at most 200 ops allowed')
-    // SAFETY: deliberately malformed ops to prove a non-array is refused.
-    const notAList = { ops: { op: 'add' } as never }
+    const notAList = { ops: { op: 'add' } }
     expect(() => applyViewPatch(base, notAList)).toThrow('ops: must be an array of operations')
     const fine = Array.from({ length: MAX_PATCH_OPS }, (_, i) => ({
       op: 'replace' as const,

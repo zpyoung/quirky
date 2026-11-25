@@ -16,7 +16,6 @@ import {
 import {
   ClaudeSettledBackgroundTasks,
   claudeBackgroundTaskDetails,
-  hasLiveClaudeBackgroundWork,
   type TrackedClaudeBackgroundTask
 } from './claude-settled-background-tasks'
 import { combineClaudeBackgroundTaskRoster } from './claude-background-task-roster-merge'
@@ -33,14 +32,12 @@ export type { ClaudeBackgroundTaskKind } from './claude-background-task-frames'
 
 /** Ended ids remembered to refuse a late start; live tasks take no bound. */
 const MAX_TERMINAL_TASK_IDS = 256
-export type ClaudeGoalBackgroundWork = 'live' | 'unverifiable' | 'exited'
 
 export class ClaudeBackgroundTaskTracker {
   private readonly tasks = new Map<string, TrackedClaudeBackgroundTask>()
   private readonly retention = new ClaudeSettledBackgroundTasks()
   private readonly terminalTaskIds = new Set<string>()
   private aggregateRosterObserved = false
-  private coverageIncomplete = false
   private monitoring = false
   private publishedTasksFingerprint = ''
 
@@ -65,14 +62,6 @@ export class ClaudeBackgroundTaskTracker {
       }
     }
     return ids
-  }
-
-  get goalBackgroundWork(): ClaudeGoalBackgroundWork {
-    return hasLiveClaudeBackgroundWork(this.tasks.values())
-      ? 'live'
-      : this.coverageIncomplete
-        ? 'unverifiable'
-        : 'exited'
   }
 
   observe(message: Record<string, unknown>, startsTurn = false): boolean {
@@ -104,7 +93,6 @@ export class ClaudeBackgroundTaskTracker {
     this.retention.clear()
     this.terminalTaskIds.clear()
     this.aggregateRosterObserved = false
-    this.coverageIncomplete = false
     return this.refreshMonitoring()
   }
 
@@ -224,18 +212,15 @@ export class ClaudeBackgroundTaskTracker {
 
   private replaceAggregateRoster(value: unknown): void {
     if (!Array.isArray(value)) {
-      this.coverageIncomplete = true
       return
     }
     const prior = new Map(this.tasks)
     this.aggregateRosterObserved = true
     this.tasks.clear()
     const roster = new Map<string, TrackedClaudeBackgroundTask>()
-    let coverageIncomplete = false
     for (const valueTask of value) {
       const task = record(valueTask)
       if (!task) {
-        coverageIncomplete = true
         continue
       }
       if (task.ambient === true) {
@@ -243,7 +228,6 @@ export class ClaudeBackgroundTaskTracker {
       }
       const id = taskId(task)
       if (!id) {
-        coverageIncomplete = true
         continue
       }
       // An authoritative live roster supersedes an earlier terminal edge — for
@@ -264,7 +248,6 @@ export class ClaudeBackgroundTaskTracker {
         totalTokens: existing?.totalTokens
       })
     }
-    this.coverageIncomplete = coverageIncomplete
     for (const [id, task] of combineClaudeBackgroundTaskRoster(prior, roster)) {
       this.tasks.set(id, task)
     }
