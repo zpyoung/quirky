@@ -155,7 +155,7 @@ export function defineGraphiteMonacoThemes(m: typeof import('monaco-editor')): v
 - Monaco needs 6- or 8-digit hex, so pass hex values only and never `var()`.
 - Live switching relies on the global `setTheme`, which already runs when the prop changes. No editor gets a theme-dependent `key`.
 
-**Mermaid.** `getMermaidConfig(isDark, htmlLabels, colors?)` returns `theme: 'base'` whenever `colors` is present, in either mode. `readMermaidThemeColors()` reads these tokens: `--background`, `--foreground`, `--secondary` (primary fill), `--code-background` (secondary fill), `--card` (tertiary fill), `--muted-foreground` (node borders and lines), and `--chart-1` to `--chart-5` (pie slices `pie1` to `pie5`, so slices never share a fill). `MermaidBlock.tsx:99-100` passes `colors` in both modes.
+**Mermaid.** `getMermaidConfig(isDark, htmlLabels, colors?)` returns `theme: 'base'` whenever `colors` is present, in either mode. `readMermaidThemeColors()` reads these tokens: `--background`, `--foreground`, `--secondary` (primary fill), `--code-background` (secondary fill), `--card` (tertiary fill), `--muted-foreground` (node borders and lines), and `--chart-1` to `--chart-8` (all twelve pie slots, mapped as in the Token map notes). `MermaidBlock.tsx:99-100` passes `colors` in both modes.
 
 ## Data models and pinned shapes
 
@@ -198,7 +198,7 @@ The light `--muted-foreground` and amber values follow the 2026-11-25 amendment 
 Notes on the map:
 
 - The gutter mixes keep their current `color-mix` percentages over the new ground colours.
-- `--chart-1` to `--chart-5` take v1's tile hues so they carry white text: dark `#3f6fd0`, `#7b52c6`, `#0f7f8a`, `#b4532f`, `#3a7d52`; light `#2f62c0`, `#6c42b8`, `#0b6f79`, `#a64624`, `#2f6f45`. Mermaid pie labels use `pieSectionTextColor: #ffffff`.
+- `--chart-1` to `--chart-5` take v1's tile hues so they carry white text: dark `#3f6fd0`, `#7b52c6`, `#0f7f8a`, `#b4532f`, `#3a7d52`; light `#2f62c0`, `#6c42b8`, `#0b6f79`, `#a64624`, `#2f6f45`. New `--chart-6` to `--chart-8` take v1's remaining tiles: dark `#a8408a`, `#50698a`, `#8a6a1c`; light `#962f7a`, `#44607f`, `#7a5c12`. Mermaid pie labels use `pieSectionTextColor: #ffffff`, and all twelve pie slots are set: `pie1`..`pie8` = `--chart-1`..`--chart-8`, then `pie9`..`pie12` = `--chart-2`..`--chart-5`, so no two adjacent slices (including last-to-first) share a fill at any slice count.
 - `--git-decoration-*`, `--git-graph-*`, `--tool-*`, `--hljs-*`, `--code-accent`, `--ai-action-accent` and `--callout-*` keep their values, because they're categorical data hues, not chrome.
 - Mobile (`mobile/src/theme/mobile-theme.ts`) uses these values:
   - Base colours: `bgBase #0c0d0f`, `bgPanel #16171b`, `bgRaised #22242b`, `borderSubtle #24262c`, `editorSurface #16171b`, `terminalBg #16171b`.
