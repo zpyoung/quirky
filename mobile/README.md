@@ -2,6 +2,8 @@
 
 React Native companion app for Quirky. Monitor worktrees, view terminal output, and send commands from your phone.
 
+To ship a build to your iPhone, follow [TESTFLIGHT.md](./TESTFLIGHT.md).
+
 Local development uses two processes:
 
 - Quirky desktop/Electron from the repo root. This hosts the mobile WebSocket RPC server on port `6768`.
