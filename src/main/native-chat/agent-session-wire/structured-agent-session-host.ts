@@ -39,6 +39,7 @@ import { structuredAgentSessionRestartResumeSurfaces } from './structured-agent-
 import * as conversation from './structured-agent-session-host-delivery'
 import { wireStructuredAgentSessionQueuedMessages } from './structured-agent-session-queued-wiring'
 import * as sessionLogger from './structured-agent-session-logger'
+import { createHostTurnObserver } from './structured-agent-session-turn-observer'
 import { sleepStructuredAgentSessionWorkspace } from './structured-agent-session-workspace-sleep'
 export type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 
@@ -47,10 +48,12 @@ export class StructuredAgentSessionHost {
     () => this.mutationContext(),
     this
   )
+  private readonly turnObserver = createHostTurnObserver(() => this.deps)
   private readonly sessions = new StructuredAgentSessionConversations({
     deliver: (sessionId, journal) => {
       this.subscribers.publish(sessionId, journal)
       this.conversationDelivery.afterCommit(sessionId, journal)
+      this.turnObserver.observe(sessionId, journal)
     },
     deliverSettleEdge: (id, journal) => this.conversationDelivery.afterSettleEdge(id, journal),
     logger: sessionLogger.deferredStructuredAgentSessionLogger(() => this.deps.logger),
@@ -334,6 +337,10 @@ export class StructuredAgentSessionHost {
    *  revised or tombstoned in place, so an item's ABSENCE from a bounded page proves nothing. */
   journalSnapshot = async (sessionId: string) =>
     (await this.lifetime.conversation(sessionId)).journal.snapshot()
+
+  /** One item's body by its journal key, without reducing the whole timeline. */
+  readItemBody = async (sessionId: string, itemId: string) =>
+    (await this.lifetime.conversation(sessionId)).journal.itemBody(itemId)
 
   /** The host's projection of a held chat's current work (`structuredAgentSessionCurrentWork`). */
   currentWork = this.clientDelivery.readCurrentWork
