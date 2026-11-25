@@ -99,10 +99,17 @@ function v1ChatItemText(body: AgentJournalItemBody): string | null {
       return body.fromTitle ? `Forked from ${body.fromTitle}` : 'Forked from another chat'
     case 'test-result':
       return `${body.passed ?? 0} passed, ${body.failed ?? 0} failed`
-    default:
-      // the body type is an open union: a kind a newer host wrote reaches here too
+    case 'message':
+    case 'tool-call':
+    case 'diff':
+    case 'approval':
+    case 'question':
+    case 'status':
+    case 'turn':
       return null
   }
+  // the parsed body is an open union at runtime: a kind a newer host wrote falls through to here
+  return null
 }
 
 function itemBlocks(item: AgentJournalRenderItem): {
