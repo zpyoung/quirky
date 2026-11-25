@@ -2,7 +2,12 @@
 import { describe, expect, it } from 'vitest'
 import mermaid from 'mermaid'
 
-import { getMermaidConfig } from './mermaid-config'
+import { getMermaidConfig, type MermaidThemeColors } from './mermaid-config'
+
+const pieColors = {
+  dark: ['#3f6fd0', '#7b52c6', '#0f7f8a', '#b4532f', '#3a7d52'] as const,
+  light: ['#2f62c0', '#6c42b8', '#0b6f79', '#a64624', '#2f6f45'] as const
+}
 
 const darkColors = {
   background: '#0a0a0a',
@@ -21,7 +26,7 @@ const graphiteDark = {
   secondary: '#101114',
   tertiary: '#16171b',
   line: '#7c828d',
-  pie: ['#bedbff', '#2b7fff', '#155dfc', '#1447e6', '#193cb8'] as const
+  pie: pieColors.dark
 }
 
 const graphiteLight = {
@@ -31,7 +36,7 @@ const graphiteLight = {
   secondary: '#f6f7f9',
   tertiary: '#ffffff',
   line: '#646b76',
-  pie: ['#bedbff', '#2b7fff', '#155dfc', '#1447e6', '#193cb8'] as const
+  pie: pieColors.light
 }
 
 function luminance(color: string | boolean | undefined): number {
@@ -54,9 +59,15 @@ function luminance(color: string | boolean | undefined): number {
   return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
 }
 
+function contrastRatio(first: string, second: string): number {
+  const a = luminance(first)
+  const b = luminance(second)
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+}
+
 function resolvedTheme(
   isDark: boolean,
-  colors = darkColors
+  colors: MermaidThemeColors = darkColors
 ): NonNullable<ReturnType<typeof mermaid.mermaidAPI.getConfig>['themeVariables']> {
   mermaid.initialize(getMermaidConfig(isDark, false, colors))
   const variables = mermaid.mermaidAPI.getConfig().themeVariables
@@ -159,6 +170,26 @@ describe('getMermaidConfig', () => {
       ).toBe(5)
     }
   )
+
+  it.each([
+    ['dark', true, graphiteDark],
+    ['light', false, graphiteLight]
+  ] as const)('keeps pie slice labels readable on every slice (%s)', (_mode, isDark, colors) => {
+    const variables = resolvedTheme(isDark, colors)
+    expect(variables.pieSectionTextColor).toBe('#ffffff')
+    for (const slice of [
+      variables.pie1,
+      variables.pie2,
+      variables.pie3,
+      variables.pie4,
+      variables.pie5
+    ]) {
+      if (typeof slice !== 'string') {
+        throw new Error('Expected a resolved pie color')
+      }
+      expect(contrastRatio('#ffffff', slice), `white on ${slice}`).toBeGreaterThanOrEqual(4.5)
+    }
+  })
 
   it('keeps node borders off the surface fills so shapes stay outlined', () => {
     const variables = resolvedTheme(true, graphiteDark)

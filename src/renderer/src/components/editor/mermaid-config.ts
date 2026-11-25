@@ -49,7 +49,8 @@ export function getMermaidConfig(
             pie2: colors.pie[1],
             pie3: colors.pie[2],
             pie4: colors.pie[3],
-            pie5: colors.pie[4]
+            pie5: colors.pie[4],
+            pieSectionTextColor: '#ffffff'
           }
         }
       : {}),
