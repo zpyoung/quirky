@@ -250,13 +250,13 @@ describe('CandidateRow', () => {
 
   it('colors the review pill by state the way the PR page and item dialog do', () => {
     const states = [
-      { state: 'merged' as const, label: 'PR #1', hue: 'purple' },
-      { state: 'closed' as const, label: 'PR #2', hue: 'rose' },
-      { state: 'open' as const, label: 'PR #3', hue: 'emerald' },
-      { state: 'draft' as const, label: 'PR #4', hue: 'slate' }
+      { state: 'merged' as const, label: 'PR #1', tone: 'text-purple-', muted: false },
+      { state: 'closed' as const, label: 'PR #2', tone: 'text-destructive', muted: false },
+      { state: 'open' as const, label: 'PR #3', tone: 'text-agent-done', muted: false },
+      { state: 'draft' as const, label: 'PR #4', tone: 'text-muted-foreground', muted: true }
     ]
 
-    for (const { state, label, hue } of states) {
+    for (const { state, label, tone, muted } of states) {
       const candidate = makeCandidate()
 
       act(() => {
@@ -285,8 +285,10 @@ describe('CandidateRow', () => {
       })
 
       const pill = container?.querySelector(`[aria-label*="${label}"]`)
-      expect(pill?.className).toContain(`text-${hue}-`)
-      expect(pill?.className).not.toContain('text-muted-foreground')
+      expect(pill?.className).toContain(tone)
+      if (!muted) {
+        expect(pill?.className).not.toContain('text-muted-foreground')
+      }
     }
   })
 
