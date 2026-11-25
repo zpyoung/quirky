@@ -45,7 +45,7 @@ const PR_GROUP_META: Record<
       return translate('auto.components.sidebar.worktree.list.groups.682ed5d551', 'Closed')
     },
     icon: CircleX,
-    tone: 'text-zinc-600 dark:text-zinc-300'
+    tone: 'text-muted-foreground'
   }
 }
 

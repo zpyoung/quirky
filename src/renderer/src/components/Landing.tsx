@@ -132,10 +132,7 @@ export default function Landing(): React.JSX.Element {
     <div className="absolute inset-0 flex items-center justify-center bg-background">
       <div className="w-full max-w-lg px-6">
         <div className="flex flex-col items-center gap-4 py-8">
-          <div
-            className="flex items-center justify-center size-20 rounded-2xl border border-border/80 shadow-lg shadow-black/40"
-            style={{ backgroundColor: '#12181e' }}
-          >
+          <div className="dark flex items-center justify-center size-20 rounded-2xl border border-border/80 bg-code-background shadow-lg shadow-black/40">
             <img
               src={logo}
               alt={translate('auto.components.Landing.520304a067', 'Quirky logo')}

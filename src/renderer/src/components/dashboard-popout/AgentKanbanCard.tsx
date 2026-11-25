@@ -116,7 +116,7 @@ function sameCard(a: DashboardCard, b: DashboardCard): boolean {
 const REVIEW_PRESENTATION = {
   open: {
     icon: GitPullRequest,
-    className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+    className: 'border-agent-done/30 bg-agent-done/10 text-agent-done'
   },
   draft: {
     icon: GitPullRequestDraft,
@@ -227,7 +227,7 @@ export const AgentKanbanCard = memo(
           needsYou
             ? 'border-agent-question/40 bg-agent-question/[0.06] hover:border-agent-question/60 hover:bg-agent-question/10'
             : isDone
-              ? 'border-emerald-500/40 bg-emerald-500/[0.06] hover:border-emerald-500/60 hover:bg-emerald-500/10'
+              ? 'border-agent-done/40 bg-agent-done/[0.06] hover:border-agent-done/60 hover:bg-agent-done/10'
               : 'border-border/60 bg-card hover:border-border hover:bg-accent/40'
         )}
       >
