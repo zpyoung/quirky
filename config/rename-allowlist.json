@@ -15,7 +15,9 @@
     "config/scripts/check-no-orca-strings.test.mjs",
     "config/scripts/check-ipc-channel-parity.test.mjs",
     "pnpm-lock.yaml",
-    "mobile/pnpm-lock.yaml"
+    "mobile/pnpm-lock.yaml",
+    "src/main/agent-hooks/sibling-app-hook-commands.ts",
+    "src/main/agent-hooks/sibling-app-hook-commands.test.ts"
   ],
   "keepTokens": [
     "stablyai/orca",
