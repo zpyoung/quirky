@@ -1,13 +1,13 @@
 ---
 last_released_commit: 98b5867f0bd06ac1ea7b9cd22c43fc8ef15dda73
-upstream_synced: v1.4.237
 ---
 
 # Changelog
 
-Changes owned by the [`zpyoung/orca`](https://github.com/zpyoung/orca) fork. Upstream changes
-inherited from [`stablyai/orca`](https://github.com/stablyai/orca) are recorded as a single sync
-line per release, and detailed in each GitHub release's generated notes.
+Changes to Quirky, an independent app. The entries below predate Quirky's own versioning: they
+come from [`zpyoung/orca`](https://github.com/zpyoung/orca), the personal build Quirky's code grew
+out of, and their sync lines refer to the [`stablyai/orca`](https://github.com/stablyai/orca)
+releases that build followed.
 
 This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). It is maintained by the
 `release` skill — see `.claude/skills/release/SKILL.md`.

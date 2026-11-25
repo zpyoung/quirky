@@ -5,9 +5,9 @@ description: Use when asked to review upstream, find out what's new upstream, or
 
 # Upstream review
 
-Quirky is a hard fork of `stablyai/orca`. This skill proposes which upstream changes the owner
-should port. It writes a proposal and opens a draft PR. It never ports code and never pushes to
-`main`.
+Quirky is an independent app that began as a copy of `stablyai/orca`; nothing from that project
+merges in on its own. This skill proposes which of its changes the owner should port by hand. It
+writes a proposal and opens a draft PR. It never ports code and never pushes to `main`.
 
 ## 1. Find the last reviewed version
 

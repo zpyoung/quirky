@@ -39,7 +39,7 @@ export function createGpuCrashDiagnosticsRecorder(): GpuCrashDiagnosticsRecorder
   })
 }
 
-const UPSTREAM_CREDIT = 'Based on Orca by Lovecast Inc. (MIT)'
+const UPSTREAM_CREDIT = 'Includes code from Orca by Lovecast Inc. (MIT)'
 
 export function updateGpuAccelerationAboutPanel(): void {
   const options = createGpuAccelerationAboutPanelOptions({
