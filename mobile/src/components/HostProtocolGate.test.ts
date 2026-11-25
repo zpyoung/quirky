@@ -109,7 +109,7 @@ describe('HostProtocolGate', () => {
     renderer = await renderGate()
     const output = renderedText(renderer)
     expect(output).toContain('Update Quirky Mobile')
-    expect(output).toContain('Open App Store')
+    expect(output).not.toContain('Open App Store')
     expect(output).not.toContain('HostContent')
   })
 
@@ -129,7 +129,7 @@ describe('HostProtocolGate', () => {
     expect(output).not.toContain('HostContent')
     act(() => renderer?.root.findAllByType('Pressable')[0]?.props.onPress())
     expect(nativeTestState.openUrl).toHaveBeenCalledWith(
-      'https://github.com/stablyai/orca/releases'
+      'https://github.com/zpyoung/quirky/releases'
     )
   })
 
