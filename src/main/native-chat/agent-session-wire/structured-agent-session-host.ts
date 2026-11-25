@@ -39,7 +39,16 @@ import { structuredAgentSessionRestartResumeSurfaces } from './structured-agent-
 import * as conversation from './structured-agent-session-host-delivery'
 import { wireStructuredAgentSessionQueuedMessages } from './structured-agent-session-queued-wiring'
 import * as sessionLogger from './structured-agent-session-logger'
+import { hostStructuredAgentSessionCurrentWork } from './structured-agent-session-host-current-work'
 import { createHostTurnObserver } from './structured-agent-session-turn-observer'
+import {
+  createHostPlanObserver,
+  recordPermissionMode
+} from './structured-agent-session-plan-observer'
+import {
+  AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
+  isAgentChatPermissionMode
+} from '../../../shared/agent-chat-permission-mode'
 import { sleepStructuredAgentSessionWorkspace } from './structured-agent-session-workspace-sleep'
 export type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 
@@ -49,11 +58,13 @@ export class StructuredAgentSessionHost {
     this
   )
   private readonly turnObserver = createHostTurnObserver(() => this.deps)
+  private readonly planObserver = createHostPlanObserver(() => this.deps)
   private readonly sessions = new StructuredAgentSessionConversations({
     deliver: (sessionId, journal) => {
       this.subscribers.publish(sessionId, journal)
       this.conversationDelivery.afterCommit(sessionId, journal)
       this.turnObserver.observe(sessionId, journal)
+      this.planObserver.observe(sessionId, journal)
     },
     deliverSettleEdge: (id, journal) => this.conversationDelivery.afterSettleEdge(id, journal),
     logger: sessionLogger.deferredStructuredAgentSessionLogger(() => this.deps.logger),
@@ -308,13 +319,28 @@ export class StructuredAgentSessionHost {
   queuedMessagesResume = this.queued.queuedMessagesResume
   queuedMessageUpdate = this.queued.queuedMessageUpdate
   queuedMessageEditHold = this.queued.queuedMessageEditHold
+  queuedMessageMove = this.queued.queuedMessageMove
 
   waitForSendSettlement = this.clientDelivery.waitForSendSettlement
 
   private mutations = structuredAgentSessionMutationDelegates(() => this.mutationContext())
   cancel = this.mutations.cancel
   respondToPrompt = this.mutations.respondToPrompt
-  setOption = this.mutations.setOption
+  setOption: typeof this.mutations.setOption = async (caller, params) => {
+    const { sessionId } = params.envelope
+    const before = recordPermissionMode(this.deps.store.getRecord(sessionId))
+    const result = await this.mutations.setOption(caller, params)
+    const journal = this.sessions.get(sessionId)?.journal
+    if (
+      result.ok &&
+      journal &&
+      params.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID &&
+      isAgentChatPermissionMode(params.value)
+    ) {
+      this.planObserver.recordPermissionMode(sessionId, journal, params.value, before)
+    }
+    return result
+  }
   changeThreadGoal = this.mutations.changeThreadGoal
   readOptions = this.mutations.readOptions
 
@@ -337,6 +363,18 @@ export class StructuredAgentSessionHost {
    *  revised or tombstoned in place, so an item's ABSENCE from a bounded page proves nothing. */
   journalSnapshot = async (sessionId: string) =>
     (await this.lifetime.conversation(sessionId)).journal.snapshot()
+
+  /** Whether the chat's own agent is working (a running turn or a send it owes); a closed chat
+   *  is opened to read it. */
+  isWorking = async (sessionId: string): Promise<boolean> => {
+    await this.lifetime.conversation(sessionId)
+    return (
+      hostStructuredAgentSessionCurrentWork(
+        { store: this.deps.store, sessions: this.sessions },
+        sessionId
+      )?.working() ?? false
+    )
+  }
 
   /** One item's body by its journal key, without reducing the whole timeline. */
   readItemBody = async (sessionId: string, itemId: string) =>
