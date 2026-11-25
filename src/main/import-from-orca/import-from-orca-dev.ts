@@ -192,7 +192,7 @@ export async function importFromOrcaDev(
       }
     }
 
-    applied = applyImportPlan(deps.store, plan, receipt.idMap ?? {}, {
+    applied = await applyImportPlan(deps.store, plan, receipt.idMap ?? {}, {
       defaultSettings: getDefaultSettings(homedir())
     })
     const run = {
@@ -221,9 +221,10 @@ export async function importFromOrcaDev(
             code: 'WRITE_FAILED',
             message: `The import failed: ${error instanceof Error ? error.message : String(error)}`
           }
+    console.error('[import-from-orca] import failed', error)
     report.errors.push(failure)
     report.ok = false
-    applied?.rollback()
+    await applied?.rollback()
     report.imported = {}
     report.copiedFiles = []
     await removeWritten(written).catch(() => undefined)

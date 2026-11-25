@@ -1,5 +1,4 @@
 import type React from 'react'
-import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import {
@@ -13,53 +12,22 @@ import {
 import { translate } from '@/i18n/i18n'
 import { ImportFromOrcaReport } from './ImportFromOrcaReport'
 import { useImportFromOrca } from './useImportFromOrca'
+import { dismissImportOffer, useImportOfferStatus } from './import-from-orca-offer-state'
 
-const DISMISSED_KEY = 'importFromOrca.offerDismissed'
-
-function readDismissed(): boolean {
-  try {
-    return window.localStorage.getItem(DISMISSED_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function writeDismissed(): void {
-  try {
-    window.localStorage.setItem(DISMISSED_KEY, '1')
-  } catch {
-    // storage can be unavailable; the offer then shows again next launch
-  }
-}
-
-/** First-launch dialog offering to import from Orca Dev; shown only while Quirky has no repos and the source exists. */
+/** First-launch dialog offering to import from Orca Dev; shown before onboarding, only while Quirky has no repos and the source exists. */
 export function ImportFromOrcaFirstLaunchOffer(): React.JSX.Element | null {
-  const [offered, setOffered] = useState(false)
+  const offered = useImportOfferStatus() === 'offered'
   const { running, report, run } = useImportFromOrca()
 
-  useEffect(() => {
-    let cancelled = false
-    if (!readDismissed()) {
-      void window.api.importFromOrca
-        .detect()
-        .then((result) => {
-          if (!cancelled && result.offerFirstRun) {
-            setOffered(true)
-          }
-        })
-        .catch(() => undefined)
-    }
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   const close = (): void => {
-    writeDismissed()
-    setOffered(false)
+    if (running) {
+      return
+    }
     if (report?.ok) {
       window.location.reload()
+      return
     }
+    dismissImportOffer()
   }
 
   return (

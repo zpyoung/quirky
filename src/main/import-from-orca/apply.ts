@@ -8,6 +8,9 @@ import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identit
 import { ImportFailure } from './import-failure'
 import { ORCA_AUTOMATION_CREATION_KEY_PREFIX, type ImportPlan } from './plan'
 
+// the live app's async profile-state authority rejects synchronous flushes
+const FLUSH_OPTIONS = { drainToStableGeneration: false } as const
+
 /** The slice of the live `Store` the importer reads and writes; every write goes through a domain setter. */
 export type ImportStore = Pick<
   Store,
@@ -21,7 +24,7 @@ export type ImportStore = Pick<
   | 'deleteAutomation'
   | 'deleteProjectGroup'
   | 'deleteProjectHostSetup'
-  | 'flushOrThrow'
+  | 'flushPendingOrThrowAsync'
   | 'getAllWorkspaceLineage'
   | 'getAllWorktreeLineage'
   | 'getAllWorktreeMeta'
@@ -81,8 +84,8 @@ export type ApplyResult = {
   idMap: Record<string, Record<string, string>>
   /** Secret slots that were written into Quirky. */
   secretsImported: string[]
-  /** Undoes every setter call this apply made; safe to call once, after a later step fails. */
-  rollback: () => void
+  /** Undoes every setter call this apply made and persists the undo; safe to call once, after a later step fails. */
+  rollback: () => Promise<void>
 }
 
 const FOLDER_WORKSPACE_STATE_KEYS = [
@@ -127,12 +130,12 @@ function pickPrevious<T extends object>(current: T, updates: Partial<T>): Partia
  * is thrown. Settings are filled in only where Quirky's value is still the default, and
  * linked accounts are merged by id, so a first import into a used profile keeps what it has.
  */
-export function applyImportPlan(
+export async function applyImportPlan(
   store: ImportStore,
   plan: ImportPlan,
   priorIdMap: Record<string, Record<string, string>>,
   options: ApplyOptions
-): ApplyResult {
+): Promise<ApplyResult> {
   const undo: (() => void)[] = []
   const imported: Record<string, string[]> = {}
   const idMap: Record<string, Record<string, string>> = {
@@ -146,7 +149,7 @@ export function applyImportPlan(
   const groupId = (sourceId: string | null | undefined): string | null =>
     sourceId ? (idMap.projectGroups[sourceId] ?? null) : null
 
-  const rollback = (): void => {
+  const rollback = async (): Promise<void> => {
     for (const step of undo.splice(0).toReversed()) {
       try {
         step()
@@ -155,7 +158,7 @@ export function applyImportPlan(
       }
     }
     try {
-      store.flushOrThrow()
+      await store.flushPendingOrThrowAsync(FLUSH_OPTIONS)
     } catch {
       // the original failure is the one worth reporting
     }
@@ -171,9 +174,9 @@ export function applyImportPlan(
     applySsh(store, plan, undo, record)
     applyAutomations(store, plan, undo, record)
     applyLineageAndNames(store, plan, idMap, undo, record)
-    store.flushOrThrow()
+    await store.flushPendingOrThrowAsync(FLUSH_OPTIONS)
   } catch (error) {
-    rollback()
+    await rollback()
     throw new ImportFailure(
       'WRITE_FAILED',
       `Writing the imported items failed and was rolled back: ${error instanceof Error ? error.message : String(error)}`
