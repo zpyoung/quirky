@@ -5,8 +5,26 @@ import mermaid from 'mermaid'
 import { getMermaidConfig, type MermaidThemeColors } from './mermaid-config'
 
 const pieColors = {
-  dark: ['#3f6fd0', '#7b52c6', '#0f7f8a', '#b4532f', '#3a7d52'] as const,
-  light: ['#2f62c0', '#6c42b8', '#0b6f79', '#a64624', '#2f6f45'] as const
+  dark: [
+    '#3f6fd0',
+    '#7b52c6',
+    '#0f7f8a',
+    '#b4532f',
+    '#3a7d52',
+    '#a8408a',
+    '#50698a',
+    '#8a6a1c'
+  ] as const,
+  light: [
+    '#2f62c0',
+    '#6c42b8',
+    '#0b6f79',
+    '#a64624',
+    '#2f6f45',
+    '#962f7a',
+    '#44607f',
+    '#7a5c12'
+  ] as const
 }
 
 const darkColors = {
@@ -16,7 +34,16 @@ const darkColors = {
   secondary: '#1447e6',
   tertiary: '#155dfc',
   line: '#a1a1a1',
-  pie: ['#bedbff', '#2b7fff', '#155dfc', '#1447e6', '#193cb8'] as const
+  pie: [
+    '#bedbff',
+    '#2b7fff',
+    '#155dfc',
+    '#1447e6',
+    '#193cb8',
+    '#1c398e',
+    '#162456',
+    '#0b1437'
+  ] as const
 }
 
 const graphiteDark = {
@@ -63,6 +90,17 @@ function contrastRatio(first: string, second: string): number {
   const a = luminance(first)
   const b = luminance(second)
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+}
+
+function pieSlots(variables: ReturnType<typeof resolvedTheme>): { name: string; color: string }[] {
+  return Array.from({ length: 12 }, (_, index) => {
+    const name = `pie${index + 1}`
+    const color = variables[name]
+    if (typeof color !== 'string') {
+      throw new Error(`Expected ${name} to resolve to a color`)
+    }
+    return { name, color }
+  })
 }
 
 function resolvedTheme(
@@ -160,16 +198,12 @@ describe('getMermaidConfig', () => {
   it.each([
     ['dark', true, graphiteDark],
     ['light', false, graphiteLight]
-  ] as const)(
-    'gives the five pie categories distinct resolved colors (%s)',
-    (_mode, isDark, colors) => {
-      const variables = resolvedTheme(isDark, colors)
-      expect(
-        new Set([variables.pie1, variables.pie2, variables.pie3, variables.pie4, variables.pie5])
-          .size
-      ).toBe(5)
+  ] as const)('sets all twelve pie slots (%s)', (_mode, isDark, colors) => {
+    const variables = resolvedTheme(isDark, colors)
+    for (const slot of pieSlots(variables)) {
+      expect(slot.color, slot.name).toMatch(/^#[\da-f]{6}$/i)
     }
-  )
+  })
 
   it.each([
     ['dark', true, graphiteDark],
@@ -177,19 +211,31 @@ describe('getMermaidConfig', () => {
   ] as const)('keeps pie slice labels readable on every slice (%s)', (_mode, isDark, colors) => {
     const variables = resolvedTheme(isDark, colors)
     expect(variables.pieSectionTextColor).toBe('#ffffff')
-    for (const slice of [
-      variables.pie1,
-      variables.pie2,
-      variables.pie3,
-      variables.pie4,
-      variables.pie5
-    ]) {
-      if (typeof slice !== 'string') {
-        throw new Error('Expected a resolved pie color')
-      }
-      expect(contrastRatio('#ffffff', slice), `white on ${slice}`).toBeGreaterThanOrEqual(4.5)
+    for (const slot of pieSlots(variables)) {
+      expect(contrastRatio('#ffffff', slot.color), `white on ${slot.name}`).toBeGreaterThanOrEqual(
+        4.5
+      )
     }
   })
+
+  it.each([
+    ['dark', true, graphiteDark],
+    ['light', false, graphiteLight]
+  ] as const)(
+    'never puts the same color on adjacent slices for any slice count (%s)',
+    (_mode, isDark, colors) => {
+      const slots = pieSlots(resolvedTheme(isDark, colors))
+      for (let count = 2; count <= 12; count++) {
+        for (let index = 0; index < count; index++) {
+          const next = (index + 1) % count
+          expect(
+            slots[index].color.toLowerCase(),
+            `${count} slices: ${slots[index].name} vs ${slots[next].name}`
+          ).not.toBe(slots[next].color.toLowerCase())
+        }
+      }
+    }
+  )
 
   it('keeps node borders off the surface fills so shapes stay outlined', () => {
     const variables = resolvedTheme(true, graphiteDark)

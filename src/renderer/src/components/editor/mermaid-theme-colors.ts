@@ -28,7 +28,10 @@ export function readMermaidThemeColors(): MermaidThemeColors | undefined {
       readColor('--chart-2'),
       readColor('--chart-3'),
       readColor('--chart-4'),
-      readColor('--chart-5')
+      readColor('--chart-5'),
+      readColor('--chart-6'),
+      readColor('--chart-7'),
+      readColor('--chart-8')
     ]
   }
 }
