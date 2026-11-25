@@ -317,6 +317,7 @@ export function ChatSession(props: ChatSessionProps): React.JSX.Element {
           onOpenVisual={onOpenVisual}
           onForked={onForked}
           workspaceRoot={imageRuntimeContext?.worktreePath ?? null}
+          worktreeId={ownerWorktreeId}
           {...(readWorkspaceImage ? { readWorkspaceImage } : {})}
           planPanel={planPanel}
           visualPanel={visualPanel}

@@ -8,14 +8,20 @@ import { VisualBlock } from './VisualBlock'
 vi.mock('../panels/VisualItemCard', () => ({
   VisualItemCard: ({
     workspaceRoot,
+    worktreeId,
+    onOpenLink,
     readWorkspaceImage
   }: {
     workspaceRoot: string | null
+    worktreeId?: string | null
+    onOpenLink?: unknown
     readWorkspaceImage?: unknown
   }) => (
     <div
       data-testid="inline-card"
       data-root={String(workspaceRoot)}
+      data-worktree={String(worktreeId)}
+      data-link={String(onOpenLink !== undefined)}
       data-reader={String(readWorkspaceImage !== undefined)}
     />
   )
@@ -79,6 +85,13 @@ describe('VisualBlock', () => {
     const card = screen.getByTestId('inline-card')
     expect(card.getAttribute('data-root')).toBe('/work/repo')
     expect(card.getAttribute('data-reader')).toBe('true')
+  })
+
+  it('hands the chat worktree id and link opener to an inline visual', () => {
+    renderBlock(visual('inline'), { worktreeId: 'wt-1' })
+    const card = screen.getByTestId('inline-card')
+    expect(card.getAttribute('data-worktree')).toBe('wt-1')
+    expect(card.getAttribute('data-link')).toBe('true')
   })
 
   it('keeps a pane visual as a chip', () => {

@@ -8,10 +8,7 @@ import {
   sendNativeChatTypedCommand,
   type NativeChatSendOptions
 } from '../../native-chat/native-chat-runtime-send'
-import {
-  isTerminalInputQuarantined,
-  subscribeTerminalInputQuarantine
-} from '../terminal-input-quarantine'
+import { isTerminalInputQuarantined } from '../terminal-input-quarantine'
 
 function deliveryOutcome(start: (options: NativeChatSendOptions) => unknown): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
@@ -24,22 +21,6 @@ function deliveryOutcome(start: (options: NativeChatSendOptions) => unknown): Pr
       }
     })
   })
-}
-
-/** The typed-command queue reports no outcome, so only a quarantine raised mid-send is detectable. */
-async function typedCommandOutcome(target: NativeChatResolvedTarget, text: string) {
-  let invalidated = false
-  const unsubscribe = subscribeTerminalInputQuarantine(target.terminalTabId, (armed) => {
-    if (armed) {
-      invalidated = true
-    }
-  })
-  try {
-    await sendNativeChatTypedCommand(target, text).settled
-    return !invalidated
-  } finally {
-    unsubscribe()
-  }
 }
 
 /**
@@ -66,7 +47,7 @@ export function submitToTerminalAgent(args: {
     )
   }
   if (agent === 'codex' && isSlashCommandDraft(text)) {
-    return typedCommandOutcome(target, text)
+    return deliveryOutcome((options) => sendNativeChatTypedCommand(target, text, options))
   }
   return deliveryOutcome((options) => sendNativeChatMessage(target, text, options))
 }

@@ -10,6 +10,7 @@ function openOwned(
   destination: HttpLinkDestination | undefined
 ): void {
   if (!worktreeId) {
+    void window.api.shell.openUrl(url)
     return
   }
   openRoutedHttpLink(url, {
@@ -21,8 +22,8 @@ function openOwned(
 }
 
 /**
- * Opens an http(s) link for the workspace that owns the panel; other schemes are refused, and so
- * is a link with no workspace, since nothing says which machine it belongs to.
+ * Opens an http(s) link for the workspace that owns the panel; other schemes are refused. A link
+ * with no workspace opens in the system browser, since nothing says which machine it belongs to.
  */
 export function openPanelLink(href: string, worktreeId?: string | null): void {
   if (/^https?:\/\//i.test(href)) {

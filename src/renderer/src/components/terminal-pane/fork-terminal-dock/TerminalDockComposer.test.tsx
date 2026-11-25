@@ -204,10 +204,31 @@ describe('TerminalDockComposer', () => {
     )
   })
 
-  it('keeps the draft when quarantine is raised while a slash command types', async () => {
-    mocks.sendNativeChatTypedCommand.mockImplementation(() => ({
-      settled: Promise.resolve().then(() => armTerminalInputQuarantine('tab-1'))
-    }))
+  it('resolves true when an accepted slash command settles', async () => {
+    mocks.sendNativeChatTypedCommand.mockImplementation((_target, _text, options) => {
+      options.onDeliverySettled(true)
+      options.onOutcome('unobservable')
+    })
+    render(<TerminalDockComposer {...baseProps} agent="codex" />)
+
+    await expect(submit('/model')).resolves.toBe(true)
+  })
+
+  it('keeps the draft when the pty refuses a slash command', async () => {
+    mocks.sendNativeChatTypedCommand.mockImplementation((_target, _text, options) => {
+      options.onWriteRejected?.()
+      options.onDeliverySettled(false)
+    })
+    render(<TerminalDockComposer {...baseProps} agent="codex" />)
+
+    await expect(submit('/model')).resolves.toBe(false)
+  })
+
+  it('keeps the draft when a slash command is cancelled before it types', async () => {
+    mocks.sendNativeChatTypedCommand.mockImplementation((_target, _text, options) => {
+      options.onDeliverySettled(false)
+      options.onOutcome('may-not-have-sent')
+    })
     render(<TerminalDockComposer {...baseProps} agent="codex" />)
 
     await expect(submit('/model')).resolves.toBe(false)
