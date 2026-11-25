@@ -198,7 +198,8 @@ The light `--muted-foreground` and amber values follow the 2026-11-25 amendment 
 Notes on the map:
 
 - The gutter mixes keep their current `color-mix` percentages over the new ground colours.
-- `--chart-*`, `--git-decoration-*`, `--git-graph-*`, `--tool-*`, `--hljs-*`, `--code-accent`, `--ai-action-accent` and `--callout-*` keep their values, because they're categorical data hues, not chrome.
+- `--chart-1` to `--chart-5` take v1's tile hues so they carry white text: dark `#3f6fd0`, `#7b52c6`, `#0f7f8a`, `#b4532f`, `#3a7d52`; light `#2f62c0`, `#6c42b8`, `#0b6f79`, `#a64624`, `#2f6f45`. Mermaid pie labels use `pieSectionTextColor: #ffffff`.
+- `--git-decoration-*`, `--git-graph-*`, `--tool-*`, `--hljs-*`, `--code-accent`, `--ai-action-accent` and `--callout-*` keep their values, because they're categorical data hues, not chrome.
 - Mobile (`mobile/src/theme/mobile-theme.ts`) uses these values:
   - Base colours: `bgBase #0c0d0f`, `bgPanel #16171b`, `bgRaised #22242b`, `borderSubtle #24262c`, `editorSurface #16171b`, `terminalBg #16171b`.
   - Composer: `composerSurface #16171b`, `composerBorder rgba(236,238,242,0.08)`, `composerControl #22242b`.
