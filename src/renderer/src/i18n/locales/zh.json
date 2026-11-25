@@ -17338,6 +17338,7 @@
           "sourceMissing": "在这台 Mac 上未找到 Orca Dev 的数据。",
           "sourceIncompatible": "此版本的 Quirky 无法读取 Orca Dev 的数据。",
           "keychainDenied": "对 Orca Dev 钥匙串项的访问被拒绝，因此未导入机密。",
+          "secretsNotDecrypted": "Orca Dev 钥匙串密码无法解密其中的密钥，因此未导入这些密钥。",
           "writeFailed": "导入失败，已回滚它写入的所有内容。"
         },
         "report": {

@@ -9,6 +9,8 @@ export type ImportReceiptRun = {
   imported: Record<string, string[]>
   skippedSecrets: string[]
   secretsImported?: string[]
+  /** Account folders and files this run copied, relative to their roots; absent in older receipts. */
+  copiedFiles?: string[]
 }
 
 export type ImportReceipt = {
@@ -79,4 +81,11 @@ export function receiptIds(receipt: ImportReceipt, domain: string): Set<string> 
 
 export function receiptSecretSlots(receipt: ImportReceipt): Set<string> {
   return new Set(receipt.runs.flatMap((run) => run.secretsImported ?? []))
+}
+
+/** Folders and files a previous run copied, so a rerun never restores one the owner deleted. */
+export function receiptCopiedFiles(receipt: ImportReceipt): Set<string> {
+  return new Set(
+    receipt.runs.flatMap((run) => (isStringArray(run.copiedFiles) ? run.copiedFiles : []))
+  )
 }

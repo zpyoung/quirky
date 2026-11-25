@@ -70,6 +70,10 @@ export const NOT_HOST_TWINNED = new Map([
     'twins share one id-keyed bucket by design; re-keying it is a non-goal (D7)'
   ],
   [
+    'RetiredWorktreeNamePersistence.restoreRetiredWorktreeNameRegistry',
+    'twins share one id-keyed bucket by design; re-keying it is a non-goal (D7)'
+  ],
+  [
     'SparsePresetPersistence.removeSparsePreset',
     'twins share one id-keyed bucket by design; re-keying it is a non-goal (D7)'
   ],

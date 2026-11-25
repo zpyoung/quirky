@@ -19,6 +19,11 @@ function errorCopy(code: ImportErrorCode): string {
         'auto.components.importFromOrca.error.keychainDenied',
         'Access to the Orca Dev keychain item was denied, so secrets were not imported.'
       )
+    case 'SECRETS_NOT_DECRYPTED':
+      return translate(
+        'auto.components.importFromOrca.error.secretsNotDecrypted',
+        'The Orca Dev keychain password could not decrypt its secrets, so they were not imported.'
+      )
     case 'WRITE_FAILED':
       return translate(
         'auto.components.importFromOrca.error.writeFailed',

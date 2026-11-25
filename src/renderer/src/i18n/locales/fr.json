@@ -17442,6 +17442,7 @@
           "sourceMissing": "Les données d'Orca Dev sont introuvables sur ce Mac.",
           "sourceIncompatible": "Cette version de Quirky n'a pas pu lire les données d'Orca Dev.",
           "keychainDenied": "L'accès à l'élément du trousseau d'Orca Dev a été refusé, les secrets n'ont donc pas été importés.",
+          "secretsNotDecrypted": "Le mot de passe du trousseau d'Orca Dev n'a pas pu déchiffrer ses secrets, ils n'ont donc pas été importés.",
           "writeFailed": "L'importation a échoué et tout ce qu'elle avait écrit a été annulé."
         },
         "report": {

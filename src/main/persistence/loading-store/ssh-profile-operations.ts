@@ -79,6 +79,17 @@ export class SshProfileOperations {
     )
   }
 
+  getSshTargetGenerationCounter(): number {
+    return this[sshProfileOperationsContext].runtime.state.sshTargetGenerationCounter ?? 0
+  }
+
+  /** Sets the persisted high-water mark exactly; callers wanting a maximum compare first. */
+  setSshTargetGenerationCounter(value: number): void {
+    const context = this[sshProfileOperationsContext]
+    context.runtime.state.sshTargetGenerationCounter = value
+    scheduleSave(context.scheduling)
+  }
+
   getDeletedSshConfigAliases(): string[] {
     return getDeletedSshConfigAliasesOperation(this[sshProfileOperationsContext].runtime.state)
   }

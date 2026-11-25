@@ -42,6 +42,41 @@ export class RetiredWorktreeNamePersistence {
       : EMPTY_RETIRED_NAME_REGISTRY
   }
 
+  /** Puts a registry read earlier back; an empty one removes the repo's entry, as if never written. */
+  restoreRetiredWorktreeNameRegistry(repoId: string, registry: RetiredNameRegistry): void {
+    const state = this[retiredWorktreeNamePersistenceContext].runtime.state
+    if (isEmptyRegistry(registry)) {
+      delete state.retiredWorktreeNamesByRepo?.[repoId]
+    } else {
+      state.retiredWorktreeNamesByRepo ??= {}
+      state.retiredWorktreeNamesByRepo[repoId] = registry
+    }
+    scheduleSave(this[retiredWorktreeNamePersistenceContext].scheduling)
+  }
+
+  /** A deep copy of every namespace registry, in eviction order, for a later restore. */
+  snapshotRetiredWorktreeNamespaceRegistries(): Record<string, RetiredNameRegistry> | undefined {
+    const stored =
+      this[retiredWorktreeNamePersistenceContext].runtime.state.retiredWorktreeNamesByNamespace
+    return stored === undefined ? undefined : structuredClone(stored)
+  }
+
+  /**
+   * Puts back a snapshot taken by `snapshotRetiredWorktreeNamespaceRegistries`, including any
+   * namespace a capped merge evicted since; `undefined` removes the map, as if never written.
+   */
+  restoreRetiredWorktreeNamespaceRegistries(
+    snapshot: Record<string, RetiredNameRegistry> | undefined
+  ): void {
+    const state = this[retiredWorktreeNamePersistenceContext].runtime.state
+    if (snapshot === undefined) {
+      delete state.retiredWorktreeNamesByNamespace
+    } else {
+      state.retiredWorktreeNamesByNamespace = structuredClone(snapshot)
+    }
+    scheduleSave(this[retiredWorktreeNamePersistenceContext].scheduling)
+  }
+
   addRetiredWorktreeName(repoId: string, name: string): void {
     const normalized = normalizeRetirableGeneratedName(name)
     if (!repoId || !normalized) {
@@ -91,6 +126,10 @@ export class RetiredWorktreeNamePersistence {
     scheduleSave(this[retiredWorktreeNamePersistenceContext].scheduling)
     return true
   }
+}
+
+function isEmptyRegistry(registry: RetiredNameRegistry): boolean {
+  return registry.exhaustedTiers === 0 && registry.names.length === 0
 }
 
 export function applyRetiredWorktreeNames(
