@@ -124,24 +124,22 @@ export function useMobileTasksTaskCreateActions(model: LinearItemActionsModel) {
         if (result.ok === false || !result.id || !result.identifier) {
           throw new Error(result.error ?? 'Failed to create Linear issue')
         }
-        const created = createLinearTask({
-          id: result.id,
-          workspaceId: team.workspaceId,
-          workspaceName: team.workspaceName,
-          identifier: result.identifier,
-          title: result.title ?? title,
-          description: createBody.trim(),
-          url: result.url ?? '',
-          state: { name: 'Open', type: 'unstarted', color: colors.accent },
-          team,
-          labels: [],
-          priority: 0,
-          updatedAt: new Date().toISOString()
-        })
-        if (created.provider === 'gitlabTodo') {
-          throw new Error('Failed to create Linear issue')
-        }
-        setActionItem(created)
+        setActionItem(
+          createLinearTask({
+            id: result.id,
+            workspaceId: team.workspaceId,
+            workspaceName: team.workspaceName,
+            identifier: result.identifier,
+            title: result.title ?? title,
+            description: createBody.trim(),
+            url: result.url ?? '',
+            state: { name: 'Open', type: 'unstarted', color: colors.accent },
+            team,
+            labels: [],
+            priority: 0,
+            updatedAt: new Date().toISOString()
+          })
+        )
       }
       setShowCreateTask(false)
       setCreateTitle('')

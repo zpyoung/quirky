@@ -265,7 +265,7 @@ export function createJiraTask(issue: JiraIssue): Extract<TaskItem, { provider: 
   }
 }
 
-export function createLinearTask(issue: LinearIssue): TaskItem {
+export function createLinearTask(issue: LinearIssue): Extract<TaskItem, { provider: 'linear' }> {
   return {
     key: `linear:${issue.workspaceId ?? 'workspace'}:${issue.id}`,
     provider: 'linear',

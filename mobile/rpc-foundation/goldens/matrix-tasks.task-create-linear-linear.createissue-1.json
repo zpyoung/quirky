@@ -269,7 +269,7 @@
           "labels": [],
           "priority": 0,
           "state": {
-            "color": "#3b82f6",
+            "color": "#5fd0d6",
             "name": "Open",
             "type": "unstarted"
           },
@@ -492,7 +492,7 @@
           "labels": [],
           "priority": 0,
           "state": {
-            "color": "#3b82f6",
+            "color": "#5fd0d6",
             "name": "Open",
             "type": "unstarted"
           },
