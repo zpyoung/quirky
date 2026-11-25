@@ -5,12 +5,7 @@ import type { Repo } from '../../shared/repo-types'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
-import {
-  LEGACY_TERMINAL_DIVIDER_DARK,
-  LEGACY_TERMINAL_DIVIDER_LIGHT,
-  LEGACY_TERMINAL_THEME_DARK,
-  LEGACY_TERMINAL_THEME_LIGHT
-} from '../persistence/applying-settings/terminal-settings-migrations'
+import { isLegacyTerminalDefaultSetting } from '../persistence/applying-settings/terminal-settings-migrations'
 import { ImportFailure } from './import-failure'
 import { ORCA_AUTOMATION_CREATION_KEY_PREFIX, type ImportPlan } from './plan'
 
@@ -346,20 +341,6 @@ function applyWorktrees(
   }
 }
 
-const LEGACY_ORCA_TERMINAL_DEFAULTS: Partial<Record<keyof GlobalSettings, unknown>> = {
-  terminalThemeDark: LEGACY_TERMINAL_THEME_DARK,
-  terminalThemeLight: LEGACY_TERMINAL_THEME_LIGHT,
-  terminalDividerColorDark: LEGACY_TERMINAL_DIVIDER_DARK,
-  terminalDividerColorLight: LEGACY_TERMINAL_DIVIDER_LIGHT
-}
-
-function isLegacyOrcaTerminalDefault(key: keyof GlobalSettings, value: unknown): boolean {
-  return (
-    Object.hasOwn(LEGACY_ORCA_TERMINAL_DEFAULTS, key) &&
-    LEGACY_ORCA_TERMINAL_DEFAULTS[key] === value
-  )
-}
-
 function applyScalarState(
   store: ImportStore,
   plan: ImportPlan,
@@ -375,7 +356,7 @@ function applyScalarState(
       if (
         key !== 'claudeManagedAccounts' &&
         key !== 'codexManagedAccounts' &&
-        !isLegacyOrcaTerminalDefault(key, plan.settings[key]) &&
+        !isLegacyTerminalDefaultSetting(key, plan.settings[key]) &&
         isDeepStrictEqual(settingsBefore[key], options.defaultSettings[key])
       ) {
         Object.assign(updates, { [key]: plan.settings[key] })
@@ -404,9 +385,8 @@ function applyScalarState(
     record('settings.codexManagedAccounts', account.id)
   }
 
-  const uiBefore = store.getUI()
   if (plan.ui !== null) {
-    const previous = pickPrevious(uiBefore, plan.ui)
+    const previous = pickPrevious(store.getUI(), plan.ui)
     store.updateUI(plan.ui)
     undo.push(() => store.updateUI(previous))
     record('ui', 'ui')
