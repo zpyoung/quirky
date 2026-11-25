@@ -260,8 +260,8 @@ describe('contrast hierarchy and incomplete terminal palettes', () => {
             nativeChatAppearance: { matchTerminalInterface: true }
           })
         )
-        expect(style['--chat-source-background']).toBe('#000000')
-        expect(style['--chat-source-foreground']).toBe('#fafafa')
+        expect(style['--chat-source-background']).toBe('#0c0d0f')
+        expect(style['--chat-source-foreground']).toBe('#eceef2')
         expect(style.colorScheme).toBe('dark')
       }
     }
