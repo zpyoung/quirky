@@ -15,9 +15,19 @@ export type ComposerMode = 'chat' | 'terminal'
 /** What `onSubmit` answers: `false` keeps the draft, anything else means the message was taken. */
 export type ComposerSubmitResult = void | boolean | 'queued'
 
+/**
+ * `steer` is the steering chord pressed over a non-empty draft in chat mode; a plain send otherwise.
+ * The session controller has no steer field on `StructuredAgentSessionSendRequest`, so for `steer`
+ * the caller sends with `send(text, attachments)` (no request, which queues the text as a card while a
+ * turn runs and returns `'queued'`) and then steers that card into the running turn with
+ * `queue.steer(messageId)` / `queue.steerNewest()`. When the agent is idle it is an ordinary send.
+ */
+export type ComposerSubmitOptions = { intent: 'send' | 'steer' }
+
 export type ComposerSubmit = (
   text: string,
-  attachments: StructuredAgentSessionAttachment[]
+  attachments: StructuredAgentSessionAttachment[],
+  options?: ComposerSubmitOptions
 ) => ComposerSubmitResult | Promise<ComposerSubmitResult>
 
 /** The session controller's queue (`useStructuredAgentSession().queuedMessages`). */

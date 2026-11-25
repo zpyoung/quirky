@@ -232,7 +232,9 @@ const ComposerPane = forwardRef<ComposerHandle, ComposerProps>(function Composer
     const submitted = readNativeChatComposerDraft(draftScopeKey)
     submitting.current = true
     try {
-      const result = await onSubmit(value, attached)
+      const result = await (kind === 'steer' && chat
+        ? onSubmit(value, attached, { intent: 'steer' })
+        : onSubmit(value, attached))
       if (result !== false) {
         setNotice(null)
         setTrigger(null)
