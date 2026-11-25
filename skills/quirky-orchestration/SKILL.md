@@ -1,5 +1,5 @@
 ---
-name: orchestration
+name: quirky-orchestration
 description: >-
   Coordinate supervised Quirky workers: threaded messages, blocking ask/reply,
   task dispatch, worker_done/escalation waits, task DAGs, decision gates,
@@ -47,16 +47,16 @@ to another executable, which could silently target a different Quirky build.
 ## Load the version-matched guide before running Quirky commands
 
 ```text
-QUIRKY skills get orchestration
+QUIRKY skills get quirky-orchestration
 ```
 
 That prints the compact, version-matched guide for the exact binary that will handle your
 next commands. It covers the normal local coordinator loop. For a conditional action gate
 such as remote placement, uncertain release recovery, or expanded DAG work, load only the
 reference that gate names with
-`QUIRKY skills get orchestration --reference references/<file>.md`
+`QUIRKY skills get quirky-orchestration --reference references/<file>.md`
 (`--references` lists the names). If that binary rejects `--reference`, run
-`QUIRKY skills get orchestration --full` and read the named bundled reference before acting.
+`QUIRKY skills get quirky-orchestration --full` and read the named bundled reference before acting.
 
 Prefer `--json`. Use the selected executable's `--help` for commands or flags the guide does
 not cover. If a command reports that Quirky is not running, start it with `QUIRKY open --json`

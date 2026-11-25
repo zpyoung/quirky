@@ -98,13 +98,13 @@ describe('getLinearAgentSkillNavInstallStatus', () => {
     ).toBe('update-available')
   })
 
-  it('reports legacy-only installs under linear-tickets', () => {
+  it('reports legacy-only installs under quirky-linear-tickets', () => {
     expect(
       getLinearAgentSkillNavInstallStatus({
-        skills: [skill('linear-tickets')],
+        skills: [skill('quirky-linear-tickets')],
         installed: true,
         loading: false,
-        inventory: inventory([placement('linear-tickets', 'current')])
+        inventory: inventory([placement('quirky-linear-tickets', 'current')])
       })
     ).toBe('up-to-date')
   })
@@ -112,12 +112,12 @@ describe('getLinearAgentSkillNavInstallStatus', () => {
   it('prefers canonical freshness when both names are installed', () => {
     expect(
       getLinearAgentSkillNavInstallStatus({
-        skills: [skill('quirky-linear'), skill('linear-tickets')],
+        skills: [skill('quirky-linear'), skill('quirky-linear-tickets')],
         installed: true,
         loading: false,
         inventory: inventory(
-          [placement('quirky-linear', 'current'), placement('linear-tickets', 'outdated')],
-          ['linear-tickets']
+          [placement('quirky-linear', 'current'), placement('quirky-linear-tickets', 'outdated')],
+          ['quirky-linear-tickets']
         )
       })
     ).toBe('up-to-date')

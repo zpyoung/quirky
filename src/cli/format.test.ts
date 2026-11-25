@@ -128,14 +128,16 @@ describe('formatCliError', () => {
         data: {
           effectsApplied: false,
           nextCommandArgs: ['skills', 'get', 'orchestration', '--full'],
-          nextSteps: ['Using this same Quirky CLI executable, run: skills get orchestration --full']
+          nextSteps: [
+            'Using this same Quirky CLI executable, run: skills get quirky-orchestration --full'
+          ]
         }
       },
       _meta: { runtimeId: 'runtime-1' }
     })
 
     expect(formatCliError(error)).toContain(
-      'Next step: Using this same Quirky CLI executable, run: skills get orchestration --full'
+      'Next step: Using this same Quirky CLI executable, run: skills get quirky-orchestration --full'
     )
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     reportCliError(error, true)

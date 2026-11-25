@@ -1,5 +1,5 @@
 ---
-name: computer-use
+name: quirky-computer-use
 description: >-
   Drives the GUI of a visible local app window through `quirky computer`: accessibility
   tree, clicks, typing, menus, dialogs, and screenshots in native apps and external

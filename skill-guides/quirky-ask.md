@@ -6,7 +6,7 @@ description: >-
   answer envelope back, for a genuine human decision the agent cannot
   determine by reading code, config, or tests. Not for permission to proceed,
   and not the same as `quirky orchestration ask` (worker-to-coordinator agent
-  messaging inside an orchestration run — see the orchestration skill for
+  messaging inside an orchestration run — see the quirky-orchestration skill for
   that). Triggers include "quirky ask", "ask the user", "ask a question and
   wait for the answer", or needing the user to choose between options,
   confirm a decision, or supply a non-secret value.
@@ -14,7 +14,7 @@ description: >-
 
 # Quirky Ask
 
-`quirky ask` asks the _user_ — not another agent — a structured question and blocks until they answer, decline, or a timeout you opted into expires. It exists for one thing: a genuine human decision you cannot make yourself. It is not `quirky orchestration ask`, which is worker-to-coordinator messaging between agents inside an orchestration run; see the `orchestration` skill for that.
+`quirky ask` asks the _user_ — not another agent — a structured question and blocks until they answer, decline, or a timeout you opted into expires. It exists for one thing: a genuine human decision you cannot make yourself. It is not `quirky orchestration ask`, which is worker-to-coordinator messaging between agents inside an orchestration run; see the `quirky-orchestration` skill for that.
 
 `QUIRKY` is a placeholder for the executable you resolved in the stub; substitute it before running.
 

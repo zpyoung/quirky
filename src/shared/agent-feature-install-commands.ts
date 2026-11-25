@@ -13,11 +13,11 @@ export const SKILLS_CLI_VERSION = '1.7.2'
 export const SKILLS_CLI_ENV_OVERRIDES = { LC_ALL: 'C' } as const
 
 export const QUIRKY_CLI_SKILL_NAME = 'quirky-cli'
-export const COMPUTER_USE_SKILL_NAME = 'computer-use'
-export const ORCHESTRATION_SKILL_NAME = 'orchestration'
+export const COMPUTER_USE_SKILL_NAME = 'quirky-computer-use'
+export const ORCHESTRATION_SKILL_NAME = 'quirky-orchestration'
 export const EPHEMERAL_VMS_SKILL_NAME = 'quirky-per-workspace-env'
 export const QUIRKY_LINEAR_SKILL_NAME = 'quirky-linear'
-export const LINEAR_TICKETS_SKILL_NAME = 'linear-tickets'
+export const LINEAR_TICKETS_SKILL_NAME = 'quirky-linear-tickets'
 export const LINEAR_AGENT_SKILL_NAMES = [
   QUIRKY_LINEAR_SKILL_NAME,
   LINEAR_TICKETS_SKILL_NAME

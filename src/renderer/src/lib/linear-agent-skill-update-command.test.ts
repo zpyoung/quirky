@@ -33,7 +33,10 @@ describe('getLinearAgentSkillUpdateTarget', () => {
       command: QUIRKY_LINEAR_SKILL_INSTALL_COMMAND
     })
     expect(
-      getLinearAgentSkillUpdateTarget([skill('quirky-linear'), skill('linear-tickets')], true)
+      getLinearAgentSkillUpdateTarget(
+        [skill('quirky-linear'), skill('quirky-linear-tickets')],
+        true
+      )
     ).toEqual({
       skillName: 'quirky-linear',
       command: QUIRKY_LINEAR_SKILL_INSTALL_COMMAND
@@ -41,9 +44,9 @@ describe('getLinearAgentSkillUpdateTarget', () => {
   })
 
   it('keeps the update and freshness identity on a legacy-only install', () => {
-    expect(getLinearAgentSkillUpdateTarget([skill('linear-tickets')], true)).toEqual({
-      skillName: 'linear-tickets',
-      command: buildAgentFeatureSkillInstallCommand(['linear-tickets'])
+    expect(getLinearAgentSkillUpdateTarget([skill('quirky-linear-tickets')], true)).toEqual({
+      skillName: 'quirky-linear-tickets',
+      command: buildAgentFeatureSkillInstallCommand(['quirky-linear-tickets'])
     })
   })
 })

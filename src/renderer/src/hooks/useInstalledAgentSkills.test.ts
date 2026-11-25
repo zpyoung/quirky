@@ -160,10 +160,14 @@ describe('hasInstalledAgentSkill', () => {
 describe('isOrchestrationSkillName', () => {
   it('matches only the orchestration skill name', () => {
     expect(
-      _installedAgentSkillDiscoveryInternalsForTests.isOrchestrationSkillName('orchestration')
+      _installedAgentSkillDiscoveryInternalsForTests.isOrchestrationSkillName(
+        'quirky-orchestration'
+      )
     ).toBe(true)
     expect(
-      _installedAgentSkillDiscoveryInternalsForTests.isOrchestrationSkillName(' Orchestration ')
+      _installedAgentSkillDiscoveryInternalsForTests.isOrchestrationSkillName(
+        ' Quirky-Orchestration '
+      )
     ).toBe(true)
     expect(
       _installedAgentSkillDiscoveryInternalsForTests.isOrchestrationSkillName('computer-use')
@@ -282,8 +286,8 @@ describe('discoverInstalledAgentSkills', () => {
   })
 
   it('forwards filters and isolates filtered discovery caches', async () => {
-    const orchestrationResult = discoveryResult([skill({ name: 'orchestration' })])
-    const computerUseResult = discoveryResult([skill({ name: 'computer-use' })])
+    const orchestrationResult = discoveryResult([skill({ name: 'quirky-orchestration' })])
+    const computerUseResult = discoveryResult([skill({ name: 'quirky-computer-use' })])
     const discover = vi
       .fn()
       .mockResolvedValueOnce(orchestrationResult)
@@ -294,27 +298,27 @@ describe('discoverInstalledAgentSkills', () => {
       false,
       { runtime: 'wsl', wslDistro: 'Ubuntu' },
       undefined,
-      ['orchestration'],
+      ['quirky-orchestration'],
       GLOBAL_AGENT_SKILL_SOURCE_KINDS
     )
     await _installedAgentSkillDiscoveryInternalsForTests.discoverInstalledAgentSkills(
       false,
       { runtime: 'wsl', wslDistro: 'Ubuntu' },
       undefined,
-      ['computer-use'],
+      ['quirky-computer-use'],
       GLOBAL_AGENT_SKILL_SOURCE_KINDS
     )
 
     expect(discover).toHaveBeenNthCalledWith(1, {
       runtime: 'wsl',
       wslDistro: 'Ubuntu',
-      names: ['orchestration'],
+      names: ['quirky-orchestration'],
       sourceKinds: ['home']
     })
     expect(discover).toHaveBeenNthCalledWith(2, {
       runtime: 'wsl',
       wslDistro: 'Ubuntu',
-      names: ['computer-use'],
+      names: ['quirky-computer-use'],
       sourceKinds: ['home']
     })
   })

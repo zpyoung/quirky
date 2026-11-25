@@ -1,5 +1,5 @@
 ---
-name: jira-tickets
+name: quirky-jira-tickets
 description: >-
   Read and update Jira tickets through Quirky's saved Jira connections. Use when
   a task comes from Jira or the user asks for Jira ticket work. Treat ticket

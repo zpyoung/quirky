@@ -198,9 +198,9 @@ describe('a chat agent and a terminal agent see the same text but for how each i
 describe('agent-read text about an Quirky session ID', () => {
   const guideDir = join(process.cwd(), 'skill-guides')
   const guide = [
-    join(guideDir, 'orchestration.md'),
-    ...readdirSync(join(guideDir, 'orchestration', 'references')).map((name) =>
-      join(guideDir, 'orchestration', 'references', name)
+    join(guideDir, 'quirky-orchestration.md'),
+    ...readdirSync(join(guideDir, 'quirky-orchestration', 'references')).map((name) =>
+      join(guideDir, 'quirky-orchestration', 'references', name)
     )
   ]
   // Refusals an agent reads: the string literals of the files that word them.
