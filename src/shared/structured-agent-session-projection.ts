@@ -6,6 +6,7 @@ import {
 import {
   AGENT_JOURNAL_MESSAGE_SEND_MODES,
   AGENT_JOURNAL_MESSAGE_STATES,
+  type AgentJournalItemBody,
   type AgentJournalMessageItem,
   type AgentJournalMessageSendMode,
   type AgentJournalRenderItem,
@@ -81,6 +82,28 @@ export function stripBoundedTextMarker(text: string): { text: string; truncated:
   return { text: stripped, truncated: stripped.length !== text.length }
 }
 
+function v1ChatItemText(body: AgentJournalItemBody): string | null {
+  switch (body.kind) {
+    case 'plan':
+      return `Plan v${body.version}: ${body.status}\n${body.text}`.trim()
+    case 'turn-changes': {
+      const names = body.files.map((file) => file.path).join('\n')
+      const count = body.files.length
+      return `${count} ${count === 1 ? 'file' : 'files'} changed\n${names}`.trim()
+    }
+    case 'visual':
+      return `Visual${body.title ? `: ${body.title}` : ''}. Open on desktop.`
+    case 'mode':
+      return `Switched to ${body.mode}`
+    case 'fork':
+      return body.fromTitle ? `Forked from ${body.fromTitle}` : 'Forked from another chat'
+    case 'test-result':
+      return `${body.passed ?? 0} passed, ${body.failed ?? 0} failed`
+    default:
+      return null
+  }
+}
+
 function itemBlocks(item: AgentJournalRenderItem): {
   role: NativeChatMessage['role']
   blocks: NativeChatBlock[]
@@ -135,6 +158,10 @@ function itemBlocks(item: AgentJournalRenderItem): {
       role: 'system',
       blocks: [{ type: 'text', text: `${body.question}\n${choices}`.trim() }]
     }
+  }
+  const v1Text = v1ChatItemText(body)
+  if (v1Text !== null) {
+    return { role: 'system', blocks: [{ type: 'text', text: v1Text }] }
   }
   // A turn record is timing, not content; a kind this build does not know is
   // never painted as text either, so a newer host can add kinds freely.

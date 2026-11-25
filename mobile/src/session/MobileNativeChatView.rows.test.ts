@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { AgentJournalItemBody } from '../../../src/shared/agent-session-journal-types'
+import { projectStructuredItemToNativeChat } from '../../../src/shared/structured-agent-session-projection'
 import {
   installChatViewHooks,
   assistantTurn,
@@ -56,6 +58,38 @@ describe('MobileNativeChatView: rows and the streaming bubble', () => {
     await render({ messages: rows, folded: rows, actionablePromptIds: ['open'] })
     expect(renderedRow('asked').props.awaiting).toBe(false)
     expect(renderedRow('open').props.awaiting).toBe(true)
+  })
+
+  it('draws a row for each v1 chat item kind', async () => {
+    const spec = { head: '{}', byteLength: 2, digest: 'd', truncated: false }
+    const bodies: AgentJournalItemBody[] = [
+      { kind: 'plan', version: 1, status: 'waiting', text: 'Step one' },
+      {
+        kind: 'turn-changes',
+        turnId: 't',
+        source: 'edit-tools',
+        files: [{ path: 'a.ts', status: 'added' }]
+      },
+      { kind: 'mode', mode: 'plan' },
+      { kind: 'fork', fromSessionId: 's' },
+      { kind: 'visual', viewId: 'v', version: 1, placement: 'inline', spec },
+      { kind: 'test-result', callId: 'c', command: 'pnpm test', state: 'passed', passed: 2 }
+    ]
+    const rows = bodies.flatMap((body, index) => {
+      const message = projectStructuredItemToNativeChat({
+        itemId: `${body.kind}-${index}`,
+        revision: 1,
+        sequence: index + 1,
+        observedAt: index + 1,
+        body
+      })
+      return message ? [message] : []
+    })
+
+    await render({ messages: rows, folded: rows })
+
+    expect(listIds()).toEqual(rows.map((row) => row.id))
+    expect(rows).toHaveLength(bodies.length)
   })
 
   it('renders an accepted optimistic image send without a queued state', async () => {
