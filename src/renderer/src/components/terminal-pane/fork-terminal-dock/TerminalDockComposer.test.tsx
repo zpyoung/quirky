@@ -87,7 +87,8 @@ describe('TerminalDockComposer', () => {
 
     expect(mocks.sendNativeChatMessage).toHaveBeenCalledExactlyOnceWith(
       { terminalTabId: 'tab-1', ptyId: 'pty-1' },
-      'hello agent'
+      'hello agent',
+      expect.any(Object)
     )
   })
 
@@ -140,8 +141,67 @@ describe('TerminalDockComposer', () => {
       'claude',
       { terminalTabId: 'tab-1', ptyId: 'pty-1' },
       'look',
-      ['/tmp/a.png']
+      ['/tmp/a.png'],
+      expect.any(Object)
     )
+  })
+
+  it('resolves true once the pty accepted the delivery', async () => {
+    mocks.sendNativeChatMessage.mockImplementation((_target, _text, options) => {
+      options.onDeliverySettled(true)
+    })
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await expect(submit('hello')).resolves.toBe(true)
+  })
+
+  it('keeps the draft when the pty refuses the delivery', async () => {
+    mocks.sendNativeChatMessage.mockImplementation((_target, _text, options) => {
+      options.onWriteRejected?.()
+      options.onDeliverySettled(false)
+    })
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await expect(submit('hello')).resolves.toBe(false)
+  })
+
+  it('keeps the draft when the queue drops the send before it writes', async () => {
+    mocks.sendNativeChatMessage.mockImplementation((_target, _text, options) => {
+      options.onOutcome('may-not-have-sent')
+    })
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await expect(submit('hello')).resolves.toBe(false)
+  })
+
+  it('does not flip an accepted delivery when the submit observation is negative', async () => {
+    mocks.sendNativeChatMessage.mockImplementation((_target, _text, options) => {
+      options.onDeliverySettled(true)
+      options.onOutcome('may-not-have-sent')
+    })
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await expect(submit('hello')).resolves.toBe(true)
+  })
+
+  it('keeps the draft when an image send is refused', async () => {
+    mocks.sendWithImages.mockImplementation((_agent, _target, _text, _paths, options) => {
+      options.onDeliverySettled(false)
+    })
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await expect(submit('look', [{ path: '/tmp/a.png', previewUri: '/tmp/a.png' }])).resolves.toBe(
+      false
+    )
+  })
+
+  it('keeps the draft when quarantine is raised while a slash command types', async () => {
+    mocks.sendNativeChatTypedCommand.mockImplementation(() => ({
+      settled: Promise.resolve().then(() => armTerminalInputQuarantine('tab-1'))
+    }))
+    render(<TerminalDockComposer {...baseProps} agent="codex" />)
+
+    await expect(submit('/model')).resolves.toBe(false)
   })
 
   it('offers Stop only while the agent works, routed through the terminal cancel', () => {
