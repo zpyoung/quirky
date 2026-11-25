@@ -52,6 +52,14 @@ describe('test command detection', () => {
 })
 
 describe('parseTestCounts', () => {
+  it('parses a megabyte of digits in linear time and still finds the trailing summary', () => {
+    const output = `${'1'.repeat(1_000_000)}\n=== 2 failed, 41 passed in 1.20s ===`
+    const started = performance.now()
+    const counts = parseTestCounts(output)
+    expect(performance.now() - started).toBeLessThan(200)
+    expect(counts).toEqual({ passed: 41, failed: 2 })
+  })
+
   it('reads a pytest summary', () => {
     expect(parseTestCounts('=== 2 failed, 41 passed, 3 skipped in 1.20s ===')).toEqual({
       passed: 41,

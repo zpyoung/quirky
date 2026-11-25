@@ -8,6 +8,8 @@ import type { AgentJournalTestResultItem } from '../../../shared/agent-session-j
 const TAIL_LINES = 8
 const TAIL_CHARS = 800
 const COMMAND_CHARS = 2000
+const COUNT_SCAN_CHARS = 64 * 1024
+const COUNT_SCAN_LINES = 200
 
 const TEST_COMMAND =
   /(?:^|[\s;&|(])(?:(?:npm|pnpm|yarn|bun|make)\s+(?:run\s+)?test(?::[\w-]+)?|bun\s+test|pytest|jest|vitest|go\s+test|cargo\s+test)(?=$|[\s;&|)])/
@@ -33,9 +35,16 @@ function plainText(output: string): string {
   return stripAnsiEscapeSequences(output)
 }
 
+/** Runner summaries print at the end, so only the last lines are scanned; that bounds the work a
+ *  hostile or huge output can cost the host's main thread. */
+function summaryWindow(output: string): string {
+  const recent = output.length > COUNT_SCAN_CHARS ? output.slice(-COUNT_SCAN_CHARS) : output
+  return recent.split('\n').slice(-COUNT_SCAN_LINES).join('\n')
+}
+
 /** Pass, fail and skip counts printed by common test runners; the last mention of each wins. */
 export function parseTestCounts(output: string): TestCounts {
-  const text = plainText(output)
+  const text = plainText(summaryWindow(output))
   const last = (pattern: RegExp): number | undefined => {
     let found: number | undefined
     for (const match of text.matchAll(pattern)) {
@@ -44,9 +53,9 @@ export function parseTestCounts(output: string): TestCounts {
     return found
   }
   const counts: TestCounts = {}
-  const passed = last(/(\d+)\s+(?:passed|pass)\b/gi)
-  const failed = last(/(\d+)\s+(?:failed|fail|failures?)\b/gi)
-  const skipped = last(/(\d+)\s+(?:skipped|skip|ignored|pending)\b/gi)
+  const passed = last(/(?<!\d)(\d{1,9})\s+(?:passed|pass)\b/gi)
+  const failed = last(/(?<!\d)(\d{1,9})\s+(?:failed|fail|failures?)\b/gi)
+  const skipped = last(/(?<!\d)(\d{1,9})\s+(?:skipped|skip|ignored|pending)\b/gi)
   if (passed !== undefined) {
     counts.passed = passed
   }

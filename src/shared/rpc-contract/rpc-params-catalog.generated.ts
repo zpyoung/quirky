@@ -529,6 +529,7 @@ import {
 import { ContinueInterruptedParams } from './structured-agent-session-continue-params'
 import {
   AcknowledgeAttentionParams,
+  AgentSessionForkParams,
   AgentSessionTurnDiffParams,
   AgentsParams,
   AttachParams,
@@ -544,6 +545,7 @@ import {
   ModelCatalogParams,
   OptionsParams,
   QueuedMessageActionParams,
+  QueuedMessageMoveParams,
   QueuedMessagesResumeParams,
   RespondParams,
   RespondToQuestionParams,
@@ -692,6 +694,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSession.createSupport': CreateSupportParams,
   'agentSession.currentRequests': CurrentRequestsParams,
   'agentSession.ensure': AttachParams,
+  'agentSession.fork': AgentSessionForkParams,
   'agentSession.handoffStatus': HandoffStatusParams,
   'agentSession.history': HistoryParams,
   'agentSession.hold': HoldParams,
@@ -700,6 +703,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSession.options': OptionsParams,
   'agentSession.queuedMessageDelete': QueuedMessageActionParams,
   'agentSession.queuedMessageEditHold': QueuedMessageEditHoldParams,
+  'agentSession.queuedMessageMove': QueuedMessageMoveParams,
   'agentSession.queuedMessageSend': QueuedMessageActionParams,
   'agentSession.queuedMessageUpdate': QueuedMessageUpdateParams,
   'agentSession.queuedMessagesResume': QueuedMessagesResumeParams,
