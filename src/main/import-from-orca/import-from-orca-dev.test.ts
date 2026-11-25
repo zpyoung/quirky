@@ -602,7 +602,7 @@ describe('importFromOrcaDev', () => {
     expect(priorNames.names).toEqual(['seahorse'])
     let flushes = 0
     const failing = Object.assign(Object.create(store), {
-      flushOrThrow: () => {
+      flushPendingOrThrowAsync: async () => {
         flushes += 1
         if (flushes === 1) {
           throw new Error('flush failed')
@@ -638,7 +638,7 @@ describe('importFromOrcaDev', () => {
     const before = store.snapshotRetiredWorktreeNamespaceRegistries()
     let flushes = 0
     const failing = Object.assign(Object.create(store), {
-      flushOrThrow: () => {
+      flushPendingOrThrowAsync: async () => {
         flushes += 1
         if (flushes === 1) {
           throw new Error('flush failed')
@@ -650,6 +650,25 @@ describe('importFromOrcaDev', () => {
 
     expect(report.errors.map((error) => error.code)).toEqual(['WRITE_FAILED'])
     expect(store.snapshotRetiredWorktreeNamespaceRegistries()).toEqual(before)
+    store.freezeWrites()
+  })
+
+  it('imports through the live app store, whose authority rejects synchronous flushes', async () => {
+    const fixture = makeFixture()
+    buildSource(fixture)
+    const store = openStore(join(fixture.quirkyDir, 'profile'), 'local-default')
+    // mirrors the packaged app's async profile-state authority
+    const live = Object.assign(Object.create(store), {
+      flushOrThrow: () => {
+        throw new Error('Live profile persistence requires an awaited flush')
+      }
+    })
+
+    const report = await runImport(fixture, live, 'first-run')
+
+    expect(report.errors).toEqual([])
+    expect(report.ok).toBe(true)
+    expect(store.getRepos().map((repo) => repo.id)).toHaveLength(2)
     store.freezeWrites()
   })
 

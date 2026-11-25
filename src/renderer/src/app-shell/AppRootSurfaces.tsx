@@ -21,6 +21,7 @@ import {
 } from './app-root-surface-settings'
 import type { FloatingWorkspacePanelState } from './use-floating-workspace-panel'
 import type { OnboardingGate } from './use-onboarding-and-feature-tips'
+import { useImportOfferStatus } from '../components/import-from-orca/import-from-orca-offer-state'
 
 const QuickOpen = lazy(() => import('../components/QuickOpen'))
 const WorkspaceCleanupDialog = lazy(
@@ -126,6 +127,7 @@ export function AppRootSurfaces(props: {
   onboardingGate: OnboardingGate
 }): React.JSX.Element {
   const { floatingWorkspace, onboardingGate } = props
+  const importOfferStatus = useImportOfferStatus()
   const { mountedLazyModalIds, shouldMountAddRepoDialog } = useLazyModalMounts()
   usePreloadWorktreeJumpPalette()
   const activeView = useAppStore((s) => s.activeView)
@@ -338,7 +340,7 @@ export function AppRootSurfaces(props: {
       >
         <CrashReportDialog />
       </RecoverableRenderErrorBoundary>
-      {onboardingGate.onboarding && onboardingGate.shouldRender ? (
+      {onboardingGate.onboarding && onboardingGate.shouldRender && importOfferStatus === 'none' ? (
         <Suspense fallback={null}>
           <RecoverableRenderErrorBoundary
             boundaryId="modal.onboarding"

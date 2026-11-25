@@ -32,6 +32,11 @@ function errorCopy(code: ImportErrorCode): string {
   }
 }
 
+const DETAILED_ERROR_CODES: ReadonlySet<ImportErrorCode> = new Set([
+  'SOURCE_INCOMPATIBLE',
+  'WRITE_FAILED'
+])
+
 /** Summarizes what an import did: counts per domain, skipped secrets, which keychain item worked, and what was left out. */
 export function ImportFromOrcaReport({ report }: { report: ImportReport }): React.JSX.Element {
   const importedEntries = Object.entries(report.imported).filter(([, count]) => count > 0)
@@ -44,9 +49,12 @@ export function ImportFromOrcaReport({ report }: { report: ImportReport }): Reac
           : translate('auto.components.importFromOrca.report.failed', 'Import did not finish.')}
       </p>
       {report.errors.map((error) => (
-        <p key={`${error.code}:${error.message}`} className="text-muted-foreground">
-          {errorCopy(error.code)}
-        </p>
+        <div key={`${error.code}:${error.message}`} className="text-muted-foreground">
+          <p>{errorCopy(error.code)}</p>
+          {DETAILED_ERROR_CODES.has(error.code) && error.message ? (
+            <p className="break-words font-mono text-xs">{error.message}</p>
+          ) : null}
+        </div>
       ))}
       {report.ok && importedEntries.length === 0 ? (
         <p className="text-muted-foreground">

@@ -36,7 +36,7 @@ describe('electron-builder config', () => {
         '!examples{,/**/*}',
         '!pr-evidence{,/**/*}',
         '!notes{,/**/*}',
-        '!{.claude,.grok,.agents,.codex}{,/**/*}',
+        '!{.claude,.grok,.agents,.codex,.quirk,.anti-slop-plugin}{,/**/*}',
         '!Casks{,/**/*}',
         '!{AGENTS.md,CLAUDE.md,DEVELOPING.md,bundle-size-progress.md,ORCHESTRATION_IMPLEMENTATION_CHECKLIST.md,ORCHESTRATION_STRUCTURED_OUTPUT_DESIGN.md}',
         '!out/**/*.test.js',
