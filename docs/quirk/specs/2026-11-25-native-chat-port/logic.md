@@ -44,7 +44,7 @@ The cutover spec gave the reason for replacing the engine: "plan mode, transcrip
 3. **New item kinds are gated by client capability.** That's how an older phone app keeps working: it never receives a kind it doesn't know.
 4. **Switch on merge, judge it after.** Orca's chat view is deleted in the same branch, so there's no fallback setting. Done means seven days of real use on desktop and phone after merge without a blocker, and any blocker is fixed forward.
 5. **v1's layout and behavior, this app's styling.** The view uses STYLEGUIDE tokens and the shadcn primitives in `src/renderer/src/components/ui/`, so it matches the rest of the app.
-6. **The conversation outline rail is dropped.** v1 had one, and none of the day-one picks needs it.
+6. **The conversation outline rail is dropped.** Orca's chat has one (the message rail beside the transcript), v1 didn't, and none of the day-one picks needs it.
 
 ## Behavior and scenarios
 
@@ -271,7 +271,7 @@ These mocked elements have no component in the repo yet, so each is an open ques
 **Deleted in the same branch:**
 
 - Orca's chat view (`src/renderer/src/components/native-chat`), except the hooks the projection reads
-- the PTY bridge path and its transcript decoders
+- the PTY bridge view (the transcript decoders and readers stay; see Amendments)
 - `fork-agent-composer`
 - the terminal-dock composer
 - thread goal
@@ -369,8 +369,10 @@ Coverage gaps: Brave's context endpoint wasn't available on the plan, two Reddit
 
 ## Status & amendments
 
-Status: Approved (2026-11-25), signed off with the SC-3 queue-after-Stop question and the five component gaps open for the build
+Status: Approved (2026-11-25), signed off with the SC-3 queue-after-Stop question and the five component gaps open for the build. Tech spec: written ([tech.md](tech.md)); gate fired because the work crosses the engine, desktop view, CLI and phone and spans more than one session
 
 **Amendments:**
 
-- None yet.
+- 2026-11-25: Two corrections found while writing the tech spec. No decision changed.
+  - The transcript decoders and readers in `src/main/native-chat/` stay. Legacy history import, ai-vault, orchestration worker reads and Claude rewind use them, and `nativeChat.*` serves shipped phone apps. Only the bridge view is deleted, which is what Decisions Locked says.
+  - The outline rail being dropped is Orca's message rail, not a v1 feature. v1 never had one.
