@@ -1,7 +1,7 @@
 import {
   BUTTON_VARIANTS,
   CALLOUT_TONES,
-  ITEM_STATE_SHAPE,
+  ITEM_STATE_FIELDS,
   STATUS_STATES,
   STEP_STATES,
   TONES,
@@ -22,13 +22,13 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   stack: {
     summary: 'Vertical container; children render top to bottom.',
     container: 'any',
-    shape: {},
+    props: {},
     example: { type: 'stack', children: [{ type: 'markdown', props: { text: 'Hello' } }] }
   },
   columns: {
     summary: `Side-by-side container; each child is one column, at most ${MAX_COLUMNS}.`,
     container: 'columns',
-    shape: {},
+    props: {},
     example: {
       type: 'columns',
       children: [
@@ -40,7 +40,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   section: {
     summary: 'Titled container.',
     container: 'any',
-    shape: { title: { kind: 'string', required: true, max: 120 } },
+    props: { title: { kind: 'string', required: true, max: 120 } },
     example: {
       type: 'section',
       props: { title: 'Details' },
@@ -50,7 +50,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   markdown: {
     summary:
       'Formatted text. Links must be absolute http(s) URLs and ask the user before opening; images and raw HTML are dropped. Math written as $x^2$ or $$x^2$$ is typeset.',
-    shape: { text: { kind: 'string', required: true, markdown: true } },
+    props: { text: { kind: 'string', required: true, markdown: true } },
     example: {
       type: 'markdown',
       props: { text: 'See the [docs](https://example.com/docs) for **details**.' }
@@ -58,7 +58,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   },
   kv: {
     summary: 'Key and value rows.',
-    shape: {
+    props: {
       items: {
         kind: 'list',
         of: { key: { kind: 'string', required: true }, value: { kind: 'string', required: true } },
@@ -79,7 +79,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   },
   table: {
     summary: `Header row plus data rows; every row has one cell per column, at most ${MAX_TABLE_ROWS} rows.`,
-    shape: {
+    props: {
       columns: { kind: 'strings', min: 1, max: MAX_TABLE_COLUMNS },
       rows: { kind: 'matrix', max: MAX_TABLE_ROWS }
     },
@@ -96,7 +96,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   },
   stat: {
     summary: 'One headline number with a label.',
-    shape: {
+    props: {
       label: { kind: 'string', required: true, max: 80 },
       value: { kind: 'string', required: true, max: 80 },
       delta: { kind: 'string', max: 80 },
@@ -109,7 +109,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   },
   'status-list': {
     summary: 'Rows with a status dot.',
-    shape: {
+    props: {
       items: {
         kind: 'list',
         of: {
@@ -134,10 +134,10 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   },
   steps: {
     summary: 'A checklist of steps with progress.',
-    shape: {
+    props: {
       items: {
         kind: 'list',
-        of: ITEM_STATE_SHAPE(STEP_STATES, 'text'),
+        of: ITEM_STATE_FIELDS(STEP_STATES, 'text'),
         min: 1,
         max: MAX_LIST_ITEMS,
         what: 'items'
@@ -156,12 +156,12 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   },
   code: {
     summary: 'A code block shown as text.',
-    shape: { text: { kind: 'string', required: true }, language: { kind: 'string', max: 40 } },
+    props: { text: { kind: 'string', required: true }, language: { kind: 'string', max: 40 } },
     example: { type: 'code', props: { text: 'const answer = 42', language: 'ts' } }
   },
   'file-diff': {
     summary: 'A changed file with its unified diff text.',
-    shape: {
+    props: {
       path: { kind: 'string', required: true, max: 400 },
       diff: { kind: 'string', required: true }
     },
@@ -169,7 +169,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   },
   'bar-chart': {
     summary: `Horizontal bars, one per series entry, at most ${MAX_CHART_POINTS}. Values are plain numbers.`,
-    shape: {
+    props: {
       series: {
         kind: 'list',
         of: {
@@ -195,7 +195,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   },
   'line-chart': {
     summary: `A line through points, at most ${MAX_CHART_POINTS}. x is a label or number, y a number.`,
-    shape: {
+    props: {
       points: {
         kind: 'list',
         of: {
@@ -222,7 +222,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   },
   callout: {
     summary: 'A highlighted note.',
-    shape: {
+    props: {
       tone: { kind: 'enum', values: CALLOUT_TONES, required: true },
       text: { kind: 'string', required: true }
     },
@@ -234,7 +234,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   button: {
     summary:
       "Sends an action to the agent when clicked. If the agent is blocked in `quirky view wait`, the action is that command's result; otherwise it arrives as a message.",
-    shape: {
+    props: {
       label: { kind: 'string', required: true, max: 80 },
       action: {
         kind: 'string',
@@ -252,7 +252,7 @@ export const BASIC_COMPONENTS: Record<BasicNodeType, Component> = {
   field: {
     summary:
       'Asks the user one question inline. The answer is sent as an action named after the question id, with data {value}. `question` is one ask question: type select|multiselect (options: {value, label, description?}[], at most 12; default), text (multiline?, pattern? (a regular expression, at most 200 characters, at most 3 variable quantifiers, no nested repetition), format?: email|url, default), number (integer?, min?, max?, default) or confirm (default). Also header?, required?. The id follows the button action pattern and is unique in the spec. Credential-shaped ids or text are refused.',
-    shape: { question: { kind: 'question' } },
+    props: { question: { kind: 'question' } },
     example: {
       type: 'field',
       props: {

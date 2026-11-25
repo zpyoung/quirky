@@ -17697,6 +17697,9 @@
       "forgeCredentialTarget": {
         "unknownHost": "The machine that owns this repository is not known yet. Reconnect it and try again.",
         "thisComputer": "this computer"
+      },
+      "structuredAgentSessionQueueMoveClient": {
+        "notConnected": "The chat is not connected yet."
       }
     },
     "ssh": {

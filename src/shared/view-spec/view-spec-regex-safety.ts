@@ -17,7 +17,7 @@ function readCountedQuantifier(pattern: string, index: number): CountedQuantifie
   return { length: text.length, variable }
 }
 
-export type UnsafePatternShape =
+export type UnsafePatternKind =
   | 'nested-repetition'
   | 'repeated-alternation'
   | 'too-many-quantifiers'
@@ -29,7 +29,7 @@ export type UnsafePatternShape =
  * `MAX_PATTERN_QUANTIFIERS` variable quantifiers. With none of those, matching a 200-character
  * input stays polynomial of low degree. A `?` after a group does not count as repeating it.
  */
-export function findUnsafePatternShape(pattern: string): UnsafePatternShape | undefined {
+export function findUnsafePatternKind(pattern: string): UnsafePatternKind | undefined {
   const groupHasQuantifier: boolean[] = []
   const groupHasAlternation: boolean[] = []
   let inClass = false
@@ -107,7 +107,7 @@ export function findUnsafePatternShape(pattern: string): UnsafePatternShape | un
   return quantifierCount > MAX_PATTERN_QUANTIFIERS ? 'too-many-quantifiers' : undefined
 }
 
-export const UNSAFE_PATTERN_MESSAGES: Record<UnsafePatternShape, string> = {
+export const UNSAFE_PATTERN_MESSAGES: Record<UnsafePatternKind, string> = {
   'nested-repetition':
     'pattern must not nest repetition (e.g. (a+)+); it can hang the regex engine',
   'repeated-alternation':

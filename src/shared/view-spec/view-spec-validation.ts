@@ -4,7 +4,7 @@ import {
   IMAGE_EXTENSIONS,
   isRequired,
   type Field,
-  type Shape
+  type PropFields
 } from './view-spec-catalog-schema'
 import {
   addError,
@@ -68,15 +68,15 @@ function readString(
   return raw
 }
 
-function readShape(
+function readFields(
   raw: Record<string, unknown>,
-  shape: Shape,
+  fields: PropFields,
   path: string,
   check: Check
 ): Record<string, unknown> {
-  checkKeys(raw, Object.keys(shape), path, check)
+  checkKeys(raw, Object.keys(fields), path, check)
   const out: Record<string, unknown> = {}
-  for (const [name, field] of Object.entries(shape)) {
+  for (const [name, field] of Object.entries(fields)) {
     const value = Object.hasOwn(raw, name) ? raw[name] : undefined
     const fieldPath = path ? `${path}.${name}` : name
     if (value === undefined) {
@@ -182,7 +182,7 @@ function readField(value: unknown, field: Field, path: string, check: Check): un
           addError(check, entryPath, 'must be an object')
           return {}
         }
-        return readShape(entry, field.of, entryPath, check)
+        return readFields(entry, field.of, entryPath, check)
       })
     }
     case 'question':
@@ -351,9 +351,9 @@ function readNode(raw: unknown, path: string, depth: number, check: Check): View
   if (rawProps !== undefined && !isPlainObject(rawProps)) {
     addError(check, `${path}.props`, 'props must be an object')
   }
-  const props = readShape(
+  const props = readFields(
     isPlainObject(rawProps) ? rawProps : {},
-    component.shape,
+    component.props,
     `${path}.props`,
     check
   )
