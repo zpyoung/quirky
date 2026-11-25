@@ -8,6 +8,8 @@ type QueuedRun = (controls: {
 type QueueOptions = { onCancelUnsubmitted?: (delay: never) => unknown; onInvalidate?: () => void }
 
 const queued: { run: QueuedRun; options: QueueOptions }[] = []
+let queueBodyStarted = false
+const queueCancel = vi.fn()
 const typeAgentTuiCommand = vi.fn()
 const quarantined = vi.fn(() => false)
 
@@ -27,7 +29,14 @@ vi.mock('../native-chat-pty-send-queue', () => ({
   waitForNativeChatPtyIdle: vi.fn(async () => {}),
   enqueueNativeChatPtySend: (_pty: string, _ms: number, run: QueuedRun, options: QueueOptions) => {
     queued.push({ run, options })
-    return { cancel: () => {}, settleAfterMs: 0 }
+    return {
+      cancel: queueCancel,
+      invalidate: () => {},
+      bodyStarted: () => queueBodyStarted,
+      finished: () => false,
+      settled: Promise.resolve(),
+      settleAfterMs: 0
+    }
   }
 }))
 vi.mock('./native-chat-runtime-clear', () => ({
@@ -57,6 +66,8 @@ async function runQueued(cancelled = false): Promise<void> {
 describe('sendNativeChatTypedCommand delivery reporting', () => {
   beforeEach(() => {
     queued.length = 0
+    queueBodyStarted = false
+    queueCancel.mockReset()
     typeAgentTuiCommand.mockReset()
     quarantined.mockReturnValue(false)
   })
@@ -87,6 +98,17 @@ describe('sendNativeChatTypedCommand delivery reporting', () => {
     sendNativeChatTypedCommand(TARGET, '/model', options)
     queued[0]?.options.onInvalidate?.()
     await runQueued(true)
+    expect(options.onWriteRejected).not.toHaveBeenCalled()
+    expect(options.onDeliverySettled).toHaveBeenCalledExactlyOnceWith(false)
+    expect(options.onOutcome).toHaveBeenCalledExactlyOnceWith('may-not-have-sent')
+  })
+
+  it('reports a command cancelled before it starts once, as not delivered', () => {
+    const options = callbacks()
+    const handle = sendNativeChatTypedCommand(TARGET, '/model', options)
+    handle.cancel()
+    handle.cancel()
+    expect(queueCancel).toHaveBeenCalled()
     expect(options.onWriteRejected).not.toHaveBeenCalled()
     expect(options.onDeliverySettled).toHaveBeenCalledExactlyOnceWith(false)
     expect(options.onOutcome).toHaveBeenCalledExactlyOnceWith('may-not-have-sent')

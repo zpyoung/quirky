@@ -93,7 +93,7 @@ export function sendNativeChatTypedCommand(
     return { cancel: () => {}, settleAfterMs: 0 }
   }
   const controller = new AbortController()
-  return enqueueNativeChatPtySend(
+  const handle = enqueueNativeChatPtySend(
     target.ptyId,
     (command.length + 1) * AGENT_TUI_COMMAND_KEY_INTERVAL_MS,
     ({ isCancelled, delay, markSubmitted }) => {
@@ -146,4 +146,19 @@ export function sendNativeChatTypedCommand(
       }
     }
   )
+  return {
+    ...handle,
+    // a send cancelled while still queued never reaches `start` or the queue's cancel hooks
+    cancel: (keepInput) => {
+      const startedBeforeCancel = handle.bodyStarted()
+      try {
+        handle.cancel(keepInput)
+      } finally {
+        if (!startedBeforeCancel) {
+          report('abandoned')
+          controller.abort()
+        }
+      }
+    }
+  }
 }

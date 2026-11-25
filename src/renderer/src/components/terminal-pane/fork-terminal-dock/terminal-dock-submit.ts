@@ -10,9 +10,11 @@ import {
 } from '../../native-chat/native-chat-runtime-send'
 import { isTerminalInputQuarantined } from '../terminal-input-quarantine'
 
-function deliveryOutcome(start: (options: NativeChatSendOptions) => unknown): Promise<boolean> {
+function deliveryOutcome(
+  start: (options: NativeChatSendOptions) => { settled?: Promise<void> } | undefined
+): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
-    start({
+    const handle = start({
       onDeliverySettled: resolve,
       onOutcome: (outcome) => {
         if (outcome === 'may-not-have-sent') {
@@ -20,6 +22,8 @@ function deliveryOutcome(start: (options: NativeChatSendOptions) => unknown): Pr
         }
       }
     })
+    // a handle that settles without reporting would otherwise leave the composer's submit pending
+    void handle?.settled?.then(() => resolve(false))
   })
 }
 
