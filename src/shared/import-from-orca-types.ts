@@ -5,6 +5,7 @@ export type ImportErrorCode =
   | 'SOURCE_MISSING'
   | 'SOURCE_INCOMPATIBLE'
   | 'KEYCHAIN_DENIED'
+  | 'SECRETS_NOT_DECRYPTED'
   | 'WRITE_FAILED'
 
 export type ImportError = {

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import type { AutomationCreateInput } from '../../shared/automations-types'
 import type { Store } from '../persistence/loading-store/store'
 import type { Repo } from '../../shared/repo-types'
@@ -33,6 +34,13 @@ export type ImportStore = Pick<
   | 'getRemovedSshTargetTombstones'
   | 'getRepos'
   | 'getRetiredWorktreeNameRegistry'
+  | 'getRetiredWorktreeNameRegistryForNamespace'
+  | 'getSshTargetGenerationCounter'
+  | 'getWorkspaceLineage'
+  | 'removeWorkspaceLineage'
+  | 'restoreRetiredWorktreeNameRegistry'
+  | 'restoreRetiredWorktreeNameRegistryForNamespace'
+  | 'setSshTargetGenerationCounter'
   | 'getSettings'
   | 'getSparsePresets'
   | 'getSshTargets'
@@ -59,6 +67,11 @@ export type ImportStore = Pick<
   | 'updateSettings'
   | 'updateUI'
 >
+
+export type ApplyOptions = {
+  /** Quirky's own settings defaults; a key still at its default counts as unset. */
+  defaultSettings: GlobalSettings
+}
 
 export type ApplyResult = {
   /** Source ids added, per source domain. */
@@ -110,13 +123,14 @@ function pickPrevious<T extends object>(current: T, updates: Partial<T>): Partia
 /**
  * Applies the plan through the store's domain setters, adding items and never replacing any.
  * On a failure every setter call made so far is undone in reverse order and a `WRITE_FAILED`
- * is thrown. Retired-name tombstones for namespaces and workspace lineage rows have no inverse
- * setter and stay; both are additive and keyed by ids no live item uses.
+ * is thrown. Settings are filled in only where Quirky's value is still the default, and
+ * linked accounts are merged by id, so a first import into a used profile keeps what it has.
  */
 export function applyImportPlan(
   store: ImportStore,
   plan: ImportPlan,
-  priorIdMap: Record<string, Record<string, string>>
+  priorIdMap: Record<string, Record<string, string>>,
+  options: ApplyOptions
 ): ApplyResult {
   const undo: (() => void)[] = []
   const imported: Record<string, string[]> = {}
@@ -152,10 +166,10 @@ export function applyImportPlan(
     applyFolderWorkspaces(store, plan, idMap, undo, record)
     applyProjectsAndSetups(store, plan, undo, record)
     applyWorktrees(store, plan, groupId, undo, record)
-    applyScalarState(store, plan, secretsImported, undo, record)
+    applyScalarState(store, plan, options, secretsImported, undo, record)
     applySsh(store, plan, undo, record)
     applyAutomations(store, plan, undo, record)
-    applyLineageAndNames(store, plan, idMap, record)
+    applyLineageAndNames(store, plan, idMap, undo, record)
     store.flushOrThrow()
   } catch (error) {
     rollback()
@@ -326,40 +340,44 @@ function applyWorktrees(
 function applyScalarState(
   store: ImportStore,
   plan: ImportPlan,
+  options: ApplyOptions,
   secretsImported: string[],
   undo: Undo,
   record: Recorder
 ): void {
   const settingsBefore = store.getSettings()
+  const updates: Partial<GlobalSettings> = {}
   if (plan.settings !== null) {
-    const previous = pickPrevious(settingsBefore, plan.settings)
-    store.updateSettings(plan.settings)
-    undo.push(() => store.updateSettings(previous))
+    for (const key of Object.keys(plan.settings) as (keyof GlobalSettings)[]) {
+      if (
+        key !== 'claudeManagedAccounts' &&
+        key !== 'codexManagedAccounts' &&
+        isDeepStrictEqual(settingsBefore[key], options.defaultSettings[key])
+      ) {
+        Object.assign(updates, { [key]: plan.settings[key] })
+      }
+    }
     record('settings', 'settings')
-    for (const account of plan.claudeAccounts) {
-      record('settings.claudeManagedAccounts', account.id)
-    }
-    for (const account of plan.codexAccounts) {
-      record('settings.codexManagedAccounts', account.id)
-    }
-  } else if (plan.claudeAccounts.length > 0 || plan.codexAccounts.length > 0) {
-    const updates = {
-      claudeManagedAccounts: [...settingsBefore.claudeManagedAccounts, ...plan.claudeAccounts],
-      codexManagedAccounts: [...settingsBefore.codexManagedAccounts, ...plan.codexAccounts]
-    }
+  }
+  if (plan.claudeAccounts.length > 0) {
+    updates.claudeManagedAccounts = [
+      ...settingsBefore.claudeManagedAccounts,
+      ...plan.claudeAccounts
+    ]
+  }
+  if (plan.codexAccounts.length > 0) {
+    updates.codexManagedAccounts = [...settingsBefore.codexManagedAccounts, ...plan.codexAccounts]
+  }
+  if (Object.keys(updates).length > 0) {
+    const previous = pickPrevious(settingsBefore, updates)
     store.updateSettings(updates)
-    undo.push(() =>
-      store.updateSettings({
-        claudeManagedAccounts: settingsBefore.claudeManagedAccounts,
-        codexManagedAccounts: settingsBefore.codexManagedAccounts
-      })
-    )
-    for (const account of plan.claudeAccounts) {
-      record('settings.claudeManagedAccounts', account.id)
-    }
-    for (const account of plan.codexAccounts) {
-      record('settings.codexManagedAccounts', account.id)
-    }
+    undo.push(() => store.updateSettings(previous))
+  }
+  for (const account of plan.claudeAccounts) {
+    record('settings.claudeManagedAccounts', account.id)
+  }
+  for (const account of plan.codexAccounts) {
+    record('settings.codexManagedAccounts', account.id)
   }
 
   const uiBefore = store.getUI()
@@ -400,6 +418,11 @@ function applyScalarState(
 }
 
 function applySsh(store: ImportStore, plan: ImportPlan, undo: Undo, record: Recorder): void {
+  const counterBefore = store.getSshTargetGenerationCounter()
+  if (plan.sshTargetGenerationCounter !== null && plan.sshTargetGenerationCounter > counterBefore) {
+    store.setSshTargetGenerationCounter(plan.sshTargetGenerationCounter)
+    undo.push(() => store.setSshTargetGenerationCounter(counterBefore))
+  }
   for (const target of plan.sshTargets) {
     store.addSshTarget(target)
     undo.push(() => store.removeSshTarget(target.id))
@@ -456,22 +479,33 @@ function applyLineageAndNames(
   store: ImportStore,
   plan: ImportPlan,
   idMap: Record<string, Record<string, string>>,
+  undo: Undo,
   record: Recorder
 ): void {
   for (const { repoId, names } of plan.retiredByRepo) {
     if (store.getRepos().some((repo) => repo.id === repoId)) {
+      const before = store.getRetiredWorktreeNameRegistry(repoId)
       store.mergeRetiredWorktreeNames(repoId, names)
+      undo.push(() => store.restoreRetiredWorktreeNameRegistry(repoId, before))
       record('retiredWorktreeNamesByRepo', repoId)
     }
   }
   for (const { key, names } of plan.retiredByNamespace) {
+    const before = store.getRetiredWorktreeNameRegistryForNamespace(key)
     store.mergeRetiredWorktreeNamesForNamespace(key, names)
+    undo.push(() => store.restoreRetiredWorktreeNameRegistryForNamespace(key, before))
     record('retiredWorktreeNamesByNamespace', key)
   }
   for (const lineage of plan.workspaceLineage) {
     const remapped = remapFolderKeys(lineage, idMap.folderWorkspaces)
     if (remapped !== null) {
+      const before = store.getWorkspaceLineage(remapped.childWorkspaceKey)
       store.setWorkspaceLineage(remapped)
+      undo.push(() =>
+        before === undefined
+          ? store.removeWorkspaceLineage(remapped)
+          : void store.setWorkspaceLineage(before)
+      )
       record('workspaceLineageByChildKey', lineage.childWorkspaceKey)
     }
   }

@@ -49,47 +49,64 @@ export function sourceDatabaseExists(sourceRoot: string): boolean {
   }
 }
 
-async function backupInto(databasePath: string, copyPath: string): Promise<void> {
-  const source = new Database(databasePath, { readonly: true, fileMustExist: true })
-  try {
-    await writeProfileStateDatabaseSnapshotAsync(source, copyPath)
-  } finally {
-    source.close()
-  }
-}
+const SIDECAR_SUFFIXES = ['-wal', '-shm'] as const
+const MAX_COPY_ATTEMPTS = 3
 
 /**
- * Online-backs-up the source into `copyPath`. A read-only WAL database whose sidecar files are
- * missing cannot be opened without creating them, so that case reads a copy staged in the work
- * dir instead; the source itself is never opened for writing.
+ * Copies the database and its sidecar files into a fresh folder under `workDir`, then checks the
+ * copy with `quick_check`. Orca Dev may write while the files are copied, so a torn copy is
+ * thrown away and made again, up to `MAX_COPY_ATTEMPTS` times. The source is only ever read as
+ * plain files, never opened as a database.
  */
+async function copyConsistently(databasePath: string, workDir: string): Promise<string> {
+  let lastError: unknown = new Error('no copy attempt ran')
+  for (let attempt = 0; attempt < MAX_COPY_ATTEMPTS; attempt += 1) {
+    const stagingDir = join(workDir, `staged-${attempt}`)
+    await mkdir(stagingDir)
+    const staged = join(stagingDir, basename(databasePath))
+    try {
+      await copyFile(databasePath, staged)
+      for (const suffix of SIDECAR_SUFFIXES) {
+        if (existsSync(`${databasePath}${suffix}`)) {
+          await copyFile(`${databasePath}${suffix}`, `${staged}${suffix}`)
+        }
+      }
+      const copy = new Database(staged, { fileMustExist: true })
+      try {
+        const result = copy.pragma('quick_check', { simple: true })
+        if (result === 'ok') {
+          return staged
+        }
+        lastError = new Error(`copy failed its integrity check: ${String(result)}`)
+      } finally {
+        copy.close()
+      }
+    } catch (error) {
+      lastError = error
+    }
+    await rm(stagingDir, { recursive: true, force: true })
+  }
+  throw lastError
+}
+
 async function snapshotDatabase(
   databasePath: string,
   copyPath: string,
   workDir: string
 ): Promise<void> {
+  const staged = await copyConsistently(databasePath, workDir)
+  const copy = new Database(staged, { fileMustExist: true })
   try {
-    await backupInto(databasePath, copyPath)
-    return
-  } catch (error) {
-    if (!/readonly|read-only|unable to open/i.test(String(error))) {
-      throw error
-    }
+    await writeProfileStateDatabaseSnapshotAsync(copy, copyPath)
+  } finally {
+    copy.close()
   }
-  const stagingDir = join(workDir, 'staged')
-  await mkdir(stagingDir)
-  const staged = join(stagingDir, basename(databasePath))
-  await copyFile(databasePath, staged)
-  if (existsSync(`${databasePath}-wal`)) {
-    await copyFile(`${databasePath}-wal`, `${staged}-wal`)
-  }
-  await backupInto(staged, copyPath)
 }
 
 /**
- * Builds the source `PersistedState` without touching the source: the database is copied with
- * SQLite's online backup into `tempDir`, and only that copy is read. The temp copy is removed
- * before returning.
+ * Builds the source `PersistedState` without opening or writing anything under the source: the
+ * database files are copied into `tempDir` and only that copy is opened. The temp copy is
+ * removed before returning.
  */
 export async function readSourceState(sourceRoot: string, tempDir: string): Promise<SourceState> {
   const databasePath = resolveActiveProfileDatabase(sourceRoot)

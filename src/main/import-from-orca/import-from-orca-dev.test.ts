@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import type { SecretStore } from '../../shared/secret-store'
 import { setSecretStore, _resetSecretStoreForTests } from '../../shared/secret-store'
 import type { ImportStore } from './apply'
-import { deriveOsCryptKey } from './secrets'
+import { deriveOsCryptKey } from '../browser/browser-cookie-key'
 
 vi.mock('electron', () => ({
   app: {
@@ -45,6 +45,8 @@ const { createProfileStateStore } =
   await import('../persistence/profile-state/profile-state-store-factory')
 const { importFromOrcaDev, detectImportFromOrca } = await import('./import-from-orca-dev')
 const { default: Database } = await import('../sqlite/sync-database')
+const { resolveSecrets } = await import('./secrets-step')
+const { canonicalWorktreeIdentity } = await import('../../shared/worktree/identity')
 
 const PRIMARY_PASSWORD = 'primary-keychain-password'
 const FALLBACK_PASSWORD = 'fallback-keychain-password'
@@ -418,6 +420,7 @@ describe('importFromOrcaDev', () => {
     const store = openStore(join(fixture.quirkyDir, 'profile'), 'local-default')
     const sourceTree = join(fixture.root, 'source')
     const before = snapshotTree(sourceTree)
+    const filesBefore = walk(sourceTree).sort()
     setReadOnly(sourceTree, true)
     let report
     try {
@@ -429,6 +432,7 @@ describe('importFromOrcaDev', () => {
     expect(report.errors).toEqual([])
     expect(report.ok).toBe(true)
     expect(snapshotTree(sourceTree)).toEqual(before)
+    expect(walk(sourceTree).sort()).toEqual(filesBefore)
     store.freezeWrites()
   })
 
@@ -453,6 +457,165 @@ describe('importFromOrcaDev', () => {
     expect(existsSync(join(fixture.userDataPath, 'orca-import-receipt.json'))).toBe(false)
     expect(existsSync(join(fixture.userDataPath, 'claude-accounts'))).toBe(false)
     expect(existsSync(join(fixture.homeDir, '.quirky', 'keybindings.json'))).toBe(false)
+    store.freezeWrites()
+  })
+
+  it('first import into a used profile keeps its settings and linked accounts', async () => {
+    const fixture = makeFixture()
+    buildSource(fixture)
+    const store = openStore(join(fixture.quirkyDir, 'profile'), 'local-default')
+    const existing = {
+      id: 'existing',
+      email: 'me@example.test',
+      managedAuthPath: join(fixture.userDataPath, 'claude-accounts', 'existing'),
+      authMethod: 'unknown' as const,
+      createdAt: 1,
+      updatedAt: 1,
+      lastAuthenticatedAt: 1
+    }
+    store.updateSettings({ theme: 'light', claudeManagedAccounts: [existing] })
+
+    const report = await runImport(fixture, store, 'first-run')
+
+    expect(report.ok).toBe(true)
+    expect(store.getSettings().theme).toBe('light')
+    expect(store.getSettings().claudeManagedAccounts.map((account) => account.id)).toEqual([
+      'existing',
+      'acc1'
+    ])
+    expect(store.getSettings().workspaceDir).toBe(join(fixture.homeDir, 'quirky', 'workspaces'))
+    store.freezeWrites()
+  })
+
+  it('a rerun does not restore copied files the owner deleted', async () => {
+    const fixture = makeFixture()
+    buildSource(fixture)
+    const store = openStore(join(fixture.quirkyDir, 'profile'), 'local-default')
+    await runImport(fixture, store, 'first-run')
+    rmSync(join(fixture.userDataPath, 'claude-accounts', 'acc1'), { recursive: true })
+    rmSync(join(fixture.homeDir, '.quirky', 'keybindings.json'))
+
+    const report = await runImport(fixture, store, 'rerun')
+
+    expect(report.ok).toBe(true)
+    expect(report.copiedFiles).toEqual([])
+    expect(existsSync(join(fixture.userDataPath, 'claude-accounts', 'acc1'))).toBe(false)
+    expect(existsSync(join(fixture.homeDir, '.quirky', 'keybindings.json'))).toBe(false)
+    const receipt = JSON.parse(
+      readFileSync(join(fixture.userDataPath, 'orca-import-receipt.json'), 'utf8')
+    )
+    expect(receipt.runs[0].copiedFiles.sort()).toEqual(['claude-accounts/acc1', 'keybindings.json'])
+    store.freezeWrites()
+  })
+
+  it('secrets: one undecryptable value does not stop the others', async () => {
+    const seal = osCryptStore(PRIMARY_PASSWORD).encryptString('plaintext-proxy-value')
+    const corrupt = Buffer.concat([Buffer.from('v10'), Buffer.alloc(16, 7)]).toString('base64')
+    const run = (password: string) =>
+      resolveSecrets({
+        source: {
+          settings: { opencodeSessionCookie: corrupt, httpProxyUrl: seal.toString('base64') },
+          ui: { browserKagiSessionLink: Buffer.from('v10short').toString('base64') }
+        },
+        sourceHome: join(tmpdir(), 'import-from-orca-no-such-home'),
+        quirkyHome: join(tmpdir(), 'import-from-orca-no-such-quirky'),
+        alreadyImportedSlots: new Set(),
+        readKeychainPassword: () => password,
+        safeStorage: quirkyStore
+      })
+
+    const good = await run(PRIMARY_PASSWORD)
+    expect([...good.plaintext.keys()]).toEqual(['settings.httpProxyUrl'])
+    expect(good.skipped.sort()).toEqual([
+      'settings.opencodeSessionCookie',
+      'ui.browserKagiSessionLink'
+    ])
+    expect(good.errors).toEqual([])
+
+    const wrong = await run('some-other-password')
+    expect(wrong.plaintext.size).toBe(0)
+    expect(wrong.errors.map((error) => error.code)).toEqual(['SECRETS_NOT_DECRYPTED'])
+  })
+
+  it('identity maps and the ssh generation counter come across', async () => {
+    const fixture = makeFixture()
+    buildSource(fixture)
+    const profileDir = join(fixture.sourceRoot, 'profiles', 'local-default')
+    const source = openStore(profileDir, 'local-default')
+    for (let index = 0; index < 3; index += 1) {
+      source.allocateSshTargetGeneration()
+    }
+    const sourceInstanceIds = Object.fromEntries(
+      Object.entries(source.getAllWorktreeMeta()).map(([id, meta]) => [id, meta.instanceId])
+    )
+    source.flushOrThrow()
+    source.freezeWrites()
+    const checkpoint = new Database(join(profileDir, 'profile-state.db'))
+    checkpoint.pragma('wal_checkpoint(TRUNCATE)')
+    checkpoint.close()
+    const store = openStore(join(fixture.quirkyDir, 'profile'), 'local-default')
+
+    const report = await runImport(fixture, store, 'first-run')
+
+    expect(report.ok).toBe(true)
+    expect(store.getSshTargetGenerationCounter()).toBe(3)
+    const exported = JSON.parse(store.prepareProfileStateExport().json)
+    const aliasedKeys = Object.values(exported.worktreeIdentityAliases ?? {}).flat()
+    const rows = Object.entries(store.getAllWorktreeMeta())
+    expect(rows).toHaveLength(2)
+    expect(Object.fromEntries(rows.map(([id, meta]) => [id, meta.instanceId]))).toEqual(
+      sourceInstanceIds
+    )
+    for (const [worktreeId, meta] of rows) {
+      expect(aliasedKeys).toContain(
+        canonicalWorktreeIdentity({
+          worktreeId,
+          executionHostId: 'local',
+          instanceId: meta.instanceId ?? ''
+        })
+      )
+    }
+    store.freezeWrites()
+  })
+
+  it('rollback: a failed final flush also restores retired names and workspace lineage', async () => {
+    const fixture = makeFixture()
+    buildSource(fixture)
+    const profileDir = join(fixture.sourceRoot, 'profiles', 'local-default')
+    const source = openStore(profileDir, 'local-default')
+    source.mergeRetiredWorktreeNamesForNamespace('ns-1', ['nautilus'])
+    source.setWorkspaceLineage({
+      childWorkspaceKey: `worktree:${worktreeOne}`,
+      parentWorkspaceKey: `worktree:${worktreeTwo}`,
+      origin: 'manual',
+      capture: { source: 'manual', confidence: 'explicit' },
+      createdAt: 1
+    } as never)
+    source.flushOrThrow()
+    source.freezeWrites()
+    const checkpoint = new Database(join(profileDir, 'profile-state.db'))
+    checkpoint.pragma('wal_checkpoint(TRUNCATE)')
+    checkpoint.close()
+    const store = openStore(join(fixture.quirkyDir, 'profile'), 'local-default')
+    store.mergeRetiredWorktreeNamesForNamespace('ns-1', ['seahorse'])
+    const priorNames = store.getRetiredWorktreeNameRegistryForNamespace('ns-1')
+    expect(priorNames.names).toEqual(['seahorse'])
+    let flushes = 0
+    const failing = Object.assign(Object.create(store), {
+      flushOrThrow: () => {
+        flushes += 1
+        if (flushes === 1) {
+          throw new Error('flush failed')
+        }
+      }
+    })
+
+    const report = await runImport(fixture, failing, 'first-run')
+
+    expect(report.errors.map((error) => error.code)).toEqual(['WRITE_FAILED'])
+    expect(store.getRetiredWorktreeNameRegistryForNamespace('ns-1')).toEqual(priorNames)
+    expect(store.getAllWorkspaceLineage()).toEqual({})
+    expect(store.getRepos()).toEqual([])
     store.freezeWrites()
   })
 

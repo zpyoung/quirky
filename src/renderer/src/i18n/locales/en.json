@@ -17622,6 +17622,7 @@
           "sourceMissing": "Orca Dev data was not found on this Mac.",
           "sourceIncompatible": "Orca Dev's data could not be read by this version of Quirky.",
           "keychainDenied": "Access to the Orca Dev keychain item was denied, so secrets were not imported.",
+          "secretsNotDecrypted": "The Orca Dev keychain password could not decrypt its secrets, so they were not imported.",
           "writeFailed": "The import failed and everything it wrote was rolled back."
         },
         "report": {

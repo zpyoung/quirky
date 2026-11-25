@@ -33,12 +33,15 @@ async function copyTree(source: string, destination: string): Promise<void> {
 /**
  * Copies each `claude-accounts/<id>`, `codex-accounts/<id>` and `claude-profiles/<id>` folder
  * that Quirky does not have yet. Each folder lands under a temporary name first, so a crash
- * leaves no half-copied account. Returns the folders copied, relative to their roots.
+ * leaves no half-copied account. Folders in `alreadyCopied` were brought over by an earlier run
+ * and are never copied again, even if the owner has since deleted them. Returns the folders
+ * copied, relative to their roots.
  */
 export async function copyAccountDirs(
   sourceRoot: string,
   userDataPath: string,
-  written: WrittenPaths
+  written: WrittenPaths,
+  alreadyCopied: ReadonlySet<string> = new Set()
 ): Promise<string[]> {
   const copied: string[] = []
   for (const root of COPIED_ACCOUNT_DIRS) {
@@ -51,7 +54,7 @@ export async function copyAccountDirs(
         continue
       }
       const destination = join(userDataPath, root, entry.name)
-      if (existsSync(destination)) {
+      if (alreadyCopied.has(join(root, entry.name)) || existsSync(destination)) {
         continue
       }
       if (!existsSync(join(userDataPath, root))) {
@@ -69,15 +72,19 @@ export async function copyAccountDirs(
   return copied
 }
 
-/** Copies `keybindings.json` into Quirky's home dir unless one is already there. */
+/**
+ * Copies `keybindings.json` into Quirky's home dir unless one is already there or an earlier
+ * run already copied it.
+ */
 export async function copyKeybindings(
   sourceHome: string,
   quirkyHome: string,
-  written: WrittenPaths
+  written: WrittenPaths,
+  alreadyCopied: ReadonlySet<string> = new Set()
 ): Promise<string[]> {
   const source = join(sourceHome, 'keybindings.json')
   const destination = join(quirkyHome, 'keybindings.json')
-  if (!existsSync(source) || existsSync(destination)) {
+  if (alreadyCopied.has('keybindings.json') || !existsSync(source) || existsSync(destination)) {
     return []
   }
   const stat = await lstat(source)

@@ -287,6 +287,14 @@ export class MetadataLineageOperations {
     return this[metadataLineageOperationsContext].runtime.state.workspaceLineageByChildKey
   }
 
+  /** Drops the workspace lineage row a caller holds; a row already gone is a no-op. */
+  removeWorkspaceLineage(lineage: WorkspaceLineage): void {
+    delete this[metadataLineageOperationsContext].runtime.state.workspaceLineageByChildKey[
+      lineage.childWorkspaceKey
+    ]
+    scheduleSave(this[metadataLineageOperationsContext].scheduling)
+  }
+
   setWorkspaceLineage(lineage: WorkspaceLineage): WorkspaceLineage {
     this[metadataLineageOperationsContext].runtime.state.workspaceLineageByChildKey[
       lineage.childWorkspaceKey

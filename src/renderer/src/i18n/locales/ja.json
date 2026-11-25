@@ -17338,6 +17338,7 @@
           "sourceMissing": "このMacでOrca Devのデータが見つかりませんでした。",
           "sourceIncompatible": "このバージョンのQuirkyではOrca Devのデータを読み取れませんでした。",
           "keychainDenied": "Orca Devのキーチェーン項目へのアクセスが拒否されたため、シークレットはインポートされませんでした。",
+          "secretsNotDecrypted": "Orca Dev のキーチェーンのパスワードでは秘密情報を復号できなかったため、インポートされませんでした。",
           "writeFailed": "インポートに失敗し、書き込まれた内容はすべて元に戻されました。"
         },
         "report": {

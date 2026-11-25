@@ -15,6 +15,11 @@ const PBKDF2_ITERATIONS = 1003
 const PBKDF2_KEY_LENGTH = 16
 const PBKDF2_SALT = 'saltysalt'
 
+/** Derives the Chromium OSCrypt AES-128 key from a keychain password (saltysalt, 1003 rounds, SHA-1). */
+export function deriveOsCryptKey(password: string): Buffer {
+  return pbkdf2Sync(password, PBKDF2_SALT, PBKDF2_ITERATIONS, PBKDF2_KEY_LENGTH, 'sha1')
+}
+
 function runKeychainCommand(program: string, args: readonly string[], timeoutMs: number): string {
   const result = runProcessSync({ program, args, timeoutMs })
   if (result.code !== 0 || result.timedOut) {
@@ -53,7 +58,7 @@ export function getMacEncryptionKey(
     return {
       mode: 'aes-128-cbc',
       keysByVersion: {
-        v10: pbkdf2Sync(raw, PBKDF2_SALT, PBKDF2_ITERATIONS, PBKDF2_KEY_LENGTH, 'sha1')
+        v10: deriveOsCryptKey(raw)
       }
     }
   } catch {

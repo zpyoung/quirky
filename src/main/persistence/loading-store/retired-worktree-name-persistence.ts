@@ -42,6 +42,37 @@ export class RetiredWorktreeNamePersistence {
       : EMPTY_RETIRED_NAME_REGISTRY
   }
 
+  /** Puts a registry read earlier back; an empty one removes the repo's entry, as if never written. */
+  restoreRetiredWorktreeNameRegistry(repoId: string, registry: RetiredNameRegistry): void {
+    const state = this[retiredWorktreeNamePersistenceContext].runtime.state
+    if (isEmptyRegistry(registry)) {
+      delete state.retiredWorktreeNamesByRepo?.[repoId]
+    } else {
+      state.retiredWorktreeNamesByRepo ??= {}
+      state.retiredWorktreeNamesByRepo[repoId] = registry
+    }
+    scheduleSave(this[retiredWorktreeNamePersistenceContext].scheduling)
+  }
+
+  /** Namespace twin of `restoreRetiredWorktreeNameRegistry`. */
+  restoreRetiredWorktreeNameRegistryForNamespace(
+    namespaceKey: string,
+    registry: RetiredNameRegistry
+  ): void {
+    const state = this[retiredWorktreeNamePersistenceContext].runtime.state
+    if (isEmptyRegistry(registry)) {
+      delete state.retiredWorktreeNamesByNamespace?.[namespaceKey]
+    } else {
+      state.retiredWorktreeNamesByNamespace ??= {}
+      recordRetirementNamespaceRegistry(
+        state.retiredWorktreeNamesByNamespace,
+        namespaceKey,
+        registry
+      )
+    }
+    scheduleSave(this[retiredWorktreeNamePersistenceContext].scheduling)
+  }
+
   addRetiredWorktreeName(repoId: string, name: string): void {
     const normalized = normalizeRetirableGeneratedName(name)
     if (!repoId || !normalized) {
@@ -91,6 +122,10 @@ export class RetiredWorktreeNamePersistence {
     scheduleSave(this[retiredWorktreeNamePersistenceContext].scheduling)
     return true
   }
+}
+
+function isEmptyRegistry(registry: RetiredNameRegistry): boolean {
+  return registry.exhaustedTiers === 0 && registry.names.length === 0
 }
 
 export function applyRetiredWorktreeNames(

@@ -2,6 +2,7 @@ import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { getAppEnvironment } from '../../shared/app-environment'
+import { getDefaultSettings } from '../../shared/constants'
 import type {
   ImportDetectResult,
   ImportError,
@@ -17,6 +18,7 @@ import { readKeychainPasswordWithSecurity } from './keychain'
 import { ORCA_AUTOMATION_CREATION_KEY_PREFIX, buildImportPlan } from './plan'
 import {
   readReceipt,
+  receiptCopiedFiles,
   receiptIds,
   receiptPath,
   receiptSecretSlots,
@@ -179,9 +181,10 @@ export async function importFromOrcaDev(
     report.notImported = plan.notImported
     report.normalizedAway = plan.normalizedAway
 
+    const alreadyCopied = receiptCopiedFiles(receipt)
     report.copiedFiles.push(
-      ...(await copyAccountDirs(deps.sourceRoot, deps.userDataPath, written)),
-      ...(await copyKeybindings(deps.sourceHome, quirkyHome, written))
+      ...(await copyAccountDirs(deps.sourceRoot, deps.userDataPath, written, alreadyCopied)),
+      ...(await copyKeybindings(deps.sourceHome, quirkyHome, written, alreadyCopied))
     )
     for (const file of secrets.sealedFiles) {
       if (await writeSealedFile(quirkyHome, file.name, file.content, written)) {
@@ -189,13 +192,16 @@ export async function importFromOrcaDev(
       }
     }
 
-    applied = applyImportPlan(deps.store, plan, receipt.idMap ?? {})
+    applied = applyImportPlan(deps.store, plan, receipt.idMap ?? {}, {
+      defaultSettings: getDefaultSettings(homedir())
+    })
     const run = {
       at: deps.now().toISOString(),
       mode: options.mode,
       imported: applied.imported,
       skippedSecrets: report.skippedSecrets,
-      secretsImported: applied.secretsImported
+      secretsImported: applied.secretsImported,
+      copiedFiles: [...report.copiedFiles]
     }
     await writeReceiptFile(receiptPath(deps.userDataPath), {
       ...receipt,

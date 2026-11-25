@@ -64,8 +64,9 @@ function quirkyEnvelopePrefix(prefix: string): string {
 /**
  * Decrypts the source's sealed values and returns them ready to apply: slot values as plaintext
  * held in memory only, credential files already re-sealed with Quirky's safeStorage. Anything
- * that cannot be carried over is listed in `skipped`; a keychain that cannot be read gives
- * `KEYCHAIN_DENIED` and the caller carries on without secrets.
+ * that cannot be carried over is listed in `skipped`. A keychain that cannot be read gives
+ * `KEYCHAIN_DENIED`; a password that reads but decrypts nothing gives `SECRETS_NOT_DECRYPTED`.
+ * Either way the caller carries on without secrets.
  */
 export async function resolveSecrets(args: {
   source: SourceState
@@ -103,15 +104,25 @@ export async function resolveSecrets(args: {
     skipped.push(...sealed.map((candidate) => candidate.label))
     return outcome
   }
-  const resolved = await resolveSecretKey(args.readKeychainPassword, sealed[0].base64)
+  const resolved = await resolveSecretKey(
+    args.readKeychainPassword,
+    sealed.map((candidate) => candidate.base64)
+  )
   if (resolved.key === null) {
     skipped.push(...sealed.map((candidate) => candidate.label))
-    outcome.errors.push({
-      code: 'KEYCHAIN_DENIED',
-      message: resolved.denied
-        ? 'Access to the Orca Dev keychain item was denied or the item is missing, so secrets were not imported.'
-        : 'The Orca Dev keychain passwords did not unlock its secrets, so secrets were not imported.'
-    })
+    outcome.errors.push(
+      resolved.denied
+        ? {
+            code: 'KEYCHAIN_DENIED',
+            message:
+              'Access to the Orca Dev keychain item was denied or the item is missing, so secrets were not imported.'
+          }
+        : {
+            code: 'SECRETS_NOT_DECRYPTED',
+            message:
+              'The Orca Dev keychain passwords could not decrypt any of its secrets, so secrets were not imported.'
+          }
+    )
     return outcome
   }
   outcome.keychainItem = resolved.item

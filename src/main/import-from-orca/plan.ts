@@ -96,6 +96,7 @@ export type ImportPlan = {
   sshTargets: SshTarget[]
   deletedSshConfigAliases: string[]
   sshTombstones: RemovedSshTargetTombstone[]
+  sshTargetGenerationCounter: number | null
   automations: Automation[]
   settings: Partial<GlobalSettings> | null
   claudeAccounts: ClaudeManagedAccount[]
@@ -410,6 +411,12 @@ export function buildImportPlan(input: PlanInput): ImportPlan {
     (tombstone) => !tombstoneKnown.has(tombstone.oldTargetId)
   )
 
+  const sourceCounter = source.sshTargetGenerationCounter
+  const sshTargetGenerationCounter =
+    typeof sourceCounter === 'number' && Number.isInteger(sourceCounter) && sourceCounter > 0
+      ? sourceCounter
+      : null
+
   const automationResult = dropRemoved(
     list(source.automations, isAutomation).filter(
       (automation) => !droppedRepoIds.has(automation.projectId)
@@ -508,6 +515,7 @@ export function buildImportPlan(input: PlanInput): ImportPlan {
     sshTargets,
     deletedSshConfigAliases,
     sshTombstones,
+    sshTargetGenerationCounter,
     automations,
     settings,
     claudeAccounts,
