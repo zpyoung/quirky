@@ -14164,7 +14164,8 @@
           "pairThisComputer": "Empareja este equipo.",
           "androidHelp": {
             "guide": "Guía de instalación"
-          }
+          },
+          "noInstallLink": "Instálala desde TestFlight: pide una invitación al propietario."
         },
         "MobilePage": {
           "e17393c6a3": "Vista previa del teléfono",

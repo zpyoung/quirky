@@ -11,9 +11,6 @@ export type DiagnosticsHostSelection = {
   routeKey?: DiagnosticsRouteKey
 }
 
-export type DiagnosticsSubmissionState = 'sending' | 'sent' | 'failed'
-export type DiagnosticsSubmissionStates = Readonly<Record<string, DiagnosticsSubmissionState>>
-
 export function selectDiagnosticsHostId(
   hosts: readonly HostProfile[],
   requestedHostId: string | undefined,
@@ -42,27 +39,6 @@ export function resolveDiagnosticsHostId(
     }
   }
   return selectDiagnosticsHostId(hosts, requestedHostId, null)
-}
-
-export function getDiagnosticsSubmissionState(
-  states: DiagnosticsSubmissionStates,
-  key: string | null
-): DiagnosticsSubmissionState | 'idle' {
-  return key ? (states[key] ?? 'idle') : 'idle'
-}
-
-export function updateDiagnosticsSubmissionState(
-  states: DiagnosticsSubmissionStates,
-  key: string,
-  state: DiagnosticsSubmissionState | null
-): DiagnosticsSubmissionStates {
-  const next = { ...states }
-  if (state) {
-    next[key] = state
-  } else {
-    delete next[key]
-  }
-  return next
 }
 
 export async function readHydratedConnectionLog(

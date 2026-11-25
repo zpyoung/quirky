@@ -14476,7 +14476,8 @@
           "pairThisComputer": "Pair this computer.",
           "androidHelp": {
             "guide": "Install guide"
-          }
+          },
+          "noInstallLink": "Install from TestFlight: ask the owner for an invite."
         },
         "MobilePage": {
           "e17393c6a3": "Phone preview",

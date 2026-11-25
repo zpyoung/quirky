@@ -35,7 +35,7 @@ vi.mock('expo-router', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn(), dismissTo: vi.fn() })
 }))
 
-const RELEASES_URL = 'https://github.com/stablyai/orca/releases'
+const RELEASES_URL = 'https://github.com/zpyoung/quirky/releases'
 
 let renderer: ReactTestRenderer | null = null
 
@@ -83,9 +83,9 @@ describe('ProtocolBlockScreen', () => {
     })
     expect(mobile).toContain('Update Quirky Mobile')
     expect(mobile).toContain(
-      'This desktop needs a newer Quirky Mobile app. Update Quirky Mobile from the App Store, then try this host again.'
+      'This desktop needs a newer Quirky Mobile app. Update Quirky Mobile from TestFlight, then try this host again.'
     )
-    expect(mobile).toContain('Open App Store')
+    expect(mobile).not.toContain('Open App Store')
     act(() => renderer?.unmount())
 
     const desktop = render({
@@ -127,9 +127,9 @@ describe('ProtocolBlockScreen', () => {
     })
     expect(output).toContain('Update Quirky Mobile')
     expect(output).toContain(
-      "This desktop's mobile workspace needs a newer Quirky Mobile app. Update Quirky Mobile from the App Store, then try this host again."
+      "This desktop's mobile workspace needs a newer Quirky Mobile app. Update Quirky Mobile from TestFlight, then try this host again."
     )
-    expect(primaryActionUrl()).toBe('itms-apps://apps.apple.com/app/quirky-ide/id6766130217')
+    expect(output).not.toContain('Open App Store')
   })
 
   it('offers no download for a cached bundle the host outgrew, because none would clear it', () => {
@@ -208,7 +208,7 @@ describe('ProtocolBlockScreen', () => {
   describe('with the newest release known', () => {
     const release = {
       version: '0.0.52',
-      url: 'https://github.com/stablyai/orca/releases/tag/mobile-v0.0.52'
+      url: 'https://github.com/zpyoung/quirky/releases/tag/mobile-v0.0.52'
     }
 
     it.each(['ios', 'android'] as const)('opens that exact release on %s', (os) => {
@@ -230,17 +230,23 @@ describe('ProtocolBlockScreen', () => {
     })
   })
 
-  it.each([
-    ['ios', 'Open App Store', 'itms-apps://apps.apple.com/app/quirky-ide/id6766130217'],
-    ['android', 'Open GitHub Releases', RELEASES_URL]
-  ] as const)('keeps the %s store link when no release is known', (os, label, url) => {
-    nativeTestState.platform.OS = os
+  it('keeps the android store link when no release is known', () => {
+    nativeTestState.platform.OS = 'android'
     const output = render(
       { kind: 'blocked', reason: 'mobile-too-old', desktopVersion: 5, requiredMobileVersion: 9 },
       null
     )
-    expect(output).toContain(label)
+    expect(output).toContain('Open GitHub Releases')
     expect(output).not.toContain('Get Quirky')
-    expect(primaryActionUrl()).toBe(url)
+    expect(primaryActionUrl()).toBe(RELEASES_URL)
+  })
+
+  it('offers no install button on ios while there is no install link', () => {
+    const output = render(
+      { kind: 'blocked', reason: 'mobile-too-old', desktopVersion: 5, requiredMobileVersion: 9 },
+      null
+    )
+    expect(output).not.toContain('Open App Store')
+    expect(pressableCount()).toBe(1)
   })
 })

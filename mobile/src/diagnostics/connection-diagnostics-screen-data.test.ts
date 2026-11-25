@@ -1,11 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  getDiagnosticsSubmissionState,
   readConnectionDiagnosticsSnapshot,
   readHydratedConnectionLog,
   resolveDiagnosticsHostId,
-  selectDiagnosticsHostId,
-  updateDiagnosticsSubmissionState
+  selectDiagnosticsHostId
 } from './connection-diagnostics-screen-data'
 import type { ConnectionLogEntry, HostProfile } from '../transport/types'
 
@@ -40,15 +38,6 @@ describe('connection diagnostics screen data', () => {
 
     expect(resolveDiagnosticsHostId(hosts, 'c', manualSelection, routeC)).toBe('c')
     expect(resolveDiagnosticsHostId(hosts, 'a', manualSelection, secondRouteA)).toBe('a')
-  })
-
-  it('keeps async submission completion scoped to its host incident', () => {
-    let states = updateDiagnosticsSubmissionState({}, 'host-a:incident-1', 'sending')
-    states = updateDiagnosticsSubmissionState(states, 'host-b:incident-2', 'sending')
-    states = updateDiagnosticsSubmissionState(states, 'host-a:incident-1', 'sent')
-
-    expect(getDiagnosticsSubmissionState(states, 'host-a:incident-1')).toBe('sent')
-    expect(getDiagnosticsSubmissionState(states, 'host-b:incident-2')).toBe('sending')
   })
 
   it('waits for hydration and then reads the refreshed log', async () => {

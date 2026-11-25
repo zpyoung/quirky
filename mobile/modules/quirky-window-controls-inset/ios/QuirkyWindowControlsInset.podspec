@@ -5,8 +5,8 @@ Pod::Spec.new do |s|
   s.description = s.summary
   s.license = { :type => 'MIT' }
   s.author = 'Quirky'
-  s.homepage = 'https://onorca.dev'
-  s.source = { :git => 'https://github.com/stablyai/orca.git' }
+  s.homepage = 'https://github.com/zpyoung/quirky'
+  s.source = { :git => 'https://github.com/zpyoung/quirky.git' }
   s.platforms = { :ios => '15.1' }
   s.swift_version = '5.9'
   s.static_framework = true
