@@ -7,6 +7,7 @@ export type MermaidThemeColors = {
   secondary: string
   tertiary: string
   border: string
+  line: string
 }
 
 export function getMermaidConfig(
@@ -19,12 +20,12 @@ export function getMermaidConfig(
     securityLevel: 'strict',
     suppressErrorRendering: true,
     // The legacy dark theme removes color from flowcharts.
-    theme: isDark ? (colors ? 'base' : 'dark') : 'default',
+    theme: colors ? 'base' : isDark ? 'dark' : 'default',
     darkMode: isDark,
-    ...(isDark && colors
+    ...(colors
       ? {
           themeVariables: {
-            darkMode: true,
+            darkMode: isDark,
             background: colors.background,
             primaryColor: colors.primary,
             secondaryColor: colors.secondary,
@@ -35,7 +36,7 @@ export function getMermaidConfig(
             primaryBorderColor: colors.border,
             secondaryBorderColor: colors.border,
             tertiaryBorderColor: colors.border,
-            lineColor: colors.foreground,
+            lineColor: colors.line,
             textColor: colors.foreground,
             edgeLabelBackground: colors.background,
             // Base defaults to light Gantt surfaces even when darkMode is enabled.
