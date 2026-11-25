@@ -119,8 +119,8 @@ describe('matching chat surfaces with opposite app schemes', () => {
     const chat = createChat('dark', 'light')
     expect(chat.dataset.nativeChatScheme).toBe('dark')
     const styles = getComputedStyle(chat)
-    expect(styles.getPropertyValue('--chat-canvas')).toContain('#000000')
-    expect(styles.getPropertyValue('--chat-source-foreground')).toBe('#fafafa')
+    expect(styles.getPropertyValue('--chat-canvas')).toContain('#0c0d0f')
+    expect(styles.getPropertyValue('--chat-source-foreground')).toBe('#eceef2')
   })
 })
 

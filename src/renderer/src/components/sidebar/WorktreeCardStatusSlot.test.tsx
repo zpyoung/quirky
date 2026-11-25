@@ -97,7 +97,7 @@ describe('WorktreeCardStatusSlot', () => {
     )
     expect(markup).toContain('Reviews: 2 · Checks: Unknown')
     expect(markup).toContain('text-muted-foreground')
-    expect(markup).not.toContain('text-emerald-500')
+    expect(markup).not.toContain('text-agent-done')
   })
   it.each([{ items: [] }, { items: [referenceAttachment(1)] }])(
     'preserves discovered and singleton review lifecycle glyphs',
@@ -138,8 +138,8 @@ describe('WorktreeCardStatusSlot', () => {
     expect(markup).toContain('aria-label="Mark as read"')
     expect(markup).toContain('Mark as read')
     expect(markup).not.toContain('Active · Mark as read')
-    expect(markup).not.toContain('bg-emerald-500')
-    expect(markup).toContain('text-amber-500')
+    expect(markup).not.toContain('bg-agent-done')
+    expect(markup).toContain('text-agent-question')
   })
 
   it('overlays an unread badge on the status dot when new card style is on', () => {
@@ -161,10 +161,10 @@ describe('WorktreeCardStatusSlot', () => {
     expect(markup).toContain('Active · Unread')
     expect(markup).toContain('data-worktree-status-lane-unread=""')
     expect(markup).toContain('data-worktree-unread-alert=""')
-    expect(markup).toContain('bg-amber-500')
-    expect(markup).toContain('bg-emerald-500')
+    expect(markup).toContain('bg-agent-question')
+    expect(markup).toContain('bg-agent-done')
     expect(markup).not.toContain('lucide-bell')
-    expect(markup).not.toContain('text-amber-500')
+    expect(markup).not.toContain('text-agent-question')
   })
 
   it('suppresses the new-card unread badge while unread status is working', () => {
@@ -183,12 +183,12 @@ describe('WorktreeCardStatusSlot', () => {
     )
 
     expect(markup).toContain('Working · Unread')
-    expect(markup).toContain('border-agent-working')
+    expect(markup).toContain('agent-working-pulse')
     expect(markup).not.toContain('data-worktree-status-lane-unread=""')
     expect(markup).not.toContain('data-worktree-unread-alert=""')
     expect(markup).not.toContain('aria-label="Mark as read"')
     expect(markup).not.toContain('lucide-bell')
-    expect(markup).not.toContain('text-amber-500')
+    expect(markup).not.toContain('text-agent-question')
   })
 
   it('suppresses the new-card unread badge while unread status is permission', () => {
@@ -232,8 +232,8 @@ describe('WorktreeCardStatusSlot', () => {
     expect(markup).toContain('aria-label="Mark as read"')
     expect(markup).toContain('Mark as read')
     expect(markup).toContain('Working')
-    expect(markup).toContain('text-amber-500')
-    expect(markup).not.toContain('border-agent-working')
+    expect(markup).toContain('text-agent-question')
+    expect(markup).not.toContain('agent-working-pulse')
     expect(markup).not.toContain('data-worktree-unread-alert=""')
   })
 
@@ -251,7 +251,7 @@ describe('WorktreeCardStatusSlot', () => {
     )
 
     expect(markup).toContain('Active · Mark as unread')
-    expect(markup).toContain('bg-emerald-500')
+    expect(markup).toContain('bg-agent-done')
     expect(markup.match(/data-tooltip-root/g)).toHaveLength(1)
   })
 
@@ -270,7 +270,7 @@ describe('WorktreeCardStatusSlot', () => {
     )
 
     expect(markup).toContain('Active')
-    expect(markup).toContain('bg-emerald-500')
+    expect(markup).toContain('bg-agent-done')
     expect(markup).not.toContain('PR checks: Failed')
   })
 
@@ -293,7 +293,7 @@ describe('WorktreeCardStatusSlot', () => {
     expect(markup).toContain('inline-flex size-5 items-center justify-center')
     expect(markup).toContain('size-[13px] translate-x-px')
     expect(markup).toContain('text-rose-500/85')
-    expect(markup).not.toContain('bg-emerald-500')
+    expect(markup).not.toContain('bg-agent-done')
     expect(markup).not.toContain('data-tooltip-root')
   })
 
@@ -336,7 +336,7 @@ describe('WorktreeCardStatusSlot', () => {
     )
 
     expect(markup).toContain('PR checks: Failed')
-    expect(markup).not.toContain('bg-emerald-500')
+    expect(markup).not.toContain('bg-agent-done')
   })
 
   it('keeps sleeping distinct from PR status when new card style is on', () => {
@@ -385,7 +385,7 @@ describe('WorktreeCardStatusSlot', () => {
     expect(markup).toContain('Sleeping')
     expect(markup).toContain('lucide-moon')
     expect(markup).not.toContain('lucide-git-branch')
-    expect(markup).not.toContain('bg-emerald-500')
+    expect(markup).not.toContain('bg-agent-done')
     expect(markup).not.toContain('bg-neutral-500/40')
   })
 
@@ -443,7 +443,7 @@ describe('WorktreeCardStatusSlot', () => {
     )
 
     expect(markup).toContain('Done')
-    expect(markup).toContain('bg-emerald-500')
+    expect(markup).toContain('bg-agent-done')
     expect(markup).not.toContain('lucide-git-branch')
     expect(markup).not.toContain('lucide-moon')
     expect(markup).toContain('data-tooltip-root')
@@ -467,7 +467,7 @@ describe('WorktreeCardStatusSlot', () => {
 
     expect(markup).toContain('Working')
     expect(markup).toContain('inline-flex size-5 items-center justify-center')
-    expect(markup).toContain('border-agent-working')
+    expect(markup).toContain('agent-working-pulse')
     expect(markup).toContain('data-tooltip-root')
     expect(markup).toContain('data-tooltip-content="">Working')
     expect(markup).not.toContain('PR checks: Failed')
@@ -515,8 +515,8 @@ describe('WorktreeCardStatusSlot', () => {
     expect(markup).toContain('Mark as read')
     expect(markup).not.toContain('Active · Mark as read')
     expect(markup).not.toContain('PR checks: Failed')
-    expect(markup).not.toContain('bg-emerald-500')
-    expect(markup).toContain('text-amber-500')
+    expect(markup).not.toContain('bg-agent-done')
+    expect(markup).toContain('text-agent-question')
   })
 
   it('overlays an unread badge on PR status when new card style is on', () => {
@@ -542,10 +542,10 @@ describe('WorktreeCardStatusSlot', () => {
     expect(markup).not.toContain('group/unread')
     expect(markup).not.toContain('cursor-pointer')
     expect(markup).toContain('text-rose-500/85')
-    expect(markup).toContain('bg-amber-500')
+    expect(markup).toContain('bg-agent-question')
     expect(markup).not.toContain('lucide-bell')
-    expect(markup).not.toContain('text-amber-500')
-    expect(markup).not.toContain('bg-emerald-500')
+    expect(markup).not.toContain('text-agent-question')
+    expect(markup).not.toContain('bg-agent-done')
     expect(markup).not.toContain('data-tooltip-root')
   })
 
@@ -572,10 +572,10 @@ describe('WorktreeCardStatusSlot', () => {
     expect(markup).not.toContain('group/unread')
     expect(markup).not.toContain('cursor-pointer')
     expect(markup).toContain('lucide-moon')
-    expect(markup).toContain('bg-amber-500')
+    expect(markup).toContain('bg-agent-question')
     expect(markup).not.toContain('lucide-bell')
-    expect(markup).not.toContain('text-amber-500')
-    expect(markup).not.toContain('bg-emerald-500')
+    expect(markup).not.toContain('text-agent-question')
+    expect(markup).not.toContain('bg-agent-done')
     expect(markup).not.toContain('data-tooltip-root')
   })
 })
