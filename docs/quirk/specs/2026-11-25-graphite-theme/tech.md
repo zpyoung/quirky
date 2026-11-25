@@ -111,7 +111,7 @@ export function migrateTerminalGraphiteDefaults(settings: Partial<GlobalSettings
 ```
 
 - Precondition: none. It accepts any parsed settings object.
-- When `terminalGraphiteDefaultsMigrated === true`, it returns the input values unchanged with `needsSave: false`.
+- When `terminalGraphiteDefaultsMigrated === true`, it returns the input values unchanged with `needsSave: false`. A key missing from the input comes back as its current default, so the caller's `{...defaults, ...result}` spread never writes `undefined` over a default.
 - Otherwise each of the four keys is checked on its own. A value that is `undefined`, `''` or exactly the legacy value becomes the new default. Any other value is kept as it is. The marker comes back as `true` and `needsSave` as `true`.
 - Postcondition: the function is idempotent. A second call with its own output returns `needsSave: false`.
 - Fresh installs never run the move, because `buildDefaultSettings` sets the marker to `true`.
@@ -155,7 +155,7 @@ export function defineGraphiteMonacoThemes(m: typeof import('monaco-editor')): v
 - Monaco needs 6- or 8-digit hex, so pass hex values only and never `var()`.
 - Live switching relies on the global `setTheme`, which already runs when the prop changes. No editor gets a theme-dependent `key`.
 
-**Mermaid.** `getMermaidConfig(isDark, htmlLabels, colors?)` returns `theme: 'base'` whenever `colors` is present, in either mode. `readMermaidThemeColors()` reads these tokens: `--background`, `--foreground`, `--secondary` (primary fill), `--muted` (secondary fill), `--card` (tertiary fill), `--border` (node borders) and `--muted-foreground` (lines). `MermaidBlock.tsx:99-100` passes `colors` in both modes. It currently passes `undefined` in light mode, and that changes.
+**Mermaid.** `getMermaidConfig(isDark, htmlLabels, colors?)` returns `theme: 'base'` whenever `colors` is present, in either mode. `readMermaidThemeColors()` reads these tokens: `--background`, `--foreground`, `--secondary` (primary fill), `--code-background` (secondary fill), `--card` (tertiary fill), `--muted-foreground` (node borders and lines), and `--chart-1` to `--chart-5` (pie slices `pie1` to `pie5`, so slices never share a fill). `MermaidBlock.tsx:99-100` passes `colors` in both modes.
 
 ## Data models and pinned shapes
 
@@ -183,6 +183,7 @@ The light `--muted-foreground` and amber values follow the 2026-11-25 amendment 
 | `--agent-question`, `--status-warning`                                                                       | `#e5b454`                                        | `#a56e08`              |
 | `--agent-question-text`, `--status-warning-foreground`                                                       | `#e5b454`                                        | `#855706`              |
 | `--agent-done` (new), `--status-success`, `--workspace-status-review`                                        | `#4cc38a`                                        | `#1f9d63`              |
+| `--agent-done-text` (new; done green used as text, or as a fill under text)                                  | `#4cc38a`                                        | `#167747`              |
 | `--agent-failed` (new)                                                                                       | `#ef6b73`                                        | `#d6455d`              |
 | `--workspace-status-progress`                                                                                | `var(--agent-working)`                           | `var(--agent-working)` |
 | `--workspace-status-done` (v1 sand, so it stays distinct from review green)                                  | `#d6b58c`                                        | `#8f6a3a`              |
