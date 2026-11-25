@@ -157,18 +157,16 @@ export async function applyImportPlan(
         continue
       }
     }
-    try {
-      await store.flushPendingOrThrowAsync(FLUSH_OPTIONS)
-    } catch {
-      // the original failure is the one worth reporting
-    }
+    // the original failure is the one worth reporting
+    await store.flushPendingOrThrowAsync(FLUSH_OPTIONS).catch(() => undefined)
   }
 
   try {
+    const projectsBefore = new Set(store.getProjects().map((project) => project.id))
     applyGroups(store, plan, idMap, undo, record)
     applyRepos(store, plan, groupId, undo, record)
     applyFolderWorkspaces(store, plan, idMap, undo, record)
-    applyProjectsAndSetups(store, plan, undo, record)
+    applyProjectsAndSetups(store, plan, projectsBefore, undo, record)
     applyWorktrees(store, plan, groupId, undo, record)
     applyScalarState(store, plan, options, secretsImported, undo, record)
     applySsh(store, plan, undo, record)
@@ -270,12 +268,13 @@ function applyFolderWorkspaces(
 function applyProjectsAndSetups(
   store: ImportStore,
   plan: ImportPlan,
+  projectsBefore: ReadonlySet<string>,
   undo: Undo,
   record: Recorder
 ): void {
   const present = new Set(store.getProjects().map((project) => project.id))
   for (const project of plan.projects) {
-    if (present.has(project.id)) {
+    if (present.has(project.id) && !projectsBefore.has(project.id)) {
       record('projects', project.id)
     }
   }
