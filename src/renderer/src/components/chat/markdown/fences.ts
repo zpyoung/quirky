@@ -17,6 +17,7 @@ type OpenFence = {
   lines: string[]
   quotes: number
   column: number
+  indent: number
 }
 
 const closeFence = (open: OpenFence, closed: boolean): Fence => ({
@@ -63,7 +64,7 @@ function* fences(markdown: string): Generator<Fence> {
           yield closeFence(open, true)
           open = null
         } else {
-          open.lines.push(line)
+          open.lines.push(line.slice(Math.min(open.indent, leadingSpaces(line))))
         }
         continue
       }
@@ -100,7 +101,8 @@ function* fences(markdown: string): Generator<Fence> {
       meta: space < 0 ? '' : info.slice(space + 1).trim(),
       lines: [],
       quotes,
-      column: listColumn
+      column: listColumn,
+      indent: leadingSpaces(text)
     }
   }
   if (open) {

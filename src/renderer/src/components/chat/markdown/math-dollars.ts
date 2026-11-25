@@ -16,18 +16,21 @@ function isDigit(char: string | undefined): boolean {
  * The source is parsed without math, so code, inline code, link and image destinations and titles,
  * definitions and html are never text and their characters are never touched.
  */
-function textOwners(source: string): Int32Array {
+function textOwners(source: string): { owners: Int32Array; ends: number[] } {
   const owners = new Int32Array(source.length).fill(NOT_TEXT)
+  const ends: number[] = []
   const tree = parseGfm(source)
   let nextOwner = 0
   const walk = (parent: Root | Parent) => {
     const owner = nextOwner++
+    ends[owner] = 0
     for (const child of parent.children) {
       if (child.type === 'text') {
         const from = child.position?.start.offset
         const to = child.position?.end.offset
         if (from !== undefined && to !== undefined) {
           owners.fill(owner, from, to)
+          ends[owner] = Math.max(ends[owner] ?? 0, to)
         }
       } else if ('children' in child) {
         walk(child)
@@ -35,7 +38,7 @@ function textOwners(source: string): Int32Array {
     }
   }
   walk(tree)
-  return owners
+  return { owners, ends }
 }
 
 /** Length of the run of dollars at `index` that all belong to `owner`. */
@@ -64,10 +67,16 @@ function findText(
   return -1
 }
 
-/** Finds the next unescaped single dollar in text owned by `owner` that is not part of a longer run. */
-function findCloser(source: string, owners: Int32Array, from: number, owner: number): number {
+/** Finds the next unescaped single dollar in text owned by `owner`, before `limit`, that is not part of a longer run. */
+function findCloser(
+  source: string,
+  owners: Int32Array,
+  from: number,
+  owner: number,
+  limit: number
+): number {
   let index = from
-  while (index < source.length) {
+  while (index < limit) {
     if (owners[index] !== owner) {
       index += 1
       continue
@@ -129,7 +138,7 @@ function rewriteEscapedDelimiter(
  * `$$…$$` pairs with the next `$$` in any text, because display math may span blocks.
  */
 export function maskLooseDollars(source: string, mask: string): string {
-  const owners = textOwners(source)
+  const { owners, ends } = textOwners(source)
   let out = ''
   let index = 0
   while (index < source.length) {
@@ -172,7 +181,7 @@ export function maskLooseDollars(source: string, mask: string): string {
       const closer =
         isWhitespace(source[index + 1]) || index + 1 >= source.length
           ? -1
-          : findCloser(source, owners, index + 1, owner)
+          : findCloser(source, owners, index + 1, owner, ends[owner] ?? 0)
       const tight =
         closer > index + 1 && !isWhitespace(source[closer - 1]) && !isDigit(source[closer + 1])
       if (tight) {

@@ -267,4 +267,10 @@ describe('maskLooseDollars', () => {
     const once = maskLooseDollars('costs $5 and $10, $O(n)$', mask).replaceAll(mask, '$')
     expect(maskLooseDollars(once, mask)).toBe(maskLooseDollars('costs $5 and $10, $O(n)$', mask))
   })
+
+  it('masks each paragraph on its own when many paragraphs hold an unmatched dollar', () => {
+    const source = `${'$x\n\n'.repeat(2000)}$y$`
+    const expected = `${`${mask}x\n\n`.repeat(2000)}$y$`
+    expect(maskLooseDollars(source, mask)).toBe(expected)
+  })
 })
