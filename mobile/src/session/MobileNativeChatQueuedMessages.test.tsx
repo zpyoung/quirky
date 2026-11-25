@@ -280,7 +280,7 @@ describe('MobileNativeChatQueuedMessages', () => {
       (node) => String(node.type) === 'Text' && node.props.children === reason
     )
     expect(caption.props.numberOfLines).toBeUndefined()
-    expect(flatStyle(caption.props.style).color).toBe('#ef4444')
+    expect(flatStyle(caption.props.style).color).toBe('#ef6b73')
     const [returnedRow, waitingRow] = mounted.root.findAllByProps({ testID: 'queued-card-row' })
     expect(nodeTypes(returnedRow!)).toContain('AlertCircle')
     expect(caption.parent?.parent).toBe(returnedRow)
