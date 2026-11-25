@@ -4,11 +4,6 @@
   "family": "aiVault.resume-launch",
   "namedDeltas": [],
   "values": {
-    "0bce25f5646d": {
-      "name": "session.tabs.createTerminal#1",
-      "ordinal": 2,
-      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"session.tabs.createTerminal\",\"params\":{\"worktree\":\"id:workspace-1\",\"env\":{\"QUIRKY_RESUME\":\"1\"},\"envToDelete\":[\"CODEX_HOME\"],\"launchAgent\":\"codex\",\"clientMutationId\":\"resume-mutation-1\",\"activate\":false,\"select\":true,\"navigation\":\"caller\"}}"
-    },
     "0f026fafa7e1": {
       "status": "rejected",
       "startedAt": 0,
@@ -24,7 +19,7 @@
       "ordinal": 4,
       "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"terminal.send\",\"params\":{\"terminal\":\"terminal-9\",\"text\":\"codex resume rollout\",\"enter\":true}}"
     },
-    "a67829619e64": {
+    "80988ca7b466": {
       "name": "session.tabs.createTerminal#1",
       "ordinal": 1,
       "args": [
@@ -71,6 +66,11 @@
           }
         }
       }
+    },
+    "aed61586aede": {
+      "name": "session.tabs.createTerminal#1",
+      "ordinal": 2,
+      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"session.tabs.createTerminal\",\"params\":{\"worktree\":\"id:workspace-1\",\"env\":{\"QUIRKY_RESUME\":\"1\"},\"envToDelete\":[\"CODEX_HOME\"],\"launchAgent\":\"codex\",\"clientMutationId\":\"resume-mutation-1\",\"activate\":false,\"select\":true,\"navigation\":\"caller\"}}"
     },
     "cb651a7fb6ff": {
       "name": "terminal.send#1",
@@ -121,8 +121,8 @@
       {
         "id": "input-locked",
         "observation": {
-          "sender": ["a67829619e64", "cb651a7fb6ff"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "cb651a7fb6ff"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "0f026fafa7e1"
           },

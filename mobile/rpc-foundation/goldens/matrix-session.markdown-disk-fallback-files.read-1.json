@@ -264,6 +264,21 @@
         }
       }
     },
+    "c60e18e0d7aa": {
+      "file": {},
+      "markdown": {
+        "tab-md": {
+          "baseVersion": "",
+          "content": "# disk",
+          "editable": false,
+          "isDirty": false,
+          "localContent": "# disk",
+          "readOnlyReason": "Editing needs Quirky desktop running.",
+          "stale": false,
+          "status": "ready"
+        }
+      }
+    },
     "c681a5b94b73": {
       "name": "files.read#1",
       "ordinal": 3,
@@ -296,21 +311,6 @@
           "result": {
             "error": "refused"
           }
-        }
-      }
-    },
-    "c6cea5310098": {
-      "file": {},
-      "markdown": {
-        "tab-md": {
-          "baseVersion": "",
-          "content": "# disk",
-          "editable": false,
-          "isDirty": false,
-          "localContent": "# disk",
-          "readOnlyReason": "Editing needs Quirky desktop running.",
-          "stale": false,
-          "status": "ready"
         }
       }
     },
@@ -481,7 +481,7 @@
           "settlements": {
             "markdown": "eb79a9b3682a"
           },
-          "state": "c6cea5310098",
+          "state": "c60e18e0d7aa",
           "effects": []
         }
       },

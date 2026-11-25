@@ -142,6 +142,21 @@
         }
       }
     },
+    "1a6fb562ea93": {
+      "name": "jiraConnection",
+      "ordinal": 74,
+      "value": {
+        "connected": false,
+        "credentialError": {
+          "$rpc": "null"
+        },
+        "selection": {
+          "$rpc": "null"
+        },
+        "sites": [],
+        "unavailableReason": "Update Quirky desktop to browse Jira on mobile."
+      }
+    },
     "1f75fb0d92bd": {
       "name": "projectRowItem",
       "ordinal": 26,
@@ -167,11 +182,6 @@
       "value": {
         "$rpc": "null"
       }
-    },
-    "2db932a72b8a": {
-      "name": "trustedQuirkyHooks",
-      "ordinal": 54,
-      "value": {}
     },
     "2f9b87c56373": {
       "name": "selectedLinearWorkspaceId",
@@ -369,6 +379,13 @@
         "recent": []
       }
     },
+    "5a6d4bcc38e1": {
+      "name": "projectRepoNotInQuirky",
+      "ordinal": 27,
+      "value": {
+        "$rpc": "null"
+      }
+    },
     "60729092583d": {
       "name": "settings.get#1",
       "ordinal": 44,
@@ -539,13 +556,6 @@
       "value": {
         "client": "logical-client",
         "kind": "unknown"
-      }
-    },
-    "7d8029e889cf": {
-      "name": "projectRepoNotInQuirky",
-      "ordinal": 27,
-      "value": {
-        "$rpc": "null"
       }
     },
     "8616eb8e398b": {
@@ -798,6 +808,11 @@
       "name": "appliedQuery",
       "ordinal": 72,
       "value": "is:issue is:open"
+    },
+    "a6e3fa569e72": {
+      "name": "trustedQuirkyHooks",
+      "ordinal": 54,
+      "value": {}
     },
     "ace3d3315687": {
       "name": "showGitLabFilterPicker",
@@ -1102,21 +1117,6 @@
       "ordinal": 55,
       "value": {}
     },
-    "fc9d2d0c303b": {
-      "name": "jiraConnection",
-      "ordinal": 74,
-      "value": {
-        "connected": false,
-        "credentialError": {
-          "$rpc": "null"
-        },
-        "selection": {
-          "$rpc": "null"
-        },
-        "sites": [],
-        "unavailableReason": "Update Quirky desktop to browse Jira on mobile."
-      }
-    },
     "fe7472dae00e": {
       "name": "showGitHubPresetPicker",
       "ordinal": 12,
@@ -1176,7 +1176,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1243,7 +1243,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1258,7 +1258,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1332,7 +1332,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1347,7 +1347,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1367,7 +1367,7 @@
             "8a48acc3bcf6",
             "a57d68d030ff",
             "dc148a8a8aa1",
-            "fc9d2d0c303b"
+            "1a6fb562ea93"
           ]
         }
       },
@@ -1421,7 +1421,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1436,7 +1436,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1456,7 +1456,7 @@
             "8a48acc3bcf6",
             "a57d68d030ff",
             "dc148a8a8aa1",
-            "fc9d2d0c303b"
+            "1a6fb562ea93"
           ]
         }
       },
@@ -1510,7 +1510,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1525,7 +1525,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1545,7 +1545,7 @@
             "8a48acc3bcf6",
             "a57d68d030ff",
             "dc148a8a8aa1",
-            "fc9d2d0c303b"
+            "1a6fb562ea93"
           ]
         }
       },
@@ -1599,7 +1599,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1614,7 +1614,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1634,7 +1634,7 @@
             "8a48acc3bcf6",
             "a57d68d030ff",
             "dc148a8a8aa1",
-            "fc9d2d0c303b"
+            "1a6fb562ea93"
           ]
         }
       },
@@ -1688,7 +1688,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1703,7 +1703,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1723,7 +1723,7 @@
             "8a48acc3bcf6",
             "a57d68d030ff",
             "dc148a8a8aa1",
-            "fc9d2d0c303b"
+            "1a6fb562ea93"
           ]
         }
       },
@@ -1777,7 +1777,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1792,7 +1792,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1812,7 +1812,7 @@
             "8a48acc3bcf6",
             "a57d68d030ff",
             "dc148a8a8aa1",
-            "fc9d2d0c303b"
+            "1a6fb562ea93"
           ]
         }
       },
@@ -1866,7 +1866,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1881,7 +1881,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1901,7 +1901,7 @@
             "8a48acc3bcf6",
             "a57d68d030ff",
             "dc148a8a8aa1",
-            "fc9d2d0c303b"
+            "1a6fb562ea93"
           ]
         }
       },
@@ -1955,7 +1955,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1970,7 +1970,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1990,7 +1990,7 @@
             "8a48acc3bcf6",
             "a57d68d030ff",
             "dc148a8a8aa1",
-            "fc9d2d0c303b"
+            "1a6fb562ea93"
           ]
         }
       },
@@ -2044,7 +2044,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -2059,7 +2059,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -2079,7 +2079,7 @@
             "8a48acc3bcf6",
             "a57d68d030ff",
             "dc148a8a8aa1",
-            "fc9d2d0c303b"
+            "1a6fb562ea93"
           ]
         }
       },
@@ -2133,7 +2133,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -2148,7 +2148,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -2168,7 +2168,7 @@
             "8a48acc3bcf6",
             "a57d68d030ff",
             "dc148a8a8aa1",
-            "fc9d2d0c303b"
+            "1a6fb562ea93"
           ]
         }
       }

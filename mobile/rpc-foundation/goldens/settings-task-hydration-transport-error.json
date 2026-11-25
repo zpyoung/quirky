@@ -246,6 +246,13 @@
         "startedAt": 0
       }
     },
+    "5a6d4bcc38e1": {
+      "name": "projectRepoNotInQuirky",
+      "ordinal": 27,
+      "value": {
+        "$rpc": "null"
+      }
+    },
     "619882ebba08": {
       "name": "settings.get#1",
       "ordinal": 44,
@@ -298,13 +305,6 @@
       "value": {
         "client": "logical-client",
         "kind": "unknown"
-      }
-    },
-    "7d8029e889cf": {
-      "name": "projectRepoNotInQuirky",
-      "ordinal": 27,
-      "value": {
-        "$rpc": "null"
       }
     },
     "8413a71cd880": {
@@ -693,7 +693,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -760,7 +760,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",

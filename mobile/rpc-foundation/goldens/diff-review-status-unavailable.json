@@ -4,7 +4,7 @@
   "family": "session.diff-review",
   "namedDeltas": [],
   "values": {
-    "14804a5e414f": {
+    "1577ec1f968e": {
       "status": "fulfilled",
       "startedAt": 0,
       "settledAt": 0,
@@ -53,7 +53,7 @@
         }
       }
     },
-    "55c07df45014": {
+    "617e97a76b35": {
       "branchCompare": "unloaded",
       "diff": "unloaded",
       "snapshot": {
@@ -71,9 +71,9 @@
           "sender": ["45d1ea7c0b42"],
           "payloads": ["168d1f64ca9b"],
           "settlements": {
-            "unavailable": "14804a5e414f"
+            "unavailable": "1577ec1f968e"
           },
-          "state": "55c07df45014",
+          "state": "617e97a76b35",
           "effects": []
         }
       }
