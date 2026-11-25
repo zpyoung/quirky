@@ -106,7 +106,7 @@ export async function createUninstallFixture() {
     const manifest = {
       manifestVersion: 1,
       id,
-      publisher: official ? 'stablyai' : 'memory-audit',
+      publisher: official ? 'zpyoung' : 'memory-audit',
       name: id,
       version: '1.0.0',
       engines: { quirky: '>=1.0.0' },
@@ -127,7 +127,7 @@ export async function createUninstallFixture() {
           hostVersion: '1.4.0',
           source: {
             kind: 'git',
-            url: 'https://github.com/stablyai/quirky-plugins.git',
+            url: 'https://github.com/zpyoung/quirky-plugins.git',
             ref: 'main'
           },
           resolvedCommit: '1'.repeat(40)

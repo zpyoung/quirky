@@ -1,11 +1,11 @@
 {
   "manifestVersion": 1,
   "id": "quirky-navigation-shortcuts",
-  "publisher": "stablyai",
+  "publisher": "zpyoung",
   "name": "Quirky Navigation Shortcuts",
   "version": "1.0.0",
   "description": "Command aliases and optional shortcuts for frequent Quirky views.",
-  "repository": "https://github.com/stablyai/orca-navigation-shortcuts",
+  "repository": "https://github.com/zpyoung/quirky-navigation-shortcuts",
   "engines": { "quirky": ">=1.4.0" },
   "pluginApi": 1,
   "contributes": {

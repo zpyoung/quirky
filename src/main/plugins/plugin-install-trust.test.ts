@@ -46,12 +46,12 @@ describe('plugin install trust', () => {
         url: 'https://github.com/attacker/quirky-secrets.git',
         ref: 'main'
       },
-      'reserved plugin identity community.quirky-secrets must resolve to the stablyai organization'
+      'reserved plugin identity community.quirky-secrets must resolve to the zpyoung organization'
     ],
     [
       {
         kind: 'git',
-        url: 'git@github.com:stablyai/orca-secrets.git',
+        url: 'git@github.com:zpyoung/quirky-secrets.git',
         ref: 'main'
       },
       null
@@ -63,13 +63,13 @@ describe('plugin install trust', () => {
   it('rejects locally installed reserved identities before publication', async () => {
     const sourcePath = await tempRoot('quirky-reserved-plugin-')
     const pluginsDir = await tempRoot('quirky-plugin-installs-')
-    await writePlugin(sourcePath, 'stablyai', 'quirky-skills')
+    await writePlugin(sourcePath, 'zpyoung', 'quirky-skills')
 
     await expect(
       installPluginFromLocalPath({ pluginsDir, sourcePath, hostVersion: '1.4.0' })
     ).resolves.toEqual({
       ok: false,
-      error: 'reserved plugin identity stablyai.quirky-skills cannot be installed from a local path'
+      error: 'reserved plugin identity zpyoung.quirky-skills cannot be installed from a local path'
     })
     await expect(readPluginLockfile(pluginsDir)).resolves.toEqual({ version: 1, plugins: {} })
   })
@@ -77,20 +77,20 @@ describe('plugin install trust', () => {
   it('allows the app-bundled path only for the complete official identity', async () => {
     const sourcePath = await tempRoot('quirky-bundled-plugin-')
     const pluginsDir = await tempRoot('quirky-plugin-installs-')
-    await writePlugin(sourcePath, 'stablyai', 'quirky-skills')
+    await writePlugin(sourcePath, 'zpyoung', 'quirky-skills')
 
     const result = await installBundledPlugin({
       pluginsDir,
       sourcePath,
       hostVersion: '1.4.0',
-      expectedPluginKey: 'stablyai.quirky-skills'
+      expectedPluginKey: 'zpyoung.quirky-skills'
     })
 
-    expect(result).toMatchObject({ ok: true, pluginKey: 'stablyai.quirky-skills' })
+    expect(result).toMatchObject({ ok: true, pluginKey: 'zpyoung.quirky-skills' })
     const lock = await readPluginLockfile(pluginsDir)
-    expect(lock.plugins['stablyai.quirky-skills']?.source).toEqual({
+    expect(lock.plugins['zpyoung.quirky-skills']?.source).toEqual({
       kind: 'bundled',
-      bundleId: 'stablyai.quirky-skills'
+      bundleId: 'zpyoung.quirky-skills'
     })
   })
 })
