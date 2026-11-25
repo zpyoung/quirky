@@ -130,6 +130,20 @@ describe('Composer sending', () => {
     expect(readNativeChatComposerDraft(SCOPE).text).toBe('hello')
   })
 
+  it('passes a steer intent when the steer chord sends a draft in chat', async () => {
+    const { onSubmit, content } = setup({ queue, working: true })
+    press(content, { key: 'Enter', keyCode: 13, metaKey: true })
+    await settle()
+    expect(onSubmit).toHaveBeenCalledWith('hello', [], { intent: 'steer' })
+  })
+
+  it('treats the steer chord as a plain send in terminal mode', async () => {
+    const { onSubmit, content } = setup({ mode: 'terminal' })
+    press(content, { key: 'Enter', keyCode: 13, metaKey: true })
+    await settle()
+    expect(onSubmit).toHaveBeenCalledWith('hello', [])
+  })
+
   it('does not send on Shift+Enter', async () => {
     const { onSubmit, content } = setup()
     press(content, { key: 'Enter', keyCode: 13, shiftKey: true })

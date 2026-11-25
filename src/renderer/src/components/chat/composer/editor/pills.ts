@@ -11,10 +11,17 @@ import { visualPillLabel, visualRefText, VISUAL_REF, watchVisualLabel, type Pill
 
 const basename = (path: string) => path.slice(path.lastIndexOf('/') + 1) || path
 
-/** The plain text a pill serialises to: `@<path> `, `/<name> ` or `@view:<id>/v<n>/<element> `. */
+const needsQuotes = (path: string) => /\s/.test(path) || path.startsWith('"')
+
+/**
+ * The plain text a pill serialises to: `@<path> `, `/<name> ` or `@view:<id>/v<n>/<element> `. A path
+ * with whitespace, or one starting with a quote, is written `@"<path>" ` with `\` and `"` escaped.
+ */
 export const pillText = (pill: Pill): string =>
   pill.kind === 'file'
-    ? `@${pill.path} `
+    ? needsQuotes(pill.path)
+      ? `@"${pill.path.replace(/[\\"]/g, '\\$&')}" `
+      : `@${pill.path} `
     : pill.kind === 'command'
       ? `/${pill.name} `
       : `${visualRefText(pill)} `
@@ -73,7 +80,10 @@ const decorate = (pill: Pill, from: number, to: number) =>
   Decoration.replace({ widget: new PillWidget(pill) }).range(from, to)
 
 // the visual branch comes before @path, which would otherwise take every `@view:` reference as a file
-const PILL = new RegExp(`(?<=^|\\s)(?:\\/([^\\s/]+)|${VISUAL_REF}|@(\\S+)) `, 'g')
+const PILL = new RegExp(
+  `(?<=^|\\s)(?:\\/([^\\s/]+)|${VISUAL_REF}|@"((?:[^"\\\\]|\\\\.)+)"|@(\\S+)) `,
+  'g'
+)
 
 /**
  * Pills found in plain text at the start or after whitespace: `/<name> `, `@view:<id>/v<n>/<element> ` and
@@ -83,7 +93,8 @@ export function parsePills(text: string): { from: number; to: number; pill: Pill
   return [...text.matchAll(PILL)].flatMap((match): { from: number; to: number; pill: Pill }[] => {
     const from = match.index
     const to = from + match[0].length
-    const [, command, viewId, version, element, path] = match
+    const [, command, viewId, version, element, quoted, bare] = match
+    const path = quoted === undefined ? bare : quoted.replace(/\\(.)/g, '$1')
     if (command !== undefined) {
       return [{ from, to, pill: { kind: 'command' as const, name: command } }]
     }

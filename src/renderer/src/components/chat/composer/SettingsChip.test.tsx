@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionOptionDescriptor } from '../../../../../shared/native-chat-session-options'
 import { SettingsChip } from './SettingsChip'
@@ -85,5 +85,38 @@ describe('SettingsChip', () => {
     fireEvent.click(screen.getByRole('switch', { name: /Plan mode/ }))
     expect(onTogglePlan).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('radio', { name: 'plan' })).toBeNull()
+  })
+
+  it('re-renders when the option surface changes', () => {
+    let snapshot = [select('model', 'Model', 'opus', ['opus', 'sonnet'])]
+    const listeners = new Set<(next: SessionOptionDescriptor[]) => void>()
+    const settings: ComposerSettings = {
+      surface: {
+        getSnapshot: () => snapshot,
+        setOption: vi.fn(),
+        invokeAction: vi.fn(),
+        subscribe: (listener) => {
+          listeners.add(listener)
+          return () => listeners.delete(listener)
+        }
+      },
+      setOption: vi.fn().mockResolvedValue(true)
+    }
+    render(
+      <SettingsChip
+        settings={settings}
+        planModeAvailable={false}
+        open
+        onOpenChange={() => {}}
+        section={null}
+        onTogglePlan={() => {}}
+      />
+    )
+    expect(screen.getByRole('radio', { name: 'opus' }).getAttribute('aria-checked')).toBe('true')
+    act(() => {
+      snapshot = [select('model', 'Model', 'sonnet', ['opus', 'sonnet'])]
+      listeners.forEach((listener) => listener(snapshot))
+    })
+    expect(screen.getByRole('radio', { name: 'sonnet' }).getAttribute('aria-checked')).toBe('true')
   })
 })

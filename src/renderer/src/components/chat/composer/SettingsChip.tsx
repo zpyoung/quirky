@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import { Check, ChevronDown, ClipboardList } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -37,7 +37,12 @@ export function SettingsChip({
   section: SettingsSection | null
   onTogglePlan: () => void
 }): React.JSX.Element | null {
-  const snapshot = settings.surface.getSnapshot()
+  const { surface } = settings
+  const subscribe = useCallback(
+    (onChange: () => void) => surface.subscribe(() => onChange()),
+    [surface]
+  )
+  const snapshot = useSyncExternalStore(subscribe, () => surface.getSnapshot())
   const descriptors = settingDescriptors(snapshot)
   const content = useRef<HTMLDivElement>(null)
 
