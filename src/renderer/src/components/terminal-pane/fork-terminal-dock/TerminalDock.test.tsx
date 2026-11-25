@@ -3,47 +3,27 @@
 import '@testing-library/jest-dom/vitest'
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { createRef, type ReactNode } from 'react'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import type { AgentComposerHandle } from '../../native-chat/fork-agent-composer/agent-composer-types'
+import { createRef, useImperativeHandle, useRef, type Ref } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ComposerHandle } from '../../chat/composer/composer-types'
 
 vi.mock('@/i18n/i18n', () => ({
   i18n: { language: 'en' },
   translate: (_key: string, fallback: string) => fallback
 }))
-vi.mock('@/lib/agent-paste-draft', () => ({
-  getSettingsForAgentTabRuntimeOwner: () => ({})
-}))
-vi.mock('@/runtime/runtime-terminal-inspection', () => ({
-  isRemoteRuntimePtyId: () => false,
-  sendRuntimePtyInput: vi.fn()
-}))
-vi.mock('@/components/ui/tooltip', () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children: ReactNode }) => <div>{children}</div>
-}))
-vi.mock('../../native-chat/NativeChatSessionOptionPickers', () => ({
-  NativeChatSessionOptionPickers: () => <div data-testid="session-option-pickers" />
-}))
-vi.mock('../../native-chat/native-chat-attachment-upload', () => ({
-  // The dock test builds no worktree/connection state, so owner resolution would
-  // answer 'not-ready' and short-circuit every attach before routing is exercised.
-  resolveNativeChatAttachmentOwner: () => ({ kind: 'local' }),
-  nativeChatWorktreeNotReadyNotice: () => 'Worktree not ready',
-  uploadNativeChatAttachmentPaths: vi.fn()
-}))
-
-const mocks = vi.hoisted(() => ({
-  sendHandle: { cancel: vi.fn(), settleAfterMs: 0 },
-  sendNativeChatMessage: vi.fn()
-}))
-mocks.sendNativeChatMessage.mockReturnValue(mocks.sendHandle)
-
-vi.mock('../../native-chat/native-chat-runtime-send', () => ({
-  sendNativeChatMessage: (...args: unknown[]) => mocks.sendNativeChatMessage(...args),
-  sendNativeChatMessageWithImageAttachments: vi.fn(),
-  submitNativeChatPrompt: vi.fn()
+// the composer itself is covered by TerminalDockComposer.test; the dock owns layout and focus here
+vi.mock('./TerminalDockComposer', () => ({
+  TerminalDockComposer: function StubComposer({
+    ref,
+    canSend
+  }: {
+    ref: Ref<ComposerHandle>
+    canSend: boolean
+  }) {
+    const textarea = useRef<HTMLTextAreaElement>(null)
+    useImperativeHandle(ref, () => ({ focus: () => textarea.current?.focus() }))
+    return <textarea ref={textarea} disabled={!canSend} />
+  }
 }))
 
 import {
@@ -54,34 +34,10 @@ import {
 } from './TerminalDock'
 import { DEFAULT_GUTTER_ROWS, MAX_GUTTER_ROWS, MIN_GUTTER_ROWS } from './terminal-dock-pane-state'
 
-beforeAll(() => {
-  Object.defineProperty(window, 'api', {
-    configurable: true,
-    value: {
-      ui: {
-        onFileDrop: () => () => {},
-        saveClipboardImageAsTempFile: () => Promise.resolve(PASTED_IMAGE_PATH),
-        readClipboardText: () => Promise.resolve('')
-      },
-      shell: { pickAttachment: () => Promise.resolve(null) }
-    }
-  })
-})
-
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
 })
-
-const PASTED_IMAGE_PATH = '/tmp/quirky-paste-1-abc.png'
-
-function imageClipboardData(): DataTransfer {
-  return {
-    items: [
-      { kind: 'file', type: 'image/png', getAsFile: () => new Blob([], { type: 'image/png' }) }
-    ]
-  } as unknown as DataTransfer
-}
 
 const baseProps = {
   terminalTabId: 'tab-1',
@@ -118,7 +74,7 @@ describe('TerminalDock', () => {
   })
 
   it('exposes the composer imperative handle through its own forwarded ref', () => {
-    const ref = createRef<AgentComposerHandle>()
+    const ref = createRef<ComposerHandle>()
     render(<TerminalDock {...baseProps} ref={ref} />)
 
     expect(document.activeElement).not.toBe(screen.getByRole('textbox'))
@@ -158,44 +114,10 @@ describe('TerminalDock', () => {
     expect(terminalDockAutoUndockHighThresholdPx(DEFAULT_GUTTER_ROWS)).toBe(280)
   })
 
-  it('keeps the gutter height fixed regardless of draft length', () => {
-    render(<TerminalDock {...baseProps} />)
-    const dock = screen.getByRole('status').closest('[data-terminal-dock]') as HTMLElement
-    const shortHeight = dock.style.height
-
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
-    fireEvent.change(textarea, { target: { value: 'x'.repeat(4000) } })
-
-    expect(dock.style.height).toBe(shortHeight)
-    expect(dock.style.height).toBe(`${terminalDockGutterHeightPx(5)}px`)
-    expect(textarea).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto')
-    expect(textarea.closest('.overflow-hidden')).not.toBeNull()
-  })
-
   it('claims paste for the composer instead of letting the terminal pane swallow it', () => {
     render(<TerminalDock {...baseProps} />)
     const dock = screen.getByRole('status').closest('[data-terminal-dock]')
     expect(dock).toHaveAttribute('data-native-chat-root', 'true')
-  })
-
-  it('holds a pasted image as a chip and writes nothing to the pty until send', async () => {
-    render(<TerminalDock {...baseProps} />)
-
-    fireEvent.paste(screen.getByRole('textbox'), { clipboardData: imageClipboardData() })
-    expect(await screen.findByText('Pasted image')).toBeInTheDocument()
-    expect(mocks.sendNativeChatMessage).not.toHaveBeenCalled()
-  })
-
-  it('keeps the gutter height fixed when attachment chips appear', async () => {
-    render(<TerminalDock {...baseProps} />)
-    const dock = screen.getByRole('status').closest('[data-terminal-dock]') as HTMLElement
-    const emptyHeight = dock.style.height
-
-    fireEvent.paste(screen.getByRole('textbox'), { clipboardData: imageClipboardData() })
-    const chip = await screen.findByText('Pasted image')
-
-    expect(dock.style.height).toBe(emptyHeight)
-    expect(chip.closest('.overflow-y-auto')).toHaveClass('max-h-12', 'shrink-0')
   })
 
   it('unmounts below the low threshold', () => {
@@ -237,19 +159,6 @@ describe('TerminalDock', () => {
 
     rerender(<TerminalDock {...baseProps} paneHeightPx={high} />)
     expect(screen.getByRole('textbox')).toBeInTheDocument()
-  })
-
-  it('preserves the draft across an auto-undock/re-dock cycle via the paneKey-scoped cache', () => {
-    const low = terminalDockAutoUndockLowThresholdPx(DEFAULT_GUTTER_ROWS)
-    const high = terminalDockAutoUndockHighThresholdPx(DEFAULT_GUTTER_ROWS)
-    const { rerender } = render(<TerminalDock {...baseProps} />)
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'mid sentence' } })
-
-    rerender(<TerminalDock {...baseProps} paneHeightPx={low - 1} />)
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
-
-    rerender(<TerminalDock {...baseProps} paneHeightPx={high + 1} />)
-    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('mid sentence')
   })
 
   it('does not mount a 15-row gutter in a pane too short to fit it', () => {

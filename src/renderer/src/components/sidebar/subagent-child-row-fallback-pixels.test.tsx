@@ -5,7 +5,7 @@ import type { AgentSessionBackgroundTask } from '../../../../shared/agent-sessio
 import type { AgentStatusEntry, AgentSubagentSnapshot } from '../../../../shared/agent-status-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import DashboardAgentRow from '@/components/dashboard/DashboardAgentRow'
-import { NativeChatBackgroundTasksStatus } from '@/components/native-chat/NativeChatBackgroundTasksStatus'
+import { BackgroundTasksStrip } from '@/components/chat/session/BackgroundTasksStrip'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { CompactAgentRow } from './worktree-card-compact-agent-row'
 import { buildSubagentChildRows } from './worktree-subagent-child-rows'
@@ -193,7 +193,7 @@ function stripMarkup(supportsTaskStop: boolean): string {
     return normalize(
       renderToStaticMarkup(
         <TooltipProvider>
-          <NativeChatBackgroundTasksStatus
+          <BackgroundTasksStrip
             tasks={TASKS}
             settledTasks={SETTLED_TASKS}
             supportsTaskStop={supportsTaskStop}

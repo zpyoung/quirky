@@ -3,10 +3,7 @@ import type {
   NativeChatComposerNotice,
   NativeChatComposerNoticeContent
 } from './native-chat-composer-notice'
-import type {
-  NativeChatComposerErrorDetail,
-  NativeChatStructuredComposerTransport
-} from './native-chat-composer-types'
+import type { NativeChatComposerErrorDetail } from './native-chat-composer-error-detail'
 import type { StructuredConversationCommandCauses } from './structured-conversation-command-send'
 
 type ComposerErrorLine = NativeChatComposerNoticeContent &
@@ -50,11 +47,11 @@ export function useNativeChatComposerNotice(
  *  it. A command's refusal names what the chat shows it waiting on, so it goes once that is gone. */
 export function useNativeChatComposerError(causes: StructuredConversationCommandCauses): {
   composerError: (NativeChatComposerNoticeContent & { onDismiss: () => void }) | null
-  reportComposerError: NativeChatStructuredComposerTransport['onError']
+  reportComposerError: (message: string | null, detail?: NativeChatComposerErrorDetail) => void
 } {
   const [line, setLine] = useState<ComposerErrorLine | null>(null)
-  const reportComposerError = useCallback<NativeChatStructuredComposerTransport['onError']>(
-    (text, detail) =>
+  const reportComposerError = useCallback(
+    (text: string | null, detail?: NativeChatComposerErrorDetail) =>
       setLine(
         text === null
           ? null

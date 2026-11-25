@@ -5,10 +5,12 @@ import type {
 } from '../../../../shared/agent-session-journal-types'
 import { dispatchWasWithdrawn } from '../../../../shared/structured-agent-session-dispatch-rejection'
 import { structuredAgentSessionCommandItemIds } from '../../../../shared/structured-agent-session-message-projection'
-import { structuredAgentSessionDeliveryNotices } from './structured-agent-session-delivery-notices'
+import {
+  structuredAgentSessionDeliveryNotices,
+  type NativeChatDeliveryNotice
+} from './structured-agent-session-delivery-notices'
 import type { StructuredAgentSessionPendingSend } from './structured-agent-session-pending-sends'
 import { useStructuredAgentSessionStartFailureFacts } from './use-structured-agent-session-start-failure-facts'
-import type { NativeChatDeliveryNotice } from './NativeChatMessageRow'
 import type { AgentSessionFailureFact } from '../../../../shared/agent-session-failure'
 
 const NO_SUBMISSIONS: readonly AgentJournalSubmission[] = []

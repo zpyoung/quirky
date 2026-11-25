@@ -28,7 +28,6 @@ type TabBarItemActionSource = {
     | 'onMakePreviewFilePermanent'
   >
   togglePinned: (item: TabBarItem) => void
-  toggleTabViewMode: (tabId: string) => void
 }
 
 export type TabBarItemActions = {
@@ -50,7 +49,6 @@ export type TabBarItemActions = {
   duplicateBrowserTab: (tabId: string, unifiedTabId: string) => void
   makePreviewFilePermanent: (fileId: string, tabId?: string) => void
   togglePinned: (item: TabBarItem) => void
-  toggleViewMode: (tabId: string) => void
 }
 
 /** Actions that read the strip's handlers when called, so their own identity never has to change. */
@@ -91,8 +89,7 @@ export function useTabBarItemActions(source: TabBarItemActionSource): TabBarItem
         latest.current.props.onDuplicateBrowserTab?.(tabId, unifiedTabId),
       makePreviewFilePermanent: (fileId, tabId) =>
         latest.current.props.onMakePreviewFilePermanent?.(fileId, tabId),
-      togglePinned: (item) => latest.current.togglePinned(item),
-      toggleViewMode: (tabId) => latest.current.toggleTabViewMode(tabId)
+      togglePinned: (item) => latest.current.togglePinned(item)
     }
     // Switch point: pin goes to main first (rename, color and view do from their store actions).
     return QUIRKY_LAYOUT_OWNER_IS_MAIN

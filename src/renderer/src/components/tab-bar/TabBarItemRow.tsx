@@ -31,10 +31,6 @@ type TabBarItemRowProps = {
   isExpanded: boolean
   dropIndicator: DropIndicator
   includeTopTabBorder: boolean
-  canToggleViewMode: boolean
-  isChatView: boolean
-  /** Unified tab whose view mode the terminal tab toggles; absent when it has none. */
-  viewModeTabId: string | undefined
   canDuplicate: boolean
   canCloseSplitPane: boolean
   /** This editor tab's own status, so a git status write re-renders only the tabs it changed. */
@@ -54,9 +50,6 @@ function TabBarItemRow({
   isExpanded,
   dropIndicator,
   includeTopTabBorder,
-  canToggleViewMode,
-  isChatView,
-  viewModeTabId,
   canDuplicate,
   canCloseSplitPane,
   gitStatus
@@ -108,9 +101,6 @@ function TabBarItemRow({
       <TerminalSortableTab
         {...sortableTabProps}
         tab={resolveTerminalItemTab(item.data, generatedTabTitlesEnabled)}
-        canToggleViewMode={canToggleViewMode}
-        isChatView={isChatView}
-        onToggleViewMode={viewModeTabId ? () => actions.toggleViewMode(viewModeTabId) : undefined}
         isExpanded={isExpanded}
         onActivate={actions.activateTerminal}
         onToggleExpand={actions.togglePaneExpand}

@@ -178,10 +178,6 @@ function Strip({
   const runtime: TabBarItemSurfaceRuntime = {
     resolvedGroupId: 'group-1',
     generatedTabTitlesEnabled,
-    unifiedTabByVisibleId: new Map(),
-    tabAgentTypesByTabId: {},
-    nativeChatTabWideFallbackUnsafeTabsById: {},
-    nativeChatTranscriptIsLocalReadable: false,
     managedBrowserCreationEnabled,
     statusByRelativePath
   }
@@ -200,8 +196,7 @@ function Strip({
       onSetTabColor: NOOP,
       onTogglePaneExpand: NOOP
     },
-    togglePinned: NOOP,
-    toggleTabViewMode: NOOP
+    togglePinned: NOOP
   })
   return (
     <>

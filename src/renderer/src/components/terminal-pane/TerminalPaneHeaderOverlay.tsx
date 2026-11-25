@@ -1,6 +1,6 @@
 import { ImeInput } from '@/lib/ime-text-field'
 import type { CSSProperties, RefObject } from 'react'
-import { MessageSquarePlus, SquareSplitVertical, SquareTerminal, X } from 'lucide-react'
+import { MessageSquarePlus, SquareSplitVertical, X } from 'lucide-react'
 import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -39,12 +39,6 @@ type TerminalPaneHeaderOverlayProps = {
   hiddenStartupStyle: CSSProperties
   managerRef: RefObject<PaneManager | null>
   paneTransportsRef: RefObject<Map<number, PtyTransport>>
-  /** True when the active pane shows the native chat view; renders its way back to the terminal.
-   *  Switching into chat view is no longer offered here. */
-  canShowTerminal?: boolean
-  /** Flip the active pane from the native chat view back to the terminal. */
-  onShowTerminal?: () => void
-  /** Offers the tab menu's "Switch to Chat" for the active pane's own conversation. */
   canResumeInNewNativeChat?: boolean
   canContinueAgentSessionInNewSession?: boolean
   onContinueAgentSessionInNewSession?: (pane: ManagedPane) => void
@@ -82,8 +76,6 @@ export default function TerminalPaneHeaderOverlay({
   hiddenStartupStyle,
   managerRef,
   paneTransportsRef,
-  canShowTerminal,
-  onShowTerminal,
   canResumeInNewNativeChat,
   canContinueAgentSessionInNewSession,
   onContinueAgentSessionInNewSession,
@@ -246,32 +238,7 @@ export default function TerminalPaneHeaderOverlay({
                       </TooltipContent>
                     </Tooltip>
                   ) : null}
-                  {canShowTerminal && isActivePane ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          // Same class as split so it shares the hover/active reveal.
-                          className="pane-title-split-trigger"
-                          aria-label={translate(
-                            'components.native-chat.toggle.showTerminal',
-                            'Show terminal'
-                          )}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onShowTerminal?.()
-                          }}
-                        >
-                          <SquareTerminal className="size-3" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={4}>
-                        {translate('components.native-chat.toggle.showTerminal', 'Show terminal')}
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : canResumeInNewNativeChat && isActivePane ? (
+                  {canResumeInNewNativeChat && isActivePane ? (
                     <TerminalPaneResumeInChatButton
                       tabId={tabId}
                       worktreeId={worktreeId}

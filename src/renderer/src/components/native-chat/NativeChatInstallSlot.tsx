@@ -9,7 +9,7 @@ import {
 } from '@/runtime/use-managed-runtime-install'
 import type { ManagedRuntimeInstallState } from '../../../../shared/managed-runtime-install'
 import { NativeChatInstallStrip } from './NativeChatInstallStrip'
-import type { NativeChatStructuredViewProps } from './native-chat-view-types'
+import type { NativeChatViewProps } from './native-chat-view-types'
 
 /** What a chat's input slot holds for the program its host must install first. */
 export type NativeChatInstallSlotState =
@@ -33,7 +33,7 @@ const RESERVED: NativeChatInstallSlotState = { kind: 'reserved' }
  *  the composer alone. Until the host says whether it provides the program, the composer stays
  *  usable but sends nothing. */
 export function useNativeChatInstallSlot(
-  props: Pick<NativeChatStructuredViewProps, 'target' | 'agent' | 'isVisible'>,
+  props: Pick<NativeChatViewProps, 'target' | 'agent' | 'isVisible'>,
   agentLabel: string,
   layout: ManagedRuntimeInstallLayout
 ): {

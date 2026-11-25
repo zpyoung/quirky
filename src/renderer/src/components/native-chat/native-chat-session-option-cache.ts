@@ -6,7 +6,7 @@ import {
   type NativeChatSessionOptionRecord,
   type TrackedNativeChatSessionOption
 } from '../../../../shared/native-chat-session-option-state'
-import { setBoundedScopeCacheEntry } from './fork-agent-composer/agent-composer-scope-cache'
+import { setBoundedScopeCacheEntry } from './bounded-scope-cache'
 
 const sessionOptionCache = new Map<string, NativeChatSessionOptionRecord>()
 // The values last taken from an agent report, per scope. Claude paints its model

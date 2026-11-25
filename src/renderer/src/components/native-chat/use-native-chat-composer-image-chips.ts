@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
-import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
+import type { NativeChatComposerImageAttachment } from './native-chat-composer-image-attachment'
 import {
   readNativeChatComposerDraft,
   subscribeToNativeChatComposerDraft

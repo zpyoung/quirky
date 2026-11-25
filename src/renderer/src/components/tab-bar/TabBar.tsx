@@ -67,11 +67,7 @@ function TabBarInner(props: TabBarProps): React.JSX.Element {
     }
     runtime.pinTab(item.unifiedTabId)
   }
-  const itemActions = useTabBarItemActions({
-    props,
-    togglePinned,
-    toggleTabViewMode: runtime.toggleTabViewMode
-  })
+  const itemActions = useTabBarItemActions({ props, togglePinned })
   // Read here, not just where the rows render: the real tabs have to know when a row took over.
   const activeClientHostedBrowserRowId = useActiveClientHostedBrowserRowId({
     worktreeId,

@@ -4,6 +4,7 @@ import type { Locator, Page } from '@stablyai/playwright-test'
 import { expect } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { buildFakeAgentCommandOverride } from './helpers/fake-agent-command-override'
+import { chatComposer, chatSendButton, chatStopButton, chatView } from './helpers/native-chat-view'
 import { SUPPORTED, createChatOnHost, test } from './helpers/structured-claude-stub'
 
 function focusIsIn(composer: Locator): Promise<boolean> {
@@ -31,13 +32,13 @@ async function openChat(page: Page, claudeCommand: string) {
     )
   await expect.poll(readTabId, { timeout: 30_000 }).toBeTruthy()
   await page.locator(`[data-testid="sortable-tab"][data-tab-id="${await readTabId()}"]`).click()
-  const chat = page.locator('[data-native-chat-root="true"]')
-  const composer = chat.getByRole('textbox')
+  const chat = chatView(page)
+  const composer = chatComposer(chat)
   await composer.click()
   return {
     composer,
-    send: chat.getByRole('button', { name: 'Send', exact: true }),
-    stop: chat.getByRole('button', { name: 'Stop the agent' }),
+    send: chatSendButton(chat),
+    stop: chatStopButton(chat),
     reply: chat.getByText('Stub reply.')
   }
 }

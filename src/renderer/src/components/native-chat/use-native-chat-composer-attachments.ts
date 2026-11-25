@@ -5,7 +5,7 @@ import {
   nativeChatLocalAttachmentUnsupportedNotice,
   type NativeChatResolvedTarget
 } from './native-chat-composer-target'
-import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
+import type { NativeChatComposerImageAttachment } from './native-chat-composer-image-attachment'
 import { updateNativeChatComposerDraft } from './native-chat-composer-draft-store'
 import type { NativeChatResolvedPathOptions } from './native-chat-resolved-path-ownership'
 import { useNativeChatResolvedPathAttachments } from './use-native-chat-resolved-path-attachments'
