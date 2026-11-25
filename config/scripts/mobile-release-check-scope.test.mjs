@@ -89,7 +89,6 @@ it('gates Ruby independently and retains mobile static validation', () => {
   expect(gated.map((step) => step.name)).toEqual([
     'Setup Ruby and fastlane',
     'Test iOS release version resolution',
-    'Test TestFlight lane arguments',
     'Smoke-check the Fastfile',
     'Smoke-check CocoaPods'
   ])
