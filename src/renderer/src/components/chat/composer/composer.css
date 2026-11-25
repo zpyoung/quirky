@@ -1,0 +1,113 @@
+.composer-cm {
+  max-height: 40vh;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 0.875rem;
+}
+
+.composer-cm.cm-editor.cm-focused {
+  outline: none;
+}
+
+.composer-cm .cm-scroller {
+  min-height: calc(1.5em + 0.75rem);
+  overflow-y: auto;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.composer-cm .cm-content {
+  padding: 0.375rem 0;
+  caret-color: var(--foreground);
+}
+
+.composer-cm .cm-line {
+  padding: 0;
+}
+
+.composer-cm .cm-cursor,
+.composer-cm .cm-dropCursor {
+  border-left-color: var(--foreground);
+}
+
+.composer-cm .cm-selectionBackground,
+.composer-cm.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: var(--accent);
+}
+
+.composer-cm .cm-activeLine {
+  background: transparent;
+}
+
+.composer-cm .cm-placeholder {
+  color: var(--muted-foreground);
+}
+
+.composer-cm .cm-composer-strong {
+  font-weight: 700;
+}
+
+.composer-cm .cm-composer-emphasis {
+  font-style: italic;
+}
+
+.composer-cm .cm-composer-strike {
+  text-decoration: line-through;
+}
+
+.composer-cm .cm-composer-heading {
+  font-weight: 700;
+}
+
+.composer-cm .cm-composer-muted {
+  color: var(--muted-foreground);
+}
+
+.composer-cm .cm-composer-link {
+  color: var(--foreground);
+  text-decoration: underline;
+}
+
+.composer-cm .cm-composer-code {
+  border-radius: calc(var(--radius) * 0.4);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.composer-cm .cm-composer-codeblock {
+  padding: 0 0.5rem;
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.composer-cm .cm-composer-codeblock .cm-composer-code {
+  background: transparent;
+}
+
+.composer-cm .cm-composer-listline {
+  padding-inline-start: 0.5rem;
+}
+
+.composer-cm .cm-composer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-end: 0.25rem;
+  padding: 0 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 0.4);
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.75rem;
+  vertical-align: baseline;
+}
+
+.composer-cm .cm-composer-pill-command {
+  font-family: var(--font-mono);
+}
+
+.composer-cm .cm-composer-pill-icon {
+  color: var(--muted-foreground);
+}
