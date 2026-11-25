@@ -94,7 +94,6 @@ describe('quirkyd activation record', () => {
     expect(pinned).toEqual(['quirkyd-0.3.0+cc01', 'quirkyd-0.2.0+bb01', 'quirkyd-0.1.0+aa01'])
   })
 
-  // Design D7.1 R4; the real two-slot swap is quirkyd-cross-runtime-daemon-adoption.integration.test.ts.
   it('pins a Bun-era slot whose live daemon a Node quirkyd adopted, rollback target or not', () => {
     const bunSlotVersion = '0.1.0+ea9eae1d1d6a'
     const nodeRecord = { ...emptyQuirkydActivationRecord(), active: '0.1.0+a97ad77bf77c' }

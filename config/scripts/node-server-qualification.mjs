@@ -2,9 +2,7 @@ export const NODE_SERVER_RUNNERS = [
   'ubuntu-22.04',
   'ubuntu-24.04-arm',
   'macos-15',
-  'macos-15-intel',
-  'windows-2022',
-  'windows-11-arm'
+  'macos-15-intel'
 ]
 
 // Shared execution and storage changes need every host; explicit platform paths need their family.

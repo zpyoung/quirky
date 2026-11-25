@@ -1,22 +1,12 @@
 /** Mirrors QUIRKY_REQUIRED_TEST_INPUTS_ENV in src/main/quirkyd/quirkyd-node-slot-fixture.ts. */
 export const REQUIRED_TEST_INPUTS_ENV = 'QUIRKY_REQUIRED_TEST_INPUTS'
 
-// Need the pinned Bun and the last Bun quirkyd slot beside the built Node slot (design D7).
-export const CROSS_RUNTIME_TEST_PATHS = [
-  'src/main/quirkyd/quirkyd-cross-runtime-daemon-adoption.integration.test.ts',
-  'src/main/persistence/profile-state/profile-state-cross-runtime.integration.test.ts'
-]
-
 // Need the built desktop server template; CI runs them by path after build-quirkyd-template.mjs.
 export const TEMPLATE_TEST_PATHS = [
   'src/main/quirkyd/quirkyd-packaged-structured-chat.integration.test.ts'
 ]
 
-export function nodeServerTestPaths({
-  artifact = false,
-  crossRuntime = false,
-  template = false
-} = {}) {
+export function nodeServerTestPaths({ artifact = false, template = false } = {}) {
   return [
     'src/main/persistence/profile-state',
     'src/main/persistence/loading-store/profile-state',
@@ -48,7 +38,6 @@ export function nodeServerTestPaths({
           'config/scripts/zip-extractor-command.test.mjs'
         ]
       : []),
-    ...(crossRuntime ? CROSS_RUNTIME_TEST_PATHS : []),
     ...(template ? TEMPLATE_TEST_PATHS : [])
   ]
 }

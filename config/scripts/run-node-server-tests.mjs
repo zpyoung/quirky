@@ -20,20 +20,12 @@ import { UNIT_INCLUDE } from './ci-unit-files.mjs'
 import { runProcessSync } from '@quirky/process-host'
 import { describeProcessFailure } from './process-failure-message.mjs'
 import { resolveBuildSourceCommit } from './build-source-commit.mjs'
-import {
-  CROSS_RUNTIME_TEST_PATHS,
-  nodeServerTestPaths,
-  REQUIRED_TEST_INPUTS_ENV
-} from './node-server-test-paths.mjs'
+import { nodeServerTestPaths, REQUIRED_TEST_INPUTS_ENV } from './node-server-test-paths.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 const target = currentTarget()
 const artifact = process.argv.includes('--artifact')
-// Lanes that provide the pinned Bun and the last Bun quirkyd slot (design D7 upgrade and rollback).
-const crossRuntime = process.argv.includes('--cross-runtime')
-const testArgs = process.argv
-  .slice(2)
-  .filter((arg) => arg !== '--artifact' && arg !== '--cross-runtime')
+const testArgs = process.argv.slice(2).filter((arg) => arg !== '--artifact')
 const packageDir = join(root, 'out', 'quirkyd')
 const runtimePath = artifact
   ? packagedNodeRuntimePath(packageDir, target)
@@ -44,9 +36,7 @@ const env = {
   ...process.env,
   QUIRKY_BACKGROUND_LAUNCH: '1',
   QUIRKY_PINNED_NODE: runtimePath,
-  [REQUIRED_TEST_INPUTS_ENV]: [artifact && 'artifact', crossRuntime && 'cross-runtime']
-    .filter(Boolean)
-    .join(',')
+  [REQUIRED_TEST_INPUTS_ENV]: [artifact && 'artifact'].filter(Boolean).join(',')
 }
 
 function run(program, args) {
@@ -123,11 +113,10 @@ function defaultTestArgs() {
   // Why: vitest 5 drops CLI --exclude for inline projects, so the selectors' substring matches
   // are resolved to files here and filtered before vitest sees them.
   // Electron probes run in desktop jobs; headless compatibility containers have no display.
-  const selectors = nodeServerTestPaths({ artifact, crossRuntime })
-  const skipped = new Set(crossRuntime ? [] : CROSS_RUNTIME_TEST_PATHS)
+  const selectors = nodeServerTestPaths({ artifact })
   return globSync(UNIT_INCLUDE, { cwd: root })
     .map((path) => path.replaceAll('\\', '/'))
     .filter((path) => selectors.some((selector) => path.includes(selector)))
-    .filter((path) => !path.endsWith('.electron.test.ts') && !skipped.has(path))
+    .filter((path) => !path.endsWith('.electron.test.ts'))
     .sort()
 }

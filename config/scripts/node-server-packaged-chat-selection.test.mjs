@@ -36,7 +36,7 @@ it('runs a real structured chat on Linux from the built desktop template', () =>
   expect(template['continue-on-error']).toBeUndefined()
   expect(chat['continue-on-error']).toBeUndefined()
   // Default --artifact runs have no template, so a required-input failure would follow.
-  expect(nodeServerTestPaths({ artifact: true, crossRuntime: true })).not.toContain(
+  expect(nodeServerTestPaths({ artifact: true })).not.toContain(
     'src/main/quirkyd/quirkyd-packaged-structured-chat.integration.test.ts'
   )
 })

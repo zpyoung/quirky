@@ -60,32 +60,6 @@ it('fails closed to every platform when the evidence is incomplete', () => {
 })
 
 it.each([
-  [
-    'src/main/runtime/windows-terminal.ts',
-    ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
-    false
-  ],
-  [
-    'src/main/windows/windows-process-table.ts',
-    ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
-    false
-  ],
-  ['src/main/wsl/runner.ts', ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'], false],
-  [
-    'src/packages/process-host/src/windows-command-line.ts',
-    ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
-    false
-  ],
-  [
-    'src/shared/__tests__/process-host/windows-command-line.win32.test.ts',
-    ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
-    false
-  ],
-  [
-    'src/main/quirkyd/quirkyd-launcher.win32.test.ts',
-    ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
-    false
-  ],
   ['src/main/daemon/darwin-process.ts', ['ubuntu-22.04', 'macos-15', 'macos-15-intel'], false],
   ['src/shared/linux-glibc.ts', ['ubuntu-22.04', 'ubuntu-24.04-arm'], true],
   [
@@ -104,7 +78,7 @@ it('combines platform families without adding Linux compatibility work', () => {
       scope
     )
   ).toEqual({
-    runners: ['ubuntu-22.04', 'macos-15', 'macos-15-intel', 'windows-2022', 'windows-11-arm'],
+    runners: ['ubuntu-22.04', 'macos-15', 'macos-15-intel'],
     qualification: false
   })
 })

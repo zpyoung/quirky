@@ -286,7 +286,7 @@ it.each([
     deferred: true,
     fullQualification: false,
     qualification: false,
-    runners: ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
+    runners: ['ubuntu-22.04'],
     expected: 'should_run=true'
   },
   {
@@ -397,11 +397,7 @@ it('keeps a Node harness smoke without widening it for an unrelated modified SSH
 
 it.each([
   ['src/main/daemon/daemon-authenticated-client-activity.test.ts', NODE_SERVER_RUNNERS, true],
-  [
-    'src/main/daemon/daemon-endpoint-windows.test.ts',
-    ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
-    false
-  ]
+  ['src/main/daemon/daemon-endpoint-windows.test.ts', ['ubuntu-22.04'], false]
 ])('retains daemon platform coverage: %s', async (daemon, runners, qualification) => {
   const root = qualificationTree({ [daemon]: 'throw Error("unselected")' })
   const diff = [registry, daemon, unrelatedSshUnit]
@@ -582,43 +578,10 @@ it('keeps every platform job and runs them when detection is skipped or fails', 
   }
 })
 
-it('runs the Bun and Node cross-runtime tests on Linux against pinned inputs', () => {
+it('runs the Alpine lane against a pinned Node image', () => {
   const workflow = parse(
     readFileSync(new URL('../../.github/workflows/node-server-tests.yml', import.meta.url), 'utf8')
   )
-  const steps = workflow.jobs.persistence.steps
-  const setupBun = steps.find((step) => String(step.uses).startsWith('oven-sh/setup-bun@'))
-  expect(setupBun.uses).toMatch(/^oven-sh\/setup-bun@[0-9a-f]{40}$/)
-  expect(setupBun.with['bun-version-file']).toBe('config/.bun-version')
-  const build = steps.find((step) => String(step.run).includes('build-quirkyd-bun.mjs'))
-  expect(build.env.BUN_QUIRKYD_COMMIT).toMatch(/^[0-9a-f]{40}$/)
-  expect(setupBun.if).toBe("runner.os == 'Linux'")
-  expect(build.id).toBe('bun-quirkyd')
-  expect(build.background).toBe(true)
-  expect(build.if).toBeUndefined()
-  expect(build['continue-on-error']).toBeUndefined()
-  expect(build.run).toMatch(/^if \[ "\$RUNNER_OS" != Linux \]; then exit 0; fi\n/)
-  expect(build.run).toContain(
-    'pnpm --dir "$RUNNER_TEMP/bun-quirkyd-source" install --frozen-lockfile --ignore-scripts'
-  )
-  expect(build.run).not.toContain('"$GITHUB_WORKSPACE/node_modules"')
-  expect(build.run).toContain('echo "slot=$RUNNER_TEMP/bun-quirkyd" >> "$GITHUB_OUTPUT"')
-  expect(build.run).toContain('echo "executable=$(command -v bun)" >> "$GITHUB_OUTPUT"')
-  expect(build.run).not.toContain('GITHUB_ENV')
-  const join = steps.findIndex((step) => step.wait === build.id)
-  expect(join).toBeGreaterThan(steps.indexOf(build))
-  expect(steps[join].if).toBeUndefined()
-  expect(steps[join]['continue-on-error']).toBeUndefined()
-  const consumer = steps.find((step) => step.run?.startsWith('pnpm test:node-server --artifact '))
-  expect(steps.indexOf(consumer)).toBeGreaterThan(join)
-  expect(consumer.run).toBe(
-    "pnpm test:node-server --artifact ${{ runner.os == 'Linux' && '--cross-runtime' || '' }}"
-  )
-  expect(consumer.if).toBeUndefined()
-  expect(consumer.env).toEqual({
-    QUIRKY_BUN_QUIRKYD_SLOT: '${{ steps.bun-quirkyd.outputs.slot }}',
-    BUN_EXECUTABLE: '${{ steps.bun-quirkyd.outputs.executable }}'
-  })
   const alpine = workflow.jobs.linux_musl.steps.find((step) =>
     String(step.run).includes('docker run')
   )

@@ -1,11 +1,10 @@
 // Test fixture: a packaged Node slot whose runtime is the real pinned Node, laid out as shipped.
-import { copyFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync } from 'node:fs'
+import { copyFileSync, existsSync, linkSync, mkdirSync, readdirSync } from 'node:fs'
 import { copyFile, link, mkdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import type * as NodePty from 'node-pty'
 import { join, resolve } from 'node:path'
 import { it } from 'vitest'
-import { runProcessSync } from '@quirky/process-host'
 import { NODE_RUNTIME_ASSETS, type ServerTarget } from '../../shared/node-runtime-pin'
 import {
   QUIRKYD_NODE_PTY_DIR,
@@ -39,22 +38,6 @@ export function locatePinnedNodeForTests(): string | null {
     candidates.find((candidate): candidate is string => !!candidate && existsSync(candidate)) ??
     null
   )
-}
-
-const crossRuntimeBunVersion = readFileSync(
-  new URL('../../../config/.bun-version', import.meta.url),
-  'utf8'
-).trim()
-
-/** The shared Bun pin (BUN_EXECUTABLE, else `bun` on PATH), if available. */
-export function locateBunForTests(): string | null {
-  const candidate = process.env.BUN_EXECUTABLE ?? 'bun'
-  try {
-    const result = runProcessSync({ program: candidate, args: ['--version'], timeoutMs: 10_000 })
-    return result.code === 0 && result.stdout.trim() === crossRuntimeBunVersion ? candidate : null
-  } catch {
-    return null
-  }
 }
 
 /** Writes `<root>/slot/{.server-target,.runtime-node}` and links the runtime into `<root>/runtimes/`. */
@@ -112,7 +95,7 @@ export function installPackagedQuirkydSlotForTests(
 
 /** Comma-separated input groups a lane must have; set by run-node-server-tests.mjs. */
 export const QUIRKY_REQUIRED_TEST_INPUTS_ENV = 'QUIRKY_REQUIRED_TEST_INPUTS'
-export type RequiredTestInputGroup = 'artifact' | 'cross-runtime'
+export type RequiredTestInputGroup = 'artifact'
 
 function laneRequires(group: RequiredTestInputGroup): boolean {
   return (process.env[QUIRKY_REQUIRED_TEST_INPUTS_ENV] ?? '').split(',').includes(group)

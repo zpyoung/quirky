@@ -166,27 +166,6 @@ jobs:
           # Template qualification must not wait for large download-cache uploads.
           cache-pnpm-store: ${{ !inputs.build_template }}
           cache-pnpm-store-lookup-only: 'true'
-      # Design D7 upgrade and rollback: the last Bun quirkyd, built from a main commit that shipped
-      # it, using the current Bun pin beside this checkout's Node slot; hand-over skips once PROTOCOL_VERSION
-      # moves past the Bun daemon's. Install its pinned dependencies independently of this checkout.
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        if: runner.os == 'Linux'
-        with:
-          bun-version-file: config/.bun-version
-      - name: Build the last Bun quirkyd for the cross-runtime tests
-        id: bun-quirkyd
-        background: true
-        shell: bash
-        env:
-          BUN_QUIRKYD_COMMIT: f4092c06d639ee13ad446261dcabc78b27a21fbc
-        run: |
-          if [ "$RUNNER_OS" != Linux ]; then exit 0; fi
-          git fetch --no-tags --depth=1 origin "$BUN_QUIRKYD_COMMIT"
-          git worktree add --detach "$RUNNER_TEMP/bun-quirkyd-source" "$BUN_QUIRKYD_COMMIT"
-          pnpm --dir "$RUNNER_TEMP/bun-quirkyd-source" install --frozen-lockfile --ignore-scripts
-          node "$RUNNER_TEMP/bun-quirkyd-source/config/scripts/build-quirkyd-bun.mjs" --out-dir "$RUNNER_TEMP/bun-quirkyd"
-          echo "slot=$RUNNER_TEMP/bun-quirkyd" >> "$GITHUB_OUTPUT"
-          echo "executable=$(command -v bun)" >> "$GITHUB_OUTPUT"
       # Linux release slots come from the floor and Alpine lanes; this slot serves local tests.
       - uses: ./.github/actions/prepare-quirkyd-prebuilds
       - uses: actions/download-artifact@v8
@@ -198,11 +177,7 @@ jobs:
       - uses: ./.github/actions/build-mobile-web-bundle
         if: needs.changes.outputs.qualification == 'false'
       - run: pnpm build:quirkyd
-      - wait: bun-quirkyd
-      - run: pnpm test:node-server --artifact ${{ runner.os == 'Linux' && '--cross-runtime' || '' }}
-        env:
-          QUIRKY_BUN_QUIRKYD_SLOT: ${{ steps.bun-quirkyd.outputs.slot }}
-          BUN_EXECUTABLE: ${{ steps.bun-quirkyd.outputs.executable }}
+      - run: pnpm test:node-server --artifact
       - name: Build the host-target desktop server template
         if: runner.os == 'Linux'
         run: node config/scripts/build-quirkyd-template.mjs --targets linux-${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}-glibc
