@@ -235,7 +235,7 @@ describe('WorktreeCardStatusSlot', () => {
     // the button keeps the read action even though the bell glyph yields to live status
     expect(markup).toContain('aria-label="Mark as read"')
     expect(markup).toContain(`${label} · Mark as read`)
-    expect(markup).not.toContain('text-agent-question')
+    expect(markup).not.toContain('text-agent-question drop-shadow-sm')
     expect(markup).not.toContain('data-worktree-unread-alert=""')
   })
 
