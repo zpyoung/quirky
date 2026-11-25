@@ -16,7 +16,6 @@ function declaringNothing(definition: StructuredAgentDefinition): StructuredAgen
     capabilities: {
       rewind: false,
       compact: false,
-      threadGoal: false,
       contextUsage: false,
       imagePrompts: false,
       steering: definition.capabilities.steering,
@@ -70,7 +69,6 @@ export function claudeAndCodexDeclared(): StructuredAgentRegistry {
   return claudeAndCodexAgents({
     ...NO_METHODS,
     compact: unused,
-    changeThreadGoal: unused,
     rewind: unused,
     recoverRewind: unused
   })
@@ -94,7 +92,6 @@ function implementedBy(
     capabilities: {
       ...declared,
       compact: declared.compact && Boolean(adapter.compact),
-      threadGoal: declared.threadGoal && Boolean(adapter.changeThreadGoal),
       rewind:
         declared.rewind &&
         Boolean(adapter.forkForRewind || (adapter.rewind && adapter.recoverRewind))

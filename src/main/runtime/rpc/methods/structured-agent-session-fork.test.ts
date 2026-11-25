@@ -5,11 +5,38 @@ import {
   type StructuredAgentSessionForkPorts
 } from './structured-agent-session-fork'
 
-const SOURCE = {
+const SOURCE: AgentSessionRecord = {
+  schemaVersion: 2,
   sessionId: 'omp_source',
   provider: 'omp',
-  conversationName: 'Parser work'
-} as unknown as AgentSessionRecord
+  conversationName: 'Parser work',
+  location: {
+    executionHostId: 'local',
+    wslDistro: null,
+    workspaceId: 'repo_1::/tmp/wt-a',
+    workspaceKind: 'folder'
+  },
+  providerHandleChain: [],
+  accountHome: { variable: 'OMP_HOME', path: '/home/work/.omp' },
+  lease: {
+    sessionId: 'omp_source',
+    runtimeKind: 'native',
+    runtimeFence: 1,
+    handoffStage: null,
+    provenHandleLinkId: null,
+    ownerProcess: null,
+    reservedSpawnToken: null,
+    leaseDeadlineAt: 0,
+    lastRenewedAt: 0,
+    handoffOperationId: null,
+    claimKeyId: 'key-1',
+    claimStatus: 'live',
+    unreconciled: false,
+    deathEvidence: null
+  },
+  createdAt: 1,
+  updatedAt: 1
+}
 
 function ports(overrides: Partial<StructuredAgentSessionForkPorts> = {}) {
   const created: Parameters<StructuredAgentSessionForkPorts['create']>[0][] = []

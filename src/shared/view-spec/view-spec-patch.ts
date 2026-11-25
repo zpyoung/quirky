@@ -181,6 +181,10 @@ function applyOp(doc: unknown, op: ViewPatchOp): { doc: unknown } | { error: str
   return { error: `${op.path} does not exist` }
 }
 
+function hasSpecFrame(value: unknown): value is ViewSpec {
+  return isPlainObject(value) && typeof value.title === 'string' && isPlainObject(value.root)
+}
+
 /**
  * Applies RFC 6902 `add`, `replace` and `remove` operations (JSON Pointer paths, `-` appends,
  * `~0` and `~1` escapes) to a deep copy of `spec`, in order. All or nothing: `spec` is never
@@ -190,7 +194,7 @@ function applyOp(doc: unknown, op: ViewPatchOp): { doc: unknown } | { error: str
  * The result is only structurally a spec. Callers must run it through `validateViewSpec` before
  * storing or rendering it.
  */
-export function applyViewPatch(spec: ViewSpec, patch: ViewPatch): ViewSpec {
+export function applyViewPatch(spec: ViewSpec, patch: { ops: unknown }): ViewSpec {
   const { ops, errors } = readOps(patch.ops)
   if (errors.length > 0) {
     throw new ViewPatchError(errors)
@@ -203,6 +207,8 @@ export function applyViewPatch(spec: ViewSpec, patch: ViewPatch): ViewSpec {
     }
     doc = result.doc
   }
-  // SAFETY: ops can replace any part of the spec, so the shape is unchecked until the caller validates it.
-  return doc as ViewSpec
+  if (!hasSpecFrame(doc)) {
+    throw new ViewPatchError([{ path: '', message: 'a patched spec must keep a title and a root' }])
+  }
+  return doc
 }

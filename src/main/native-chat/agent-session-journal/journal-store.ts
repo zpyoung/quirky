@@ -11,7 +11,6 @@ import type {
   AgentJournalRenderItem,
   AgentJournalSnapshot,
   AgentJournalSubmission,
-  AgentJournalThreadGoal,
   AgentJournalTurnLifecycle,
   AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
@@ -74,7 +73,6 @@ import type { JournalStepWriter } from './journal-step-writer'
 import type { JournalStopMarks } from './journal-stop-marks'
 import type { JournalContextController } from './journal-context-controller'
 import type { JournalStopAcceptor } from './journal-stop-acceptance'
-import { journalThreadGoalSource, type JournalThreadGoalSource } from './journal-thread-goal-source'
 
 export { AgentSessionJournalError } from './journal-write-guards'
 
@@ -235,13 +233,6 @@ export class AgentSessionJournal {
   /** The newest turn record whatever state it settled in, for readers that need the outcome. */
   newestTurn = (): AgentJournalTurnLifecycle | null =>
     newestStructuredAgentSessionTurnBySequence(this.state.items.values())
-
-  /** The latest goal and its row, for a provider revising accounting after restart. */
-  threadGoalSource = (): JournalThreadGoalSource =>
-    journalThreadGoalSource(this.state.items.values())
-
-  /** The latest goal the whole journal records, not only a client's loaded page. */
-  threadGoal = (): AgentJournalThreadGoal | null => this.threadGoalSource().goal
 
   /** The newest context facts the whole journal records, not only a client's loaded page. */
   contextUsage = (): AgentSessionContextUsage =>

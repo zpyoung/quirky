@@ -10,8 +10,6 @@ export type AgentSessionCapabilities = {
   rewind: boolean
   /** Compact the conversation's context on request: offers the `/compact` command. */
   compact: boolean
-  /** A goal the user can set and change on the thread. */
-  threadGoal: boolean
   /** Turns report how much of the context window they used. */
   contextUsage: boolean
   /** Prompts may carry images. */

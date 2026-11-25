@@ -1,4 +1,5 @@
 import { isAbsolute, relative, resolve } from 'node:path'
+import { isRecord } from '../../../shared/agent-status-child-work-value-guards'
 import type { AgentJournalItemBody } from '../../../shared/agent-session-journal-types'
 import type { TurnChangesFile } from '../../../shared/agent-session-journal-v1-items'
 
@@ -52,10 +53,10 @@ export function editedPathsOfItem(body: AgentJournalItemBody): string[] {
     return []
   }
   const { input } = body
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+  if (!isRecord(input)) {
     return []
   }
-  const fields = input as Record<string, unknown>
+  const fields = input
   const direct = stringField(fields, PATH_FIELDS)
   if (direct !== undefined) {
     return [direct]
@@ -66,10 +67,7 @@ export function editedPathsOfItem(body: AgentJournalItemBody): string[] {
   }
   if (Array.isArray(fields.changes)) {
     return fields.changes.flatMap((change) => {
-      const path =
-        typeof change === 'object' && change !== null
-          ? stringField(change as Record<string, unknown>, ['path'])
-          : undefined
+      const path = isRecord(change) ? stringField(change, ['path']) : undefined
       return path === undefined ? [] : [path]
     })
   }

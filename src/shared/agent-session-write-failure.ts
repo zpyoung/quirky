@@ -61,9 +61,6 @@ export function agentSessionWriteKindForMethod(
   if (fingerprintMethod === 'agentSession.setOption') {
     return 'option'
   }
-  if (fingerprintMethod === 'agentSession.threadGoal') {
-    return 'goal'
-  }
   if (fingerprintMethod === 'agentSession.queuedMessageUpdate') {
     return 'queued-edit'
   }

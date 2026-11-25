@@ -38,7 +38,6 @@ const registeredAgentSchema = z.object({
   capabilities: z.object({
     rewind: capabilityFlag,
     compact: capabilityFlag,
-    threadGoal: capabilityFlag,
     contextUsage: capabilityFlag,
     imagePrompts: capabilityFlag,
     // Holding a follow-up until the turn ends never interrupts one the client cannot reason about.

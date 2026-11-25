@@ -99,7 +99,13 @@ function v1ChatItemText(body: AgentJournalItemBody): string | null {
       return body.fromTitle ? `Forked from ${body.fromTitle}` : 'Forked from another chat'
     case 'test-result':
       return `${body.passed ?? 0} passed, ${body.failed ?? 0} failed`
-    default:
+    case 'approval':
+    case 'diff':
+    case 'message':
+    case 'question':
+    case 'status':
+    case 'tool-call':
+    case 'turn':
       return null
   }
 }

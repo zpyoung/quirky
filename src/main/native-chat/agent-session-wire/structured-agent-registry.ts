@@ -24,7 +24,6 @@ function requiredAdapterMethods(
 ): AdapterMethod[] {
   return [
     ...(capabilities.compact ? (['compact'] as const) : []),
-    ...(capabilities.threadGoal ? (['changeThreadGoal'] as const) : []),
     ...(capabilities.rewind && !adapter.forkForRewind ? (['rewind', 'recoverRewind'] as const) : [])
   ]
 }

@@ -111,10 +111,6 @@ export const WORK_METHODS = [
     method: 'agentSession.setOption',
     params: { envelope: envelope(), key: 'model', value: 'gpt-live' }
   },
-  {
-    method: 'agentSession.threadGoal',
-    params: { envelope: envelope(), change: { kind: 'clear' } }
-  },
   { method: 'agentSession.handoffStatus', params: { sessionId: SESSION } },
   { method: 'agentSession.options', params: { sessionId: SESSION } },
   { method: 'agentSession.modelCatalog', params: { agent: 'codex', sessionId: SESSION } },

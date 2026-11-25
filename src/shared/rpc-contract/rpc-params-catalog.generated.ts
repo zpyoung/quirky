@@ -562,7 +562,6 @@ import {
   SleepWorkspaceParams,
   SubscribeParams,
   SubscribeTurnCompletionsParams,
-  ThreadGoalParams,
   UnsubscribeParams
 } from './structured-agent-session-params'
 import {
@@ -730,7 +729,6 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSession.subscribeAvailability': AvailabilityParams,
   'agentSession.subscribeStatus': null,
   'agentSession.subscribeTurnCompletions': SubscribeTurnCompletionsParams,
-  'agentSession.threadGoal': ThreadGoalParams,
   'agentSession.turnDiff': AgentSessionTurnDiffParams,
   'agentSession.unsubscribe': UnsubscribeParams,
   'agentSession.view.close': AgentSessionViewCloseParams,

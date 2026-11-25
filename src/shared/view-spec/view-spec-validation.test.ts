@@ -43,19 +43,21 @@ describe('valid specs', () => {
   it('accepts one spec that holds every visual kind', () => {
     const root = {
       type: 'stack',
-      children: [
-        'diagram',
-        'image',
-        'html',
-        'live-preview',
-        'timeline',
-        'board',
-        'matrix',
-        'annotated-code',
-        'file-map',
-        'plot',
-        'sketch'
-      ].map((type) => COMPONENTS[type as keyof typeof COMPONENTS].example)
+      children: (
+        [
+          'diagram',
+          'image',
+          'html',
+          'live-preview',
+          'timeline',
+          'board',
+          'matrix',
+          'annotated-code',
+          'file-map',
+          'plot',
+          'sketch'
+        ] as const
+      ).map((type) => COMPONENTS[type].example)
     }
     expect(validateViewSpec(spec(root))).toEqual({ ok: true, spec: spec(root) })
   })

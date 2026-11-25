@@ -35,8 +35,6 @@ import { journalClaudeMessage, type ClaudeMessageJournalContext } from './claude
 import { journalClaudeResult, type ClaudeResultJournalContext } from './claude-result-journaling'
 import { ClaudeAuthenticationFailures } from './claude-authentication-failures'
 import { ClaudeUsageLimits } from './claude-usage-limits'
-import { ClaudeThreadGoal } from './claude-thread-goal'
-import type { ClaudeGoalBackgroundWork } from './claude-background-task-tracker'
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
 
 export type { ClaudeJournalTranslator } from './claude-journal-translator-contract'
@@ -49,7 +47,6 @@ export type ClaudeJournalTranslatorDeps = {
   fallbackIdPrefix?: string
   onBackgroundTaskJournalFailure?: (error: Error) => void
   account?: () => AgentSessionAccountKind | undefined
-  goalBackgroundWork?: () => ClaudeGoalBackgroundWork
 }
 
 export function createClaudeJournalTranslator(
@@ -171,15 +168,13 @@ export function createClaudeJournalTranslator(
     corrections,
     turn,
     authenticationFailures: new ClaudeAuthenticationFailures(deps.account),
-    usageLimits: new ClaudeUsageLimits(),
-    threadGoal: new ClaudeThreadGoal(() => deps.sink.journalLinkage?.()?.threadGoalSource())
+    usageLimits: new ClaudeUsageLimits()
   }
 
   const resultContext: ClaudeResultJournalContext = {
     ...messageContext,
     prompts,
-    context,
-    goalBackgroundWork: deps.goalBackgroundWork ?? (() => 'unverifiable')
+    context
   }
 
   const handleMessage = (

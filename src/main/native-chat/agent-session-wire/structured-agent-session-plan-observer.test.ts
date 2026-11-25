@@ -24,7 +24,12 @@ const PENDING: AgentJournalResolution = {
   resolvedAt: null
 }
 
-type Row = { body: AgentJournalItemBody; sequence: number; turnScope: AgentJournalTurnScope }
+type Row = {
+  body: AgentJournalItemBody
+  sequence: number
+  turnScope: AgentJournalTurnScope
+  agentId?: string
+}
 
 class FakeJournal implements PlanObserverJournal {
   readonly rows = new Map<string, Row>()
@@ -35,7 +40,10 @@ class FakeJournal implements PlanObserverJournal {
   itemBody = (itemId: string) => this.rows.get(itemId)?.body ?? null
   visitItemsWithLinkage = (visit: JournalItemLinkageVisitor): void => {
     for (const [itemId, row] of this.rows) {
-      visit(itemId, row.sequence, row.body, { turnScope: row.turnScope })
+      visit(itemId, row.sequence, row.body, {
+        turnScope: row.turnScope,
+        ...(row.agentId ? { agentId: row.agentId } : {})
+      })
     }
   }
   appendItem = async (
@@ -50,6 +58,13 @@ class FakeJournal implements PlanObserverJournal {
     this.last += 1
     const held = this.rows.get(itemId)
     this.rows.set(itemId, { body, turnScope, sequence: held?.sequence ?? this.last })
+  }
+
+  markSubagent(itemId: string, agentId: string): void {
+    const row = this.rows.get(itemId)
+    if (row) {
+      row.agentId = agentId
+    }
   }
 
   turn(state: 'running' | 'completed'): void {
@@ -169,6 +184,51 @@ describe('plan versions', () => {
     expect(journal.plan(2)).toMatchObject({ version: 2, status: 'waiting', unchanged: true })
   })
 
+  it('does not flag a plan unchanged when an empty version came between', async () => {
+    const observer = observerFor()
+    const journal = started(observer)
+    journal.approval('approval-1', 'Step one')
+    await settle(observer, journal)
+    journal.resolve('approval-1', resolved('deny'))
+    journal.approval('approval-2', '')
+    await settle(observer, journal)
+    journal.resolve('approval-2', resolved('deny'))
+    journal.approval('approval-3', 'Step one')
+    await settle(observer, journal)
+    expect(journal.plan(3)).toMatchObject({ version: 3, status: 'waiting' })
+    expect(journal.plan(3)).not.toHaveProperty('unchanged')
+  })
+
+  it('does not flag a plan unchanged after an empty version across a reopen', async () => {
+    const first = observerFor()
+    const journal = started(first)
+    journal.approval('approval-1', 'Step one')
+    await settle(first, journal)
+    journal.resolve('approval-1', resolved('deny'))
+    journal.approval('approval-2', '')
+    await settle(first, journal)
+    journal.resolve('approval-2', resolved('deny'))
+    await settle(first, journal)
+
+    const second = observerFor()
+    second.observe(SESSION, journal)
+    journal.approval('approval-3', 'Step one')
+    await settle(second, journal)
+    expect(journal.plan(3)).not.toHaveProperty('unchanged')
+  })
+
+  it('writes no plan or mode for a subagent plan approval pending at open', async () => {
+    const journal = new FakeJournal()
+    journal.turn('running')
+    journal.approval('approval-1', 'Child plan')
+    journal.markSubagent('approval-1', 'child-1')
+    const observer = observerFor()
+    observer.observe(SESSION, journal)
+    await observer.idle()
+    expect(journal.plan(1)).toBeUndefined()
+    expect(journal.modes()).toEqual([])
+  })
+
   it('settles a cancelled approval not-answered, stopped', async () => {
     const observer = observerFor()
     const journal = started(observer)
@@ -263,6 +323,16 @@ describe('mode markers', () => {
       { kind: 'mode', mode: 'auto', previous: 'ask' },
       { kind: 'mode', mode: 'full-access', previous: 'auto' }
     ])
+  })
+
+  it('names plan as the previous mode when the permission mode changes in plan mode', async () => {
+    const observer = observerFor()
+    const journal = started(observer)
+    journal.approval('approval-1', 'Step one')
+    await settle(observer, journal)
+    observer.recordPermissionMode(SESSION, journal, 'auto', 'ask')
+    await settle(observer, journal)
+    expect(journal.modes().at(-1)).toEqual({ kind: 'mode', mode: 'auto', previous: 'plan' })
   })
 
   it('writes nothing for the mode the chat already held', async () => {

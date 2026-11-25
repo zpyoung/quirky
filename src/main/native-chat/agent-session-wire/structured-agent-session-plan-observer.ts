@@ -131,7 +131,7 @@ export class StructuredAgentSessionPlanObserver {
       if (mode === (state.lastMode ?? previous)) {
         return
       }
-      this.writeMode(sessionId, state, mode, previous)
+      this.writeMode(sessionId, state, mode, state.lastMode ?? previous)
     } catch (error) {
       this.deps.logger.warn('recording a permission mode marker failed', {
         scope: 'plan-items',
@@ -203,9 +203,9 @@ export class StructuredAgentSessionPlanObserver {
     journal.visitItemsWithLinkage((_itemId, sequence, body) => {
       if (body.kind === 'plan') {
         state.nextVersion = Math.max(state.nextVersion, body.version + 1)
-        if (body.version > newestPlan && body.text.trim() !== '') {
+        if (body.version > newestPlan) {
           newestPlan = body.version
-          state.lastPlanText = body.text
+          state.lastPlanText = body.text.trim() === '' ? null : body.text
         }
       } else if (body.kind === 'mode') {
         state.modeCount += 1
@@ -226,9 +226,13 @@ export class StructuredAgentSessionPlanObserver {
     const scopes = new Map<string, AgentJournalTurnScope>()
     const plans: AgentJournalPlanItem[] = []
     const answered = new Set<string>()
+    const rootItemIds = new Set<string>()
     const unplanned: { itemId: string; body: AgentJournalItemBody }[] = []
     state.journal.visitItemsWithLinkage((itemId, _sequence, body, attribution) => {
       scopes.set(itemId, attribution.turnScope ?? AGENT_JOURNAL_THREAD_SCOPE)
+      if (isRootAgentJournalItem(attribution)) {
+        rootItemIds.add(itemId)
+      }
       if (body.kind === 'plan') {
         if (body.approvalItemId) {
           answered.add(body.approvalItemId)
@@ -246,7 +250,7 @@ export class StructuredAgentSessionPlanObserver {
     })
     // A plan approval that is still open but has no row yet: the commit that raised it came first.
     for (const { itemId, body } of unplanned) {
-      if (!answered.has(itemId)) {
+      if (!answered.has(itemId) && rootItemIds.has(itemId)) {
         this.observeNewItem(sessionId, state, itemId, body, scopes.get(itemId))
       }
     }
@@ -286,9 +290,7 @@ export class StructuredAgentSessionPlanObserver {
       return
     }
     state.nextVersion += 1
-    if (!plan.empty) {
-      state.lastPlanText = plan.text
-    }
+    state.lastPlanText = plan.empty ? null : plan.text
     const scope = turnScope ?? AGENT_JOURNAL_THREAD_SCOPE
     // A plan approval means plan mode, however it was entered (a chat started in it writes no tool call).
     if (state.lastMode !== 'plan') {

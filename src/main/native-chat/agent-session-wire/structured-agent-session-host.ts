@@ -349,7 +349,6 @@ export class StructuredAgentSessionHost {
     }
     return result
   }
-  changeThreadGoal = this.mutations.changeThreadGoal
   readOptions = this.mutations.readOptions
 
   rewind = (caller: HostTypes.StructuredAgentSessionCaller, params: AgentSessionRewindParams) =>

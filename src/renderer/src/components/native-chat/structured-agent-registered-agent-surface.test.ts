@@ -57,7 +57,6 @@ describe('a host-registered agent on the structured chat surface', () => {
     const capabilities = (imagePrompts: boolean): AgentSessionCapabilities => ({
       rewind: false,
       compact: false,
-      threadGoal: false,
       contextUsage: false,
       imagePrompts,
       steering: 'queue',
