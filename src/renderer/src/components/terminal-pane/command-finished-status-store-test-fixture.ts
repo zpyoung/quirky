@@ -17,6 +17,9 @@ export function createCommandFinishedStatusStore(): {
       acknowledgedAgentsByPaneKey: {},
       activityClearedAtByPaneKey: {},
       manuallyUnreadTurnsByPaneKey: {},
+      unreadTerminalTabs: {},
+      unreadTerminalPanes: {},
+      unreadAgentCompletionPanes: {},
       ...createAgentStatusSlice(...args),
       ...createTerminalTabPresentationActions(args[0], args[1])
     } satisfies Partial<AppState>
