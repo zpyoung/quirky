@@ -11135,8 +11135,7 @@
       "tests/e2e/terminal-split-activation-latency-report.unit.test.ts": 116,
       "tests/e2e/worktree-status-warning.unit.test.ts": 1920,
       "tests/tools/omp-close-lifecycle.test.mjs": 277,
-      "tests/tools/omp-config-root-local-shell.test.mjs": 216,
-      "tests/tools/omp-config-root-relay-shell.test.mjs": 234
+      "tests/tools/omp-config-root-local-shell.test.mjs": 216
     }
   },
   "e2e": {
