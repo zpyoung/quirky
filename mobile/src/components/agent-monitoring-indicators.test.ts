@@ -5,7 +5,6 @@ import { AgentSpinner } from './AgentSpinner'
 import { AgentStateDot } from './AgentStateDot'
 import { colors } from '../theme/mobile-theme'
 
-
 type MonitoringTestRenderer = {
   readonly root: {
     findByType(type: string): { props: Record<string, unknown> }
