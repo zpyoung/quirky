@@ -39,7 +39,8 @@ export type ImportStore = Pick<
   | 'getWorkspaceLineage'
   | 'removeWorkspaceLineage'
   | 'restoreRetiredWorktreeNameRegistry'
-  | 'restoreRetiredWorktreeNameRegistryForNamespace'
+  | 'snapshotRetiredWorktreeNamespaceRegistries'
+  | 'restoreRetiredWorktreeNamespaceRegistries'
   | 'setSshTargetGenerationCounter'
   | 'getSettings'
   | 'getSparsePresets'
@@ -490,10 +491,10 @@ function applyLineageAndNames(
       record('retiredWorktreeNamesByRepo', repoId)
     }
   }
+  const namespacesBefore = store.snapshotRetiredWorktreeNamespaceRegistries()
+  undo.push(() => store.restoreRetiredWorktreeNamespaceRegistries(namespacesBefore))
   for (const { key, names } of plan.retiredByNamespace) {
-    const before = store.getRetiredWorktreeNameRegistryForNamespace(key)
     store.mergeRetiredWorktreeNamesForNamespace(key, names)
-    undo.push(() => store.restoreRetiredWorktreeNameRegistryForNamespace(key, before))
     record('retiredWorktreeNamesByNamespace', key)
   }
   for (const lineage of plan.workspaceLineage) {

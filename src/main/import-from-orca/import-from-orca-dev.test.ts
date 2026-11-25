@@ -619,6 +619,40 @@ describe('importFromOrcaDev', () => {
     store.freezeWrites()
   })
 
+  it('rollback: restores namespaces a capped merge evicted', async () => {
+    const fixture = makeFixture()
+    buildSource(fixture)
+    const profileDir = join(fixture.sourceRoot, 'profiles', 'local-default')
+    const source = openStore(profileDir, 'local-default')
+    source.mergeRetiredWorktreeNamesForNamespace('imported-ns', ['nautilus'])
+    source.flushOrThrow()
+    source.freezeWrites()
+    const checkpoint = new Database(join(profileDir, 'profile-state.db'))
+    checkpoint.pragma('wal_checkpoint(TRUNCATE)')
+    checkpoint.close()
+    const store = openStore(join(fixture.quirkyDir, 'profile'), 'local-default')
+    // 256 is the namespace registry cap, so the imported namespace evicts the oldest one.
+    for (let index = 0; index < 256; index += 1) {
+      store.mergeRetiredWorktreeNamesForNamespace(`ns-${index}`, ['seahorse'])
+    }
+    const before = store.snapshotRetiredWorktreeNamespaceRegistries()
+    let flushes = 0
+    const failing = Object.assign(Object.create(store), {
+      flushOrThrow: () => {
+        flushes += 1
+        if (flushes === 1) {
+          throw new Error('flush failed')
+        }
+      }
+    })
+
+    const report = await runImport(fixture, failing, 'first-run')
+
+    expect(report.errors.map((error) => error.code)).toEqual(['WRITE_FAILED'])
+    expect(store.snapshotRetiredWorktreeNamespaceRegistries()).toEqual(before)
+    store.freezeWrites()
+  })
+
   it('reports SOURCE_MISSING when Orca Dev data is absent', async () => {
     const fixture = makeFixture()
     const store = openStore(join(fixture.quirkyDir, 'profile'), 'local-default')

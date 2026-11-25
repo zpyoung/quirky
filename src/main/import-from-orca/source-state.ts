@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import Database from '../sqlite/sync-database'
 import { SCHEMA_VERSION } from '../../shared/constants'
@@ -50,36 +50,66 @@ export function sourceDatabaseExists(sourceRoot: string): boolean {
 }
 
 const SIDECAR_SUFFIXES = ['-wal', '-shm'] as const
-const MAX_COPY_ATTEMPTS = 3
+const MAX_COPY_ATTEMPTS = 5
+const COPY_RETRY_DELAY_MS = 200
+
+type FileStamp = { size: number; mtimeNs: bigint; ino: bigint } | null
+
+async function stampOf(path: string): Promise<FileStamp> {
+  try {
+    const info = await stat(path, { bigint: true })
+    return { size: Number(info.size), mtimeNs: info.mtimeNs, ino: info.ino }
+  } catch {
+    return null
+  }
+}
+
+async function stampsOf(databasePath: string): Promise<string> {
+  const paths = [databasePath, ...SIDECAR_SUFFIXES.map((suffix) => `${databasePath}${suffix}`)]
+  const stamps = await Promise.all(paths.map(stampOf))
+  return JSON.stringify(stamps, (_key, value) =>
+    typeof value === 'bigint' ? value.toString() : value
+  )
+}
 
 /**
- * Copies the database and its sidecar files into a fresh folder under `workDir`, then checks the
- * copy with `quick_check`. Orca Dev may write while the files are copied, so a torn copy is
- * thrown away and made again, up to `MAX_COPY_ATTEMPTS` times. The source is only ever read as
- * plain files, never opened as a database.
+ * Copies the database and its sidecar files into a fresh folder under `workDir`. The copy only
+ * counts when no source file changed while it was taken (same size, mtime and inode before and
+ * after), so the database and its WAL come from one moment even while Orca Dev is running; the
+ * copy must also pass `quick_check`. Otherwise it is thrown away and taken again, up to
+ * `MAX_COPY_ATTEMPTS` times. The source is only ever read as plain files, never opened as a
+ * database, because even a read-only SQLite connection writes to the `-shm` file.
  */
 async function copyConsistently(databasePath: string, workDir: string): Promise<string> {
   let lastError: unknown = new Error('no copy attempt ran')
   for (let attempt = 0; attempt < MAX_COPY_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, COPY_RETRY_DELAY_MS * attempt))
+    }
     const stagingDir = join(workDir, `staged-${attempt}`)
     await mkdir(stagingDir)
     const staged = join(stagingDir, basename(databasePath))
     try {
+      const before = await stampsOf(databasePath)
       await copyFile(databasePath, staged)
       for (const suffix of SIDECAR_SUFFIXES) {
         if (existsSync(`${databasePath}${suffix}`)) {
           await copyFile(`${databasePath}${suffix}`, `${staged}${suffix}`)
         }
       }
-      const copy = new Database(staged, { fileMustExist: true })
-      try {
-        const result = copy.pragma('quick_check', { simple: true })
-        if (result === 'ok') {
-          return staged
+      if ((await stampsOf(databasePath)) !== before) {
+        lastError = new Error('Orca Dev wrote to its database while it was being copied')
+      } else {
+        const copy = new Database(staged, { fileMustExist: true })
+        try {
+          const result = copy.pragma('quick_check', { simple: true })
+          if (result === 'ok') {
+            return staged
+          }
+          lastError = new Error(`copy failed its integrity check: ${String(result)}`)
+        } finally {
+          copy.close()
         }
-        lastError = new Error(`copy failed its integrity check: ${String(result)}`)
-      } finally {
-        copy.close()
       }
     } catch (error) {
       lastError = error

@@ -54,21 +54,25 @@ export class RetiredWorktreeNamePersistence {
     scheduleSave(this[retiredWorktreeNamePersistenceContext].scheduling)
   }
 
-  /** Namespace twin of `restoreRetiredWorktreeNameRegistry`. */
-  restoreRetiredWorktreeNameRegistryForNamespace(
-    namespaceKey: string,
-    registry: RetiredNameRegistry
+  /** A deep copy of every namespace registry, in eviction order, for a later restore. */
+  snapshotRetiredWorktreeNamespaceRegistries(): Record<string, RetiredNameRegistry> | undefined {
+    const stored =
+      this[retiredWorktreeNamePersistenceContext].runtime.state.retiredWorktreeNamesByNamespace
+    return stored === undefined ? undefined : structuredClone(stored)
+  }
+
+  /**
+   * Puts back a snapshot taken by `snapshotRetiredWorktreeNamespaceRegistries`, including any
+   * namespace a capped merge evicted since; `undefined` removes the map, as if never written.
+   */
+  restoreRetiredWorktreeNamespaceRegistries(
+    snapshot: Record<string, RetiredNameRegistry> | undefined
   ): void {
     const state = this[retiredWorktreeNamePersistenceContext].runtime.state
-    if (isEmptyRegistry(registry)) {
-      delete state.retiredWorktreeNamesByNamespace?.[namespaceKey]
+    if (snapshot === undefined) {
+      delete state.retiredWorktreeNamesByNamespace
     } else {
-      state.retiredWorktreeNamesByNamespace ??= {}
-      recordRetirementNamespaceRegistry(
-        state.retiredWorktreeNamesByNamespace,
-        namespaceKey,
-        registry
-      )
+      state.retiredWorktreeNamesByNamespace = structuredClone(snapshot)
     }
     scheduleSave(this[retiredWorktreeNamePersistenceContext].scheduling)
   }
