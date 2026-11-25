@@ -45,7 +45,7 @@
 [2Gread,[8Gmodify,[16Gand[20Gexecute[28Gfiles[34Ghere,[40Gand[44Gwill[49Gload[54Glocal[60Gconfigurations[75G(commands,[86Ghooks,[93GMCP
 [2Gservers,[11Gagents,[19Gskills,[27Gsettings).
 
-[2G[1m/private/tmp/quirky-qoder-probe/workspace[22m
+[2G[1m/private/tmp/quik-qoder-probe/workspace[22m
 
 [3G❯[5G1.[8GTrust[14Gfolder
 [5G2.[8GDon't[14Gtrust[20Gand[24Gexit

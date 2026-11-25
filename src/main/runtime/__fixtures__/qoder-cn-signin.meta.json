@@ -4,9 +4,9 @@
   "command": [
     "qoderclicn",
     "--config-dir",
-    "/tmp/quirky-qoder-validation-1002/cn-config",
+    "/tmp/quik-qoder-validation-1002/cn-config",
     "--cwd",
-    "/tmp/quirky-qoder-validation-1002/workspace"
+    "/tmp/quik-qoder-validation-1002/workspace"
   ],
   "cols": 120,
   "rows": 40,

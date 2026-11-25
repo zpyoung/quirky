@@ -144,7 +144,7 @@ describe('Store', () => {
 
     expect(store.getProjects()).toEqual([
       expect.objectContaining({
-        id: 'github:stablyai/orca',
+        id: 'github:stablyai/quirky',
         displayName: 'renamed',
         sourceRepoIds: ['r1']
       })
@@ -152,7 +152,7 @@ describe('Store', () => {
     expect(store.getProjectHostSetups()).toEqual([
       expect.objectContaining({
         id: 'r1',
-        projectId: 'github:stablyai/orca',
+        projectId: 'github:stablyai/quirky',
         displayName: 'renamed',
         worktreeBasePath: '../new-worktrees'
       })

@@ -271,7 +271,7 @@ describe('Store', () => {
 
     expect(automation.runContext).toMatchObject({
       kind: 'workspace-run',
-      projectId: 'github:stablyai/orca',
+      projectId: 'github:stablyai/quirky',
       hostId: toSshExecutionHostId('builder'),
       projectHostSetupId: 'r1',
       repoId: 'r1',
@@ -280,7 +280,7 @@ describe('Store', () => {
     expect(automation.sourceContext).toMatchObject({
       kind: 'task-source',
       provider: 'github',
-      projectId: 'github:stablyai/orca',
+      projectId: 'github:stablyai/quirky',
       hostId: toSshExecutionHostId('builder'),
       projectHostSetupId: 'r1',
       repoId: 'r1',
@@ -305,7 +305,7 @@ describe('Store', () => {
       // which this store cannot interpret and must not persist.
       runContext: {
         kind: 'workspace-run',
-        projectId: 'github:stablyai/orca',
+        projectId: 'github:stablyai/quirky',
         hostId: toRuntimeExecutionHostId('client-env'),
         projectHostSetupId: 'client-setup',
         repoId: 'client-repo',
@@ -334,7 +334,7 @@ describe('Store', () => {
     // A record a pre-fix host stored from a paired client's create input.
     persisted.automations[0].runContext = {
       kind: 'workspace-run',
-      projectId: 'github:stablyai/orca',
+      projectId: 'github:stablyai/quirky',
       hostId: toRuntimeExecutionHostId('client-env'),
       projectHostSetupId: 'client-setup',
       repoId: 'client-repo',
@@ -445,7 +445,7 @@ describe('Store', () => {
 
     expect(migratedAutomation?.runContext).toMatchObject({
       kind: 'workspace-run',
-      projectId: 'github:stablyai/orca',
+      projectId: 'github:stablyai/quirky',
       hostId: toSshExecutionHostId('builder'),
       projectHostSetupId: 'r1',
       repoId: 'r1',
@@ -454,7 +454,7 @@ describe('Store', () => {
     expect(migratedAutomation?.sourceContext).toMatchObject({
       kind: 'task-source',
       provider: 'github',
-      projectId: 'github:stablyai/orca',
+      projectId: 'github:stablyai/quirky',
       hostId: toSshExecutionHostId('builder'),
       projectHostSetupId: 'r1',
       repoId: 'r1',

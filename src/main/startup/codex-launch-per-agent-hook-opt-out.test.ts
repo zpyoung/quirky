@@ -153,7 +153,6 @@ describe('Codex launch prep honours the per-agent hook opt-out', () => {
       expect(mocks.reconcileCodexHooksForLaunch).not.toHaveBeenCalled()
       expect(mocks.prepareRuntimeHomeForLaunch).toHaveBeenCalledWith(
         ACCOUNT_HOME,
-        undefined,
         readsSetting(codexHooksOn),
         true
       )
@@ -206,8 +205,8 @@ describe('Codex launch prep honours the per-agent hook opt-out', () => {
     await prepareCodexRuntimeHomeForLaunch()
 
     expect(mocks.prepareRuntimeHomeForLaunch.mock.calls).toEqual([
-      [ACCOUNT_HOME, undefined, readsSetting(true), false],
-      [ACCOUNT_HOME, undefined, readsSetting(true), false]
+      [ACCOUNT_HOME, readsSetting(true), false],
+      [ACCOUNT_HOME, readsSetting(true), false]
     ])
     expect(mocks.reconcileCodexHooksForLaunch).not.toHaveBeenCalled()
   })

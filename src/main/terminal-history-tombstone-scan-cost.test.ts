@@ -138,31 +138,6 @@ describe('terminal history tombstone scan cost', () => {
     expect(readdirSync(pendingRoot)).toEqual([])
   })
 
-  it('drains both roots within the shared admission cap without per-completion reads', async () => {
-    const nativeRoot = join(userDataDir, 'terminal-history')
-    const wslRoot = join(userDataDir, 'terminal-history-wsl', 'Ubuntu')
-    seedTombstones(nativeRoot, 160)
-    seedTombstones(wslRoot, 160)
-    let inFlight = 0
-    let peakInFlight = 0
-    removeHostTreeMock.mockImplementation(async (dir) => {
-      inFlight++
-      peakInFlight = Math.max(peakInFlight, inFlight)
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      rmSync(dir, { recursive: true, force: true })
-      inFlight--
-    })
-
-    await flushPendingWorktreeHistoryDeletions()
-
-    expect(removeHostTreeMock).toHaveBeenCalledTimes(320)
-    expect(peakInFlight).toBeLessThanOrEqual(MAX_PENDING_HISTORY_TREE_REMOVALS)
-    expect(readdirSync(join(nativeRoot, '.pending-delete'))).toEqual([])
-    expect(readdirSync(join(wslRoot, '.pending-delete'))).toEqual([])
-    // Two roots, so a couple of reads each rather than one per completion.
-    expect(reads.count).toBeLessThanOrEqual(12)
-  })
-
   it('keeps draining after a directory read fails mid-drain', async () => {
     const root = join(userDataDir, 'terminal-history')
     const pendingRoot = join(root, '.pending-delete')

@@ -63,7 +63,7 @@ describe('Codex backend rate-limit requests', () => {
     const deadline = vi.spyOn(AbortSignal, 'timeout')
 
     await expect(
-      fetchCodexRateLimits({ codexHomePath: '\\\\wsl.localhost\\Ubuntu\\home\\fixture\\.codex' })
+      fetchCodexRateLimits({ codexHomePath: '/home/fixture/.codex' })
     ).resolves.toMatchObject({ status: 'ok', session: { usedPercent: 12 } })
     await expect(
       consumeCodexRateLimitResetCredit({
@@ -101,7 +101,6 @@ describe('Codex backend rate-limit requests', () => {
       10_000, 10_000, 30_000
     ])
     expect(fetch).not.toHaveBeenCalled()
-    expect(childSpawnMock).not.toHaveBeenCalled()
   })
 
   it('does not fall back to global fetch when the configured host transport fails', async () => {
@@ -123,7 +122,7 @@ describe('Codex backend rate-limit requests', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('uses the official backend usage contract without spawning Codex', async () => {
+  it('uses the official backend usage contract when the Codex probe fails', async () => {
     readFileMock.mockResolvedValue(
       JSON.stringify({
         tokens: { access_token: 'access-token', account_id: 'account-id' }
@@ -165,8 +164,7 @@ describe('Codex backend rate-limit requests', () => {
 
     await expect(
       fetchCodexRateLimits({
-        codexHomePath:
-          '\\\\wsl.localhost\\Ubuntu\\home\\alice\\.local\\share\\quirky\\account\\home'
+        codexHomePath: '/home/alice/.local/share/quirky/account/home'
       })
     ).resolves.toMatchObject({
       session: { usedPercent: 12, windowMinutes: 60, resetsAt: 1_800_000_000_000 },
@@ -179,8 +177,6 @@ describe('Codex backend rate-limit requests', () => {
       status: 'ok'
     })
 
-    expect(childSpawnMock).not.toHaveBeenCalled()
-    expect(ptySpawnMock).not.toHaveBeenCalled()
     expect(fetch).toHaveBeenNthCalledWith(
       1,
       'https://chatgpt.com/backend-api/wham/usage',
@@ -219,55 +215,13 @@ describe('Codex backend rate-limit requests', () => {
 
     await expect(
       fetchCodexRateLimits({
-        codexHomePath:
-          '\\\\wsl.localhost\\Ubuntu\\home\\alice\\.local\\share\\quirky\\account\\home'
+        codexHomePath: '/home/alice/.local/share/quirky/account/home'
       })
     ).resolves.toMatchObject({
       session: null,
       weekly: { usedPercent: 37, windowMinutes: 10_080, resetsAt: 1_800_000_000_000 },
       status: 'ok'
     })
-
-    expect(childSpawnMock).not.toHaveBeenCalled()
-    expect(ptySpawnMock).not.toHaveBeenCalled()
-  })
-
-  it('aborts callers while sharing one stalled backend auth read', async () => {
-    let resolveRead!: (content: string) => void
-    readFileMock.mockImplementation(
-      () =>
-        new Promise<string>((resolve) => {
-          resolveRead = resolve
-        })
-    )
-    const firstController = new AbortController()
-    const secondController = new AbortController()
-    const codexHomePath = '\\\\wsl.localhost\\Ubuntu\\home\\alice\\.codex'
-
-    const first = fetchCodexRateLimits({ codexHomePath, signal: firstController.signal })
-    const second = fetchCodexRateLimits({ codexHomePath, signal: secondController.signal })
-    await vi.advanceTimersByTimeAsync(0)
-    expect(readFileMock).toHaveBeenCalledTimes(1)
-    expect(readFileMock).toHaveBeenCalledWith(expect.stringContaining('auth.json'), 'utf8')
-
-    firstController.abort()
-    secondController.abort()
-
-    await expect(first).resolves.toMatchObject({
-      provider: 'codex',
-      status: 'error',
-      error: 'Rate-limit fetch aborted'
-    })
-    await expect(second).resolves.toMatchObject({
-      provider: 'codex',
-      status: 'error',
-      error: 'Rate-limit fetch aborted'
-    })
-    expect(fetch).not.toHaveBeenCalled()
-    expect(childSpawnMock).not.toHaveBeenCalled()
-    expect(ptySpawnMock).not.toHaveBeenCalled()
-    resolveRead('{}')
-    await vi.advanceTimersByTimeAsync(0)
   })
 
   it('applies the backend deadline while auth reading is still pending', async () => {

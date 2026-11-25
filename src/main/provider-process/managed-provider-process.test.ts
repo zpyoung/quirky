@@ -9,11 +9,9 @@ import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 import type { ProviderProcessTree } from './provider-process-close'
 
 const mocks = vi.hoisted(() => ({
-  capture: vi.fn(async () => null),
-  windowsTree: vi.fn(async () => {})
+  capture: vi.fn(async () => null)
 }))
 vi.mock('../pty-descendant-termination', () => ({ captureDescendantSnapshot: mocks.capture }))
-vi.mock('../windows-process-tree-kill', () => ({ terminateWindowsProcessTree: mocks.windowsTree }))
 
 afterEach(() => {
   vi.useRealTimers()
@@ -228,22 +226,6 @@ describe('managed provider process', () => {
     expect(managed.processless).toBe(false)
   })
 
-  it('uses Windows tree teardown and still requires observed root exit', async () => {
-    vi.useFakeTimers()
-    const fixture = fakeChild()
-    const managed = launch(fixture, 'win32')
-    expect(managed.supervised).toBe(false)
-    const first = managed.close()
-    await vi.advanceTimersByTimeAsync(150)
-    await expect(first).resolves.toMatchObject({ root: 'live' })
-    expect(mocks.windowsTree).toHaveBeenCalledWith(fixture.child.pid, {
-      site: 'fixture-provider-teardown'
-    })
-    expect(fixture.child.kill).not.toHaveBeenCalledWith('SIGTERM')
-    fixture.child.emit('exit', null, 'SIGKILL')
-    await expect(managed.close()).resolves.toMatchObject({ root: 'exited' })
-  })
-
   it('preserves a caller requiring tree proof, including live and unverifiable descendants', async () => {
     const fixture = fakeChild()
     const managed = spawnManagedProviderProcess(
@@ -268,33 +250,6 @@ describe('managed provider process', () => {
     await expect(managed.close(proof.tree)).resolves.toEqual({ root: 'exited', tree: 'exited' })
     await expect(managed.close(proof.tree)).resolves.toEqual({ root: 'exited', tree: 'exited' })
     expect(proof.tree.capture).toHaveBeenCalledTimes(3)
-  })
-
-  it('reports failed tree cleanup separately after observed root exit', async () => {
-    vi.useFakeTimers()
-    const fixture = fakeChild()
-    const managed = launch(fixture, 'win32')
-    mocks.windowsTree.mockImplementationOnce(async () => {
-      fixture.child.emit('exit', null, 'SIGKILL')
-      throw new Error('tree teardown unavailable')
-    })
-    const close = managed.close()
-    await vi.advanceTimersByTimeAsync(150)
-    await expect(close).resolves.toMatchObject({ root: 'exited' })
-    expect(managed.lastCloseResult).toEqual({ root: 'exited', tree: 'unverifiable' })
-  })
-
-  it('keeps the cleanup diagnostic tied to the close that finished before a late root exit', async () => {
-    vi.useFakeTimers()
-    const fixture = fakeChild()
-    const managed = launch(fixture, 'win32')
-    mocks.windowsTree.mockRejectedValueOnce(new Error('tree teardown unavailable'))
-    const close = managed.close()
-    await vi.advanceTimersByTimeAsync(150)
-    await expect(close).resolves.toMatchObject({ root: 'live' })
-    fixture.child.emit('exit', null, 'SIGKILL')
-    await expect(managed.close()).resolves.toMatchObject({ root: 'exited' })
-    expect(managed.lastCloseResult).toEqual({ root: 'live', tree: 'unverifiable' })
   })
 
   it('lets a supervised caller signal immediately and waits its configured grace before forcing', async () => {

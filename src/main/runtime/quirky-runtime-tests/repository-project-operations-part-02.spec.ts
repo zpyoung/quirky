@@ -75,7 +75,7 @@ describe('QuirkyRuntimeService', () => {
       expect(cloned).not.toHaveProperty('executionHostId')
 
       const result = await runtime.setupProjectExistingFolder({
-        projectId: 'github:stablyai/orca',
+        projectId: 'github:stablyai/quirky',
         hostId: 'runtime:env-1',
         path: clonePath,
         kind: 'git',
@@ -149,7 +149,7 @@ describe('QuirkyRuntimeService', () => {
 
     try {
       const result = await runtime.setupProjectClone({
-        projectId: 'github:stablyai/orca',
+        projectId: 'github:stablyai/quirky',
         hostId: 'runtime:env-2',
         url: 'https://example.com/quirky.git',
         destination

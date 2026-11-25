@@ -10,7 +10,7 @@ import { join } from 'node:path'
 
 const FALLBACK_PORT_FILE = 'mobile-ws-fallback-port.json'
 const FALLBACK_LADDER_SIZE = 31
-// `pnpm dev` pins 6769 beside packaged Quirky (devWsPort in main-process-runtime-launch.ts);
+// `pnpm dev` pins 6779 beside packaged Quirky (devWsPort in main-process-runtime-launch.ts);
 // no other instance's ladder may take it, or dev's paired phones lose their endpoint.
 const DEV_PINNED_WS_PORT = 6779
 

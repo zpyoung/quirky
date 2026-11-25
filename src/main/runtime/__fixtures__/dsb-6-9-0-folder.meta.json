@@ -1,7 +1,7 @@
 {
   "capturedAt": "2026-10-02T09:55:40.033Z",
   "platform": "darwin",
-  "command": ["/tmp/quirky-deepseek-build-20261002/bin/dsb"],
+  "command": ["/tmp/quik-deepseek-build-20261002/bin/dsb"],
   "cols": 110,
   "rows": 32,
   "note": "Third-party innocarpe DeepSeek Build 6.9.0 release; isolated HOME; folder workspace; synthetic credential; welcome screen, no prompt or model request",

@@ -65,6 +65,9 @@ const MOBILE_STREAMING_CLEANUP_RPC_METHODS = [
   'terminal.unsubscribe'
 ]
 
+// the hosted relay is cut, so the desktop no longer serves these; the mobile relay code that names them is unreachable
+const HOSTED_RELAY_RPC_METHODS = ['pairing.getEndpoints', 'pairing.provisionRelay']
+
 function listSourceFiles(root: string): string[] {
   const entries = readdirSync(root)
   const files: string[] = []
@@ -107,6 +110,7 @@ function mobileLiteralRpcMethods(): string[] {
 function mobileRpcMethods(): string[] {
   return [...new Set([...mobileLiteralRpcMethods(), ...MOBILE_DYNAMIC_RPC_METHODS])]
     .filter((method) => !MOBILE_SIDEBAR_INPUTS_RPC_METHODS.includes(method))
+    .filter((method) => !HOSTED_RELAY_RPC_METHODS.includes(method))
     .sort()
 }
 

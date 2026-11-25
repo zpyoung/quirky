@@ -39,13 +39,6 @@ if [ -n "${QUIRKY_CLI_BIN_DIR:-}" ]; then
     *) export PATH="$QUIRKY_CLI_BIN_DIR${PATH:+:$PATH}" ;;
   esac
 fi
-if [ -n "${QUIRKY_WSL_CLI_DIR:-}" ]; then
-  if [ -x "$QUIRKY_WSL_CLI_DIR/${QUIRKY_CLI_COMMAND:-}" ]; then
-    export PATH="$QUIRKY_WSL_CLI_DIR${PATH:+:$PATH}"
-  else
-    printf 'Quirky CLI unavailable: cannot run %s. Check WSL Windows-drive mount options.\n' "$QUIRKY_WSL_CLI_DIR/${QUIRKY_CLI_COMMAND:-}" >&2
-  fi
-fi
 # Why: user startup files may set the default OpenCode config after Quirky's
 # spawn env; restore the Quirky-managed config dir before the first prompt.
 [[ -n "${QUIRKY_OPENCODE_CONFIG_DIR:-}" ]] && export OPENCODE_CONFIG_DIR="${QUIRKY_OPENCODE_CONFIG_DIR}"

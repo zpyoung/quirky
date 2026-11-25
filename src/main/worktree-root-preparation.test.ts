@@ -52,38 +52,6 @@ describe('prepareLocalWorktreeRootForRepo', () => {
     expect(mkdirMock).toHaveBeenCalledWith('/Users/alice/quirky/workspaces', { recursive: true })
   })
 
-  it('resolves a WSL repo root through the async probe instead of blocking on wsl.exe', async () => {
-    const originalPlatform = process.platform
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-    let resolveHome!: (home: string) => void
-    getWslHomeAsyncMock.mockReturnValue(
-      new Promise<string>((resolve) => {
-        resolveHome = resolve
-      })
-    )
-    store.getSettings.mockReturnValue({ workspaceDir: 'C:\\workspaces', nestWorkspaces: false })
-
-    try {
-      const preparation = prepareLocalWorktreeRootForRepo(store as never, {
-        ...repo,
-        path: '\\\\wsl.localhost\\Ubuntu\\home\\jin\\src\\repo'
-      })
-      await Promise.resolve()
-      expect(mkdirMock).not.toHaveBeenCalled()
-
-      resolveHome('\\\\wsl.localhost\\Ubuntu\\home\\jin')
-      await preparation
-
-      expect(getWslHomeMock).not.toHaveBeenCalled()
-      expect(mkdirMock).toHaveBeenCalledWith(
-        '\\\\wsl.localhost\\Ubuntu\\home\\jin\\quirky\\workspaces',
-        { recursive: true }
-      )
-    } finally {
-      Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
-    }
-  })
-
   it('uses repo-specific worktree base paths', async () => {
     await prepareLocalWorktreeRootForRepo(store as never, {
       ...repo,

@@ -598,21 +598,6 @@ describe('terminal-history', () => {
       await flushPendingWorktreeHistoryDeletions()
     })
 
-    it('cleans WSL Fish history through the owning distro before removing metadata', async () => {
-      readFileSyncMock.mockReturnValue(JSON.stringify({ worktreeId, fishSession: session }))
-      readdirSyncMock.mockImplementation((path: string) => {
-        if (path.endsWith('terminal-history-wsl')) {
-          return ['Ubuntu']
-        }
-        return []
-      })
-
-      deleteWorktreeHistoryDir(worktreeId)
-      await flushPendingWorktreeHistoryDeletions()
-
-      expect(deleteWslFishHistoryFileMock).toHaveBeenCalledWith('Ubuntu', session)
-    })
-
     it('leaves the live directory alone when the tombstone rename fails', async () => {
       existsSyncMock.mockReturnValue(true)
       renameSyncMock.mockImplementation(() => {

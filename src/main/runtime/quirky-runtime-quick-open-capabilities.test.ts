@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { readdirMock, wslAwareSpawnMock } from './quirky-runtime-files-mock-registry'
+import { readdirMock, spawnProcessMock } from './quirky-runtime-files-mock-registry'
 import {
   createRuntimeFileCommands,
   useRuntimeFileCommandsLifecycle
@@ -48,6 +48,6 @@ describe('runtime SSH Quick Open', () => {
       totalCount: 0
     })
     expect(readdirMock).not.toHaveBeenCalled()
-    expect(wslAwareSpawnMock).not.toHaveBeenCalled()
+    expect(spawnProcessMock).not.toHaveBeenCalled()
   })
 })

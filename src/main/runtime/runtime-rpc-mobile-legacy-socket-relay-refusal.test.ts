@@ -34,7 +34,7 @@ describe('a server-targeted phone call on a legacy (non-E2EE) socket', () => {
         ok: false,
         error: {
           code: 'remote_runtime_unavailable',
-          message: 'Servers are reachable only over an encrypted pairing'
+          message: 'This computer does not relay to servers'
         }
       }
     ])
