@@ -19,6 +19,7 @@ import {
   getWindowsNativeHookAgent,
   WINDOWS_NATIVE_HOOK_EXECUTABLE_NAME
 } from './windows-native-hook-executable'
+import { isSiblingAppHookCommand } from './sibling-app-hook-commands'
 
 export type HookCommandConfig = {
   type: 'command'
@@ -89,6 +90,9 @@ export function createManagedCommandMatcher(
     const decodedCommand = decodePowerShellEncodedCommand(command)
     const searchText = decodedCommand ? `${command}\n${decodedCommand}` : command
     const normalizedCommand = searchText.replaceAll('\\', '/')
+    if (isSiblingAppHookCommand(normalizedCommand)) {
+      return false
+    }
     return (
       needles.some((needle) => normalizedCommand.includes(needle)) ||
       normalizedCommand.split('\n').some((line) => `${line} `.includes(nativeHook))
