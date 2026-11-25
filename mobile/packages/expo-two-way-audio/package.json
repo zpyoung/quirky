@@ -9,15 +9,15 @@
     "expo-two-way-audio",
     "react-native"
   ],
-  "homepage": "https://github.com/stablyai/orca/tree/main/mobile/packages/expo-two-way-audio",
+  "homepage": "https://github.com/zpyoung/quirky/tree/main/mobile/packages/expo-two-way-audio",
   "bugs": {
-    "url": "https://github.com/stablyai/orca/issues"
+    "url": "https://github.com/zpyoung/quirky/issues"
   },
   "license": "MIT",
   "author": "Quirky contributors",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/stablyai/orca.git",
+    "url": "git+https://github.com/zpyoung/quirky.git",
     "directory": "mobile/packages/expo-two-way-audio"
   },
   "main": "src/index.ts",

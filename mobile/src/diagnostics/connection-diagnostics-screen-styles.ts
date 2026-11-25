@@ -60,23 +60,6 @@ export const connectionDiagnosticsScreenStyles = StyleSheet.create({
     lineHeight: 18,
     marginTop: spacing.xs
   },
-  privacyHint: { marginTop: spacing.sm, fontSize: 11, lineHeight: 15, color: colors.textMuted },
-  sendButton: {
-    marginTop: spacing.md,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: 8,
-    backgroundColor: colors.bgRaised
-  },
-  sendButtonText: {
-    fontSize: typography.metaSize,
-    fontWeight: '600',
-    color: colors.textPrimary
-  },
   copyButton: {
     flexDirection: 'row',
     alignItems: 'center',

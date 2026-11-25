@@ -1,16 +1,10 @@
-import type {
-  ConnectionDiagnosticsSubmission,
-  ConnectionDiagnosticsSubmissionResult
-} from './connection-diagnostics-submission'
-
-/** A fresh report plus the incident it describes, so a stale send can be dropped. */
-export type ConnectionDiagnosticsReport = ConnectionDiagnosticsSubmission & {
-  incidentId: string | null
+/** A fresh connection report with the app and platform it was built on. */
+export type ConnectionDiagnosticsReport = {
+  report: string
+  appVersion: string
+  platform: string
 }
 
 export interface DiagnosticsDeviceOperations {
   report(): Promise<ConnectionDiagnosticsReport>
-  submit(
-    submission: ConnectionDiagnosticsSubmission
-  ): Promise<ConnectionDiagnosticsSubmissionResult>
 }

@@ -6,9 +6,9 @@ import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { CompatVerdict } from '../transport/protocol-compat'
 import type { MobileWebBundleCompatVerdict } from '../transport/mobile-web-bundle-compat'
 import type { PageRouteRefusalVerdict } from '../mobile-web-shell/page-route-policy'
+import { QUIRKY_IOS_INSTALL_URL } from '../../../src/shared/mobile-install-links'
 
-const RELEASES_URL = 'https://github.com/stablyai/orca/releases'
-const IOS_APP_STORE_URL = 'itms-apps://apps.apple.com/app/quirky-ide/id6766130217'
+const RELEASES_URL = 'https://github.com/zpyoung/quirky/releases'
 
 /** Every wall this screen renders: the protocol one, the bundle one and the page route one. All are
  *  terminal — there is no native workspace to fall back to, so the only way out is updating one of
@@ -75,11 +75,13 @@ export function ProtocolBlockScreen({ verdict }: Props) {
   // Why: Android APKs ship through GitHub Releases until a Play Store listing exists.
   const mobileUpdateTarget =
     Platform.OS === 'ios'
-      ? { label: 'Open App Store', url: IOS_APP_STORE_URL, storeName: 'the App Store' }
+      ? { label: 'Open App Store', url: QUIRKY_IOS_INSTALL_URL, storeName: 'TestFlight' }
       : { label: 'Open GitHub Releases', url: RELEASES_URL, storeName: 'GitHub Releases' }
   const mobileAction = mobileUpdate
     ? { label: `Get Quirky ${mobileUpdate.version}`, url: mobileUpdate.url }
-    : { label: mobileUpdateTarget.label, url: mobileUpdateTarget.url }
+    : mobileUpdateTarget.url
+      ? { label: mobileUpdateTarget.label, url: mobileUpdateTarget.url }
+      : null
   // No download to offer when the fix is a refetch: reconnecting is what this screen leaves you to do.
   const primaryAction =
     remedy === 'refresh-bundle'

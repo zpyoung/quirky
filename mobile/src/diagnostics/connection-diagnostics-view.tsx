@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react'
 import { View, Text, Pressable } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ChevronLeft, Copy, Check, Send } from 'lucide-react-native'
+import { ChevronLeft, Copy, Check } from 'lucide-react-native'
 import { colors, spacing } from '../theme/mobile-theme'
 import { ConnectionLog } from '../components/ConnectionLog'
 import { connectionDiagnosticsScreenStyles as styles } from './connection-diagnostics-screen-styles'
 import type { ConnectionLogEntry, ConnectionState } from '../transport/types'
 import type { ConnectionDiagnosis } from './connection-diagnostics-analysis'
-import type { DiagnosticsSubmissionState } from './connection-diagnostics-screen-data'
 
 export function ConnectionDiagnosticsView({
   hostPicker,
@@ -18,8 +17,6 @@ export function ConnectionDiagnosticsView({
   copied,
   copyDiagnostics,
   diagnosis,
-  submissionState,
-  sendDiagnostics,
   entries,
   onBack
 }: {
@@ -31,8 +28,6 @@ export function ConnectionDiagnosticsView({
   copied: boolean
   copyDiagnostics: () => Promise<void>
   diagnosis: ConnectionDiagnosis | null
-  submissionState: DiagnosticsSubmissionState | 'idle'
-  sendDiagnostics: () => Promise<void>
   entries: readonly ConnectionLogEntry[]
   onBack: () => void
 }) {
@@ -73,34 +68,6 @@ export function ConnectionDiagnosticsView({
               <Text style={styles.diagnosisHeading}>What this suggests</Text>
               <Text style={styles.diagnosisText}>{diagnosis.likelyCause}</Text>
               <Text style={styles.diagnosisNext}>{diagnosis.nextStep}</Text>
-              {diagnosis.reportability === 'quirky-relay' && (
-                <>
-                  <Text style={styles.privacyHint}>
-                    Sends a size-limited redacted report including host name, endpoint, versions,
-                    connection state, and events—never terminal contents or credentials.
-                  </Text>
-                  <Pressable
-                    style={styles.sendButton}
-                    onPress={() => void sendDiagnostics()}
-                    disabled={submissionState === 'sending'}
-                  >
-                    {submissionState === 'sent' ? (
-                      <Check size={14} color={colors.statusGreen} />
-                    ) : (
-                      <Send size={14} color={colors.textPrimary} />
-                    )}
-                    <Text style={styles.sendButtonText}>
-                      {submissionState === 'sending'
-                        ? 'Sending…'
-                        : submissionState === 'sent'
-                          ? 'Diagnostics sent'
-                          : submissionState === 'failed'
-                            ? 'Retry sending'
-                            : 'Send diagnostics to Quirky'}
-                    </Text>
-                  </Pressable>
-                </>
-              )}
             </View>
           )}
           {entries.length > 0 ? (

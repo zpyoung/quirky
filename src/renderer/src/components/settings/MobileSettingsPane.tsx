@@ -8,12 +8,14 @@ import {
 } from './mobile-settings-search'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
+import {
+  QUIRKY_ANDROID_INSTALL_URL,
+  QUIRKY_IOS_INSTALL_URL
+} from '../../../../shared/mobile-install-links'
 export { getMobileSettingsPaneSearchEntries }
 
-const QUIRKY_IOS_APP_STORE_URL = 'https://apps.apple.com/app/quirky-ide/id6766130217'
-const QUIRKY_ANDROID_APK_URL = 'https://github.com/zpyoung/quirky'
-
 export function MobileSettingsPane(): React.JSX.Element {
+  const iosInstallUrl = QUIRKY_IOS_INSTALL_URL
   const showMobileButton = useAppStore((s) => s.settings?.showMobileButton !== false)
   const updateSettings = useAppStore((s) => s.updateSettings)
 
@@ -34,19 +36,23 @@ export function MobileSettingsPane(): React.JSX.Element {
               'auto.components.settings.MobileSettingsPane.installIntro',
               'Install Quirky Mobile from the'
             )}{' '}
-            <button
-              type="button"
-              onClick={() => void window.api.shell.openUrl(QUIRKY_IOS_APP_STORE_URL)}
-              className="cursor-pointer underline underline-offset-2 hover:text-foreground"
-            >
-              {translate('auto.components.settings.MobileSettingsPane.b5a2ed83ff', 'App Store')}
-            </button>
-            {' · '}
+            {iosInstallUrl ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void window.api.shell.openUrl(iosInstallUrl)}
+                  className="cursor-pointer underline underline-offset-2 hover:text-foreground"
+                >
+                  {translate('auto.components.settings.MobileSettingsPane.b5a2ed83ff', 'App Store')}
+                </button>
+                {' · '}
+              </>
+            ) : null}
             <button
               type="button"
               // Why: Android is moving to Google Play soon, but until then
               // link directly to the pinned APK asset for the current mobile release.
-              onClick={() => void window.api.shell.openUrl(QUIRKY_ANDROID_APK_URL)}
+              onClick={() => void window.api.shell.openUrl(QUIRKY_ANDROID_INSTALL_URL)}
               className="cursor-pointer underline underline-offset-2 hover:text-foreground"
             >
               {translate(

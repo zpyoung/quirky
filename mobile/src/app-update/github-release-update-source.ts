@@ -3,7 +3,7 @@ import { compareAppVersions } from '../../../src/shared/app-version'
 import type { AppUpdateCheckResult, AppUpdateSource } from './app-update-source'
 import { isNewerReleaseVersion } from './app-update-source'
 
-const REPO_API = 'https://api.github.com/repos/stablyai/orca'
+const REPO_API = 'https://api.github.com/repos/zpyoung/quirky'
 // Why tag refs, not releases.atom or /releases?per_page=100: both are newest-first windows that a
 // run of desktop releases fills, pushing the newest mobile release out and reading as "current".
 // The release `prerelease` flag is not a filter: every mobile-android-v* release is published as one.

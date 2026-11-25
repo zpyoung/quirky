@@ -14169,7 +14169,8 @@
           "pairThisComputer": "このコンピュータをペアリングします。",
           "androidHelp": {
             "guide": "インストールガイド"
-          }
+          },
+          "noInstallLink": "TestFlight からインストールしてください。招待は所有者に依頼してください。"
         },
         "MobilePage": {
           "e17393c6a3": "スマートフォンプレビュー",

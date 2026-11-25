@@ -1,0 +1,12 @@
+{
+  "resultCount": 1,
+  "results": [
+    {
+      "kind": "software",
+      "bundleId": "com.zpyoung.quirky.mobile",
+      "trackName": "Quirky",
+      "version": "0.0.51",
+      "trackViewUrl": "https://apps.apple.com/us/app/example/id0000000000?uo=4"
+    }
+  ]
+}

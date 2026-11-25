@@ -1,14 +1,6 @@
 import { useCallback, useState, type ReactNode } from 'react'
 import { ConnectionDiagnosticsView } from './connection-diagnostics-view'
-import {
-  diagnoseConnection,
-  getReportableConnectionIncidentId
-} from './connection-diagnostics-analysis'
-import {
-  getDiagnosticsSubmissionState,
-  updateDiagnosticsSubmissionState,
-  type DiagnosticsSubmissionStates
-} from './connection-diagnostics-screen-data'
+import { diagnoseConnection } from './connection-diagnostics-analysis'
 import type { DiagnosticsDeviceOperations } from './diagnostics-device-operations'
 import type {
   ConnectionLogEntry,
@@ -41,16 +33,12 @@ export function ConnectionDiagnosticsScreen({
   hostPicker?: ReactNode
 }) {
   const [copiedHostId, setCopiedHostId] = useState<string | null>(null)
-  const [submissionStates, setSubmissionStates] = useState<DiagnosticsSubmissionStates>({})
 
   const diagnosisArgs = host
     ? { endpoint: host.endpoint, state, activePath, pendingPath, entries }
     : null
   const diagnosis = diagnosisArgs ? diagnoseConnection(diagnosisArgs) : null
-  const incidentId = diagnosisArgs ? getReportableConnectionIncidentId(diagnosisArgs) : null
   const hostId = host?.id ?? null
-  const submissionKey = hostId && incidentId ? `${hostId}:${incidentId}` : null
-  const submissionState = getDiagnosticsSubmissionState(submissionStates, submissionKey)
   const copied = copiedHostId !== null && copiedHostId === hostId
 
   const copyDiagnostics = useCallback(async () => {
@@ -63,27 +51,6 @@ export function ConnectionDiagnosticsScreen({
     setTimeout(() => setCopiedHostId((current) => (current === hostId ? null : current)), 2000)
   }, [device, hostId, writeClipboard])
 
-  const sendDiagnostics = useCallback(async () => {
-    if (!device || !hostId || !submissionKey || submissionState === 'sending') {
-      return
-    }
-    const startedKey = submissionKey
-    setSubmissionStates((states) => updateDiagnosticsSubmissionState(states, startedKey, 'sending'))
-    const fresh = await device.report()
-    if (`${hostId}:${fresh.incidentId ?? ''}` !== startedKey) {
-      setSubmissionStates((states) => updateDiagnosticsSubmissionState(states, startedKey, null))
-      return
-    }
-    const result = await device.submit({
-      report: fresh.report,
-      appVersion: fresh.appVersion,
-      platform: fresh.platform
-    })
-    setSubmissionStates((states) =>
-      updateDiagnosticsSubmissionState(states, startedKey, result.ok ? 'sent' : 'failed')
-    )
-  }, [device, hostId, submissionKey, submissionState])
-
   return (
     <ConnectionDiagnosticsView
       hasHost={host !== null}
@@ -94,8 +61,6 @@ export function ConnectionDiagnosticsScreen({
       diagnosis={diagnosis}
       copied={copied}
       copyDiagnostics={copyDiagnostics}
-      submissionState={submissionState}
-      sendDiagnostics={sendDiagnostics}
       onBack={onBack}
       hostPicker={hostPicker}
     />

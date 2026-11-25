@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Shield, LifeBuoy } from 'lucide-react-native'
+import { LifeBuoy } from 'lucide-react-native'
 import { MobileSettingsFrame, MobileSettingsSection } from './mobile-settings-menu'
 import { mobileSettingsMenuItems } from './mobile-settings-menu-items'
 
@@ -24,16 +24,10 @@ export default function SettingsMenuScreen({
         spaced
         items={[
           {
-            label: 'Privacy Policy',
-            icon: Shield,
-            external: true,
-            onPress: () => void openExternal('https://www.onorca.dev/privacy')
-          },
-          {
             label: 'Support',
             icon: LifeBuoy,
             external: true,
-            onPress: () => void openExternal('https://github.com/stablyai/orca/issues')
+            onPress: () => void openExternal('https://github.com/zpyoung/quirky/issues')
           }
         ]}
       />

@@ -14277,7 +14277,8 @@
           "pairThisComputer": "Appairez cet ordinateur.",
           "androidHelp": {
             "guide": "Guide d'installation"
-          }
+          },
+          "noInstallLink": "Installez-la depuis TestFlight : demandez une invitation au propriétaire."
         },
         "MobilePage": {
           "e17393c6a3": "Aperçu du téléphone",

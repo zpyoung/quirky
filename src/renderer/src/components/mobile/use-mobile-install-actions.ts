@@ -16,7 +16,10 @@ export function useMobileInstallActions(
   const mountedRef = useMountedRef()
 
   const openInstallUrl = useCallback((): void => {
-    void window.api.shell.openUrl(getInstallCopy(platform, iosChannel).url)
+    const { url } = getInstallCopy(platform, iosChannel)
+    if (url) {
+      void window.api.shell.openUrl(url)
+    }
   }, [iosChannel, platform])
 
   const openAndroidInstallGuide = useCallback((): void => {
@@ -24,8 +27,12 @@ export function useMobileInstallActions(
   }, [])
 
   const copyInstallUrl = useCallback(async (): Promise<void> => {
+    const { url } = getInstallCopy(platform, iosChannel)
+    if (!url) {
+      return
+    }
     try {
-      await window.api.ui.writeClipboardText(getInstallCopy(platform, iosChannel).url)
+      await window.api.ui.writeClipboardText(url)
       if (mountedRef.current) {
         toast.success(
           translate('auto.components.mobile.MobilePage.fad833de8d', 'Install link copied')
