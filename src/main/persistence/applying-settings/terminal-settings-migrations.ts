@@ -162,6 +162,18 @@ export const LEGACY_TERMINAL_THEME_LIGHT = 'Builtin Tango Light'
 export const LEGACY_TERMINAL_DIVIDER_DARK = '#3f3f46'
 export const LEGACY_TERMINAL_DIVIDER_LIGHT = '#d4d4d8'
 
+const LEGACY_TERMINAL_DEFAULTS: Partial<Record<keyof GlobalSettings, unknown>> = {
+  terminalThemeDark: LEGACY_TERMINAL_THEME_DARK,
+  terminalThemeLight: LEGACY_TERMINAL_THEME_LIGHT,
+  terminalDividerColorDark: LEGACY_TERMINAL_DIVIDER_DARK,
+  terminalDividerColorLight: LEGACY_TERMINAL_DIVIDER_LIGHT
+}
+
+/** True when a terminal theme or divider setting still holds the old Orca default, so it counts as unset. */
+export function isLegacyTerminalDefaultSetting(key: keyof GlobalSettings, value: unknown): boolean {
+  return Object.hasOwn(LEGACY_TERMINAL_DEFAULTS, key) && LEGACY_TERMINAL_DEFAULTS[key] === value
+}
+
 const GRAPHITE_TERMINAL_DIVIDER_DARK = '#24262c'
 const GRAPHITE_TERMINAL_DIVIDER_LIGHT = '#e3e5ea'
 
