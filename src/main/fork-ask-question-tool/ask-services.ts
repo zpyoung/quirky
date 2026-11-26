@@ -16,6 +16,8 @@ export type AskServices = {
   readonly registry: AskRegistry
   readonly roster: AskAttachedSurfaceRoster
   readonly waitGate: AskWaitConcurrencyGate
+  /** Resolves a closed pane's pending asks; a no-op while the durable store was never opened. */
+  resolvePaneClosed(paneKey: string): void
 }
 
 type DurableAskStore = { db: AskDb; registry: AskRegistry }
@@ -70,7 +72,8 @@ export function askServicesFor(
         return openDurable().registry
       },
       roster,
-      waitGate
+      waitGate,
+      resolvePaneClosed: (paneKey) => durable?.registry.resolvePaneClosed(paneKey)
     }
     servicesByRuntime.set(runtime, services)
   }

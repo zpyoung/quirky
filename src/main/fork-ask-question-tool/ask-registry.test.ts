@@ -373,4 +373,127 @@ describe('AskRegistry', () => {
       expect(row?.handoff_question_id).toBeNull()
     })
   })
+  describe('queue promotion and restart', () => {
+    it('emits the promoted ask with a seq newer than the head resolution', async () => {
+      const registry = new AskRegistry(db)
+      const events: { askId: string; status: string; seq: number }[] = []
+      registry.onAskChanged((event) =>
+        events.push({ askId: event.askId, status: event.status, seq: event.seq })
+      )
+      const first = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
+      const second = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_2'
+      })
+
+      registry.cancel(first.askId, 'user')
+
+      const declined = events.find((event) => event.status === 'declined')
+      const promoted = events.find((event) => event.askId === second.askId)
+      expect(promoted?.seq).toBeGreaterThan(declined?.seq ?? Infinity)
+    })
+
+    it('rebuilds the pane queue in registration order on construction', async () => {
+      const original = new AskRegistry(db)
+      const first = await original.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1'
+      })
+      const second = await original.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_2'
+      })
+      original.updatePartial(first.askId, { q1: { draft: 'typing' } })
+      original.updatePartial(second.askId, { q1: { draft: 'typing' } })
+
+      const restarted = new AskRegistry(db)
+      const events: string[] = []
+      restarted.onAskChanged((event) => events.push(`${event.askId}:${event.status}`))
+      restarted.cancel(first.askId, 'user')
+
+      expect(events).toEqual([`${first.askId}:declined`, `${second.askId}:registered`])
+    })
+
+    it('resolves an expired pending ask on construction without any waiter', async () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+      db.registerAsk(
+        {
+          askId: 'ask_old',
+          requestId: 'req_old',
+          paneKey: null,
+          worktreeId: null,
+          origin: 'cli',
+          specJson: JSON.stringify(textSpec()),
+          timeoutMs: 1_000,
+          handoff: null
+        },
+        new Date().toISOString()
+      )
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      new AskRegistry(db)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(db.getAsk('ask_old')?.status).toBe('timed_out')
+    })
+  })
+
+  describe('long timeouts', () => {
+    it('never fires early for a timeout beyond the 32-bit timer limit', async () => {
+      vi.useFakeTimers()
+      const registry = new AskRegistry(db)
+      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1',
+        timeoutMs: thirtyDaysMs
+      })
+
+      await vi.advanceTimersByTimeAsync(thirtyDaysMs - 1_000)
+      expect(db.getAsk(askId)?.status).toBe('registered')
+
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(db.getAsk(askId)?.status).toBe('timed_out')
+    })
+
+    it('still resolves timed_out when a stored draft has an unexpected shape', async () => {
+      vi.useFakeTimers()
+      const registry = new AskRegistry(db)
+      const { askId } = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_1',
+        timeoutMs: 3_000
+      })
+      db.updatePartial(askId, JSON.stringify({ q1: { draft: 5 } }))
+
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      expect(db.getAsk(askId)?.status).toBe('timed_out')
+      expect((await registry.waitChunk(askId, 0, new AbortController().signal)).status).toBe(
+        'timed_out'
+      )
+    })
+  })
+
+  describe('pane teardown', () => {
+    it('resolves every pending ask of a closed pane as unavailable', async () => {
+      const registry = new AskRegistry(db)
+      const head = await registry.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+      const queued = await registry.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_2'
+      })
+      const other = await registry.register(textSpec(), paneOrigin('pane:2'), {
+        requestId: 'req_3'
+      })
+
+      registry.resolvePaneClosed('pane:1')
+
+      for (const askId of [head.askId, queued.askId]) {
+        const envelope = await registry.waitChunk(askId, 0, new AbortController().signal)
+        expect(envelope).toMatchObject({
+          status: 'unavailable',
+          reason: 'the pane that asked was closed'
+        })
+      }
+      expect(db.getAsk(other.askId)?.status).toBe('registered')
+    })
+  })
 })

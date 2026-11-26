@@ -282,4 +282,20 @@ describe('AskDb', () => {
     expect(missed.every((row) => row.seq > boundary.row.seq)).toBe(true)
     expect(missed.find((row) => row.ask_id === 'ask_3')?.status).toBe('answered')
   })
+  it('lists pending asks in registration order even after a draft update bumps seq', () => {
+    db = new AskDb(':memory:')
+    db.registerAsk(baseParams({ askId: 'ask_a', requestId: 'req_a' }))
+    db.registerAsk(baseParams({ askId: 'ask_b', requestId: 'req_b' }))
+    db.updatePartial('ask_b', '{}')
+    db.updatePartial('ask_a', '{}')
+    db.updatePartial('ask_b', '{}')
+
+    expect(db.listPending().map((row) => row.ask_id)).toEqual(['ask_a', 'ask_b'])
+  })
+
+  it('stamps a fresh seq when touchSeq promotes a queued ask', () => {
+    db = new AskDb(':memory:')
+    const { row } = db.registerAsk(baseParams())
+    expect(db.touchSeq('ask_1').seq).toBeGreaterThan(row.seq)
+  })
 })

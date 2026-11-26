@@ -1,10 +1,6 @@
-import type { AskAnswer, AskAnswers } from '../../shared/fork-ask-question-tool/ask-answer-envelope'
-import { MAX_PATTERN_TEST_LENGTH } from '../../shared/fork-ask-question-tool/ask-question-field-validation'
-import type {
-  AskNumberQuestion,
-  AskSpec,
-  AskTextQuestion
-} from '../../shared/fork-ask-question-tool/ask-question-schema'
+import type { AskAnswer, AskAnswers } from './ask-answer-envelope'
+import { MAX_PATTERN_TEST_LENGTH } from './ask-question-field-validation'
+import type { AskNumberQuestion, AskSpec, AskTextQuestion } from './ask-question-schema'
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const FORMAT_PATTERNS: Record<'email' | 'url', RegExp> = {
@@ -96,7 +92,7 @@ function renderAnswerValue(answer: AskAnswer): string {
 /** One human-readable line per answered question, in spec order, for the model to quote (logic.md § Answer contract). */
 export function buildResultSummary(spec: AskSpec, answers: AskAnswers): string {
   return spec.questions
-    .filter((question) => question.id in answers)
+    .filter((question) => Object.hasOwn(answers, question.id))
     .map(
       (question) =>
         `${question.header ?? question.question}: ${renderAnswerValue(answers[question.id])}`

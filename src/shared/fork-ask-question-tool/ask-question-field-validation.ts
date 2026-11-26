@@ -18,9 +18,22 @@ export const MAX_PATTERN_TEST_LENGTH = 200
 // `secret key` joins `api key` and `private key` as a named credential term, not just `secret`
 // plus an unrelated word.
 const CREDENTIAL_TRIGGER =
-  '(pass(word|phrase)?|secret\\s?key|secret|token|api\\s?key|credential|private\\s?key)'
+  '(password|passphrase|secret\\s?key|secret|token|api\\s?key|credential|private\\s?key)'
 const CREDENTIAL_PATTERN = new RegExp(`\\b${CREDENTIAL_TRIGGER}\\b`, 'i')
 const CREDENTIAL_SUBSTRING_PATTERN = new RegExp(CREDENTIAL_TRIGGER, 'i')
+
+const TOKEN_QUALIFIERS =
+  '(access|auth|authentication|bearer|refresh|api|session|personal\\s+access|id|oauth|jwt|github|gitlab|npm|slack|service|deploy|bot|csrf|login)'
+const QUESTION_TEXT_CREDENTIAL_PATTERN = new RegExp(
+  [
+    '\\b(password|passphrase|credentials?|private\\s?key|secret\\s?key|api\\s?key)\\b',
+    `\\b${TOKEN_QUALIFIERS}\\s+tokens?\\b`,
+    '\\b(client|app|application|shared|webhook|oauth|aws|api)\\s+secrets?\\b',
+    '\\bsecret\\s+(value|access)\\b',
+    '\\b(your|my|the)\\s+(secret|token)\\s*[?.!]?$'
+  ].join('|'),
+  'i'
+)
 
 // `\b` cannot fire across `_`/`-` (word characters to regex) or inside a run of
 // capitals, so snake_case, camelCase, and ACRONYMCase credential-shaped values would
@@ -56,6 +69,18 @@ function mentionsCredential(value: string): boolean {
       .split(' ')
       .some((word) => /^[A-Z0-9]+$/.test(word) && CREDENTIAL_SUBSTRING_PATTERN.test(word))
   })
+}
+
+const IDENTIFIER_SHAPED_WORD = /[_-]|[a-z][A-Z]|^[A-Z0-9]{4,}$/
+
+function mentionsCredentialInQuestionText(value: string): boolean {
+  if (QUESTION_TEXT_CREDENTIAL_PATTERN.test(value)) {
+    return true
+  }
+  return value
+    .split(/\s+/)
+    .map((word) => word.replace(/^[^\w]+|[^\w]+$/g, ''))
+    .some((word) => IDENTIFIER_SHAPED_WORD.test(word) && mentionsCredential(word))
 }
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -227,6 +252,9 @@ export function validateId(
     errors.push({ path: `${path}.id`, message: `duplicate question id '${raw}'` })
   }
   seenIds.add(raw)
+  if (raw in Object.prototype) {
+    errors.push({ path: `${path}.id`, message: `'${raw}' is a reserved id` })
+  }
   if (mentionsCredential(raw)) {
     errors.push({ path: `${path}.id`, message: 'credential-shaped id is not permitted' })
   }
@@ -242,7 +270,7 @@ export function validateQuestionText(
     errors.push({ path: `${path}.question`, message: 'question text is required' })
     return ''
   }
-  if (mentionsCredential(raw)) {
+  if (mentionsCredentialInQuestionText(raw)) {
     errors.push({
       path: `${path}.question`,
       message: 'credential-shaped question text is not permitted'
@@ -325,6 +353,12 @@ export function validateOptionsQuestion(
   const values = new Set<string>()
   const options = optionsRaw.map((rawOption, index) => {
     const option = validateOption(rawOption, `${path}.options[${index}]`, errors)
+    if (option.value !== '' && values.has(option.value)) {
+      errors.push({
+        path: `${path}.options[${index}].value`,
+        message: `duplicate option value '${option.value}'`
+      })
+    }
     values.add(option.value)
     return option
   })

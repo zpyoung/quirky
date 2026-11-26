@@ -175,6 +175,19 @@ describe('ask.* coordinator hand-off (C7)', () => {
     expect(h.askDb.getAsk(askId)?.status).toBe('declined')
   })
 
+  it('cancelling a hand-off ask closes its orchestration question so the coordinator stops seeing it', async () => {
+    seedActiveDispatch(h.orchestrationDb, 'term_worker', WORKER_PANE_KEY)
+    const { askId } = await registerHandoff(h)
+    const waitPromise = h.call('ask.wait', { askId, chunkMs: 5000 })
+    const questionId = h.askDb.getAsk(askId)?.handoff_question_id ?? ''
+    expect(h.orchestrationDb.getQuestion(questionId)?.status).toBe('pending')
+
+    await h.call('ask.cancel', { askId })
+    await waitPromise
+
+    expect(h.orchestrationDb.getQuestion(questionId)?.status).toBe('closed')
+  })
+
   it('the hand-off question is created exactly once across a simulated restart', async () => {
     const { dispatch } = seedActiveDispatch(h.orchestrationDb, 'term_worker', WORKER_PANE_KEY)
     const { askId } = await registerHandoff(h)

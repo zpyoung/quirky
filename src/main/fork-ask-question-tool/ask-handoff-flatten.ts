@@ -11,7 +11,7 @@ import {
   parseConfirmAnswerValue,
   parseDateAnswerValue,
   parseNumberAnswerValue
-} from './ask-answer-value-parsing'
+} from '../../shared/fork-ask-question-tool/ask-answer-value-parsing'
 
 /** Renders an `AskSpec` as the plain-text question C7 hands to the orchestration ask/reply flow (tech.md C7). */
 export function flattenAskSpecToQuestion(spec: AskSpec): string {
@@ -19,11 +19,48 @@ export function flattenAskSpecToQuestion(spec: AskSpec): string {
   return [...blocks, 'answer with one line per question: <id>: <answer>'].join('\n\n')
 }
 
+function describeAnswerFormat(question: AskQuestion): string[] {
+  const hints: string[] = []
+  if (question.required) {
+    hints.push('required')
+  }
+  switch (question.type) {
+    case 'multiselect':
+      hints.push('comma-separated values')
+      break
+    case 'confirm':
+      hints.push('yes/no')
+      break
+    case 'date':
+      hints.push('YYYY-MM-DD')
+      break
+    case 'number': {
+      if (question.integer) {
+        hints.push('integer')
+      }
+      if (question.min !== undefined) {
+        hints.push(`min ${question.min}`)
+      }
+      if (question.max !== undefined) {
+        hints.push(`max ${question.max}`)
+      }
+      break
+    }
+    case 'select':
+    case 'text':
+      break
+  }
+  return hints
+}
+
 function renderQuestionBlock(question: AskQuestion, position: number): string {
-  const lines = [`${position}. [${question.id}] ${question.question}`]
+  const hints = describeAnswerFormat(question)
+  const hintSuffix = hints.length > 0 ? ` (${hints.join('; ')})` : ''
+  const lines = [`${position}. [${question.id}] ${question.question}${hintSuffix}`]
   if (question.type === 'select' || question.type === 'multiselect') {
     for (const option of question.options) {
-      lines.push(`- ${option.value} — ${option.label}`)
+      const description = option.description ? `: ${option.description}` : ''
+      lines.push(`- ${option.value} — ${option.label}${description}`)
     }
   }
   return lines.join('\n')
@@ -59,21 +96,22 @@ function matchReplyLines(spec: AskSpec, reply: string): Map<string, string> {
   const ids = new Set(spec.questions.map((question) => question.id))
   const byId = new Map<string, string>()
   const byPosition = new Map<number, string>()
+  let appendTo: { set: (text: string) => void; text: string } | null = null
   for (const rawLine of reply.split('\n')) {
     const line = rawLine.trim()
     const separatorIndex = line.indexOf(':')
-    if (separatorIndex === -1) {
-      continue
-    }
-    const key = line.slice(0, separatorIndex).trim()
-    const text = line.slice(separatorIndex + 1).trim()
+    const key = separatorIndex === -1 ? '' : line.slice(0, separatorIndex).trim()
+    const text = separatorIndex === -1 ? '' : line.slice(separatorIndex + 1).trim()
     if (ids.has(key)) {
       byId.set(key, text)
-      continue
-    }
-    const position = Number(key)
-    if (Number.isInteger(position)) {
+      appendTo = { set: (next) => byId.set(key, next), text }
+    } else if (/^\d+$/.test(key)) {
+      const position = Number(key)
       byPosition.set(position, text)
+      appendTo = { set: (next) => byPosition.set(position, next), text }
+    } else if (appendTo && line.length > 0) {
+      appendTo.text = `${appendTo.text}\n${line}`
+      appendTo.set(appendTo.text)
     }
   }
 

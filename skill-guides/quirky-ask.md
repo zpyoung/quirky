@@ -23,7 +23,7 @@ description: >-
 - Use it when the answer is a real judgment call only the user can make — choosing between two valid approaches, deciding whether to proceed with something destructive, or a value that genuinely isn't discoverable in the repo or environment.
 - Do not use it for something you can determine by reading code, config, docs, or running a command. Read first; ask second.
 - Do not use it to ask permission to proceed with what the user already asked for.
-- Even inside an orchestration worker with no attached UI, call `quirky ask` — not `orchestration ask` — for a human decision. It automatically hands off to the coordinator when no UI is attached to your pane, and only returns `unavailable` when there's truly nowhere for the question to go.
+- Even inside an orchestration worker with no attached UI, call `quirky ask` — not `orchestration ask` — for a human decision. With the Quirky desktop app open, every local pane counts as having an attached UI, so the card shows there. The ask hands off to the coordinator only when no UI can render it (for example a remote host with no ask-capable client) or when the run's policy forces hand-off, and returns `unavailable` only when there's truly nowhere for the question to go.
 
 ## The Three Commands
 
@@ -34,9 +34,10 @@ QUIRKY ask cancel --id <ask_id> [--json]
 ```
 
 - `--spec` is inline JSON or `@path/to/file.json` (a relative path resolves against your cwd). Invalid JSON or a spec that fails schema validation exits non-zero with a message naming the offending field, e.g. `questions[0].id: id is required and must be a non-empty string`.
-- `--timeout-ms` is an opt-in automation deadline, in milliseconds. Omit it and the ask waits on the user indefinitely — attended asks have no wall-clock deadline, only liveness tracking.
-- `--chunk-ms` controls how long _this invocation_ blocks before returning control to you if still unanswered — default 100000 (100s). It is not a deadline: a `pending` result only means "not answered within this chunk," not "gave up." You don't need to tune it.
+- `--timeout-ms` is an opt-in automation deadline, in milliseconds. Omit it and an ask shown on a card waits on the user indefinitely — it has no wall-clock deadline, only liveness tracking. An ask handed off to a coordinator is different: it defaults to a 10 minute deadline and is capped at 30 minutes, then resolves `timed_out`.
+- `--chunk-ms` controls how long _this invocation_ blocks before returning control to you if still unanswered — default 100000 (100s). It is not a deadline: a `pending` result only means "not answered within this chunk," not "gave up." You don't need to tune it. The maximum is 2147478647; larger values are rejected before anything is registered.
 - `--json` is accepted on all three but changes nothing: every one of these commands always prints bare JSON on stdout, `--json` or not, because the consumer is always a model.
+- Interrupting a blocked `quirky ask` or `quirky ask wait` with SIGINT or SIGTERM cancels the ask (best effort) and exits 130 or 143, so an abandoned ask does not leave a card open.
 - `quirky ask cancel` resolves a pending ask as `declined`. Use it if you registered an ask you no longer need answered (e.g. you found the answer another way while waiting). Cancelling an ask that's already resolved, or an unknown id, isn't an error — it just returns that ask's actual current envelope.
 - Pane/worktree attribution (which UI the ask is routed to) is automatic, from environment variables Quirky sets inside its own terminals (`QUIRKY_PANE_KEY`, `QUIRKY_TERMINAL_HANDLE`, `QUIRKY_WORKTREE_ID`, `QUIRKY_WORKSPACE_ID`). There is no flag for it.
 
@@ -109,7 +110,7 @@ Non-zero exit means a usage error, nothing else: invalid `--spec` JSON, a schema
 **`unavailable` has two different shapes**, depending on when it happens — don't assume `askId` is present without checking:
 
 - At registration time, when no attached UI exists and there's nowhere to hand the ask off to: `{"status":"unavailable","reason":"..."}` — no `askId`, since one was never issued. The reason is one of two literal strings: `"no attached UI and no active orchestration run to hand off to"`, or `"no attached UI: set QUIRKY_PANE_KEY, QUIRKY_TERMINAL_HANDLE, QUIRKY_WORKTREE_ID, or QUIRKY_WORKSPACE_ID"` if Quirky couldn't even attribute you to a pane.
-- On `wait`/`cancel` against an id that's unknown or expired, or whose owning pane disconnected and didn't reconnect within a 10-minute grace window: the full terminal shape — `{"status":"unavailable","askId":"...","reason":"...","answers":{},"skipped":[...],"summary":"..."}`.
+- On `wait`/`cancel` against an id that's unknown or expired, whose owning pane disconnected and didn't reconnect within a 10-minute grace window, or whose pane (or the agent process in it) was closed: the full terminal shape — `{"status":"unavailable","askId":"...","reason":"...","answers":{},"skipped":[...],"summary":"..."}`.
 
 ## Question Schema
 
@@ -117,7 +118,7 @@ A spec is a flat array of questions — no branching; call `quirky ask` again if
 
 Every question has:
 
-- `id` _(required, string, non-empty)_ — **you assign it**, and it must be unique within the spec; duplicates are a validation error. Answers key back by `id`, so pick something stable.
+- `id` _(required, string, non-empty)_ — **you assign it**, and it must be unique within the spec; duplicates are a validation error, as are names inherited from objects such as `toString`, `constructor`, or `__proto__`. Answers key back by `id`, so pick something stable.
 - `question` _(required, string)_ — the prompt text.
 - `header` _(optional, string)_
 - `required` _(optional, boolean)_ — see Escape Hatches below; this does **not** make the question un-skippable.
@@ -132,7 +133,7 @@ Every question has:
 | `date`        | —                                                                                                                       | ISO 8601 `YYYY-MM-DD`, a real calendar date      |
 | `confirm`     | —                                                                                                                       | boolean                                          |
 
-An option (`select`/`multiselect`) is `{value, label, description?, preview?}` — `value` and `label` are required strings; `preview` is `{format: "markdown" | "html", content: string}` for a richer option write-up, rendered sandboxed in the card UI.
+An option (`select`/`multiselect`) is `{value, label, description?, preview?}` — `value` and `label` are required strings, and `value` must be unique within the question; `preview` is `{format: "markdown" | "html", content: string}` for a richer option write-up, rendered sandboxed in the card UI.
 
 **`default` applies only when `--timeout-ms` expires** — never on an ordinary submit, even if the user leaves a question blank (that's a skip, not a default). Its value is validated against the question's own domain at registration time, same as any other field — an out-of-domain default is rejected before the ask is ever registered.
 
@@ -149,7 +150,7 @@ Treat a `source: "other"` answer as a signal, not an edge case: it means your op
 Validation rejects a question outright if either is true:
 
 - `masked` or `sensitive` appears as a key anywhere on the question object, with any value — there is no masked-input mode, so declaring one is always an error.
-- the `id`, `question` text, or any `options[].value` is **credential-shaped**: after normalizing (splitting `snake_case`, `camelCase`, `ACRONYMCase`, and letter/digit boundaries into separate words), it contains `password`/`passphrase`, `secret`, `token`, `api key`, `credential`, or `private key` (case-insensitive). This catches `db_password`, `authToken`, and `MYAPIKEY`, not just the bare words.
+- the `id`, `question` text, or any `options[].value` is **credential-shaped**: after normalizing (splitting `snake_case`, `camelCase`, `ACRONYMCase`, and letter/digit boundaries into separate words), it contains `password`/`passphrase`, `secret`, `token`, `api key`, `credential`, or `private key` (case-insensitive). This catches `db_password`, `authToken`, and `MYAPIKEY`, not just the bare words. Question text is checked more narrowly, so ordinary prose passes ("What token budget should we use?", "Should the tests pass before merge?"): it is rejected only for `password`, `passphrase`, `credential(s)`, `private key`, `api key`, `secret key`, credential compounds such as `access token`, `bearer token`, `GitHub token`, `client secret`, and identifier-shaped words like `db_password`. A bare `pass` is never a credential word.
 
 Only `id`, `question`, and option `value` are checked — `label`, `description`, `header`, and `default` text are not. Don't try to smuggle a credential-shaped field past the filter through those; the check exists to keep secrets out of the transcript, not to be defeated.
 

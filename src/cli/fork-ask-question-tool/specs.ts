@@ -9,8 +9,9 @@ export const ASK_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'spec', 'timeout-ms', 'chunk-ms'],
     notes: [
       'The envelope always prints as bare JSON on stdout, with or without --json, because the consumer is always a model.',
-      'Prints {"status":"registered","id":"..."} immediately, then blocks for one chunk before printing the result.',
-      'If the ask is still unanswered at the chunk boundary, resume with `quirky ask wait --id <id>`.'
+      'Prints {"status":"registered","askId":"..."} immediately, then blocks for one chunk before printing the result.',
+      'If the ask is still unanswered at the chunk boundary, resume with `quirky ask wait --id <askId>`.',
+      'Interrupting with SIGINT or SIGTERM cancels the ask (exit 130 / 143). --chunk-ms is capped at 2147478647.'
     ],
     examples: [
       'quirky ask --spec \'{"questions":[{"id":"db","type":"select","question":"Which database?","options":[{"value":"postgres","label":"PostgreSQL"}]}]}\'',

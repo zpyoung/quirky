@@ -1,7 +1,6 @@
 import type { AskAnswer, AskAnswers } from '../../shared/fork-ask-question-tool/ask-answer-envelope'
 import type {
   AskMultiselectQuestion,
-  AskPartial,
   AskPartialQuestionDraft,
   AskQuestion,
   AskRegistryResult,
@@ -14,14 +13,16 @@ import {
   parseDateAnswerValue,
   parseNumberAnswerValue,
   parseTextAnswerValue
-} from './ask-answer-value-parsing'
+} from '../../shared/fork-ask-question-tool/ask-answer-value-parsing'
+import { sanitizeAskPartial } from './ask-partial-draft-sanitizer'
 
 /**
  * Builds the terminal result for a `--timeout-ms` expiry: a declared `default` wins, else the
  * user's partial draft normalized into the question's answer shape, else the question is
  * skipped (tech.md C2). Never coerces an unparseable draft into a typed slot.
  */
-export function buildTimeoutResult(spec: AskSpec, partial: AskPartial): AskRegistryResult {
+export function buildTimeoutResult(spec: AskSpec, rawPartial: unknown): AskRegistryResult {
+  const partial = sanitizeAskPartial(spec, rawPartial)
   const answers: AskAnswers = {}
   const skipped: string[] = []
   for (const question of spec.questions) {

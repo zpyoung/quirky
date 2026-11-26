@@ -173,6 +173,10 @@ class QuirkyRuntimeService extends QuirkyRuntimeSidebarBase {
     return askServicesFor(this, () => Boolean(this.getAvailableAuthoritativeWindow()))
   }
 
+  protected override onPaneProcessEnded(paneKey: string): void {
+    this.getAskServices().resolvePaneClosed(paneKey)
+  }
+
   private structuredAgentAvailability?: ReturnType<typeof installStructuredAgentAvailability>
 
   /** This host's agent health snapshot and every replacement, from first use; returns the release. */

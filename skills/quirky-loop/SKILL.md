@@ -21,17 +21,12 @@ outlive the command and the terminal tab. Start by reading the full guide before
 
 Choose the executable once and reuse it for every later command:
 
-- If the `QUIRKY_CLI_COMMAND` environment variable is set, use its value. Quirky exports this
-  for managed WSL sessions.
+- If the `QUIRKY_CLI_COMMAND` environment variable is set, use its value.
 - Otherwise, in a dev checkout whose session exposes `QUIRKY_DEV_REPO_ROOT`, use `quirky-dev`.
-- Otherwise, on Linux outside an Quirky-managed terminal, use `quirky-ide`. Never run bare
-  `quirky` there — outside Quirky's terminals it normally resolves to the
-  GNOME Quirky screen reader (`/usr/bin/quirky`) and starts speech on the user's machine.
 - Otherwise, use `quirky`.
 
 Below, `QUIRKY` is a placeholder for the executable you resolved. Substitute it before
-running anything; do not create a shell variable or run `QUIRKY` literally. This works the
-same way in POSIX shells, PowerShell, and cmd.exe.
+running anything; do not create a shell variable or run `QUIRKY` literally.
 
 If the selected executable cannot run, report its exact error and stop. Do not fall through
 to another executable, which could silently target a different Quirky build.

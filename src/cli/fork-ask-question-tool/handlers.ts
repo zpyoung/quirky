@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto'
 import type { CommandHandler } from '../dispatch'
 import { getRequiredStringFlag } from '../flags'
 import { RuntimeClientError } from '../runtime-client'
-import { validateAskSpec } from '../../shared/fork-ask-question-tool/ask-question-schema'
+import {
+  ASK_MAX_CHUNK_MS,
+  validateAskSpec
+} from '../../shared/fork-ask-question-tool/ask-question-schema'
 import type {
   AskEnvelope,
   AskRegisteredEnvelope
@@ -13,6 +16,7 @@ import {
   readAskSpecInput,
   resolveAskOriginParams
 } from './ask-cli-flags'
+import { cancelAskOnInterrupt } from './ask-cli-interrupt'
 import { registerAskWithRetry } from './ask-cli-register'
 import { waitAskChunkWithRetry } from './ask-cli-wait'
 
@@ -28,7 +32,7 @@ export const ASK_HANDLERS: Record<string, CommandHandler> = {
       throw new RuntimeClientError('invalid_argument', formatAskValidationErrors(validation.errors))
     }
     const timeoutMs = getOptionalPositiveSafeIntegerFlag(flags, 'timeout-ms')
-    const chunkMs = getOptionalPositiveSafeIntegerFlag(flags, 'chunk-ms')
+    const chunkMs = getOptionalPositiveSafeIntegerFlag(flags, 'chunk-ms', ASK_MAX_CHUNK_MS)
 
     const registerOutcome = await registerAskWithRetry(client, {
       spec: validation.spec,
@@ -46,7 +50,13 @@ export const ASK_HANDLERS: Record<string, CommandHandler> = {
 
     const registered: AskRegisteredEnvelope = { status: 'registered', askId: registerOutcome.askId }
     console.log(JSON.stringify(registered))
-    const envelope = await waitAskChunkWithRetry(client, registerOutcome.askId, chunkMs)
+    const stopCancelOnInterrupt = cancelAskOnInterrupt(client, registerOutcome.askId)
+    let envelope: AskEnvelope
+    try {
+      envelope = await waitAskChunkWithRetry(client, registerOutcome.askId, chunkMs)
+    } finally {
+      stopCancelOnInterrupt()
+    }
     // exit 0 regardless of envelope.status: a decline/timeout/unavailable is a normal
     // outcome for the model to reason about, not a failed command (logic.md § Answer contract).
     console.log(JSON.stringify(envelope))
@@ -54,8 +64,14 @@ export const ASK_HANDLERS: Record<string, CommandHandler> = {
 
   'ask wait': async ({ flags, client }) => {
     const askId = getRequiredStringFlag(flags, 'id')
-    const chunkMs = getOptionalPositiveSafeIntegerFlag(flags, 'chunk-ms')
-    const envelope = await waitAskChunkWithRetry(client, askId, chunkMs)
+    const chunkMs = getOptionalPositiveSafeIntegerFlag(flags, 'chunk-ms', ASK_MAX_CHUNK_MS)
+    const stopCancelOnInterrupt = cancelAskOnInterrupt(client, askId)
+    let envelope: AskEnvelope
+    try {
+      envelope = await waitAskChunkWithRetry(client, askId, chunkMs)
+    } finally {
+      stopCancelOnInterrupt()
+    }
     console.log(JSON.stringify(envelope))
   },
 

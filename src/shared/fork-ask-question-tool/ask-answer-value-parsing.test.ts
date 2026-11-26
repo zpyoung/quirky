@@ -7,12 +7,8 @@ import {
   parseNumberAnswerValue,
   parseTextAnswerValue
 } from './ask-answer-value-parsing'
-import type { AskAnswers } from '../../shared/fork-ask-question-tool/ask-answer-envelope'
-import type {
-  AskNumberQuestion,
-  AskSpec,
-  AskTextQuestion
-} from '../../shared/fork-ask-question-tool/ask-question-schema'
+import type { AskAnswers } from './ask-answer-envelope'
+import type { AskNumberQuestion, AskSpec, AskTextQuestion } from './ask-question-schema'
 
 describe('nonBlank', () => {
   it.each([

@@ -13,11 +13,12 @@ import type {
   AskSpec
 } from '../../../../../shared/fork-ask-question-tool/ask-question-schema'
 import type { AskDb, AskRow } from '../../../../fork-ask-question-tool/ask-db'
-import { buildResultSummary } from '../../../../fork-ask-question-tool/ask-answer-value-parsing'
+import { buildResultSummary } from '../../../../../shared/fork-ask-question-tool/ask-answer-value-parsing'
 import {
   flattenAskSpecToQuestion,
   mapCoordinatorReply
 } from '../../../../fork-ask-question-tool/ask-handoff-flatten'
+import { sanitizeAskPartial } from '../../../../fork-ask-question-tool/ask-partial-draft-sanitizer'
 import { buildTimeoutResult } from '../../../../fork-ask-question-tool/ask-registry-timeout-answers'
 import { getForcedHandoffPolicy } from '../../../../fork-ask-question-tool/forced-handoff-policy'
 import type { OrchestrationDb } from '../../../orchestration/db'
@@ -168,14 +169,30 @@ function commitHandoffTerminal(
     askId,
     paneKey: row.pane_key,
     status,
-    result
+    result,
+    worktreeId: row.worktree_id
   })
+  runtime.getAskServices().registry.releaseCommittedExternally(askId)
+  closeHandoffQuestion(runtime, row)
   // Why: a waitHandoffChunk parked on this dispatch (F2) only polls orchestrationDb's question,
   // which a direct answer/cancel never touches — wake it so it re-reads askDb and sees terminal.
   if (row.handoff_dispatch_id) {
     runtime.notifyMessageArrived(`dispatch:${row.handoff_dispatch_id}`, 'status')
   }
   return envelopeFromAskRow(row)
+}
+
+// Why: a coordinator must not see a question open once its ask resolved without the coordinator's
+// reply (timeout, decline, a direct answer); closing a question already answered is a no-op.
+function closeHandoffQuestion(runtime: QuirkyRuntimeService, row: AskRow): void {
+  if (!row.handoff_question_id) {
+    return
+  }
+  try {
+    runtime.getOrchestrationDb().closeQuestion(row.handoff_question_id)
+  } catch (error) {
+    console.error('[ask] closing the hand-off question failed:', error)
+  }
 }
 
 function skippedIds(spec: AskSpec): string[] {
@@ -380,15 +397,14 @@ export function updatePartialHandoff(
   runtime: QuirkyRuntimeService,
   askDb: AskDb,
   askId: string,
-  partial: AskPartial
+  partial: Record<string, unknown>
 ): void {
   const row = askDb.getAsk(askId)
   if (!row || isTerminalAskStatus(row.status)) {
     return
   }
   const spec = JSON.parse(row.spec_json) as AskSpec
-  const ids = new Set(spec.questions.map((question) => question.id))
-  const filtered = Object.fromEntries(Object.entries(partial).filter(([id]) => ids.has(id)))
+  const filtered = sanitizeAskPartial(spec, partial)
   const updated = askDb.updatePartial(askId, JSON.stringify(filtered))
   emitHandoff(runtime, {
     seq: updated.seq,
@@ -397,6 +413,7 @@ export function updatePartialHandoff(
     paneKey: updated.pane_key,
     status: 'registered',
     spec,
-    partial: filtered
+    partial: filtered,
+    worktreeId: updated.worktree_id
   })
 }

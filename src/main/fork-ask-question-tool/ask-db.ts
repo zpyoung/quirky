@@ -230,7 +230,8 @@ export class AskDb {
   }
 
   /**
-   * Every ask still awaiting a terminal transition, oldest first. Filters on `isTerminalAskStatus`
+   * Every ask still awaiting a terminal transition, in registration order (not `seq`, which
+   * every draft update bumps). Filters on `isTerminalAskStatus`
    * rather than `resolved_at IS NULL` — the registry, not this store, is the authority on what
    * counts as terminal, and duplicating that definition here would silently diverge if a future
    * status ever resolved without stamping `resolved_at`.
@@ -240,9 +241,10 @@ export class AskDb {
    * the C8 reload case return the card instead of losing it.
    */
   listPending(): AskRow[] {
-    return (this.db.prepare('SELECT * FROM asks ORDER BY seq ASC').all() as AskRow[]).filter(
-      (row) => !isTerminalAskStatus(row.status)
-    )
+    const query = this.db.prepare('SELECT * FROM asks ORDER BY created_at ASC, rowid ASC')
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the asks table columns are exactly AskRow's fields.
+    const rows = query.all() as AskRow[]
+    return rows.filter((row) => !isTerminalAskStatus(row.status))
   }
 
   /**
@@ -259,6 +261,13 @@ export class AskDb {
     this.db
       .prepare('UPDATE asks SET partial_json = ?, seq = ? WHERE ask_id = ?')
       .run(partialJson, seq, askId)
+    return this.requireAsk(askId)
+  }
+
+  /** Stamps a fresh seq on a queued ask that just reached the head of its pane, so clients past its register seq still accept the event. */
+  touchSeq(askId: string): AskRow {
+    const seq = this.nextSeq()
+    this.db.prepare('UPDATE asks SET seq = ? WHERE ask_id = ?').run(seq, askId)
     return this.requireAsk(askId)
   }
 

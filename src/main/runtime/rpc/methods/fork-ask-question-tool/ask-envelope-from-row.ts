@@ -47,7 +47,14 @@ export function unknownAskEnvelope(askId: string): AskEnvelope {
 
 /** The `AskRegistryEvent` for one row — a snapshot-frame source for asks this process never saw a live transition for. */
 export function registryEventFromRow(row: AskRow, epoch: string): AskRegistryEvent {
-  const base = { seq: row.seq, epoch, askId: row.ask_id, paneKey: row.pane_key, status: row.status }
+  const base = {
+    seq: row.seq,
+    epoch,
+    askId: row.ask_id,
+    paneKey: row.pane_key,
+    status: row.status,
+    worktreeId: row.worktree_id
+  }
   if (isTerminalAskStatus(row.status)) {
     return { ...base, result: resultFromRow(row) }
   }

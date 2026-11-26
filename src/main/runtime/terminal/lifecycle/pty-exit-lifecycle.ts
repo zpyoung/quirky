@@ -39,6 +39,9 @@ export abstract class QuirkyRuntimeWithOnPtyExit extends QuirkyRuntimeWithOnClie
 
   protected abstract rememberPtyLivenessVerdict(ptyId: string, verdict: PtyLivenessVerdict): void
 
+  /** A pane's process is gone for good, so nothing can still be waiting on an answer for it. */
+  protected abstract onPaneProcessEnded(paneKey: string): void
+
   onPtyExit(
     ptyId: string,
     exitCode: number,
@@ -300,6 +303,9 @@ export abstract class QuirkyRuntimeWithOnPtyExit extends QuirkyRuntimeWithOnClie
     if (!preservesAbnormalSshSurface) {
       for (const surface of exitedSurfaces) {
         this.failActiveDispatchOnExit(surface.handle, surface.paneKey, exitCode, exitCause, tail)
+        if (surface.paneKey) {
+          this.onPaneProcessEnded(surface.paneKey)
+        }
       }
     }
     this.pruneDisconnectedPtyRecords()

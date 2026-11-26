@@ -8,7 +8,6 @@ import { ASK_CLI_TRANSPORT_RETRY_ATTEMPTS } from './ask-cli-transport-retry'
 
 const VALID_SPEC_JSON =
   '{"questions":[{"id":"confirm_deploy","type":"confirm","question":"Deploy now?"}]}'
-const REACHABLE_STATUS = { graphStatus: 'ready' }
 
 function ctx(flags: [string, string | boolean][], overrides: { cwd?: string } = {}) {
   return {
@@ -58,6 +57,18 @@ describe('ask flag and spec validation (client.call never invoked on bad input)'
         ])
       )
     ).rejects.toThrow(/--timeout-ms/)
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a --chunk-ms the client timeout cannot hold, before registering anything', async () => {
+    await expect(
+      ASK_HANDLERS.ask(
+        ctx([
+          ['spec', VALID_SPEC_JSON],
+          ['chunk-ms', '2147480000']
+        ])
+      )
+    ).rejects.toThrow(/--chunk-ms must be at most/)
     expect(callMock).not.toHaveBeenCalled()
   })
 
@@ -206,24 +217,25 @@ describe('quirky ask: register -> registered line -> one wait chunk -> envelope'
     expect(secondRequestId).toBe(firstRequestId)
   })
 
-  it('prints a resumable pending envelope when every initial ask.wait transport attempt fails', async () => {
-    callMock.mockResolvedValueOnce({ result: { askId: 'ask_wait_exhausted' } })
-    for (let attempt = 0; attempt < ASK_CLI_TRANSPORT_RETRY_ATTEMPTS; attempt += 1) {
-      callMock.mockRejectedValueOnce(
-        new RuntimeClientError('runtime_unavailable', 'connection reset')
-      )
-    }
-    callMock.mockResolvedValueOnce({ result: REACHABLE_STATUS })
+  it('keeps retrying across transport loss until the chunk budget is spent, then prints pending', async () => {
+    callMock
+      .mockResolvedValueOnce({ result: { askId: 'ask_wait_exhausted' } })
+      .mockRejectedValue(new RuntimeClientError('runtime_unavailable', 'connection reset'))
 
     vi.useFakeTimers()
     try {
       const assertion = expect(
-        ASK_HANDLERS.ask(ctx([['spec', VALID_SPEC_JSON]]))
+        ASK_HANDLERS.ask(
+          ctx([
+            ['spec', VALID_SPEC_JSON],
+            ['chunk-ms', '20000']
+          ])
+        )
       ).resolves.toBeUndefined()
       await Promise.all([assertion, vi.runAllTimersAsync()])
 
-      expect(callMock).toHaveBeenCalledTimes(2 + ASK_CLI_TRANSPORT_RETRY_ATTEMPTS)
-      expect(callMock.mock.calls.at(-1)?.[0]).toBe('status.get')
+      expect(callMock.mock.calls.slice(1).every(([method]) => method === 'ask.wait')).toBe(true)
+      expect(callMock.mock.calls.length).toBeGreaterThan(1 + ASK_CLI_TRANSPORT_RETRY_ATTEMPTS)
       expect(logSpy.mock.calls).toEqual([
         [JSON.stringify({ status: 'registered', askId: 'ask_wait_exhausted' })],
         [
@@ -239,50 +251,37 @@ describe('quirky ask: register -> registered line -> one wait chunk -> envelope'
     }
   })
 
-  it('surfaces the transport failure when the runtime is unreachable after the wait drops', async () => {
-    const failure = new RuntimeClientError('runtime_unavailable', 'connection reset')
+  it('backs off and retries when the host sheds the wait as runtime_busy', async () => {
+    const answered = {
+      status: 'answered',
+      askId: 'ask_busy',
+      answers: {},
+      skipped: [],
+      summary: ''
+    }
     callMock
-      .mockResolvedValueOnce({ result: { askId: 'ask_host_gone' } })
-      .mockRejectedValue(failure)
+      .mockResolvedValueOnce({ result: { askId: 'ask_busy' } })
+      .mockRejectedValueOnce(
+        new RuntimeRpcFailureError({
+          id: 'req_wait',
+          ok: false,
+          error: { code: 'runtime_busy', message: 'long-poll capacity reached; retry with backoff' }
+        })
+      )
+      .mockResolvedValueOnce({ result: answered })
 
     vi.useFakeTimers()
     try {
-      const assertion = expect(ASK_HANDLERS.ask(ctx([['spec', VALID_SPEC_JSON]]))).rejects.toBe(
-        failure
+      const assertion = expect(ASK_HANDLERS.ask(ctx([['spec', VALID_SPEC_JSON]]))).resolves.toBe(
+        undefined
       )
       await Promise.all([assertion, vi.runAllTimersAsync()])
-
-      expect(callMock.mock.calls.at(-1)?.[0]).toBe('status.get')
-      expect(logSpy.mock.calls).toEqual([
-        [JSON.stringify({ status: 'registered', askId: 'ask_host_gone' })]
-      ])
     } finally {
       vi.useRealTimers()
     }
-  })
 
-  it('prints a resumable pending envelope when the host sheds the wait as runtime_busy', async () => {
-    callMock.mockResolvedValueOnce({ result: { askId: 'ask_busy' } }).mockRejectedValueOnce(
-      new RuntimeRpcFailureError({
-        id: 'req_wait',
-        ok: false,
-        error: { code: 'runtime_busy', message: 'long-poll capacity reached; retry with backoff' }
-      })
-    )
-
-    await ASK_HANDLERS.ask(ctx([['spec', VALID_SPEC_JSON]]))
-
-    expect(callMock).toHaveBeenCalledTimes(2)
-    expect(logSpy.mock.calls).toEqual([
-      [JSON.stringify({ status: 'registered', askId: 'ask_busy' })],
-      [
-        JSON.stringify({
-          status: 'pending',
-          askId: 'ask_busy',
-          instruction: 'quirky ask wait --id ask_busy'
-        })
-      ]
-    ])
+    expect(callMock).toHaveBeenCalledTimes(3)
+    expect(logSpy.mock.calls.at(-1)).toEqual([JSON.stringify(answered)])
   })
 
   it('still rejects when every ask.register transport attempt fails', async () => {
@@ -421,23 +420,23 @@ describe('quirky ask wait', () => {
     )
   })
 
-  it('prints a resumable pending envelope after exhausting bare transport retries', async () => {
-    for (let attempt = 0; attempt < ASK_CLI_TRANSPORT_RETRY_ATTEMPTS; attempt += 1) {
-      callMock.mockRejectedValueOnce(
-        new RuntimeClientError('runtime_unavailable', 'connection reset')
-      )
-    }
-    callMock.mockResolvedValueOnce({ result: REACHABLE_STATUS })
+  it('keeps retrying across transport loss until the chunk budget is spent, then prints pending', async () => {
+    callMock.mockRejectedValue(new RuntimeClientError('runtime_unavailable', 'connection reset'))
 
     vi.useFakeTimers()
     try {
       const assertion = expect(
-        ASK_HANDLERS['ask wait'](ctx([['id', 'ask_wait_exhausted']]))
+        ASK_HANDLERS['ask wait'](
+          ctx([
+            ['id', 'ask_wait_exhausted'],
+            ['chunk-ms', '20000']
+          ])
+        )
       ).resolves.toBeUndefined()
       await Promise.all([assertion, vi.runAllTimersAsync()])
 
-      expect(callMock).toHaveBeenCalledTimes(1 + ASK_CLI_TRANSPORT_RETRY_ATTEMPTS)
-      expect(callMock.mock.calls.at(-1)?.[0]).toBe('status.get')
+      expect(callMock.mock.calls.every(([method]) => method === 'ask.wait')).toBe(true)
+      expect(callMock.mock.calls.length).toBeGreaterThan(ASK_CLI_TRANSPORT_RETRY_ATTEMPTS)
       expect(console.log).toHaveBeenCalledWith(
         JSON.stringify({
           status: 'pending',
@@ -450,44 +449,36 @@ describe('quirky ask wait', () => {
     }
   })
 
-  it('rethrows the transport failure when the runtime never answers the reachability probe', async () => {
-    const failure = new RuntimeClientError('runtime_unavailable', 'connection reset')
-    callMock.mockRejectedValue(failure)
+  it('backs off and retries when the host sheds the wait as runtime_busy', async () => {
+    const answered = {
+      status: 'answered',
+      askId: 'ask_busy',
+      answers: {},
+      skipped: [],
+      summary: ''
+    }
+    callMock
+      .mockRejectedValueOnce(
+        new RuntimeRpcFailureError({
+          id: 'req_wait',
+          ok: false,
+          error: { code: 'runtime_busy', message: 'long-poll capacity reached; retry with backoff' }
+        })
+      )
+      .mockResolvedValueOnce({ result: answered })
 
     vi.useFakeTimers()
     try {
       const assertion = expect(
-        ASK_HANDLERS['ask wait'](ctx([['id', 'ask_host_gone']]))
-      ).rejects.toBe(failure)
+        ASK_HANDLERS['ask wait'](ctx([['id', 'ask_busy']]))
+      ).resolves.toBeUndefined()
       await Promise.all([assertion, vi.runAllTimersAsync()])
-
-      expect(callMock).toHaveBeenCalledTimes(1 + ASK_CLI_TRANSPORT_RETRY_ATTEMPTS)
-      expect(callMock.mock.calls.at(-1)?.[0]).toBe('status.get')
-      expect(console.log).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
-  })
 
-  it('prints a resumable pending envelope when the host sheds the wait as runtime_busy', async () => {
-    callMock.mockRejectedValueOnce(
-      new RuntimeRpcFailureError({
-        id: 'req_wait',
-        ok: false,
-        error: { code: 'runtime_busy', message: 'long-poll capacity reached; retry with backoff' }
-      })
-    )
-
-    await ASK_HANDLERS['ask wait'](ctx([['id', 'ask_busy']]))
-
-    expect(callMock).toHaveBeenCalledTimes(1)
-    expect(console.log).toHaveBeenCalledWith(
-      JSON.stringify({
-        status: 'pending',
-        askId: 'ask_busy',
-        instruction: 'quirky ask wait --id ask_busy'
-      })
-    )
+    expect(callMock).toHaveBeenCalledTimes(2)
+    expect(console.log).toHaveBeenCalledWith(JSON.stringify(answered))
   })
 
   it.each(['runtime_unavailable', 'invalid_argument'])(

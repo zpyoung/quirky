@@ -1,19 +1,12 @@
-import type {
-  AskAnswer,
-  AskAnswers
-} from '../../../../../shared/fork-ask-question-tool/ask-answer-envelope'
-import type {
-  AskOption,
-  AskQuestion,
-  AskSpec
-} from '../../../../../shared/fork-ask-question-tool/ask-question-schema'
+import type { AskAnswer, AskAnswers } from './ask-answer-envelope'
+import type { AskOption, AskQuestion, AskSpec } from './ask-question-schema'
 import {
   nonBlank,
   parseConfirmAnswerValue,
   parseDateAnswerValue,
   parseNumberAnswerValue,
   parseTextAnswerValue
-} from '../../../../fork-ask-question-tool/ask-answer-value-parsing'
+} from './ask-answer-value-parsing'
 
 export type AskAnswerValidationError = { path: string; message: string }
 export type AskAnswerValidationResult =
@@ -22,6 +15,18 @@ export type AskAnswerValidationResult =
 
 function findOption(options: AskOption[], value: string): AskOption | undefined {
   return options.find((option) => option.value === value)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null
+  }
+  const strings = value.filter((item): item is string => typeof item === 'string')
+  return strings.length === value.length ? strings : null
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -51,11 +56,12 @@ function validateOneAnswer(
       return
     }
     case 'multiselect': {
-      if (!Array.isArray(raw.values) || !raw.values.every((value) => typeof value === 'string')) {
+      const submitted = readStringArray(raw.values)
+      if (submitted === null) {
         errors.push({ path: `${path}.values`, message: 'values must be an array of strings' })
         return
       }
-      for (const value of raw.values as string[]) {
+      for (const value of submitted) {
         if (!findOption(question.options, value)) {
           errors.push({
             path: `${path}.values`,
@@ -63,9 +69,26 @@ function validateOneAnswer(
           })
         }
       }
+      if (
+        question.required &&
+        submitted.length === 0 &&
+        nonBlank(optionalString(raw.other)) === undefined
+      ) {
+        errors.push({
+          path: `${path}.values`,
+          message: 'a required question needs at least one value or a non-blank other'
+        })
+      }
       return
     }
     case 'text':
+      if (typeof raw.value === 'string' && question.required && nonBlank(raw.value) === undefined) {
+        errors.push({
+          path: `${path}.value`,
+          message: 'a required question needs a non-blank value'
+        })
+        return
+      }
       if (typeof raw.value !== 'string' || parseTextAnswerValue(question, raw.value) === null) {
         errors.push({
           path: `${path}.value`,
@@ -108,7 +131,7 @@ function buildTypedAnswer(question: AskQuestion, raw: Record<string, unknown>): 
         : { value, note: optionalString(raw.note), source: 'other' }
     }
     case 'multiselect': {
-      const matched = (raw.values as string[])
+      const matched = [...new Set(readStringArray(raw.values) ?? [])]
         .map((value) => findOption(question.options, value))
         .filter((option): option is AskOption => option !== undefined)
       return {
@@ -156,12 +179,12 @@ export function validateAskAnswerSubmission(
     } else if (question.required) {
       errors.push({ path: 'skipped', message: `${id} is required and cannot be skipped` })
     }
-    if (id in rawAnswers) {
+    if (Object.hasOwn(rawAnswers, id)) {
       errors.push({ path: 'skipped', message: `${id} is both answered and skipped` })
     }
   }
   for (const question of spec.questions) {
-    if (!(question.id in rawAnswers) && !skippedSet.has(question.id)) {
+    if (!Object.hasOwn(rawAnswers, question.id) && !skippedSet.has(question.id)) {
       errors.push({
         path: `answers.${question.id}`,
         message: 'question was neither answered nor skipped'
@@ -173,11 +196,11 @@ export function validateAskAnswerSubmission(
     if (!question) {
       continue
     }
-    if (typeof raw !== 'object' || raw === null) {
+    if (!isRecord(raw)) {
       errors.push({ path: `answers.${id}`, message: 'answer must be an object' })
       continue
     }
-    validateOneAnswer(question, raw as Record<string, unknown>, `answers.${id}`, errors)
+    validateOneAnswer(question, raw, `answers.${id}`, errors)
   }
 
   if (errors.length > 0) {
@@ -185,8 +208,8 @@ export function validateAskAnswerSubmission(
   }
   const answers: AskAnswers = {}
   for (const question of spec.questions) {
-    const raw = rawAnswers[question.id] as Record<string, unknown> | undefined
-    if (raw) {
+    const raw = Object.hasOwn(rawAnswers, question.id) ? rawAnswers[question.id] : undefined
+    if (isRecord(raw)) {
       answers[question.id] = buildTypedAnswer(question, raw)
     }
   }

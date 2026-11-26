@@ -69,7 +69,8 @@ export function createAskRpcHarness(): { setup(): AskRpcHarness; cleanup(): void
       db: askDb,
       registry,
       roster,
-      waitGate: createAskWaitConcurrencyGate()
+      waitGate: createAskWaitConcurrencyGate(),
+      resolvePaneClosed: (paneKey) => registry.resolvePaneClosed(paneKey)
     })
 
     const paneOwners = paneOwnersSeed ?? new Map<string, string>()
