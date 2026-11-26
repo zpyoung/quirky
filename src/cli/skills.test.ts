@@ -257,7 +257,7 @@ describe('quirky skills CLI', () => {
 
     await main(['skills', 'get', 'missing'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(errorSpy).toHaveBeenCalledWith(
       'Unknown skill topic "missing". Available topics: alpha, gamma, zeta'
     )
@@ -300,7 +300,7 @@ describe('quirky skills CLI', () => {
 
     await main(['skills', 'install', '--all', '--skill', 'alpha'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(errorSpy).toHaveBeenCalledWith('Use either --all or --skill, not both.')
     expect(spawnMock).not.toHaveBeenCalled()
   })
@@ -310,7 +310,7 @@ describe('quirky skills CLI', () => {
 
     await main(['skills', 'install', '--skill', 'missing'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(errorSpy).toHaveBeenCalledWith(
       'Unknown skill "missing". Available skills: alpha, gamma, zeta'
     )
@@ -322,7 +322,7 @@ describe('quirky skills CLI', () => {
 
     await main(['skills', 'install', '--skill'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(errorSpy).toHaveBeenCalledWith('--skill requires a value; it was passed with none.')
     expect(spawnMock).not.toHaveBeenCalled()
   })
@@ -332,7 +332,7 @@ describe('quirky skills CLI', () => {
 
     await main(['skills', 'install', '--skill', 'alpha', '--json'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(logSpy).toHaveBeenCalledWith(
       JSON.stringify(
         {
@@ -342,7 +342,16 @@ describe('quirky skills CLI', () => {
             code: 'invalid_argument',
             message:
               "quirky skills install --json only supports --dry-run. Real installs stream npx's " +
-              "own output, which isn't JSON."
+              "own output, which isn't JSON.",
+            data: {
+              stableCode: 'invalid_argument',
+              next: [
+                {
+                  command: 'quirky schema skills install',
+                  why: 'check the command and its inputs'
+                }
+              ]
+            }
           },
           _meta: { runtimeId: null }
         },
@@ -851,7 +860,7 @@ describe('quirky skills CLI', () => {
     // Why: an --agent that resolves to nothing must not fall back to detection or
     // emit no --agent at all — the latter restores the ~75-agent install.
     expect(spawnMock).not.toHaveBeenCalled()
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(String(errorSpy.mock.calls[0]?.[0])).toContain('Missing required --agent')
   })
 
@@ -867,7 +876,7 @@ describe('quirky skills CLI', () => {
     // Why: the skills CLI drops such a value, leaving it with no target — the same
     // all-agents install as omitting --agent entirely.
     expect(spawnMock).not.toHaveBeenCalled()
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(String(errorSpy.mock.calls[0]?.[0])).toContain('Invalid --agent value')
   })
 
@@ -980,7 +989,7 @@ describe('quirky skills CLI', () => {
 
     await main(['skills', 'update', '--skill', 'alpha', '--json'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(logSpy).toHaveBeenCalledWith(
       JSON.stringify(
         {
@@ -990,7 +999,16 @@ describe('quirky skills CLI', () => {
             code: 'invalid_argument',
             message:
               "quirky skills update --json only supports --dry-run. Real updates stream npx's " +
-              "own output, which isn't JSON."
+              "own output, which isn't JSON.",
+            data: {
+              stableCode: 'invalid_argument',
+              next: [
+                {
+                  command: 'quirky schema skills update',
+                  why: 'check the command and its inputs'
+                }
+              ]
+            }
           },
           _meta: { runtimeId: null }
         },

@@ -420,7 +420,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Choose either one parent selector or --no-parent.'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -454,7 +454,7 @@ describe('quirky cli worktree awareness', () => {
       const output = [...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')
       expect(output).toContain('Unknown flag --parent-workspace for command: worktree create')
       expect(callMock).not.toHaveBeenCalled()
-      expect(process.exitCode).toBe(1)
+      expect(process.exitCode).toBe(2)
     }
 
     process.exitCode = priorExitCode
@@ -483,7 +483,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Missing required --parent-worktree'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

@@ -138,7 +138,7 @@ describe('quirky cli project and host names', () => {
     const printed = [...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')
     expect(printed).toContain('Ambiguous --project quirky')
     expect(printed).toContain('--project repo:second-quirky')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     process.exitCode = priorExitCode
   })
 

@@ -184,7 +184,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Omit --linear-issue on create'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -214,7 +214,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Pass a Linear issue identifier like STA-335'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -243,7 +243,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Missing value for --linear-issue'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

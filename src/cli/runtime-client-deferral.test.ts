@@ -88,7 +88,7 @@ describe('RuntimeClient module-graph deferral', () => {
 
   it('constructs no client for an unknown flag', async () => {
     await main(['worktree', 'list', '--nope'], '/tmp/repo')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(constructorArgsMock).not.toHaveBeenCalled()
   })
 

@@ -1,6 +1,7 @@
 import { getLegacyOpenCodeEnvKeysToDelete } from '../../opencode/legacy-shared-config-dir'
 import { restoreManagedDataAccountEnvironment } from '../../../shared/managed-data-account-environment'
 import { restoreOrStripOverlayEnv } from '../../../shared/agent-overlay-env'
+import { QUIRKY_OUTPUT_ENV } from '../../../shared/agent-session-caller-env'
 import { delimiter } from 'node:path'
 import { dropInheritedQuirkyFishHistory } from '../../fish-history-session'
 import { removeAppImageRuntimeEnv } from '../../pty/appimage-terminal-env'
@@ -193,6 +194,10 @@ export function createDaemonPtyEnvironment(opts: PtySubprocessOptions): Record<s
     env.TERM = opts.env.TERM
   }
   removeUnspecifiedPaneIdentityEnv(env, opts.env)
+  // the launch token is only minted for agent launches, so it is what tells them from plain shells
+  if (opts.env && Object.hasOwn(opts.env, 'QUIRKY_AGENT_LAUNCH_TOKEN')) {
+    env[QUIRKY_OUTPUT_ENV] = 'json'
+  }
   stripPiProcessOwnerEnv(env)
   if (opts.env?.fish_history === undefined) {
     dropInheritedQuirkyFishHistory(env)

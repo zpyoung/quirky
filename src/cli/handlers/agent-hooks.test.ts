@@ -417,7 +417,7 @@ describe('agent hooks CLI handler', () => {
           userDataPath
         )
 
-        expect(process.exitCode).toBe(1)
+        expect(process.exitCode).toBe(2)
         expect(getCliStatusMock).not.toHaveBeenCalled()
         expect(callMock).not.toHaveBeenCalled()
         expect(applyAgentStatusHooksEnabledMock).not.toHaveBeenCalled()

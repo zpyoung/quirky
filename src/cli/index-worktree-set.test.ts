@@ -193,7 +193,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Choose either --parent-worktree or --no-parent, not both.'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -212,7 +212,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Missing required --parent-worktree'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -351,7 +351,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Pass a Linear issue identifier like STA-335'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -454,7 +454,7 @@ describe('quirky cli worktree awareness', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(message)
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

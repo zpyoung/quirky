@@ -135,7 +135,7 @@ describe('quirky cli worktree awareness', () => {
         message: 'Pass --id either positionally or as a flag, not both.'
       }
     })
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

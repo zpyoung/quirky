@@ -15,6 +15,7 @@ import { getCliStatus, projectRemoteAppStatus } from './status'
 import { sendRequest } from './transport'
 import { sendStreamingRequest } from './streaming-transport'
 import type { CallerHint } from '../../shared/public-rpc/caller-hint'
+import type { RemoteRuntimeRequestEnvelope } from '../../shared/remote-runtime-memory-limits'
 import { RuntimeClientError, RuntimeRpcFailureError, type RuntimeRpcSuccess } from './types'
 import {
   attachDurableMutationRecovery,
@@ -149,6 +150,12 @@ export class RuntimeClient {
     }
     if (this.remote) {
       const transport = await loadWebSocketTransport()
+      const remoteEnvelope: RemoteRuntimeRequestEnvelope = {
+        ...envelope,
+        ...(options?.publicContract ? { publicContract: 1 } : {}),
+        ...(options?.confirm === undefined ? {} : { confirm: options.confirm }),
+        ...(options?.caller === undefined ? {} : { caller: options.caller })
+      }
       let response
       try {
         response = await this.remoteCompat.send<TResult>({
@@ -157,7 +164,7 @@ export class RuntimeClient {
           method,
           params,
           timeoutMs: effectiveTimeoutMs,
-          envelope
+          envelope: remoteEnvelope
         })
       } catch (error) {
         throw recover(error, null)

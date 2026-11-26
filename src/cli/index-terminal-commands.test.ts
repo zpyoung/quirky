@@ -543,7 +543,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Remote terminal create requires --worktree'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

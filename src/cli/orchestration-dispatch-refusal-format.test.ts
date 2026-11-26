@@ -45,7 +45,11 @@ describe('orchestration dispatch refusals through the CLI error boundary', () =>
     reportCliError(error, true, { commandPath: ['orchestration', 'dispatch'] })
     const printed = JSON.parse(log.mock.calls[0]?.[0] as string) as RuntimeRpcFailure
     expect(printed.ok).toBe(false)
-    expect(printed.error).toEqual(receipt)
+    expect(printed.error).toMatchObject({
+      code: receipt.code,
+      message: receipt.message,
+      data: { ...receipt.data, stableCode: expect.any(String) }
+    })
   })
 })
 
@@ -69,7 +73,17 @@ it('prints an unknown code with its message and nextSteps unchanged', () => {
   )
   const log = vi.spyOn(console, 'log').mockImplementation(() => {})
   reportCliError(error, true, { commandPath: ['orchestration', 'dispatch'] })
-  expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toEqual(failure)
+  expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toEqual({
+    ...failure,
+    error: {
+      ...failure.error,
+      data: {
+        nextSteps: ['Do the thing the newer host suggested.'],
+        stableCode: 'internal',
+        reason: 'code_from_a_newer_host'
+      }
+    }
+  })
 })
 
 function envelope(receipt: DispatchRefusalReceipt): RuntimeRpcFailure {

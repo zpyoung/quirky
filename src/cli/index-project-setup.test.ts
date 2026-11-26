@@ -238,7 +238,7 @@ describe('quirky cli worktree awareness', () => {
     // An agent reads the code and the retry candidates, not the prose.
     expect(JSON.parse(printed).error.code).toBe('invalid_argument')
     expect(JSON.parse(printed).error.data.knownEnvironments).toEqual([])
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -257,7 +257,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'no SSH target named or with id openclaw'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -274,7 +274,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       '--environment awin'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -373,7 +373,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Invalid --host value: runtime:'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -393,7 +393,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'use either --host runtime:<id> or --pairing-code, not both'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -489,7 +489,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Remote project setup requires --path to be an absolute path on the remote server.'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -520,7 +520,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Remote project setup requires --path to be an absolute path on the remote server.'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -539,7 +539,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Remote repo add requires --path to be an absolute path on the remote server.'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

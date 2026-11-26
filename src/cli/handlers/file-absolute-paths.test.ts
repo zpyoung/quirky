@@ -240,7 +240,7 @@ describe('absolute file CLI paths', () => {
 
       await openPath('/root/quirky/workspaces/xxx')
 
-      expect(process.exitCode).toBe(1)
+      expect(process.exitCode).toBe(2)
       expect(console.error).toHaveBeenCalledWith(
         'The selected worktree root is a directory, not a file-open target.'
       )
@@ -325,7 +325,7 @@ describe('absolute file CLI paths', () => {
 
     await main(['file', 'open', '--path', '/tmp/repo', '--worktree', 'id:wt-1'], '/tmp')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(console.error).toHaveBeenCalledWith(
       'The selected worktree root is a directory, not a file-open target.'
     )

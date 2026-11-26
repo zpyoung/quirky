@@ -135,7 +135,7 @@ describe('worktree issue and review metadata flags', () => {
     )
     expect(callMock).not.toHaveBeenCalled()
     expect(logSpy.mock.calls.flat().join('\n')).toContain(`Omit --${link.flag} on create`)
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it.each([
@@ -164,14 +164,14 @@ describe('worktree issue and review metadata flags', () => {
     )
     expect(callMock).not.toHaveBeenCalled()
     expect(logSpy.mock.calls.flat().join('\n')).toContain('invalid_argument')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it.each(LINK_FLAGS)('refuses a missing --$flag value before RPC', async (link) => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
     await main(['worktree', 'set', '--worktree', 'active', `--${link.flag}`, '--json'], '/tmp/repo')
     expect(callMock).not.toHaveBeenCalled()
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it.each(LINK_FLAGS)('accepts the greatest safe integer for --$flag', async (link) => {

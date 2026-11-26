@@ -639,7 +639,7 @@ describe('quirky cli browser cookies', () => {
 
       expect(callMock).not.toHaveBeenCalled()
       expect(errorSpy.mock.calls.flat().join('\n')).toContain(`Invalid --expires value: ${expires}`)
-      expect(process.exitCode).toBe(1)
+      expect(process.exitCode).toBe(2)
 
       process.exitCode = priorExitCode
     }
@@ -656,7 +656,7 @@ describe('quirky cli browser cookies', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect(errorSpy.mock.calls.flat().join('\n')).toContain('Missing value for --expires.')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

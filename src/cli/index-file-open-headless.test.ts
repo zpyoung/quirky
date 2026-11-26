@@ -43,7 +43,7 @@ describe('file commands on a server with no app window', () => {
     expect(printed).toContain('This Quirky server has no app window')
     expect(printed).toContain('Next step: Open the file from the file explorer')
     expect(printed.split('\n')[0]).not.toBe('renderer_unavailable')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(6)
   })
 
   it('keeps a stable code and recovery in --json output', async () => {

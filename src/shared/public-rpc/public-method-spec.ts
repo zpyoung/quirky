@@ -33,6 +33,8 @@ export type PublicMethodSpec = {
   destructive?: DestructiveSpec
   approvalCategory?: ApprovalCategory
   errors: StableErrorCode[]
+  /** Result keys kept in terse JSON output; `--full` returns the whole result. */
+  terse?: readonly string[]
   streaming?: true
 }
 

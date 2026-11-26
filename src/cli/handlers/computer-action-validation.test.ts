@@ -50,7 +50,7 @@ describe('quirky computer action CLI validation', () => {
       'Computer-use targeting accepts either --session or --worktree, not both'
     )
     expect(output).toContain('Next step: Do not retry the same command unchanged.')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('does not mask missing app with action target errors', async () => {
@@ -58,7 +58,7 @@ describe('quirky computer action CLI validation', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain('Missing required --app')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects malformed hotkeys before calling the runtime', async () => {
@@ -76,7 +76,7 @@ describe('quirky computer action CLI validation', () => {
     expect(output.error.data.nextSteps).toEqual(
       expect.arrayContaining([expect.stringContaining('Do not retry the same command unchanged')])
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects modifier chords on press-key before calling the runtime', async () => {
@@ -94,7 +94,7 @@ describe('quirky computer action CLI validation', () => {
     expect(output.error.data.nextSteps).toEqual(
       expect.arrayContaining([expect.stringContaining('Do not retry the same command unchanged')])
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('allows literal plus as a press-key key', async () => {
@@ -165,7 +165,7 @@ describe('quirky computer action CLI validation', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'either --window-id or --window-index'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects invalid window ids before calling the runtime', async () => {
@@ -180,7 +180,7 @@ describe('quirky computer action CLI validation', () => {
       code: 'invalid_argument',
       message: expect.stringContaining('Invalid non-negative integer for --window-id')
     })
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects conflicting action window target flags before calling the runtime', async () => {
@@ -207,7 +207,7 @@ describe('quirky computer action CLI validation', () => {
       code: 'invalid_argument',
       message: expect.stringContaining('either --window-id or --window-index')
     })
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects invalid action flags before resolving the runtime target', async () => {
@@ -226,7 +226,7 @@ describe('quirky computer action CLI validation', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'Next step: Do not retry the same command unchanged.'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('returns structured recovery data for local computer action flag errors in JSON mode', async () => {
@@ -255,7 +255,7 @@ describe('quirky computer action CLI validation', () => {
       expect.stringContaining('Fix the command flags'),
       expect.stringContaining('Do not retry')
     ])
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects incomplete pointer action targets before resolving the runtime target', async () => {
@@ -265,7 +265,7 @@ describe('quirky computer action CLI validation', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'Click requires --element-index or both --x and --y'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects unsupported action option values before resolving the runtime target', async () => {
@@ -276,7 +276,7 @@ describe('quirky computer action CLI validation', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain('Unsupported --mouse-button')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     vi.mocked(console.error).mockClear()
     process.exitCode = undefined
@@ -299,7 +299,7 @@ describe('quirky computer action CLI validation', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'Click modifiers accept modifier keys only'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     vi.mocked(console.error).mockClear()
     process.exitCode = undefined
@@ -313,7 +313,7 @@ describe('quirky computer action CLI validation', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'Click modifiers accept modifier keys only'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     vi.mocked(console.error).mockClear()
     process.exitCode = undefined
@@ -325,7 +325,7 @@ describe('quirky computer action CLI validation', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain('Unsupported --direction')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects incomplete drag targets before resolving the runtime target', async () => {
@@ -338,7 +338,7 @@ describe('quirky computer action CLI validation', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'Drag element targeting requires both --from-element-index and --to-element-index'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects conflicting text payload flags before resolving the runtime target', async () => {
@@ -349,7 +349,7 @@ describe('quirky computer action CLI validation', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain('Use either --text or --text-stdin')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects empty stdin for text actions before calling the runtime', async () => {
@@ -362,7 +362,7 @@ describe('quirky computer action CLI validation', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain('Missing text from stdin')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('allows empty stdin for set-value so fields can be cleared', async () => {
