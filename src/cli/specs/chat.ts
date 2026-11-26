@@ -1,3 +1,4 @@
+import { z, type ZodType } from 'zod'
 import type { CommandSpec } from '../args'
 import { GLOBAL_FLAGS } from '../args'
 
@@ -40,7 +41,7 @@ export const CHAT_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'session', 'text', 'wait', 'timeout'],
     positionalArgs: ['session', 'text'],
     notes: [
-      'Returns {turnId} as soon as the host accepts the message.',
+      'Returns {clientMessageId, turnId} once the host accepts the message. turnId is null when the host has not opened the turn within about 3 seconds, as when the chat is still busy with an earlier turn.',
       '--wait blocks until the turn finishes, fails or needs input, then prints the status and the final assistant message. Exits 6 if --timeout (default 600000) elapses first.'
     ],
     examples: ['quirky chat send claude_0b1c2d3e_4f5a "summarize the diff" --wait']
@@ -143,3 +144,203 @@ export const CHAT_COMMAND_SPECS: CommandSpec[] = [
     ]
   }
 ]
+
+/** What `quirky schema` reports for a hand-written command whose flags differ from its RPC params. */
+export type CommandSurface = {
+  params: ZodType
+  /** Absent when the command prints the RPC result unchanged. */
+  result?: ZodType
+}
+
+const sessionId = z.string().describe('chat session id, from `quirky chat list`')
+const nullableString = z.string().nullable()
+
+const SESSION_PARAM = { session: sessionId }
+
+const CREATED_SESSION_RESULT = z.object({
+  sessionId: z.string(),
+  agent: z.string(),
+  workspace: z.string(),
+  tabId: z.string().optional()
+})
+
+const ONE_ANSWER_REQUIRED = [
+  { required: ['allow'] },
+  { required: ['deny'] },
+  { required: ['option'] },
+  { required: ['answer'] }
+]
+
+export const CHAT_COMMAND_SURFACES: ReadonlyMap<string, CommandSurface> = new Map<
+  string,
+  CommandSurface
+>([
+  [
+    'chat list',
+    {
+      params: z.object({ workspace: z.string().optional() }),
+      result: z.object({
+        sessions: z.array(
+          z.object({
+            sessionId: z.string(),
+            agent: z.string(),
+            status: nullableString,
+            workspace: z.string(),
+            model: nullableString,
+            name: nullableString
+          })
+        )
+      })
+    }
+  ],
+  [
+    'chat create',
+    {
+      params: z.object({
+        workspace: z.string().describe('workspace selector, or `current`'),
+        agent: z.string().describe('codex, claude or another registered agent'),
+        message: z.string().optional().describe('first message'),
+        model: z.string().optional()
+      }),
+      result: CREATED_SESSION_RESULT
+    }
+  ],
+  [
+    'chat resume',
+    {
+      params: z.object({
+        ...SESSION_PARAM,
+        workspace: z.string().describe('workspace selector, or `current`'),
+        agent: z.string().optional().describe("needed when <session> is the agent's own id")
+      }),
+      result: CREATED_SESSION_RESULT
+    }
+  ],
+  [
+    'chat send',
+    {
+      params: z.object({
+        ...SESSION_PARAM,
+        text: z.string(),
+        wait: z.boolean().optional().describe('block until the turn settles'),
+        timeout: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('--wait limit in ms, default 600000')
+      }),
+      result: z.object({
+        sessionId: z.string(),
+        clientMessageId: nullableString,
+        turnId: nullableString.describe('null until the host has opened the turn'),
+        status: z.enum(['finished', 'failed', 'needs-input']).optional().describe('with --wait'),
+        requestId: z.string().optional().describe('the request a needs-input turn waits on'),
+        lastAssistantMessage: nullableString.optional().describe('with --wait')
+      })
+    }
+  ],
+  [
+    'chat cancel',
+    {
+      params: z.object({ ...SESSION_PARAM, turn: z.string().optional() }),
+      result: z.object({
+        sessionId: z.string(),
+        cancelled: z.boolean(),
+        turnId: z.string().optional()
+      })
+    }
+  ],
+  [
+    'chat rewind',
+    {
+      params: z.object({
+        ...SESSION_PARAM,
+        to: z.string().describe('item id from `quirky chat history`'),
+        yes: z.boolean().optional().describe('confirm the destructive call')
+      }),
+      result: z.object({ sessionId: z.string(), itemId: z.string(), epoch: z.string().optional() })
+    }
+  ],
+  [
+    'chat clear',
+    {
+      params: z.object({ ...SESSION_PARAM, yes: z.boolean().optional() }),
+      result: z.object({ sessionId: z.string(), cleared: z.literal(true) })
+    }
+  ],
+  [
+    'chat history',
+    {
+      params: z.object({
+        ...SESSION_PARAM,
+        limit: z.number().int().positive().max(200).optional(),
+        before: z.string().optional().describe('the nextBefore cursor of an earlier page')
+      }),
+      result: z.object({
+        sessionId: z.string(),
+        items: z.array(
+          z.object({
+            itemId: z.string(),
+            kind: z.string(),
+            role: z.string().optional(),
+            text: z.string().optional()
+          })
+        ),
+        hasOlder: z.boolean(),
+        nextBefore: z.string().optional()
+      })
+    }
+  ],
+  ['chat options get', { params: z.object(SESSION_PARAM) }],
+  [
+    'chat options set',
+    {
+      params: z.object({ ...SESSION_PARAM, key: z.string(), value: z.string() }),
+      result: z.object({ sessionId: z.string(), key: z.string(), value: z.string() })
+    }
+  ],
+  [
+    'chat requests',
+    {
+      params: z.object(SESSION_PARAM),
+      result: z.object({
+        sessionId: z.string(),
+        requests: z.array(
+          z.object({
+            id: z.string().describe('the <request> argument of `quirky chat respond`'),
+            kind: z.string(),
+            revision: z.number(),
+            prompt: nullableString,
+            options: z.array(z.object({ id: z.string(), label: z.string() }))
+          })
+        )
+      })
+    }
+  ],
+  [
+    'chat respond',
+    {
+      params: z
+        .object({
+          ...SESSION_PARAM,
+          request: z.string().describe('request id from `quirky chat requests`'),
+          allow: z.boolean().optional().describe('allow a permission request'),
+          deny: z.boolean().optional().describe('deny a permission request'),
+          option: z.string().optional().describe('option id of a question or permission request'),
+          answer: z.string().optional().describe('free-text answer to a question'),
+          yes: z.boolean().optional().describe('confirm the permission answer')
+        })
+        .meta({
+          oneOf: ONE_ANSWER_REQUIRED,
+          description: 'Pass exactly one of allow, deny, option, answer.'
+        }),
+      result: z.object({
+        sessionId: z.string(),
+        requestId: z.string(),
+        status: z.string().describe('the request resolution: resolved, cancelled or pending'),
+        selectedOptionId: z.string().optional()
+      })
+    }
+  ]
+])

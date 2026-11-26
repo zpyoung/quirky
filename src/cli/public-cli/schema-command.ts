@@ -4,6 +4,7 @@ import { findCommandSpec, GLOBAL_FLAGS } from '../args'
 import type { CommandHandler } from '../dispatch'
 import { getRepeatedStringFlag } from '../flags'
 import { RuntimeClientError } from '../runtime/types'
+import { CHAT_COMMAND_SURFACES, type CommandSurface } from '../specs/chat'
 import type { PublicMethodSpec } from '../../shared/public-rpc/public-method-spec'
 import { publicSpecForCliPath } from '../../shared/public-rpc/public-methods'
 
@@ -40,21 +41,30 @@ function userFacingFlags(spec: CommandSpec): string[] {
   return spec.allowedFlags.filter((flag) => !GLOBAL_FLAGS.includes(flag))
 }
 
+function surfaceForPath(path: readonly string[]): CommandSurface | undefined {
+  return CHAT_COMMAND_SURFACES.get(path.join(' '))
+}
+
 /**
  * The machine-readable contract for one command. A command with a public spec reports that spec's
  * params, result, stability and errors; a hand-written command with none reports its flags and
- * leaves the contract fields empty.
+ * leaves the contract fields empty. A hand-written command whose flags differ from its RPC params
+ * supplies a `surface`, and that replaces the RPC params (and result, when it names one) so the
+ * schema describes what the caller types and reads rather than the wire envelope.
  */
 export function buildCommandSchema(
   commandSpec: CommandSpec,
-  publicSpec: PublicMethodSpec | undefined
+  publicSpec: PublicMethodSpec | undefined,
+  surface?: CommandSurface
 ): CommandSchema {
+  const params = surface?.params ?? publicSpec?.params ?? null
+  const result = surface?.result ?? publicSpec?.result ?? null
   return {
     command: commandSpec.path.join(' '),
     ...(publicSpec ? { method: publicSpec.method } : {}),
     summary: commandSpec.summary,
-    params: publicSpec ? toJsonSchema(publicSpec.params, 'input') : null,
-    result: publicSpec ? toJsonSchema(publicSpec.result, 'output') : null,
+    params: toJsonSchema(params, 'input'),
+    result: toJsonSchema(result, 'output'),
     stability: publicSpec ? publicSpec.stability : null,
     destructive: publicSpec
       ? publicSpec.destructive !== undefined
@@ -77,7 +87,10 @@ function printJson(value: unknown): void {
  */
 export function createSchemaHandler(
   getSpecs: () => readonly CommandSpec[],
-  lookupPublicSpec: (path: readonly string[]) => PublicMethodSpec | undefined = publicSpecForCliPath
+  lookupPublicSpec: (
+    path: readonly string[]
+  ) => PublicMethodSpec | undefined = publicSpecForCliPath,
+  lookupSurface: (path: readonly string[]) => CommandSurface | undefined = surfaceForPath
 ): CommandHandler {
   return async ({ flags, json }) => {
     const specs = getSpecs()
@@ -93,7 +106,13 @@ export function createSchemaHandler(
     }
     const commandSpec = findCommandSpec([...specs], path)
     if (commandSpec) {
-      printJson(buildCommandSchema(commandSpec, lookupPublicSpec(commandSpec.path)))
+      printJson(
+        buildCommandSchema(
+          commandSpec,
+          lookupPublicSpec(commandSpec.path),
+          lookupSurface(commandSpec.path)
+        )
+      )
       return
     }
     const prefix = path.join(' ')

@@ -219,6 +219,7 @@ beforeEach(() => {
 })
 
 afterEach(() => vi.restoreAllMocks())
+afterEach(() => vi.useRealTimers())
 
 function printedResult(): Record<string, unknown> {
   const text = output.mock.calls.map((call: unknown[]) => String(call[0])).join('\n')
@@ -557,15 +558,15 @@ describe('chat send', () => {
   }
 
   it('returns as soon as the host accepts the message, without opening an event stream', async () => {
+    vi.useFakeTimers()
     const client = fakeClient({ handlers: { 'agentSession.send': () => mutationOk(SEND_VALUE) } })
-    await CHAT_HANDLERS['chat send'](context(client, { session: SESSION, text: 'run the tests' }))
+    const ctx = context(client, { session: SESSION, text: 'run the tests' })
+    const sent = CHAT_HANDLERS['chat send'](ctx)
+    await vi.advanceTimersByTimeAsync(10_000)
+    await sent
 
     expect(client.stream).not.toHaveBeenCalled()
-    expect(printedResult()).toMatchObject({
-      sessionId: SESSION,
-      clientMessageId: 'op-1',
-      turnId: null
-    })
+    expect(printedResult()).toMatchObject({ clientMessageId: 'op-1', turnId: null })
     const params = lastParams(client, 'agentSession.send')
     expect(params.body).toEqual({
       kind: 'message',

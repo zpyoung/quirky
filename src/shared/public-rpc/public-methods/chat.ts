@@ -48,6 +48,11 @@ export const ChatStatusSnapshotSchema = z.looseObject({
   sessions: z.array(ChatStatusSessionSchema)
 })
 
+const TurnRecordFields = {
+  turnId: z.string().optional(),
+  userItemId: z.string().optional()
+}
+
 export const ChatHistoryResultSchema = z.looseObject({
   ok: z.boolean().optional(),
   fence: z.number().optional(),
@@ -59,8 +64,13 @@ export const ChatHistoryResultSchema = z.looseObject({
         z.looseObject({
           itemId: z.string(),
           sequence: z.number().optional(),
+          turnScope: z
+            .looseObject({ kind: z.string(), turnItemId: z.string().optional() })
+            .optional(),
           body: z.looseObject({
             kind: z.string(),
+            ...TurnRecordFields,
+            turnLifecycle: z.looseObject(TurnRecordFields).optional(),
             role: z.string().optional(),
             text: z.string().optional(),
             title: z.string().optional(),

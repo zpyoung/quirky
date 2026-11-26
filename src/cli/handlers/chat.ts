@@ -19,18 +19,23 @@ import { createStructuredAgentSessionId } from '../../shared/structured-agent-se
 import { createStructuredAgentSessionOperationId } from '../../shared/structured-agent-session-mutation'
 import { structuredAgentSessionSendBody } from '../../shared/structured-agent-session-send-mutation'
 import {
+  awaitMessageTurnId,
   buildPromptResponse,
+  createSendTurnTracker,
   invalid,
   mutateSession,
   publicCallOptions,
   readCheckpoint,
   readPendingRequests,
+  readRecentTurnIds,
   readStatusSessions,
   type ChatClient,
   type PromptChoice
 } from './chat-mutation-envelope'
 
 const DEFAULT_WAIT_TIMEOUT_MS = 600_000
+const TURN_ID_LOOKUP_BUDGET_MS = 3_000
+const TURN_ID_POLL_INTERVAL_MS = 250
 
 function localResponse<T>(result: T): RuntimeRpcSuccess<T> {
   return { id: 'chat', ok: true, result, _meta: { runtimeId: '' } }
@@ -325,32 +330,60 @@ export const CHAT_HANDLERS: Record<string, CommandHandler> = {
     if (!ctx.flags.has('wait')) {
       const { response, value } = await send()
       const clientMessageId = stringField(value, 'clientMessageId') ?? null
-      printFields(ctx, { sessionId, clientMessageId, turnId: null }, response)
+      const turnId =
+        clientMessageId === null
+          ? null
+          : await awaitMessageTurnId(client, sessionId, clientMessageId, {
+              budgetMs: TURN_ID_LOOKUP_BUDGET_MS,
+              intervalMs: TURN_ID_POLL_INTERVAL_MS
+            })
+      printFields(ctx, { sessionId, clientMessageId, turnId }, response)
       return
     }
-    const settled = await waitForEvent(
-      client,
-      {
-        topics: ['chat'],
-        timeoutMs,
-        match: (event) => TURN_STATUS.has(event.type) && event.data.sessionId === sessionId
-      },
-      send
-    )
-    const summary = (await readStatusSessions(client)).find((row) => row.sessionId === sessionId)
-    const { event } = settled
-    printFields(
-      ctx,
-      {
-        sessionId,
-        clientMessageId: stringField(settled.result.value, 'clientMessageId') ?? null,
-        turnId: stringField(event.data, 'turnId') ?? null,
-        status: TURN_STATUS.get(event.type),
-        requestId: stringField(event.data, 'requestId'),
-        lastAssistantMessage: summary?.lastAssistantMessage ?? null
-      },
-      settled.result.response
-    )
+    // a finish event of an earlier turn can arrive first; only turns opened after the send may settle it
+    const tracker = createSendTurnTracker(client, sessionId, {
+      priorTurnIds: await readRecentTurnIds(client, sessionId).catch(() => new Set<string>()),
+      budgetMs: timeoutMs,
+      intervalMs: TURN_ID_POLL_INTERVAL_MS * 2
+    })
+    const sendAndTrack = async () => {
+      const sent = await send()
+      const clientMessageId = stringField(sent.value, 'clientMessageId')
+      if (clientMessageId !== undefined) {
+        tracker.accepted(clientMessageId)
+      }
+      return sent
+    }
+    try {
+      const settled = await waitForEvent(
+        client,
+        {
+          topics: ['chat'],
+          timeoutMs,
+          match: (event) =>
+            TURN_STATUS.has(event.type) &&
+            event.data.sessionId === sessionId &&
+            tracker.accepts(stringField(event.data, 'turnId'))
+        },
+        sendAndTrack
+      )
+      const summary = (await readStatusSessions(client)).find((row) => row.sessionId === sessionId)
+      const { event } = settled
+      printFields(
+        ctx,
+        {
+          sessionId,
+          clientMessageId: stringField(settled.result.value, 'clientMessageId') ?? null,
+          turnId: stringField(event.data, 'turnId') ?? tracker.turnId,
+          status: TURN_STATUS.get(event.type),
+          requestId: stringField(event.data, 'requestId'),
+          lastAssistantMessage: summary?.lastAssistantMessage ?? null
+        },
+        settled.result.response
+      )
+    } finally {
+      tracker.finish()
+    }
   },
 
   'chat cancel': async (ctx) => {
@@ -372,7 +405,7 @@ export const CHAT_HANDLERS: Record<string, CommandHandler> = {
   'chat rewind': async (ctx) => {
     const sessionId = getRequiredStringFlag(ctx.flags, 'session')
     const itemId = getRequiredStringFlag(ctx.flags, 'to')
-      const { fence, epoch } = await readCheckpoint(ctx.client, sessionId)
+    const { fence, epoch } = await readCheckpoint(ctx.client, sessionId)
     if (epoch === null) {
       throw new RuntimeClientError(
         'unavailable',
@@ -396,7 +429,7 @@ export const CHAT_HANDLERS: Record<string, CommandHandler> = {
 
   'chat clear': async (ctx) => {
     const sessionId = getRequiredStringFlag(ctx.flags, 'session')
-      const { response } = await mutateSession(ctx.client, {
+    const { response } = await mutateSession(ctx.client, {
       method: 'agentSession.conversationCommand',
       sessionId,
       fields: { command: 'clear' },

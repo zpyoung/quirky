@@ -5,6 +5,7 @@ import type { HandlerContext } from '../dispatch'
 import { REPEATED_FLAG_SEPARATOR } from '../args'
 import { definePublicMethod } from '../../shared/public-rpc/public-method-spec'
 import { COMMAND_SPECS } from '../specs'
+import { CHAT_COMMAND_SPECS } from '../specs/chat'
 import { buildCommandSchema, buildSchemaIndex, createSchemaHandler } from './schema-command'
 
 const respondSpec = definePublicMethod({
@@ -46,14 +47,21 @@ function lookup(path: readonly string[]) {
   return path.join(' ') === 'chat respond' ? respondSpec : undefined
 }
 
-function run(path: string[], json = false): Promise<void> {
+function run(path: string[], json = false, realTable = false): Promise<void> {
   const flags = new Map<string, string | boolean>()
   if (path.length > 0) {
     flags.set('path', path.join(REPEATED_FLAG_SEPARATOR))
   }
   // SAFETY: the schema handler reads only flags and json; no client or cwd is touched
   const ctx = { flags, json, cwd: '/' } as unknown as HandlerContext
-  return createSchemaHandler(() => SPECS, lookup)(ctx)
+  const handler = realTable
+    ? createSchemaHandler(() => COMMAND_SPECS)
+    : createSchemaHandler(
+        () => SPECS,
+        lookup,
+        () => undefined
+      )
+  return handler(ctx)
 }
 
 describe('quirky schema', () => {
@@ -161,5 +169,70 @@ describe('the real command table', () => {
   it('registers schema, rpc and events as visible commands', () => {
     const paths = COMMAND_SPECS.map((spec) => spec.path.join(' '))
     expect(paths).toEqual(expect.arrayContaining(['schema', 'rpc', 'rpc list', 'events']))
+  })
+})
+
+describe('hand-written commands with their own surface', () => {
+  function schemaOf(path: string[]) {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    return run(path, true, true).then(() => {
+      const printed = logSpy.mock.calls.map((call) => String(call[0])).join('\n')
+      logSpy.mockRestore()
+      return JSON.parse(printed)
+    })
+  }
+
+  it('describes `chat respond` by its session, request and answer choices, not the RPC envelope', async () => {
+    const schema = await schemaOf(['chat', 'respond'])
+    expect(Object.keys(schema.params.properties)).toEqual([
+      'session',
+      'request',
+      'allow',
+      'deny',
+      'option',
+      'answer',
+      'yes'
+    ])
+    expect(schema.params.required).toEqual(['session', 'request'])
+    expect(schema.params.oneOf).toEqual([
+      { required: ['allow'] },
+      { required: ['deny'] },
+      { required: ['option'] },
+      { required: ['answer'] }
+    ])
+    expect(Object.keys(schema.result.properties)).toEqual([
+      'sessionId',
+      'requestId',
+      'status',
+      'selectedOptionId'
+    ])
+    expect(schema).toMatchObject({
+      method: 'agentSession.respondToApproval',
+      stability: 'stable',
+      approvalCategory: 'permission-answers'
+    })
+  })
+
+  it('gives every chat command params made only of its own flags', async () => {
+    for (const spec of CHAT_COMMAND_SPECS) {
+      const name = spec.path.join(' ')
+      const { params } = await schemaOf(spec.path)
+      expect(params.properties, name).not.toHaveProperty('envelope')
+      for (const key of Object.keys(params.properties ?? {})) {
+        expect(spec.allowedFlags, `${name} --${key}`).toContain(key)
+      }
+    }
+  })
+
+  it('reports `chat send` with its turn id and the flags that wait for it', async () => {
+    const schema = await schemaOf(['chat', 'send'])
+    expect(Object.keys(schema.params.properties)).toEqual(['session', 'text', 'wait', 'timeout'])
+    expect(schema.result.properties).toHaveProperty('turnId')
+  })
+
+  it('keeps the RPC result for a command that prints it unchanged', async () => {
+    const schema = await schemaOf(['chat', 'options', 'get'])
+    expect(Object.keys(schema.params.properties)).toEqual(['session'])
+    expect(schema.result.properties).toHaveProperty('models')
   })
 })

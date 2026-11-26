@@ -1,9 +1,13 @@
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MutationEnvelope } from '../../shared/rpc-contract/structured-agent-session-params'
+import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
 import {
+  awaitMessageTurnId,
   buildMutationEnvelope,
+  createSendTurnTracker,
   readPendingRequests,
+  readRecentTurnIds,
   readStatusSessions,
   type ChatClient
 } from './chat-mutation-envelope'
@@ -276,5 +280,176 @@ describe('readPendingRequests', () => {
     await expect(readPendingRequests(client, 's1')).rejects.toMatchObject({
       code: 'invalid_runtime_response'
     })
+  })
+})
+
+describe('turn lookup from the journal', () => {
+  const OPENER = agentJournalSubmissionKey('msg-1')
+
+  function historyClient(pages: unknown[][]) {
+    let reads = 0
+    const call = vi.fn(async () => {
+      const items = pages[Math.min(reads, pages.length - 1)]
+      reads += 1
+      return {
+        id: 'r',
+        ok: true as const,
+        result: { page: { epoch: 'e', items, hasOlder: false } },
+        _meta: { runtimeId: 'rt' }
+      }
+    })
+    // SAFETY: the lookup calls only `call`
+    return { client: { call } as unknown as ChatClient, call }
+  }
+
+  const NO_WAIT = { budgetMs: 0, intervalMs: 10 }
+
+  it('finds the turn whose record names the message as its opener', async () => {
+    const { client } = historyClient([
+      [
+        { itemId: 'turn-a', body: { kind: 'turn', turnId: 't-old', userItemId: 'other' } },
+        { itemId: 'turn-b', body: { kind: 'turn', turnId: 't-new', userItemId: OPENER } }
+      ]
+    ])
+    await expect(awaitMessageTurnId(client, 's1', 'msg-1', NO_WAIT)).resolves.toBe('t-new')
+  })
+
+  it("reads the turn from an older host's lifecycle status row", async () => {
+    const { client } = historyClient([
+      [
+        {
+          itemId: 'status-1',
+          body: { kind: 'status', turnLifecycle: { turnId: 't-legacy', userItemId: OPENER } }
+        }
+      ]
+    ])
+    await expect(awaitMessageTurnId(client, 's1', 'msg-1', NO_WAIT)).resolves.toBe('t-legacy')
+  })
+
+  it('finds the running turn a steered message joined through its row scope', async () => {
+    const { client } = historyClient([
+      [
+        { itemId: 'turn-run', body: { kind: 'turn', turnId: 't-running' } },
+        {
+          itemId: OPENER,
+          body: { kind: 'message', role: 'user' },
+          turnScope: { kind: 'turn', turnItemId: 'turn-run' }
+        }
+      ]
+    ])
+    await expect(awaitMessageTurnId(client, 's1', 'msg-1', NO_WAIT)).resolves.toBe('t-running')
+  })
+
+  it('ignores a turn another message opened', async () => {
+    const { client } = historyClient([
+      [{ itemId: 'turn-a', body: { kind: 'turn', turnId: 't-old', userItemId: 'other' } }]
+    ])
+    await expect(awaitMessageTurnId(client, 's1', 'msg-1', NO_WAIT)).resolves.toBeNull()
+  })
+
+  it('polls until the host opens the turn', async () => {
+    vi.useFakeTimers()
+    const { client, call } = historyClient([
+      [],
+      [{ itemId: 'turn-b', body: { kind: 'turn', turnId: 't-new', userItemId: OPENER } }]
+    ])
+    const found = awaitMessageTurnId(client, 's1', 'msg-1', { budgetMs: 1000, intervalMs: 100 })
+    await vi.advanceTimersByTimeAsync(100)
+    await expect(found).resolves.toBe('t-new')
+    expect(call).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+  })
+
+  it('stops when told to and treats an unreadable journal as not yet opened', async () => {
+    const call = vi.fn(async () => {
+      throw new Error('down')
+    })
+    // SAFETY: the lookup calls only `call`
+    const client = { call } as unknown as ChatClient
+    await expect(
+      awaitMessageTurnId(client, 's1', 'msg-1', {
+        budgetMs: 5000,
+        intervalMs: 100,
+        stopped: () => true
+      })
+    ).resolves.toBeNull()
+    expect(call).toHaveBeenCalledTimes(1)
+  })
+
+  it('lists the ids of the turns already in the journal', async () => {
+    const { client } = historyClient([
+      [
+        { itemId: 'turn-a', body: { kind: 'turn', turnId: 't-1' } },
+        { itemId: 'm', body: { kind: 'message', role: 'user' } }
+      ]
+    ])
+    await expect(readRecentTurnIds(client, 's1')).resolves.toEqual(new Set(['t-1']))
+  })
+})
+
+describe('createSendTurnTracker', () => {
+  const OPENER = agentJournalSubmissionKey('msg-1')
+
+  function tracker(items: unknown[], priorTurnIds: string[] = ['t-earlier']) {
+    const call = vi.fn(async () => ({
+      id: 'r',
+      ok: true as const,
+      result: { page: { epoch: 'e', items, hasOlder: false } },
+      _meta: { runtimeId: 'rt' }
+    }))
+    // SAFETY: the tracker calls only `call`
+    const client = { call } as unknown as ChatClient
+    return createSendTurnTracker(client, 's1', {
+      priorTurnIds: new Set(priorTurnIds),
+      budgetMs: 1000,
+      intervalMs: 10
+    })
+  }
+
+  it('accepts a turn that was not in the journal before the send, and an event naming none', () => {
+    const own = tracker([])
+    expect(own.accepts('t-new')).toBe(true)
+    expect(own.accepts(undefined)).toBe(true)
+  })
+
+  it('refuses the finish of a turn the journal already held', () => {
+    expect(tracker([]).accepts('t-earlier')).toBe(false)
+  })
+
+  it('accepts a refused send under the message key the host reports', () => {
+    const own = tracker([])
+    own.accepted('msg-1')
+    own.finish()
+    expect(own.accepts(OPENER)).toBe(true)
+  })
+
+  it('matches only the turn the journal names once it has found it', async () => {
+    const own = tracker([
+      { itemId: 'turn-b', body: { kind: 'turn', turnId: 't-mine', userItemId: OPENER } }
+    ])
+    own.accepted('msg-1')
+    await vi.waitFor(() => expect(own.turnId).toBe('t-mine'))
+    own.finish()
+    expect(own.accepts('t-mine')).toBe(true)
+    expect(own.accepts('t-stray')).toBe(false)
+    expect(own.accepts('t-earlier')).toBe(false)
+  })
+
+  it('follows a steered send into the running turn it joined, though that turn predates it', async () => {
+    const own = tracker(
+      [
+        { itemId: 'turn-run', body: { kind: 'turn', turnId: 't-earlier' } },
+        {
+          itemId: OPENER,
+          body: { kind: 'message', role: 'user' },
+          turnScope: { kind: 'turn', turnItemId: 'turn-run' }
+        }
+      ],
+      ['t-earlier']
+    )
+    own.accepted('msg-1')
+    await vi.waitFor(() => expect(own.turnId).toBe('t-earlier'))
+    own.finish()
+    expect(own.accepts('t-earlier')).toBe(true)
   })
 })
