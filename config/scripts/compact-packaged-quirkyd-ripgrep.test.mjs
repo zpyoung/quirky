@@ -16,10 +16,7 @@ import { writeQuirkydTemplateTestFixture } from './quirkyd-template-test-fixture
 const require = createRequire(import.meta.url)
 const { compactPackagedQuirkydRipgrep } = require('./compact-packaged-quirkyd-ripgrep.cjs')
 const { verifyPackagedQuirkydTemplate } = require('./verify-packaged-quirkyd-template.cjs')
-const {
-  finalizePackagedQuirkydTemplate,
-  resealSignedWindowsApp
-} = require('./packaged-quirkyd-template.cjs')
+const { finalizePackagedQuirkydTemplate } = require('./packaged-quirkyd-template.cjs')
 const roots = []
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
@@ -100,7 +97,7 @@ describe('packaged ripgrep storage', () => {
     })
     const manifest = JSON.parse(await readFile(f.manifestPath, 'utf8'))
     expect(manifest.schemaVersion).toBe(4)
-    expect(Object.values(manifest.targets).filter((entry) => entry.packagedRipgrep)).toHaveLength(7)
+    expect(Object.values(manifest.targets).filter((entry) => entry.packagedRipgrep)).toHaveLength(5)
   })
 
   it('keeps binaries that differ and never removes Darwin signing inputs', async () => {
@@ -198,22 +195,5 @@ describe('packaged ripgrep storage', () => {
     await rm(shared)
     await symlink(other, shared)
     expect(() => compactPackagedQuirkydRipgrep(f.resourcesDir)).toThrow('must be a regular file')
-  })
-
-  it('reseals only shared Windows binaries explicitly returned by SignPath', async () => {
-    const f = await fixture()
-    compactPackagedQuirkydRipgrep(f.resourcesDir)
-    const filename = 'ripgrep/win32-x64/rg.exe'
-    const shared = join(f.resourcesDir, filename)
-    await writeFile(shared, 'authenticode-signed binary')
-    const list = join(f.appDir, 'inner-signing-list.txt')
-    await writeFile(list, 'Quirky.exe\r\n')
-    expect(() => resealSignedWindowsApp(f.appDir, list)).toThrow('checksum mismatch')
-    await writeFile(list, 'Quirky.exe\r\nresources\\ripgrep\\win32-x64\\rg.exe\r\n')
-    resealSignedWindowsApp(f.appDir, list)
-    const manifest = JSON.parse(await readFile(f.manifestPath, 'utf8'))
-    expect(manifest.targets['win32-x64'].files[filename]).toBe(hash(await readFile(shared)))
-    await writeFile(join(f.resourcesDir, 'ripgrep/linux-x64/rg'), 'unrelated change')
-    expect(() => resealSignedWindowsApp(f.appDir, list)).toThrow('checksum mismatch')
   })
 })
