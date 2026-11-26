@@ -15,7 +15,7 @@ export type WaitForEventOptions = {
 export type WaitForEventResult<T> = { result: T; event: PublicEvent }
 
 function isReadyFrame(frame: unknown): boolean {
-  return typeof frame === 'object' && frame !== null && Reflect.get(frame, 'type') === 'ready'
+  return typeof frame === 'object' && frame !== null && 'type' in frame && frame.type === 'ready'
 }
 
 /**

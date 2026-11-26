@@ -77,7 +77,7 @@ function kindOf(schema: ParamSchema): ParamKind {
   return 'json'
 }
 
-function topLevelShape(params: ParamSchema | null): Readonly<Record<string, ParamSchema>> {
+function topLevelParamFields(params: ParamSchema | null): Readonly<Record<string, ParamSchema>> {
   if (!params) {
     return {}
   }
@@ -86,10 +86,10 @@ function topLevelShape(params: ParamSchema | null): Readonly<Record<string, Para
 }
 
 function planParams(spec: PublicMethodSpec): { params: ParamPlan[]; positionals: ParamPlan[] } {
-  const shape = topLevelShape(spec.params)
+  const paramFields = topLevelParamFields(spec.params)
   const positionalKeys = new Set(spec.positionals ?? [])
   const plans = new Map<string, ParamPlan>()
-  for (const [key, schema] of Object.entries(shape)) {
+  for (const [key, schema] of Object.entries(paramFields)) {
     plans.set(key, {
       key,
       flag: toKebabCase(key),
@@ -140,7 +140,7 @@ function coerceScalar(plan: ParamPlan, raw: string): unknown {
       } catch {
         throw new RuntimeClientError('invalid_argument', `<${plan.flag}> must be valid JSON`)
       }
-    default:
+    case 'string':
       return raw
   }
 }
@@ -268,9 +268,9 @@ async function runGeneratedCommand(
     caller
   })
   const terse = ctx.flags.has('full') ? undefined : spec.terse
-  const shaped = terse ? { ...response, result: pickFields(response.result, terse) } : response
+  const printed = terse ? { ...response, result: pickFields(response.result, terse) } : response
   const { printResult } = await import('../format.js')
-  printResult(shaped, ctx.json, formatResultText)
+  printResult(printed, ctx.json, formatResultText)
 }
 
 function buildHandler(spec: PublicMethodSpec): CommandHandler {

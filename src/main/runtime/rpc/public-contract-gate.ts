@@ -157,7 +157,11 @@ function nonEmptyString(value: unknown): string | undefined {
 }
 
 function recordField(value: unknown, key: string): unknown {
-  return typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined
+  if (typeof value !== 'object' || value === null) {
+    return undefined
+  }
+  const entry: [string, unknown] | undefined = Object.entries(value).find(([name]) => name === key)
+  return entry?.[1]
 }
 
 /** The tab a call touched: named by the params for tab mutations, by the result for creations. */

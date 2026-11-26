@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { ipcMain, type BrowserWindow } from 'electron'
+import type { BrowserWindow, IpcMainEvent } from 'electron'
+import { getRuntimeDesktopSurface } from '../runtime-desktop-surface'
 import { PublicRpcError } from '../rpc/public-rpc-error'
 import { UiStateSnapshotSchema, type UiStateSnapshot } from '../../../shared/public-rpc/ui-state'
 
@@ -21,7 +22,7 @@ function requestFromRenderer<TReply extends { requestId: string }>(
   const requestId = randomUUID()
   return new Promise<TReply>((resolve, reject) => {
     const timer = setTimeout(() => {
-      ipcMain.removeListener(channels.reply, handler)
+      getRuntimeDesktopSurface().removeIpcListener(channels.reply, handler)
       reject(
         new PublicRpcError(
           'timeout',
@@ -33,15 +34,15 @@ function requestFromRenderer<TReply extends { requestId: string }>(
       )
     }, UI_RENDERER_REQUEST_TIMEOUT_MS)
 
-    const handler = (event: Electron.IpcMainEvent, reply: TReply): void => {
+    const handler = (event: IpcMainEvent, reply: TReply): void => {
       if (event.sender !== win.webContents || reply.requestId !== requestId) {
         return
       }
       clearTimeout(timer)
-      ipcMain.removeListener(channels.reply, handler)
+      getRuntimeDesktopSurface().removeIpcListener(channels.reply, handler)
       resolve(reply)
     }
-    ipcMain.on(channels.reply, handler)
+    getRuntimeDesktopSurface().onIpc(channels.reply, handler)
     win.webContents.send(channels.request, { requestId, ...payload })
   })
 }

@@ -37,7 +37,11 @@ function localResponse<T>(result: T): RuntimeRpcSuccess<T> {
 }
 
 function readField(value: unknown, key: string): unknown {
-  return typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined
+  if (typeof value !== 'object' || value === null) {
+    return undefined
+  }
+  const entry: [string, unknown] | undefined = Object.entries(value).find(([name]) => name === key)
+  return entry?.[1]
 }
 
 function stringField(value: unknown, key: string): string | undefined {
