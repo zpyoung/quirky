@@ -481,7 +481,8 @@ export function createAppCommandHandlers(
   const context: HandlerContext = {
     state,
     options,
-    floatingWorkspaceFocused: isFloatingWorkspacePanelFocused(),
+    floatingWorkspaceFocused:
+      typeof HTMLElement !== 'undefined' && isFloatingWorkspacePanelFocused(),
     canRevealRightSidebar,
     decline,
     claim,

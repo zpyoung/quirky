@@ -18,7 +18,11 @@ type AgentTouchMarkerProps = {
 
 /** A small badge on a tab an agent opened or focused, fading out once the touch window ends. */
 export function AgentTouchMarker({ tabIds }: AgentTouchMarkerProps): React.JSX.Element | null {
-  const snapshot = useSyncExternalStore(subscribeAgentActivity, getAgentActivitySnapshot)
+  const snapshot = useSyncExternalStore(
+    subscribeAgentActivity,
+    getAgentActivitySnapshot,
+    getAgentActivitySnapshot
+  )
   // a stale clock only ever errs toward "still active"; the timers below refresh it at each boundary
   const [now, setNow] = useState(() => Date.now())
   const touch = latestTouchFor(snapshot, tabIds)
