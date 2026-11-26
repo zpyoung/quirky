@@ -315,6 +315,25 @@ describe('legacy and public error codes in --json', () => {
     expect(payload.error.data.next).toBeUndefined()
   })
 
+  it('gives a hand-written public command such as ui state the stable code', () => {
+    const payload = reported(new RuntimeClientError('renderer_unavailable', 'no window'), {
+      commandPath: ['ui', 'state']
+    })
+
+    expect(payload.error.code).toBe('unavailable')
+    expect(payload.error.data.reason).toBe('renderer_unavailable')
+    expect(payload.error.data.stableCode).toBeUndefined()
+  })
+
+  it('keeps the original code for the legacy browser tab list', () => {
+    const payload = reported(new RuntimeClientError('browser_error', 'no browser'), {
+      commandPath: ['tab', 'list']
+    })
+
+    expect(payload.error.code).toBe('browser_error')
+    expect(payload.error.data.stableCode).toBe('internal')
+  })
+
   it('puts the stable code in error.code for an error a public command marked', () => {
     const payload = reported(markPublicContractError(selectorNotFound()), {
       commandPath: ['tab', 'list']

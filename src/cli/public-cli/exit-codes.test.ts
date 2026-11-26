@@ -63,16 +63,30 @@ describe('reportCliError in json mode', () => {
   function printedError(): {
     code: string
     message: string
-    data?: { reason?: string; next?: { command: string; why: string }[]; nextSteps?: string[] }
+    data?: {
+      reason?: string
+      stableCode?: string
+      next?: { command: string; why: string }[]
+      nextSteps?: string[]
+    }
   } {
     expect(logSpy).toHaveBeenCalledTimes(1)
     return JSON.parse(String(logSpy.mock.calls[0][0])).error
   }
 
-  it('puts the stable code in error.code and keeps the legacy code as the reason', () => {
+  it('keeps the original code for a legacy command and adds the stable code under data', () => {
     reportCliError(failure('selector_not_found'), true, { commandPath: ['worktree', 'show'] })
     const error = printedError()
+    expect(error.code).toBe('selector_not_found')
+    expect(error.data?.stableCode).toBe('not_found')
+    expect(error.data?.reason).toBe('selector_not_found')
+  })
+
+  it('puts the stable code in error.code and keeps the original code as the reason for a public command', () => {
+    reportCliError(failure('selector_not_found'), true, { commandPath: ['rpc'] })
+    const error = printedError()
     expect(error.code).toBe('not_found')
+    expect(error.data?.stableCode).toBeUndefined()
     expect(error.data?.reason).toBe('selector_not_found')
   })
 
@@ -95,7 +109,7 @@ describe('reportCliError in json mode', () => {
 
   it('synthesizes quirky status for a runtime that is not reachable', () => {
     reportCliError(new RuntimeClientError('runtime_unavailable', 'down'), true, {
-      commandPath: ['status']
+      commandPath: ['rpc']
     })
     const error = printedError()
     expect(error.code).toBe('unavailable')
@@ -135,11 +149,19 @@ describe('reportCliError in json mode', () => {
   })
 
   it('maps an unknown code to internal and keeps it as the reason', () => {
-    reportCliError(failure('runtime_error', 'kaput'), true, { commandPath: ['status'] })
+    reportCliError(failure('runtime_error', 'kaput'), true, { commandPath: ['rpc'] })
     const error = printedError()
     expect(error.code).toBe('internal')
     expect(error.data?.reason).toBe('runtime_error')
     expect(error.data?.next).toBeUndefined()
+  })
+
+  it('keeps an unknown code on a legacy command and reports internal under data', () => {
+    reportCliError(failure('runtime_error', 'kaput'), true, { commandPath: ['status'] })
+    const error = printedError()
+    expect(error.code).toBe('runtime_error')
+    expect(error.data?.stableCode).toBe('internal')
+    expect(error.data?.reason).toBe('runtime_error')
   })
 
   it('reports a local usage error as invalid_argument with no extra reason', () => {
