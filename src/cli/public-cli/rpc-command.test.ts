@@ -18,7 +18,11 @@ describe('buildRpcList', () => {
       stability: 'stable'
     })
     expect(byMethod.get('ui.get')).toMatchObject({ class: 'internal', stability: null })
-    expect(byMethod.get('plugins.list')).toMatchObject({ class: 'unstable', stability: 'unstable' })
+    expect(byMethod.get('plugins.list')).toMatchObject({ class: 'public', stability: 'stable' })
+    expect(byMethod.get('git.branchCompare')).toMatchObject({
+      class: 'unstable',
+      stability: 'unstable'
+    })
   })
 
   it('includes layout apply regardless of the build', () => {

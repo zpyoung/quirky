@@ -15,6 +15,7 @@ export class PublicEventBus {
   private seq = 0
   private events: PublicEvent[] = []
   private readonly listeners = new Set<(event: PublicEvent) => void>()
+  private readonly activityWatchers = new Set<(hasSubscribers: boolean) => void>()
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -63,9 +64,40 @@ export class PublicEventBus {
   }
 
   subscribe(listener: (event: PublicEvent) => void): () => void {
+    const wasIdle = this.listeners.size === 0
     this.listeners.add(listener)
+    if (wasIdle) {
+      this.notifyActivity(true)
+    }
     return () => {
-      this.listeners.delete(listener)
+      if (this.listeners.delete(listener) && this.listeners.size === 0) {
+        this.notifyActivity(false)
+      }
+    }
+  }
+
+  /**
+   * Reports when the bus gains its first live subscriber and loses its last, so a source that is
+   * costly to feed can run only while someone is listening. Fires once at registration when a
+   * subscriber is already present.
+   */
+  watchSubscriberActivity(watcher: (hasSubscribers: boolean) => void): () => void {
+    this.activityWatchers.add(watcher)
+    if (this.listeners.size > 0) {
+      watcher(true)
+    }
+    return () => {
+      this.activityWatchers.delete(watcher)
+    }
+  }
+
+  private notifyActivity(hasSubscribers: boolean): void {
+    for (const watcher of this.activityWatchers) {
+      try {
+        watcher(hasSubscribers)
+      } catch (error) {
+        console.error('[public-events] a subscriber watcher threw', error)
+      }
     }
   }
 
