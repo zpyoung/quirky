@@ -4,7 +4,6 @@ import { printResult } from '../format'
 import { waitForEvent } from '../public-cli/wait-for-event'
 import { RuntimeClientError } from '../runtime/types'
 import { getOptionalWorktreeSelector } from '../selectors'
-import { quoteCliCommandArgument } from '../shell-command-quote'
 import { readCallerHintFromEnv, type CallerHint } from '../../shared/public-rpc/caller-hint'
 import type { PublicEvent } from '../../shared/public-rpc/public-events'
 
@@ -49,19 +48,6 @@ export function publicCallOptions(confirm = false): {
     confirm,
     caller: Object.keys(hint).length > 0 ? hint : undefined
   }
-}
-
-/** A remote request cannot carry the server-side confirm gate, so the CLI refuses an unconfirmed change itself. */
-export function throwConfirmationRequired(ctx: HandlerContext, what: string): never {
-  const command = [...(ctx.rawArgs ?? []), '--yes'].map(quoteCliCommandArgument).join(' ')
-  throw new RuntimeClientError(
-    'needs_confirmation',
-    `${what} changes state and needs confirmation.`,
-    {
-      reason: 'confirmation_required',
-      next: [{ command: `quirky ${command}`, why: 'run again with --yes to confirm' }]
-    }
-  )
 }
 
 function formatUiState(state: UiStateResult): string {
