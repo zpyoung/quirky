@@ -214,6 +214,68 @@ function followAgentSessionHost(bus: PublicEventBus): () => void {
   }
 }
 
+/**
+ * terminal.idle is derived from the agent-idle terminal side-effect fact, and merely listening for
+ * side effects makes a headless runtime scan PTY output. So the tap exists only while the bus has
+ * a live subscriber.
+ */
+function followTerminalIdle(
+  bus: PublicEventBus,
+  runtime: Pick<PublicEventSourceDeps['runtime'], 'onClientEvent'> &
+    Partial<Pick<QuirkyRuntimeService, 'getAgentStatusTerminalHandleForPaneKey'>>
+): () => void {
+  let stopTap = (): void => {}
+  let attached = false
+  const detach = (): void => {
+    stopTap()
+    stopTap = () => {}
+    attached = false
+  }
+  const attach = (): void => {
+    if (attached) {
+      return
+    }
+    attached = true
+    stopTap = attachIsolated('terminal idle', () =>
+      runtime.onClientEvent((event) => {
+        if (event.type !== 'terminalSideEffects') {
+          return
+        }
+        const { batch } = event
+        // a replay restores state and a stale-title clear is a paused agent, so neither is a finished turn
+        const idled = batch.facts.some(
+          (fact) => fact.kind === 'agent-idle' && fact.staleWorkingTitleClear !== true
+        )
+        if (!idled || batch.replay) {
+          return
+        }
+        const terminalHandle = batch.paneKey
+          ? runtime.getAgentStatusTerminalHandleForPaneKey?.(batch.paneKey)
+          : undefined
+        bus.publish({
+          topic: 'workspace',
+          type: 'terminal.idle',
+          data: {
+            ...(batch.worktreeId === undefined ? {} : { worktreeId: batch.worktreeId }),
+            ...(terminalHandle === undefined ? {} : { terminalHandle })
+          }
+        })
+      })
+    )
+  }
+  const stopWatching = bus.watchSubscriberActivity((hasSubscribers) => {
+    if (hasSubscribers) {
+      attach()
+    } else {
+      detach()
+    }
+  })
+  return () => {
+    stopWatching()
+    detach()
+  }
+}
+
 /** Wires every runtime source into the bus; the returned function detaches them all. */
 export function installPublicEventSources({
   bus,
@@ -223,37 +285,19 @@ export function installPublicEventSources({
 }: PublicEventSourceDeps): () => void {
   const stops: (() => void)[] = []
 
-  // consumes terminal side effects, because terminal.idle is derived from the agent-idle fact
+  // opts out of terminal side effects so this always-on tap never starts the desktop-only output scanners
   stops.push(
-    runtime.onClientEvent((event) => {
-      if (event.type === 'workspaceViewChanged') {
-        bus.publish({ topic: 'ui', type: 'view.changed', data: { view: 'workspace' } })
-        return
-      }
-      if (event.type !== 'terminalSideEffects') {
-        return
-      }
-      const { batch } = event
-      // a replay restores state and a stale-title clear is a paused agent, so neither is a finished turn
-      const idled = batch.facts.some(
-        (fact) => fact.kind === 'agent-idle' && fact.staleWorkingTitleClear !== true
-      )
-      if (!idled || batch.replay) {
-        return
-      }
-      const terminalHandle = batch.paneKey
-        ? runtime.getAgentStatusTerminalHandleForPaneKey?.(batch.paneKey)
-        : undefined
-      bus.publish({
-        topic: 'workspace',
-        type: 'terminal.idle',
-        data: {
-          ...(batch.worktreeId === undefined ? {} : { worktreeId: batch.worktreeId }),
-          ...(terminalHandle === undefined ? {} : { terminalHandle })
+    runtime.onClientEvent(
+      (event) => {
+        if (event.type === 'workspaceViewChanged') {
+          bus.publish({ topic: 'ui', type: 'view.changed', data: { view: 'workspace' } })
         }
-      })
-    })
+      },
+      { consumesTerminalSideEffects: false }
+    )
   )
+
+  stops.push(followTerminalIdle(bus, runtime))
 
   stops.push(
     runtime.onWorktreeLifecycle((event) => {

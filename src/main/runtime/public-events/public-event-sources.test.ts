@@ -10,9 +10,20 @@ const WINDOW_CONTENTS = { id: 'main-window' }
 
 type IpcListener = (event: IpcMainEvent, payload: unknown) => void
 
-function install(options: { handleForPane?: (paneKey: string) => string | undefined } = {}) {
+type ClientListener = (event: RuntimeClientEvent) => void
+type ClientListenerOptions = { consumesTerminalSideEffects?: boolean }
+
+function install(
+  options: {
+    handleForPane?: (paneKey: string) => string | undefined
+    withSubscriber?: boolean
+  } = {}
+) {
   const bus = new PublicEventBus()
-  let clientListener: (event: RuntimeClientEvent) => void = () => {}
+  if (options.withSubscriber !== false) {
+    bus.subscribe(() => {})
+  }
+  const clientListeners = new Set<{ listener: ClientListener; options?: ClientListenerOptions }>()
   const ipcListeners = new Map<string, IpcListener>()
   setRuntimeDesktopSurface({
     showNotification: () => false,
@@ -25,9 +36,12 @@ function install(options: { handleForPane?: (paneKey: string) => string | undefi
     bus,
     // SAFETY: the sources read only these members of the runtime.
     runtime: {
-      onClientEvent: (listener: (event: RuntimeClientEvent) => void) => {
-        clientListener = listener
-        return () => {}
+      onClientEvent: (listener: ClientListener, listenerOptions?: ClientListenerOptions) => {
+        const entry = { listener, options: listenerOptions }
+        clientListeners.add(entry)
+        return () => {
+          clientListeners.delete(entry)
+        }
       },
       onWorktreeLifecycle: () => () => {},
       onNotificationDispatched: () => () => {},
@@ -40,11 +54,18 @@ function install(options: { handleForPane?: (paneKey: string) => string | undefi
     const replay = bus.since(0, ['ui', 'workspace'])
     return Array.isArray(replay) ? replay : []
   }
+  const emitClientEvent = (event: RuntimeClientEvent): void => {
+    for (const { listener } of clientListeners) {
+      listener(event)
+    }
+  }
+  const sideEffectConsumers = (): number =>
+    [...clientListeners].filter(({ options: o }) => o?.consumesTerminalSideEffects !== false).length
   const sideEffects = (
     facts: TerminalSideEffectFact[],
     extra: { replay?: true; paneKey?: string; worktreeId?: string } = {}
   ): void =>
-    clientListener({
+    emitClientEvent({
       type: 'terminalSideEffects',
       batch: { ptyId: 'pty-1', seq: 1, worktreeId: 'wt-1', facts, ...extra }
     })
@@ -55,7 +76,16 @@ function install(options: { handleForPane?: (paneKey: string) => string | undefi
     // SAFETY: only `sender` is read from the event.
     ipcListeners.get(UI_TABS_CHANGED_CHANNEL)?.({ sender } as unknown as IpcMainEvent, { tabs })
   }
-  return { bus, detach, events, sideEffects, reportTabs, ipcListeners }
+  return {
+    bus,
+    detach,
+    events,
+    sideEffects,
+    sideEffectConsumers,
+    emitClientEvent,
+    reportTabs,
+    ipcListeners
+  }
 }
 
 describe('public event sources', () => {
@@ -115,6 +145,58 @@ describe('public event sources', () => {
       sideEffects(facts, extra)
 
       expect(events()).toEqual([])
+    })
+  })
+
+  describe('terminal side-effect tap', () => {
+    it('is attached only while the bus has a live subscriber', () => {
+      const { bus, sideEffectConsumers } = install({ withSubscriber: false })
+      expect(sideEffectConsumers()).toBe(0)
+
+      const stopFirst = bus.subscribe(() => {})
+      const stopSecond = bus.subscribe(() => {})
+      expect(sideEffectConsumers()).toBe(1)
+
+      stopFirst()
+      expect(sideEffectConsumers()).toBe(1)
+      stopSecond()
+      expect(sideEffectConsumers()).toBe(0)
+
+      const stopAgain = bus.subscribe(() => {})
+      expect(sideEffectConsumers()).toBe(1)
+      stopAgain()
+    })
+
+    it('does not publish terminal.idle once the last subscriber is gone', () => {
+      const { bus, sideEffects, events } = install({ withSubscriber: false })
+
+      const stop = bus.subscribe(() => {})
+      stop()
+      sideEffects([{ kind: 'agent-idle', title: 'Done' }])
+
+      expect(events()).toEqual([])
+    })
+
+    it('is released when the sources are detached', () => {
+      const { detach, sideEffectConsumers } = install()
+      expect(sideEffectConsumers()).toBe(1)
+
+      detach()
+
+      expect(sideEffectConsumers()).toBe(0)
+    })
+  })
+
+  describe('view.changed', () => {
+    it('is published without subscribing to terminal side effects', () => {
+      const { emitClientEvent, sideEffectConsumers, events } = install({ withSubscriber: false })
+
+      emitClientEvent({ type: 'workspaceViewChanged' })
+
+      expect(sideEffectConsumers()).toBe(0)
+      expect(events()).toMatchObject([
+        { topic: 'ui', type: 'view.changed', data: { view: 'workspace' } }
+      ])
     })
   })
 

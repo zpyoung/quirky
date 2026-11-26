@@ -133,4 +133,32 @@ describe('PublicEventBus', () => {
 
     expect(received).toEqual([1])
   })
+
+  describe('watchSubscriberActivity', () => {
+    it('reports the first subscriber arriving and the last one leaving', () => {
+      const bus = new PublicEventBus()
+      const watcher = vi.fn()
+      bus.watchSubscriberActivity(watcher)
+
+      const stopFirst = bus.subscribe(() => {})
+      const stopSecond = bus.subscribe(() => {})
+      stopFirst()
+      expect(watcher.mock.calls).toEqual([[true]])
+      stopSecond()
+
+      expect(watcher.mock.calls).toEqual([[true], [false]])
+    })
+
+    it('reports an already-present subscriber at registration and stops after unwatching', () => {
+      const bus = new PublicEventBus()
+      const stopListening = bus.subscribe(() => {})
+      const watcher = vi.fn()
+
+      const unwatch = bus.watchSubscriberActivity(watcher)
+      unwatch()
+      stopListening()
+
+      expect(watcher.mock.calls).toEqual([[true]])
+    })
+  })
 })
