@@ -13,6 +13,7 @@ import type {
 } from '../../../shared/delegated-mobile-device-contract'
 import type { OrchestrationCompatibilityEvidence } from '../../../shared/orchestration-compatibility-evidence'
 import type { OrchestrationSessionCaller } from '../orchestration/orchestration-caller-identity'
+import type { AttributedCaller, CallerHint } from '../../../shared/public-rpc/caller-hint'
 import type { RpcCallerIdentity } from './rpc-caller-identity'
 import type { RpcBinarySender } from './rpc-binary-sender'
 import type { RpcMethodPermission } from './rpc-method-permission'
@@ -64,6 +65,12 @@ export type RpcRequest = {
   expectedRuntimeSource?: unknown
   // Why unknown: phone-supplied routing target (`runtime:<env>`), validated where it is read.
   executionHost?: unknown
+  /** The public CLI confirmed a destructive call; honored only with `publicContract`. */
+  confirm?: boolean
+  /** Opts the request into the public contract (preview, approvals, activity); legacy clients omit it. */
+  publicContract?: 1
+  /** Attribution only; it never authorizes anything. */
+  caller?: CallerHint
 }
 
 export type LegacyCoordinatorAuthorityProof = Readonly<{
@@ -93,6 +100,8 @@ export type RpcContext = {
   pairedDeviceParentId?: string
   // Why: host-assigned from the transport (rpc-caller-identity.ts); absent when the transport could not name its caller.
   caller?: RpcCallerIdentity
+  // Why: set by the public contract gate for public calls; absent on legacy requests.
+  publicCaller?: AttributedCaller
   // Why: lets handlers gate mobile payload truncation to phones only; undefined for in-process callers → treat as full-class (no clip).
   clientKind?: 'mobile' | 'runtime'
   // Why: negotiation is bound to the authenticated socket, never asserted by a destructive request.
