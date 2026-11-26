@@ -24,7 +24,9 @@
         "numberIntegerError": "请输入整数。",
         "numberMinError": "请输入至少为 {{value0}} 的数字。",
         "numberMaxError": "请输入最多为 {{value0}} 的数字。",
-        "dateInvalidError": "请输入有效的日期。"
+        "dateInvalidError": "请输入有效的日期。",
+        "submitNotCommitted": "此问题已被回答或在别处关闭。",
+        "submitFailed": "无法提交你的回答：{{reason}}"
       },
       "askPreview": {
         "hide": "隐藏预览",
@@ -43,6 +45,12 @@
         "title": "问题",
         "empty": "没有问题",
         "emptyDescription": "等待你回答的问题会显示在这里。"
+      },
+      "pendingList": {
+        "heading": "待回答的问题",
+        "untitled": "问题",
+        "paneClosed": "窗格已关闭",
+        "dismiss": "忽略"
       }
     }
   }

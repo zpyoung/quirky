@@ -12,6 +12,8 @@ export type AskQuestionDraft = {
   /** Raw input for `text` / `number` / `date`; parsed against the question's domain on submit. */
   text: string
   confirm: boolean | null
+  /** The browser holds in-progress number text (`1e`, `-`) it reports as an empty value. */
+  numberBadInput?: boolean
 }
 
 export function initialDraftFor(partial: AskPartialQuestionDraft | undefined): AskQuestionDraft {

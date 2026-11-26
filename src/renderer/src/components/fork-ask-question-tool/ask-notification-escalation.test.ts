@@ -4,22 +4,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { setPresenceGated } from '@/hooks/agent-auto-ack-presence'
 
-const mocks = vi.hoisted(() => ({
-  storeState: {
-    activeView: 'terminal',
-    activeWorktreeId: null as string | null,
-    settings: {},
-    floatingWorkspacePanelOpen: false,
-    groupsByWorktree: {} as Record<string, { id: string; activeTabId: string | null }[]>,
-    activeGroupIdByWorktree: {} as Record<string, string | null>,
-    unifiedTabsByWorktree: {} as Record<
-      string,
-      { id: string; contentType: 'terminal'; entityId: string }[]
-    >,
-    terminalLayoutsByTabId: {} as Record<string, { activeLeafId: string | null }>,
-    worktreesByRepo: {} as Record<string, unknown[]>
+const mocks = vi.hoisted(() => {
+  const nullable = <T>(): T | null => null
+  return {
+    storeState: {
+      activeView: 'terminal',
+      activeWorktreeId: null as string | null,
+      settings: {},
+      floatingWorkspacePanelOpen: false,
+      groupsByWorktree: {} as Record<string, { id: string; activeTabId: string | null }[]>,
+      activeGroupIdByWorktree: {} as Record<string, string | null>,
+      unifiedTabsByWorktree: {} as Record<
+        string,
+        { id: string; contentType: 'terminal'; entityId: string }[]
+      >,
+      terminalLayoutsByTabId: {} as Record<string, { activeLeafId: string | null }>,
+      rightSidebarOpen: false,
+      askPanelShownAskId: nullable<string>(),
+      worktreesByRepo: {} as Record<string, unknown[]>
+    }
   }
-}))
+})
 
 vi.mock('@/store', () => {
   const useAppStore = Object.assign(
@@ -49,6 +54,8 @@ function setPaneFocused(focused: boolean): void {
     ? { [WORKTREE_ID]: [{ id: 'unified-1', contentType: 'terminal', entityId: TAB_ID }] }
     : {}
   mocks.storeState.terminalLayoutsByTabId = focused ? { [TAB_ID]: { activeLeafId: LEAF_ID } } : {}
+  mocks.storeState.rightSidebarOpen = focused
+  mocks.storeState.askPanelShownAskId = focused ? 'ask-1' : null
 }
 
 function stubNotificationsDispatch(): ReturnType<typeof vi.fn> {
@@ -119,6 +126,36 @@ describe('useAskNotificationEscalation', () => {
     })
 
     expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('still escalates when the tab is visible but another split pane is focused', () => {
+    setPaneFocused(true)
+    mocks.storeState.terminalLayoutsByTabId = {
+      [TAB_ID]: { activeLeafId: '22222222-2222-4222-8222-222222222222' }
+    }
+    renderEscalation()
+
+    act(() => {
+      vi.advanceTimersByTime(ASK_NOTIFICATION_ESCALATION_DELAY_MS)
+    })
+
+    expect(dispatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not restart the clock when focus churns without the pane being seen', () => {
+    const { rerender } = renderEscalation()
+
+    act(() => {
+      vi.advanceTimersByTime(ASK_NOTIFICATION_ESCALATION_DELAY_MS - 1000)
+      window.dispatchEvent(new Event('focus'))
+      window.dispatchEvent(new Event('blur'))
+    })
+    rerender({ status: 'registered' })
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    expect(dispatch).toHaveBeenCalledTimes(1)
   })
 
   it('does not notify when the timer fires after focus returned through a path the hook never re-rendered against', () => {

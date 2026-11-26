@@ -42,6 +42,8 @@ export function useAskPanelFocus(
   const dismissedAskIdsRef = useRef<Set<string>>(new Set())
   const armedAskIdRef = useRef<string | null>(null)
   const lastRouteRequestIdRef = useRef(routeRequestId)
+  const revealNonce = useAppStore((state) => state.askPanelRevealNonce)
+  const lastRevealNonceRef = useRef(revealNonce)
   const userOwnsSidebarRef = useRef(false)
 
   // Derived in render rather than through effects so the panel never paints one frame of the
@@ -57,6 +59,11 @@ export function useAskPanelFocus(
       dismissedAskIdsRef.current.add(armedAskIdRef.current)
       userOwnsSidebarRef.current = true
     }
+  }
+  if (revealNonce !== lastRevealNonceRef.current) {
+    lastRevealNonceRef.current = revealNonce
+    dismissedAskIdsRef.current.clear()
+    userOwnsSidebarRef.current = false
   }
   const dismissed = askId !== null && dismissedAskIdsRef.current.has(askId)
   if (isAwaitingAnswer && askId !== null && !dismissed) {

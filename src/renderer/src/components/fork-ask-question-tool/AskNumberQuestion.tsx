@@ -26,7 +26,13 @@ export function AskNumberQuestion({
       disabled={disabled}
       aria-invalid={invalid}
       aria-label={question.header ?? question.question}
-      onChange={(event) => onChange({ ...draft, text: event.target.value })}
+      onChange={(event) =>
+        onChange({
+          ...draft,
+          text: event.target.value,
+          numberBadInput: event.target.validity.badInput
+        })
+      }
     />
   )
 }

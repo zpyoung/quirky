@@ -24,7 +24,9 @@
         "numberIntegerError": "Enter a whole number.",
         "numberMinError": "Enter a number of at least {{value0}}.",
         "numberMaxError": "Enter a number of at most {{value0}}.",
-        "dateInvalidError": "Enter a valid date."
+        "dateInvalidError": "Enter a valid date.",
+        "submitNotCommitted": "This question was already answered or closed elsewhere.",
+        "submitFailed": "Couldn't submit your answer: {{reason}}"
       },
       "askPreview": {
         "hide": "Hide preview",
@@ -43,6 +45,12 @@
         "title": "Questions",
         "empty": "No questions",
         "emptyDescription": "A question waiting on your answer appears here."
+      },
+      "pendingList": {
+        "heading": "Pending questions",
+        "untitled": "Question",
+        "paneClosed": "Pane closed",
+        "dismiss": "Dismiss"
       }
     }
   }

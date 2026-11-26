@@ -24,7 +24,9 @@
         "numberIntegerError": "整数を入力してください。",
         "numberMinError": "{{value0}}以上の数値を入力してください。",
         "numberMaxError": "{{value0}}以下の数値を入力してください。",
-        "dateInvalidError": "有効な日付を入力してください。"
+        "dateInvalidError": "有効な日付を入力してください。",
+        "submitNotCommitted": "この質問はすでに回答済みか、別の場所で閉じられています。",
+        "submitFailed": "回答を送信できませんでした: {{reason}}"
       },
       "askPreview": {
         "hide": "プレビューを隠す",
@@ -43,6 +45,12 @@
         "title": "質問",
         "empty": "質問はありません",
         "emptyDescription": "回答を待っている質問がここに表示されます。"
+      },
+      "pendingList": {
+        "heading": "保留中の質問",
+        "untitled": "質問",
+        "paneClosed": "ペインは閉じられています",
+        "dismiss": "閉じる"
       }
     }
   }
