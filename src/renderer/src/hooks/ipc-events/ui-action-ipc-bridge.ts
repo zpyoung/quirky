@@ -157,8 +157,8 @@ export function registerUiActionIpcBridge(unsubs: (() => void)[]): void {
     const notify = ui.notifyUiTabsChanged
     let lastTabs = useAppStore.getState().unifiedTabsByWorktree
     let timer: ReturnType<typeof setTimeout> | null = null
-    // main only learns tab changes from these reports, so the current set goes first as its baseline
-    notify({ tabs: buildUiTabsSnapshot(useAppStore.getState()) })
+    // a fresh renderer re-seeds main's tab baseline, so its first report must not read as tabs opening
+    notify({ tabs: buildUiTabsSnapshot(useAppStore.getState()), baseline: true })
     const unsubscribeStore = useAppStore.subscribe((state) => {
       if (state.unifiedTabsByWorktree === lastTabs) {
         return

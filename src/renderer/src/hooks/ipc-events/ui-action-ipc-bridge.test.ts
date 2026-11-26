@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { registerAppCommandDispatcher } from '@/lib/app-command-dispatch'
 import type { Tab } from '../../../../shared/tab-types'
+import { useAppStore } from '../../store'
 import { createTestStore } from '../../store/slices/store-test-helpers'
 import { buildUiTabsSnapshot, registerUiActionIpcBridge } from './ui-action-ipc-bridge'
 
@@ -83,5 +84,31 @@ describe('registerUiActionIpcBridge', () => {
       worktreeId: 'repo::/feature'
     })
     expect(replyUiAction).toHaveBeenCalledWith({ requestId: 'r1', claimed: true })
+  })
+
+  it('marks only its first tab report as the baseline so main re-seeds on a reload', () => {
+    vi.useFakeTimers()
+    const notifyUiTabsChanged = vi.fn()
+    vi.stubGlobal('window', { api: { ui: { notifyUiTabsChanged } } })
+    const unsubs: (() => void)[] = []
+    const originalTabs = useAppStore.getState().unifiedTabsByWorktree
+
+    try {
+      registerUiActionIpcBridge(unsubs)
+      useAppStore.setState({ unifiedTabsByWorktree: { 'wt-1': [tab('t1', 'wt-1', 'terminal')] } })
+      vi.advanceTimersByTime(200)
+    } finally {
+      unsubs.forEach((unsub) => unsub())
+      useAppStore.setState({ unifiedTabsByWorktree: originalTabs })
+      vi.useRealTimers()
+    }
+
+    expect(notifyUiTabsChanged.mock.calls.map(([report]) => report.baseline)).toEqual([
+      true,
+      undefined
+    ])
+    expect(notifyUiTabsChanged.mock.calls[1][0].tabs).toEqual({
+      'wt-1': [{ id: 't1', type: 'terminal' }]
+    })
   })
 })

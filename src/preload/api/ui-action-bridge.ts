@@ -18,8 +18,14 @@ export type UiFocusChange = {
   tabType?: string
   view?: string
 }
-/** Every workspace's open tabs, so main can tell which opened or closed between two reports. */
-export type UiTabsChange = { tabs: Record<string, { id: string; type: string }[]> }
+/**
+ * Every workspace's open tabs, so main can tell which opened or closed between two reports.
+ * `baseline` marks a renderer's first report, which re-seeds main instead of reading as changes.
+ */
+export type UiTabsChange = {
+  tabs: Record<string, { id: string; type: string }[]>
+  baseline?: boolean
+}
 
 /** Optional so a renderer built without this preload (older web shells, test fixtures) still mounts. */
 export type UiActionBridgeApi = {

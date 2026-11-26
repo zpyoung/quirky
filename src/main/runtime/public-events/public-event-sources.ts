@@ -25,7 +25,8 @@ const FocusChangedPayload = z.object({
 })
 
 const TabsChangedPayload = z.object({
-  tabs: z.record(z.string(), z.array(z.object({ id: z.string(), type: z.string() })))
+  tabs: z.record(z.string(), z.array(z.object({ id: z.string(), type: z.string() }))),
+  baseline: z.boolean().optional()
 })
 
 type AgentSessionHostTaps = Pick<
@@ -45,36 +46,42 @@ type PublicEventSourceDeps = {
   getWindow: () => { webContents: unknown } | null
 }
 
+type TabsReport = z.infer<typeof TabsChangedPayload>
+
 /**
- * Turns the renderer's per-workspace tab lists into tab.opened and tab.closed. The first list a
- * workspace reports only seeds what is known, since a window that is still restoring its tabs
- * would otherwise announce every one of them as new.
+ * Turns the renderer's per-workspace tab lists into tab.opened and tab.closed. Only the first
+ * report after a window connects or reloads (a report marked `baseline`) seeds silently, since a
+ * restoring window would otherwise announce every tab as new. After that a workspace appearing
+ * opens all its tabs and a workspace vanishing closes all of them.
  */
-function createTabEventTracker(
-  bus: PublicEventBus
-): (tabs: z.infer<typeof TabsChangedPayload>['tabs']) => void {
-  let known = new Map<string, Map<string, string>>()
-  return (tabsByWorkspace) => {
+function createTabEventTracker(bus: PublicEventBus): (report: TabsReport) => void {
+  let known: Map<string, Map<string, string>> | null = null
+  return ({ tabs: tabsByWorkspace, baseline }) => {
     const next = new Map<string, Map<string, string>>()
     for (const [worktreeId, tabs] of Object.entries(tabsByWorkspace)) {
-      const current = new Map(tabs.map((tab) => [tab.id, tab.type]))
-      const previous = known.get(worktreeId)
-      next.set(worktreeId, current)
-      if (!previous) {
-        continue
-      }
+      next.set(worktreeId, new Map(tabs.map((tab) => [tab.id, tab.type])))
+    }
+    const previousByWorkspace = known
+    known = next
+    if (previousByWorkspace === null || baseline === true) {
+      return
+    }
+    for (const [worktreeId, previous] of previousByWorkspace) {
+      const current = next.get(worktreeId)
       for (const [tabId, tabType] of previous) {
-        if (!current.has(tabId)) {
+        if (!current?.has(tabId)) {
           bus.publish({ topic: 'ui', type: 'tab.closed', data: { worktreeId, tabId, tabType } })
         }
       }
+    }
+    for (const [worktreeId, current] of next) {
+      const previous = previousByWorkspace.get(worktreeId)
       for (const [tabId, tabType] of current) {
-        if (!previous.has(tabId)) {
+        if (!previous?.has(tabId)) {
           bus.publish({ topic: 'ui', type: 'tab.opened', data: { worktreeId, tabId, tabType } })
         }
       }
     }
-    known = next
   }
 }
 
@@ -215,29 +222,20 @@ function followAgentSessionHost(bus: PublicEventBus): () => void {
 }
 
 /**
- * terminal.idle is derived from the agent-idle terminal side-effect fact, and merely listening for
- * side effects makes a headless runtime scan PTY output. So the tap exists only while the bus has
- * a live subscriber.
+ * terminal.idle is derived from the agent-idle terminal side-effect fact. A passive observer
+ * publishes it whenever the runtime produces facts, so idle edges reach the replay buffer even
+ * with nobody subscribed. A headless runtime scans PTY output only while a consumer exists, so a
+ * second listener holds that consumer slot while the bus has a live subscriber; with no window and
+ * no subscribers there are no idle facts at all.
  */
 function followTerminalIdle(
   bus: PublicEventBus,
   runtime: Pick<PublicEventSourceDeps['runtime'], 'onClientEvent'> &
     Partial<Pick<QuirkyRuntimeService, 'getAgentStatusTerminalHandleForPaneKey'>>
 ): () => void {
-  let stopTap = (): void => {}
-  let attached = false
-  const detach = (): void => {
-    stopTap()
-    stopTap = () => {}
-    attached = false
-  }
-  const attach = (): void => {
-    if (attached) {
-      return
-    }
-    attached = true
-    stopTap = attachIsolated('terminal idle', () =>
-      runtime.onClientEvent((event) => {
+  const stopObserver = attachIsolated('terminal idle', () =>
+    runtime.onClientEvent(
+      (event) => {
         if (event.type !== 'terminalSideEffects') {
           return
         }
@@ -260,19 +258,38 @@ function followTerminalIdle(
             ...(terminalHandle === undefined ? {} : { terminalHandle })
           }
         })
-      })
+      },
+      { consumesTerminalSideEffects: false, observesTerminalSideEffects: true }
+    )
+  )
+
+  let stopScannerHold = (): void => {}
+  let holding = false
+  const release = (): void => {
+    stopScannerHold()
+    stopScannerHold = () => {}
+    holding = false
+  }
+  const hold = (): void => {
+    if (holding) {
+      return
+    }
+    holding = true
+    stopScannerHold = attachIsolated('terminal idle scanners', () =>
+      runtime.onClientEvent(() => {})
     )
   }
   const stopWatching = bus.watchSubscriberActivity((hasSubscribers) => {
     if (hasSubscribers) {
-      attach()
+      hold()
     } else {
-      detach()
+      release()
     }
   })
   return () => {
     stopWatching()
-    detach()
+    release()
+    stopObserver()
   }
 }
 
@@ -356,7 +373,7 @@ export function installPublicEventSources({
     }
     const parsed = TabsChangedPayload.safeParse(payload)
     if (parsed.success) {
-      publishTabChanges(parsed.data.tabs)
+      publishTabChanges(parsed.data)
     }
   }
   const surface = getRuntimeDesktopSurface()
