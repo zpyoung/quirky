@@ -296,7 +296,7 @@ Back-link: [Command surface (first version)](./logic.md#command-surface-first-ve
   - `files.readDir|read|write|searchPaths|search|delete`, where `write` to an existing path and `delete` are destructive with category `file-overwrite-delete`
   - `session.tabs.listAll|activate|close|move|setTabProps`
 - `settings set <key> <value>` is a hand-written override that builds the `SettingsUpdate` object from one key.
-- Tab family: see the [Open decision](#open-decision-tab-family) below.
+- Tab family: see [Tab family (resolved)](#tab-family-resolved).
 
 ### U8: Approvals, activity, markers
 
