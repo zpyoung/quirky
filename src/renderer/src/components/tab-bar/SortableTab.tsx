@@ -69,12 +69,6 @@ export type SortableTabProps = {
   dragData: TabDragItemData
   dropIndicator?: DropIndicator
   includeTopTabBorder?: boolean
-  /** True when this agent terminal can switch between the terminal and native chat views; surfaces the "Switch view" context-menu item. */
-  canToggleViewMode?: boolean
-  /** True when the tab is currently showing the native chat view. */
-  isChatView?: boolean
-  /** Toggle the tab between terminal and native chat view. */
-  onToggleViewMode?: () => void
   canSplitTerminal?: boolean
   /** Set only for a native chat tab. */
   nativeChat?: NativeChatTabSession
@@ -106,9 +100,6 @@ export default function SortableTab({
   dragData,
   dropIndicator,
   includeTopTabBorder = true,
-  canToggleViewMode = false,
-  isChatView = false,
-  onToggleViewMode,
   canSplitTerminal = true,
   nativeChat,
   namingFailure
@@ -426,9 +417,6 @@ export default function SortableTab({
         onRenameOpen={handleRenameOpen}
         onSetTabColor={onSetTabColor}
         onTogglePin={onTogglePin}
-        canToggleViewMode={canToggleViewMode}
-        isChatView={isChatView}
-        onToggleViewMode={onToggleViewMode}
         canSplitTerminal={canSplitTerminal}
         nativeChat={nativeChat}
       />

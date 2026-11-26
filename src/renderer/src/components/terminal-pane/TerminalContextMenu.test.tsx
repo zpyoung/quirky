@@ -82,9 +82,8 @@ function renderMenu(overrides: Record<string, unknown> = {}): string {
     canContinueAgentSessionInNewSession: false,
     onContinueAgentSessionInNewSession: vi.fn(),
     onForkAgentSession: vi.fn(),
-    canToggleNativeChat: false,
-    isNativeChatView: false,
-    onToggleNativeChat: vi.fn(),
+    canResumeInChat: false,
+    onResumeInChat: vi.fn(),
     canToggleTerminalDock: false,
     isTerminalDockDocked: false,
     onToggleTerminalDock: vi.fn(),
@@ -176,10 +175,20 @@ describe('TerminalContextMenu', () => {
     expect(onContinueAgentSessionInNewSession).toHaveBeenCalledTimes(1)
   })
 
-  it('does not expose a native/terminal view switch in the terminal menu', () => {
+  it('offers Continue in Chat UI only where the pane has a conversation to resume', () => {
     renderMenu()
+    expect(
+      items.list.some((item) => childrenText(item.children).includes('Continue in Chat UI'))
+    ).toBe(false)
 
-    expect(items.list.some((item) => childrenText(item.children).includes('Switch to'))).toBe(false)
+    const onResumeInChat = vi.fn()
+    renderMenu({ canResumeInChat: true, onResumeInChat })
+    const resume = items.list.find((item) =>
+      childrenText(item.children).includes('Continue in Chat UI')
+    )
+    expect(resume).toBeDefined()
+    resume?.onSelect?.()
+    expect(onResumeInChat).toHaveBeenCalledTimes(1)
   })
 
   it('shows Copy Session ID only for panes with provider identity', () => {

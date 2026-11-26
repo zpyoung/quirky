@@ -3,7 +3,7 @@
 // Completion, failure, explicit removal, draft/workspace deletion or renderer exit ends ownership.
 
 import { useCallback, useSyncExternalStore } from 'react'
-import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
+import type { NativeChatComposerImageAttachment } from './native-chat-composer-image-attachment'
 import type { NativeChatComposerDraftOwner } from './native-chat-composer-draft-storage'
 import {
   appendNativeChatAttachmentCache,

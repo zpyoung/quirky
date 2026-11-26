@@ -225,7 +225,7 @@ describe('codex journal translation — subagent producer linkage', () => {
     )
   })
 
-  it("stamps a child's provider frames and goal rows, which are journaled per thread", () => {
+  it("stamps a child's provider frames, which are journaled per thread", () => {
     const { on, spawn, writes } = harness()
     on(PARENT, 'turn/started', { turn: { id: 'pt' } })
     spawn(PARENT, 'pt', CHILD, '/root/review')
@@ -235,25 +235,9 @@ describe('codex journal translation — subagent producer linkage', () => {
       error: { message: 'child hit a rate limit' },
       willRetry: true
     })
-    on(CHILD, 'thread/goal/updated', {
-      turnId: 'ct',
-      goal: {
-        threadId: CHILD,
-        objective: 'Review the diff',
-        status: 'active',
-        tokenBudget: null,
-        tokensUsed: 0,
-        timeUsedSeconds: 0,
-        createdAt: 1,
-        updatedAt: 1
-      }
-    })
 
     const frame = writes.find((write) => JSON.stringify(write.body).includes('rate limit'))
-    const goal = writes.find((write) => JSON.stringify(write.body).includes('Review the diff'))
     expect(frame?.linkage).toEqual(CHILD_LINKAGE)
-    // A goal belongs to the thread, not one run of it: no attempt, ever.
-    expect(goal?.linkage).toEqual(CHILD_LINKAGE)
   })
 
   it('stamps nothing while the session thread is still opening', () => {

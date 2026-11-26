@@ -536,9 +536,8 @@ describe('ClaudeBackgroundTaskTracker', () => {
         system('task_notification', { task_id: `task-${index}`, status: 'completed' })
       )
     }
-    expect(tracker.goalBackgroundWork).toBe('live')
     tracker.observe(system('task_notification', { task_id: 'task-399', status: 'completed' }))
-    expect(tracker.goalBackgroundWork).toBe('exited')
+    expect(tracker.stoppableTaskIds).toEqual([])
   })
 
   it('lists every aggregate roster entry and resets to the edge-only fallback on clear', () => {

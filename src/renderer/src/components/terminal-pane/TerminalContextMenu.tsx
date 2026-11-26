@@ -13,7 +13,6 @@ import {
   PanelRightClose,
   Pencil,
   RotateCcw,
-  SquareTerminal,
   TextSelect,
   X
 } from 'lucide-react'
@@ -31,7 +30,6 @@ import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { formatPrimaryShortcutLabel } from '@/hooks/useShortcutLabel'
 import type { KeybindingOverrides } from '../../../../shared/keybindings'
 import { translate } from '@/i18n/i18n'
-import { isMacPlatform, nativeChatToggleShortcutLabel } from '../native-chat/native-chat-shortcut'
 import { AgentSessionContinuationMenuItem } from './AgentSessionContinuationMenuItem'
 import { AgentSessionContextCopyMenuItem } from './AgentSessionContextCopyMenuItem'
 import { ClearPaneTitleMenuItem } from './ClearPaneTitleMenuItem'
@@ -65,9 +63,8 @@ type TerminalContextMenuProps = {
   onToggleTerminalDock: () => void
   /** True when this pane may switch between the terminal and native chat views.
    *  Structured sessions are excluded — they have no terminal underneath. */
-  canToggleNativeChat: boolean
-  isNativeChatView: boolean
-  onToggleNativeChat: () => void
+  canResumeInChat: boolean
+  onResumeInChat: () => void
   onCopyAgentSessionContext: () => void
   quickCommandHosts: TerminalQuickCommandMenuHost[]
   quickCommandHostLoadFailed: boolean
@@ -158,9 +155,8 @@ function TerminalContextMenuItems({
   canToggleTerminalDock,
   isTerminalDockDocked,
   onToggleTerminalDock,
-  canToggleNativeChat,
-  isNativeChatView,
-  onToggleNativeChat,
+  canResumeInChat,
+  onResumeInChat,
   onCopyAgentSessionContext,
   quickCommandHosts,
   quickCommandHostLoadFailed,
@@ -190,7 +186,6 @@ function TerminalContextMenuItems({
       setTitle: formatPrimaryShortcutLabel('terminal.setTitle', keybindings),
       clearPaneTitle: formatPrimaryShortcutLabel('terminal.clearPaneTitle', keybindings),
       close: formatPrimaryShortcutLabel('terminal.closePane', keybindings),
-      nativeChat: nativeChatToggleShortcutLabel(isMacPlatform()),
       terminalDock: formatPrimaryShortcutLabel('terminal.dock.toggle', keybindings)
     }),
     [keybindings]
@@ -253,19 +248,13 @@ function TerminalContextMenuItems({
         </DropdownMenuItem>
       ) : null}
       <AgentSessionContextCopyMenuItem onSelect={onCopyAgentSessionContext} />
-      {canToggleNativeChat ? (
-        <DropdownMenuItem onSelect={onToggleNativeChat}>
-          {isNativeChatView ? <SquareTerminal /> : <MessageSquare />}
-          {isNativeChatView
-            ? translate(
-                'components.tab.bar.SortableTabContextMenu.switchToTerminalView',
-                'Continue with Terminal Agent'
-              )
-            : translate(
-                'components.tab.bar.SortableTabContextMenu.switchToChatView',
-                'Continue in Chat UI'
-              )}
-          <DropdownMenuShortcut>{shortcuts.nativeChat}</DropdownMenuShortcut>
+      {canResumeInChat ? (
+        <DropdownMenuItem onSelect={onResumeInChat}>
+          <MessageSquare />
+          {translate(
+            'components.tab.bar.SortableTabContextMenu.switchToChatView',
+            'Continue in Chat UI'
+          )}
         </DropdownMenuItem>
       ) : null}
       <DropdownMenuSeparator />

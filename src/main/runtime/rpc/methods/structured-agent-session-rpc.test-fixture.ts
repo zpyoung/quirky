@@ -187,7 +187,6 @@ export function hostStub(): StructuredAgentSessionHost {
     setSessionTabVisibility: vi.fn(async () => undefined),
     respondToPrompt: vi.fn(async () => ({ ok: true, replayed: false })),
     setOption: vi.fn(async () => ({ ok: true, replayed: false })),
-    changeThreadGoal: vi.fn(async () => ({ ok: true, replayed: false })),
     supportsCreate: vi.fn(() => true),
     handoffStatus: vi.fn(async () => ({ owner: 'native' })),
     readOptions: vi.fn(async () => ({

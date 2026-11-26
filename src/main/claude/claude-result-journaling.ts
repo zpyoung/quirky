@@ -16,7 +16,6 @@ import {
 } from './claude-structured-provider-fallback'
 import { claudeTurnEndForResult } from './claude-turn-lifecycle-item'
 import { claudeFrameParentRef, isRootClaudeFrame } from './claude-turn-opening'
-import type { ClaudeGoalBackgroundWork } from './claude-background-task-tracker'
 
 export type ClaudeResultJournalContext = Pick<
   ClaudeMessageJournalContext,
@@ -28,11 +27,9 @@ export type ClaudeResultJournalContext = Pick<
   | 'turn'
   | 'authenticationFailures'
   | 'usageLimits'
-  | 'threadGoal'
 > & {
   prompts: ClaudeJournalPrompts
   context: ClaudeContextFacts
-  goalBackgroundWork: () => ClaudeGoalBackgroundWork
 }
 
 export function journalClaudeResult(
@@ -46,9 +43,7 @@ export function journalClaudeResult(
     prompts,
     context,
     authenticationFailures,
-    usageLimits,
-    threadGoal,
-    goalBackgroundWork
+    usageLimits
   }: ClaudeResultJournalContext,
   message: Record<string, unknown>,
   observedAt: number
@@ -61,7 +56,6 @@ export function journalClaudeResult(
   const endedTurnScope = turn.turnScope
   const endedTurnIdentity = turn.identity
   const usageEvidence = turn.usageLimitEvidence
-  const endedTurnStartedAt = turn.startedAt
   const turnId = settlesTurn ? turn.id : null
   const leftToStop = turnId !== null && sink.journalStopDecidesTurn?.(turnId, observedAt) === true
   // Retry owed prompt cancellations before a command result can return.
@@ -85,19 +79,6 @@ export function journalClaudeResult(
     context.settle(message, commandEnd ?? claudeTurnEndForResult(message, observedAt, leftToStop))
     streamedBlocks.clear()
     streamedText.settle()
-  }
-  const goal = threadGoal.settle(
-    message,
-    {
-      backgroundWork: goalBackgroundWork(),
-      stoppedByPerson: leftToStop,
-      turnStartedAt: endedTurnStartedAt
-    },
-    observedAt
-  )
-  if (goal) {
-    sink.appendItem(goal.identity, goal.body, { turnScope: endedTurnScope })
-    sink.publish()
   }
   const kind = claudeProviderFrameKind(message)
   if (usageLimit && endedTurnIdentity) {

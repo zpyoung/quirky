@@ -15,6 +15,7 @@ import {
   resumeStructuredAgentQueue,
   sendQueuedStructuredAgentMessage
 } from './structured-agent-session-queued-mutations'
+import { moveQueuedStructuredAgentMessage } from './structured-agent-session-queued-move'
 import { deferredStructuredAgentSessionLogger } from './structured-agent-session-logger'
 import {
   holdQueuedStructuredAgentMessageEdit,
@@ -91,6 +92,8 @@ export function wireStructuredAgentSessionQueuedMessages(
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof deleteQueuedStructuredAgentMessage>[2]
     ) => deleteQueuedStructuredAgentMessage(context(), caller, params),
+    queuedMessageMove: (params: Parameters<typeof moveQueuedStructuredAgentMessage>[1]) =>
+      moveQueuedStructuredAgentMessage(context(), params),
     queuedMessagesResume: (
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof resumeStructuredAgentQueue>[2]

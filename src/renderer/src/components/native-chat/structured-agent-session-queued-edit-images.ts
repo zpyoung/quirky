@@ -12,7 +12,7 @@ import {
   type QueuedMessageImageBlock
 } from '../../../../shared/queued-message-edit'
 import { createUuidV4 } from '../../../../shared/uuid-v4'
-import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
+import type { NativeChatComposerImageAttachment } from './native-chat-composer-image-attachment'
 import { appendNativeChatDraftCache } from './native-chat-draft-cache'
 import { isNativeChatImageAttachmentPath } from './native-chat-image-paste'
 import { imageReferenceInsertion } from '../../../../shared/native-chat-image-reference'

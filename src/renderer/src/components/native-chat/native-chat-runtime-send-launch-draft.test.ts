@@ -25,7 +25,7 @@ import {
   NATIVE_CHAT_CLEAR_CHUNK_MAX_BYTES,
   NATIVE_CHAT_CLEAR_CONFIRM_MS,
   NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT
-} from './fork-agent-composer/native-chat-runtime-clear'
+} from './pty-send/native-chat-runtime-clear'
 import {
   buildNativeChatImagePasteBytes,
   buildNativeChatPasteBytes,

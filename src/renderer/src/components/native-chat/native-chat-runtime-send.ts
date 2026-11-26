@@ -8,13 +8,13 @@ import {
   subscribeTerminalInputQuarantine
 } from '../terminal-pane/terminal-input-quarantine'
 import type { NativeChatResolvedTarget } from './native-chat-composer-target'
-import { runBodyAcceptedThen } from './fork-agent-composer/native-chat-runtime-send-acceptance'
-import { enqueueNativeChatBodySend } from './fork-agent-composer/native-chat-body-send'
-import type { SendOutcome } from './fork-agent-composer/native-chat-send-outcome'
+import { runBodyAcceptedThen } from './pty-send/native-chat-runtime-send-acceptance'
+import { enqueueNativeChatBodySend } from './pty-send/native-chat-body-send'
+import type { SendOutcome } from './pty-send/native-chat-send-outcome'
 import {
   sendNativeChatAskAnswerQueued,
   sendNativeChatMessageVerifiedQueued
-} from './fork-agent-composer/native-chat-runtime-send-queued'
+} from './pty-send/native-chat-runtime-send-queued'
 import {
   NATIVE_CHAT_ADVANCE_BUFFER_MS,
   NATIVE_CHAT_QUESTION_STEP_MS,
@@ -31,7 +31,7 @@ import {
   resetNativeChatPtySendQueuesForTests,
   waitForNativeChatPtyIdle
 } from './native-chat-pty-send-queue'
-import { clearConfirmDurationMs } from './fork-agent-composer/native-chat-runtime-clear'
+import { clearConfirmDurationMs } from './pty-send/native-chat-runtime-clear'
 import type { NativeChatSendOptions as NativeChatDeliveryOptions } from './native-chat-input-clear'
 
 export { NATIVE_CHAT_ADVANCE_BUFFER_MS, NATIVE_CHAT_QUESTION_STEP_MS, NATIVE_CHAT_SUBMIT_DELAY_MS }
@@ -39,7 +39,7 @@ export { invalidateNativeChatPtySends, resetNativeChatPtySendQueuesForTests }
 export {
   sendNativeChatTypedCommand,
   typeNativeChatCommand
-} from './fork-agent-composer/native-chat-typed-command-send'
+} from './pty-send/native-chat-typed-command-send'
 
 export const NATIVE_CHAT_IMAGE_ATTACHMENT_SETTLE_MS = 300
 

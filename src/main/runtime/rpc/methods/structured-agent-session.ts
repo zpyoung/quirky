@@ -21,6 +21,10 @@ import {
   projectTurnItemEvent,
   projectTurnItemHistory
 } from './structured-agent-session-turn-item-capability'
+import {
+  projectV1ItemEvent,
+  projectV1ItemHistory
+} from './structured-agent-session-v1-items-capability'
 import { defineMethod, defineStreamingMethod } from '../core'
 import {
   ensureStructuredHostInstalled as ensureHostInstalled,
@@ -50,9 +54,11 @@ import {
   structuredAgentSessionSubscriptionId as subscriptionIdFor
 } from './structured-agent-session-subscription-id'
 import { STRUCTURED_AGENT_SESSION_TURN_COMPLETION_METHODS } from './structured-agent-session-turn-completion-stream'
-import { STRUCTURED_AGENT_SESSION_THREAD_GOAL_METHODS } from './structured-agent-session-thread-goal'
 import { STRUCTURED_AGENT_SESSION_CONVERSATION_OUTLINE_METHODS } from './structured-agent-session-conversation-outline'
 import { STRUCTURED_AGENT_SESSION_ITEM_METHODS } from './structured-agent-session-item'
+import { STRUCTURED_AGENT_SESSION_TURN_DIFF_METHODS } from './structured-agent-session-turn-diff'
+import { STRUCTURED_AGENT_SESSION_FORK_METHODS } from './structured-agent-session-fork'
+import { STRUCTURED_AGENT_SESSION_VIEW_METHODS } from './structured-agent-session-view'
 import { STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS } from './structured-agent-session-options-read'
 import {
   AttachParams,
@@ -225,13 +231,16 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
     params: HistoryParams,
     handler: async (params, ctx) => {
       const host = await requireInstalledHost(ctx, params.sessionId)
-      return projectTurnItemHistory(
-        projectQueuedImageCardHistory(
-          projectBackgroundTaskHistory(await host.history(params), ctx),
-          ctx
-        ),
+      return projectV1ItemHistory(
         ctx,
-        host.sessionAgent(params.sessionId)
+        projectTurnItemHistory(
+          projectQueuedImageCardHistory(
+            projectBackgroundTaskHistory(await host.history(params), ctx),
+            ctx
+          ),
+          ctx,
+          host.sessionAgent(params.sessionId)
+        )
       )
     }
   }),
@@ -258,10 +267,13 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
           projectQueuedImageCardPublication(publication, ctx),
         emit: (event) =>
           emit(
-            projectTurnItemEvent(
-              projectBackgroundTaskEvent(event, ctx),
+            projectV1ItemEvent(
               ctx,
-              host.sessionAgent(params.sessionId)
+              projectTurnItemEvent(
+                projectBackgroundTaskEvent(event, ctx),
+                ctx,
+                host.sessionAgent(params.sessionId)
+              )
             )
           ),
         ...(params.cursor ? { cursor: params.cursor } : {}),
@@ -302,9 +314,11 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
   ...STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS,
   ...STRUCTURED_AGENT_SESSION_STATUS_METHODS,
   ...STRUCTURED_AGENT_SESSION_TURN_COMPLETION_METHODS,
-  ...STRUCTURED_AGENT_SESSION_THREAD_GOAL_METHODS,
   ...STRUCTURED_AGENT_SESSION_CONVERSATION_OUTLINE_METHODS,
   ...STRUCTURED_AGENT_SESSION_ITEM_METHODS,
+  ...STRUCTURED_AGENT_SESSION_TURN_DIFF_METHODS,
+  ...STRUCTURED_AGENT_SESSION_FORK_METHODS,
+  ...STRUCTURED_AGENT_SESSION_VIEW_METHODS,
   ...STRUCTURED_AGENT_SESSION_CURRENT_REQUESTS_METHODS,
   ...STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS
 ]

@@ -2,95 +2,56 @@
 
 import '@testing-library/jest-dom/vitest'
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ComposerProps } from '../../chat/composer/composer-types'
 
-const ASK_PROMPT = JSON.stringify({
-  questions: [
-    {
-      question: 'Choose an editor?',
-      multiSelect: false,
-      options: [{ label: 'Vim' }, { label: 'Emacs' }]
-    }
-  ]
-})
+type MockState = {
+  status: { state: string }
+  cancel: ReturnType<typeof vi.fn>
+  sendNativeChatMessage: ReturnType<typeof vi.fn>
+  sendNativeChatTypedCommand: ReturnType<typeof vi.fn>
+  sendWithImages: ReturnType<typeof vi.fn>
+  composer: { current: ComposerProps | null }
+}
 
-const mocks = vi.hoisted(() => ({
+const mocks = vi.hoisted((): MockState => ({
+  status: { state: 'waiting' },
   cancel: vi.fn(),
-  status: {
-    state: 'waiting',
-    prompt: 'status prompt',
-    stateHistory: [] as { state: string; prompt: string; startedAt: number }[],
-    interactivePrompt: JSON.stringify({
-      questions: [
-        {
-          question: 'Choose an editor?',
-          multiSelect: false,
-          options: [{ label: 'Vim' }, { label: 'Emacs' }]
-        }
-      ]
-    }) as string | undefined,
-    toolName: 'AskUserQuestion' as string | undefined,
-    paneKey: 'pane-1',
-    updatedAt: 2,
-    stateStartedAt: 2
-  },
-  messages: [
-    {
-      id: 'user-1',
-      role: 'user',
-      blocks: [{ type: 'text', text: 'status prompt' }],
-      timestamp: 1,
-      source: 'transcript'
-    }
-  ]
+  sendNativeChatMessage: vi.fn(),
+  sendNativeChatTypedCommand: vi.fn(),
+  sendWithImages: vi.fn(),
+  composer: { current: null }
 }))
 
-vi.mock('@/components/ui/tooltip', () => ({
-  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>
-}))
 vi.mock('../../../store', () => ({
   useAppStore: (selector: (state: unknown) => unknown) =>
     selector({ agentStatusByPaneKey: { 'pane-1': mocks.status } })
 }))
-vi.mock('../../native-chat/native-chat-file-link', () => ({
-  findTerminalTabWorktreeId: () => null
-}))
-vi.mock('@/lib/resolve-owner', () => ({
-  runtimeEnvironmentIdUnlessTwin: () => null
-}))
-vi.mock('../../native-chat/use-native-chat-retained-session', () => ({
-  useNativeChatRetainedSession: () => ({ messages: mocks.messages, readPhase: 'ready' })
+vi.mock('@/lib/structured-agent-session-launch-label', () => ({
+  structuredAgentLabel: () => 'Claude'
 }))
 vi.mock('../../native-chat/use-native-chat-interactive-send', () => ({
-  useNativeChatInteractiveSend: () => ({
-    sendAnswer: vi.fn(() => ({ settleAfterMs: 0, waitsForVerifiedDelivery: false })),
-    sendRaw: vi.fn(),
-    cancelPending: vi.fn(),
-    cancel: mocks.cancel
-  })
+  useNativeChatInteractiveSend: () => ({ cancel: mocks.cancel })
 }))
-vi.mock('../../native-chat/NativeChatComposer', () => ({
-  NativeChatComposer: function Composer(props: {
-    canSend: boolean
-    sendDisabled?: boolean
-    isWorking: boolean
-    onStop?: () => void
-    historyPrompts?: readonly string[]
-  }) {
-    return (
-      <div>
-        <textarea aria-label="Dock composer" disabled={!props.canSend} />
-        <button aria-label="Send dock message" disabled={props.sendDisabled} />
-        <output data-testid="history">{props.historyPrompts?.join('|')}</output>
-        {props.isWorking ? <button onClick={props.onStop}>Stop the agent</button> : null}
-      </div>
-    )
+vi.mock('../../native-chat/native-chat-runtime-send', () => ({
+  sendNativeChatMessage: mocks.sendNativeChatMessage,
+  sendNativeChatTypedCommand: mocks.sendNativeChatTypedCommand
+}))
+vi.mock('../../native-chat/native-chat-runtime-image-send', () => ({
+  sendNativeChatMessageWithImageAttachments: mocks.sendWithImages
+}))
+vi.mock('../../chat/composer/Composer', () => ({
+  Composer: (props: ComposerProps) => {
+    mocks.composer.current = props
+    return <div data-testid="composer" data-quarantined={String(props.quarantined)} />
   }
 }))
 
+import {
+  _resetTerminalInputQuarantineForTests,
+  armTerminalInputQuarantine
+} from '../terminal-input-quarantine'
 import { TerminalDockComposer } from './TerminalDockComposer'
 
 const baseProps = {
@@ -99,65 +60,189 @@ const baseProps = {
   paneKey: 'pane-1',
   targetPtyId: 'pty-1',
   agent: 'claude' as const,
-  canSend: true,
-  sendTier: 'verified' as const
+  canSend: true
+}
+
+async function submit(text: string, attachments: { path: string; previewUri: string }[] = []) {
+  return mocks.composer.current?.onSubmit(text, attachments)
 }
 
 describe('TerminalDockComposer', () => {
   beforeEach(() => {
     mocks.status.state = 'waiting'
-    mocks.status.interactivePrompt = ASK_PROMPT
-    mocks.status.toolName = 'AskUserQuestion'
-    mocks.status.prompt = 'status prompt'
-    mocks.status.stateHistory = []
+    mocks.composer.current = null
     vi.clearAllMocks()
+    mocks.sendNativeChatMessage.mockReset().mockImplementation((_target, _text, options) => {
+      options.onDeliverySettled(true)
+    })
+    mocks.sendWithImages
+      .mockReset()
+      .mockImplementation((_agent, _target, _text, _paths, options) => {
+        options.onDeliverySettled(true)
+      })
+    mocks.sendNativeChatTypedCommand.mockReset()
   })
 
-  afterEach(cleanup)
-
-  it('renders card-tier prompts upward and disables only Send in the mounted composer', async () => {
-    const { container } = render(<TerminalDockComposer {...baseProps} />)
-
-    expect(screen.getByText('Choose an editor?')).toBeInTheDocument()
-    const overlay = container.querySelector('[data-terminal-dock-card-overlay]')
-    expect(overlay).toHaveClass('absolute', 'bottom-full')
-    expect(overlay?.parentElement).not.toHaveClass('overflow-hidden')
-    await waitFor(() => expect(screen.getByLabelText('Send dock message')).toBeDisabled())
-    expect(screen.getByLabelText('Dock composer')).toBeEnabled()
+  afterEach(() => {
+    cleanup()
+    _resetTerminalInputQuarantineForTests()
   })
 
-  it('shows Stop only from working status and routes it through card send cancellation', () => {
-    mocks.status.interactivePrompt = undefined
-    mocks.status.state = 'working'
-    const { rerender } = render(<TerminalDockComposer {...baseProps} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Stop the agent' }))
-    expect(mocks.cancel).toHaveBeenCalledTimes(1)
-
-    mocks.status.state = 'waiting'
-    rerender(<TerminalDockComposer {...baseProps} />)
-    expect(screen.queryByRole('button', { name: 'Stop the agent' })).not.toBeInTheDocument()
-  })
-
-  it('seeds shared history from transcript plus status without duplicate prompts', () => {
-    mocks.status.interactivePrompt = undefined
-    mocks.status.stateHistory = [
-      { state: 'done', prompt: 'older prompt', startedAt: 1 },
-      { state: 'waiting', prompt: 'status prompt', startedAt: 2 }
-    ]
+  it('types a sent message into the pty through the per-pty send queue', async () => {
     render(<TerminalDockComposer {...baseProps} />)
 
-    expect(screen.getByTestId('history')).toHaveTextContent('older prompt|status prompt')
-    expect(screen.getByTestId('history').textContent?.match(/status prompt/g)).toHaveLength(1)
+    expect(mocks.composer.current?.mode).toBe('terminal')
+    await submit('hello agent')
+
+    expect(mocks.sendNativeChatMessage).toHaveBeenCalledExactlyOnceWith(
+      { terminalTabId: 'tab-1', ptyId: 'pty-1' },
+      'hello agent',
+      expect.any(Object)
+    )
   })
 
-  it('omits cards for input-tier agents and still routes working Stop through ESC cancellation', () => {
-    mocks.status.state = 'working'
-    render(<TerminalDockComposer {...baseProps} agent="gemini" sendTier="input" />)
+  it('refuses a send while the tab is quarantined and keeps the draft', async () => {
+    render(<TerminalDockComposer {...baseProps} />)
+    expect(screen.getByTestId('composer')).toHaveAttribute('data-quarantined', 'false')
 
-    expect(document.querySelector('[data-terminal-dock-card-overlay]')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Dock composer')).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Stop the agent' }))
+    act(() => armTerminalInputQuarantine('tab-1'))
+
+    expect(screen.getByTestId('composer')).toHaveAttribute('data-quarantined', 'true')
+    await expect(submit('rm -rf x')).resolves.toBe(false)
+    expect(mocks.sendNativeChatMessage).not.toHaveBeenCalled()
+    expect(mocks.sendWithImages).not.toHaveBeenCalled()
+  })
+
+  it('refuses a send that races ahead of the quarantine render', async () => {
+    render(<TerminalDockComposer {...baseProps} />)
+    const staleSubmit = mocks.composer.current?.onSubmit
+
+    armTerminalInputQuarantine('tab-1')
+
+    await expect(Promise.resolve(staleSubmit?.('echo hi', []))).resolves.toBe(false)
+    expect(mocks.sendNativeChatMessage).not.toHaveBeenCalled()
+  })
+
+  it('sends again once the quarantine releases', async () => {
+    render(<TerminalDockComposer {...baseProps} />)
+    act(() => armTerminalInputQuarantine('tab-1'))
+    act(() => _resetTerminalInputQuarantineForTests())
+
+    await submit('ls')
+
+    expect(mocks.sendNativeChatMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the draft when the terminal has no pty', async () => {
+    render(<TerminalDockComposer {...baseProps} targetPtyId={null} />)
+
+    expect(mocks.composer.current?.disabled).toBe(true)
+    await expect(submit('hello')).resolves.toBe(false)
+    expect(mocks.sendNativeChatMessage).not.toHaveBeenCalled()
+  })
+
+  it('sends attached images with the message', async () => {
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await submit('look', [{ path: '/tmp/a.png', previewUri: '/tmp/a.png' }])
+
+    expect(mocks.sendWithImages).toHaveBeenCalledExactlyOnceWith(
+      'claude',
+      { terminalTabId: 'tab-1', ptyId: 'pty-1' },
+      'look',
+      ['/tmp/a.png'],
+      expect.any(Object)
+    )
+  })
+
+  it('resolves true once the pty accepted the delivery', async () => {
+    mocks.sendNativeChatMessage.mockImplementation((_target, _text, options) => {
+      options.onDeliverySettled(true)
+    })
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await expect(submit('hello')).resolves.toBe(true)
+  })
+
+  it('keeps the draft when the pty refuses the delivery', async () => {
+    mocks.sendNativeChatMessage.mockImplementation((_target, _text, options) => {
+      options.onWriteRejected?.()
+      options.onDeliverySettled(false)
+    })
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await expect(submit('hello')).resolves.toBe(false)
+  })
+
+  it('keeps the draft when the queue drops the send before it writes', async () => {
+    mocks.sendNativeChatMessage.mockImplementation((_target, _text, options) => {
+      options.onOutcome('may-not-have-sent')
+    })
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await expect(submit('hello')).resolves.toBe(false)
+  })
+
+  it('does not flip an accepted delivery when the submit observation is negative', async () => {
+    mocks.sendNativeChatMessage.mockImplementation((_target, _text, options) => {
+      options.onDeliverySettled(true)
+      options.onOutcome('may-not-have-sent')
+    })
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await expect(submit('hello')).resolves.toBe(true)
+  })
+
+  it('keeps the draft when an image send is refused', async () => {
+    mocks.sendWithImages.mockImplementation((_agent, _target, _text, _paths, options) => {
+      options.onDeliverySettled(false)
+    })
+    render(<TerminalDockComposer {...baseProps} />)
+
+    await expect(submit('look', [{ path: '/tmp/a.png', previewUri: '/tmp/a.png' }])).resolves.toBe(
+      false
+    )
+  })
+
+  it('resolves true when an accepted slash command settles', async () => {
+    mocks.sendNativeChatTypedCommand.mockImplementation((_target, _text, options) => {
+      options.onDeliverySettled(true)
+      options.onOutcome('unobservable')
+    })
+    render(<TerminalDockComposer {...baseProps} agent="codex" />)
+
+    await expect(submit('/model')).resolves.toBe(true)
+  })
+
+  it('keeps the draft when the pty refuses a slash command', async () => {
+    mocks.sendNativeChatTypedCommand.mockImplementation((_target, _text, options) => {
+      options.onWriteRejected?.()
+      options.onDeliverySettled(false)
+    })
+    render(<TerminalDockComposer {...baseProps} agent="codex" />)
+
+    await expect(submit('/model')).resolves.toBe(false)
+  })
+
+  it('keeps the draft when a slash command is cancelled before it types', async () => {
+    mocks.sendNativeChatTypedCommand.mockImplementation((_target, _text, options) => {
+      options.onDeliverySettled(false)
+      options.onOutcome('may-not-have-sent')
+    })
+    render(<TerminalDockComposer {...baseProps} agent="codex" />)
+
+    await expect(submit('/model')).resolves.toBe(false)
+  })
+
+  it('offers Stop only while the agent works, routed through the terminal cancel', () => {
+    const { rerender } = render(<TerminalDockComposer {...baseProps} />)
+    expect(mocks.composer.current?.working).toBe(false)
+
+    mocks.status.state = 'working'
+    rerender(<TerminalDockComposer {...baseProps} />)
+
+    expect(mocks.composer.current?.working).toBe(true)
+    mocks.composer.current?.onStop?.()
     expect(mocks.cancel).toHaveBeenCalledTimes(1)
   })
 })

@@ -10,12 +10,9 @@ import { discoverUnitFiles } from './ci-unit-files.mjs'
 import { planUnitSelection } from './ci-unit-selection.mjs'
 
 const harness = 'src/renderer/src/runtime/web-session-tabs-sync-test-harness.ts'
-const structuredSessionHarness =
-  'src/renderer/src/components/native-chat/NativeChatStructuredSession.test-harness.tsx'
 
 const unitHarnesses = [
   harness,
-  structuredSessionHarness,
   'src/renderer/src/store/slices/editor-slice-test-harness.ts',
   'src/renderer/src/store/slices/browser-slice-test-harness.ts',
   'src/renderer/src/runtime/web-runtime-session-test-harness.ts',
@@ -55,8 +52,6 @@ describe('unit support routing', () => {
         unitHarness.replace(/\.(tsx?)$/, '-next.$1'),
         'src/renderer/src/runtime/web-session-tabs-sync-next-test-harness.ts',
         'src/renderer/src/runtime/web-session-tabs-sync/snapshot-api.ts',
-        'src/renderer/src/components/native-chat/NativeChatStructuredSession.next-test-harness.tsx',
-        'src/renderer/src/components/native-chat/NativeChatStructuredSession.tsx',
         'src/main/providers/windows-conpty-wide-char-duplication.node-pty.test.ts',
         'src/main/browser/browser-route-tcp-egress.electron.test.ts'
       ]) {

@@ -676,6 +676,11 @@
           }
         }
       },
+      "nativeChat": {
+        "contextMenu": {
+          "copy": "Copy"
+        }
+      },
       "new": {
         "workspace": {
           "SmartWorkspaceNameField": {
@@ -3121,6 +3126,20 @@
   },
   "components": {
     "native-chat": {
+      "addSelectionToChat": "Add to chat",
+      "agentMessage": {
+        "messageFrom": "Message from",
+        "unnamedSender": "an agent"
+      },
+      "approval": {
+        "cancel": "Cancel",
+        "needsAccess": "Needs access to",
+        "needsNewerQuirky": "This request needs a newer version of Quirky.",
+        "plan": {
+          "file": "Plan file"
+        },
+        "reason": "Reason"
+      },
       "ask": {
         "asked": "Asked:",
         "awaiting": "Awaiting user input:",
@@ -3150,6 +3169,7 @@
         "headerTotal": "{{value0}} background tasks",
         "monitor": "Background monitor",
         "monitoring": "Monitoring background tasks",
+        "outputFile": "Output: {{value0}}",
         "reasonBlocked": "failed",
         "reasonWaiting": "needs approval",
         "stateBlocked": "blocked",
@@ -3173,9 +3193,103 @@
         "workflow": "Background workflow"
       },
       "composer": {
+        "attach": "Attach file",
+        "availableAfterSessionStarts": "Available after the session starts.",
+        "chooseInAgentPicker": "Choose in agent picker…",
+        "clearDescription": "Clear conversation context",
+        "commandAttachmentsUnsupported": "Remove attachments before using a chat-session command.",
+        "commands": "Commands",
+        "copyImage": "Copy image",
+        "copyImageFailed": "Couldn't copy image",
+        "copyImageTooLarge": "The image is too large to copy.",
+        "draftNotSaved": "This draft couldn't be saved yet. Quirky keeps trying.",
         "effort": "Effort",
-        "imageUnsupported": "Image paste is not supported for this agent."
+        "fastMode": "Fast mode",
+        "filesLoadFailed": "Couldn't load files",
+        "imageAttachAgainLabel": "Attach again",
+        "imageCopied": "Image copied",
+        "imageNotBroughtBack": "{{name}} couldn't be brought back with this draft. Attach it again or remove it.",
+        "imageNumber": "Image #{{number}}",
+        "imagePreviewUnavailable": "Preview unavailable",
+        "imageReferenceMissing": "Image removed",
+        "imageSaving": "Saving pasted image…",
+        "imageUnsupported": "Image paste is not supported for this agent.",
+        "loadingFiles": "Loading files...",
+        "loadingSkills": "Loading skills...",
+        "model": "Model",
+        "noCommands": "No matching commands",
+        "noCommandsOrSkills": "No matching commands or skills",
+        "noFiles": "No matching files",
+        "noModelsMatch": "No models match your search.",
+        "noSkills": "No matching skills",
+        "optionValue": {
+          "fast": "Fast",
+          "high": "High",
+          "low": "Low",
+          "max": "Max",
+          "medium": "Medium",
+          "minimal": "Minimal",
+          "standard": "Standard",
+          "ultra": "Ultra",
+          "xhigh": "Extra high"
+        },
+        "optionValueShort": {
+          "medium": "Med",
+          "minimal": "Min",
+          "xhigh": "XHigh"
+        },
+        "pastedImageLabel": "Pasted image",
+        "pastedImageNotBroughtBack": "This pasted image couldn't be brought back with this draft. Remove it, and paste it again if you still need it.",
+        "pastedImageNotKeptLabel": "Not kept",
+        "removeAttachment": "Remove attachment",
+        "removeImageToSend": "An image couldn't be brought back. Remove it to send.",
+        "removeImagesToSend": "Some images couldn't be brought back. Remove them to send.",
+        "retrySkills": "Retry",
+        "searchModels": "Search models…",
+        "send": "Send",
+        "sentNotConfirmed": "Sent to the agent — not confirmed",
+        "sessionOptions": "Session options",
+        "setWhenSessionStarts": "Set when the session starts.",
+        "skillCommandCollision": "Also a skill name - agent decides",
+        "skillMultipleSources": "{{sourceCount}} sources - agent resolves",
+        "skillScopeBuiltIn": "Built-in",
+        "skillScopePersonal": "Personal",
+        "skillScopePlugin": "Plugin",
+        "skillScopeProject": "Project",
+        "skills": "Skills",
+        "skillsLoadFailed": "Couldn't load skills",
+        "skillsLoaded": "Skills loaded",
+        "skillsUnavailableHost": "Skills can't be listed in SSH chats",
+        "speed": "Speed",
+        "startDictation": "Start dictation",
+        "stopDictation": "Stop dictation",
+        "thinking": "Thinking",
+        "toggleOption": "Toggle {{value0}}",
+        "tooManySkills": "Your message was not sent to {{agent}}. Keep at most {{limit}} selected skill files and try again.",
+        "uploadingFile": "Uploading {{name}}…",
+        "viewAttachment": "View image"
       },
+      "context": {
+        "summary": "Context: {{used}} / {{window}} tokens ({{percent}}%), estimated from the last response.",
+        "unavailable": "Context usage is not known yet. It becomes available after the agent next responds.",
+        "unreported": "Context usage is not available for this session.",
+        "used": "Context: {{used}} tokens used, estimated from the last response."
+      },
+      "contextMenu": {
+        "copyQuirkySessionId": "Copy Quirky Session ID",
+        "quirkySessionIdCopied": "Quirky session ID copied",
+        "quirkySessionIdCopyFailed": "Unable to copy Quirky session ID",
+        "quirkySessionIdTooltip": "Quirky's ID for this chat, separate from the agent CLI's own session ID. Agents use it to refer to each other through Quirky."
+      },
+      "contextUsage": {
+        "estimated": "Estimated from the last response.",
+        "label": "Context {{used}} of {{window}} tokens, {{percent}}% used",
+        "title": "Context"
+      },
+      "copyCode": "Copy code",
+      "deliveryUnconfirmed": "Delivery unconfirmed — check chat before retrying",
+      "disableLineWrap": "Disable line wrap",
+      "dismissDeliveryNotice": "Dismiss",
       "failureWords": {
         "accountSwitchInProgress": "{{agent}}'s setup is changing on this host. Try again after it finishes.",
         "agentCommandNotRunnable": "{{agent}}'s Command in Settings → Agents must be a program path or name Quirky can find, with no arguments or variables. Change it or reset it.",
@@ -3281,20 +3395,96 @@
         "usageLimitWindowWeeklyModel": "weekly model",
         "writeFailed": "Quirky couldn't hand this message to the agent, so it was not sent."
       },
+      "goal": {
+        "attachmentsUnsupported": "Remove attachments before setting a goal.",
+        "blocked": "Goal blocked",
+        "chip": "Goal",
+        "clear": "Clear goal",
+        "collapse": "Hide full goal",
+        "exitMode": "Exit goal mode",
+        "expand": "Show full goal",
+        "limited": "Goal limited",
+        "pause": "Pause goal",
+        "paused": "Paused goal",
+        "placeholder": "Describe your goal, define measurable outcomes for best results",
+        "pursuing": "Pursuing goal",
+        "resume": "Resume goal",
+        "sentAsGoal": "Sent as goal",
+        "set": "Goal set"
+      },
+      "interruptedContinue": {
+        "continue": "Continue",
+        "explanation": "Continue, and the agent first checks whether its last step finished.",
+        "failed": "Couldn't continue this chat. Try again, or send a message.",
+        "unconfirmed": "Couldn't confirm whether {{agent}} received Continue. Check the chat before trying again.",
+        "usageLimitExplanation": "Asks the agent to continue where it left off. Use it once the limit resets."
+      },
+      "jumpToLatest": "Jump to latest",
+      "launchPromptNotDelivered": "Not delivered — check the terminal",
+      "loadEarlier": "Load earlier messages",
+      "loadingEarlier": "Loading…",
+      "loadingEarlierMessages": "Loading earlier messages…",
+      "messageNotSent": "Message not sent",
+      "messageSending": "Sending…",
+      "newRowsAnnouncement": "New messages arrived while you were away",
+      "newRowsMarker": "New",
       "notices": {
         "compaction": "Context compacted",
         "contextCleared": "Context cleared",
+        "details": "Details",
         "historyItemTooLarge": "This part of the chat was too large to show.",
         "historyRepaired": "Part of this chat's history couldn't be loaded.",
-        "plan": "Plan"
+        "plan": "Plan",
+        "quirkyStopCanContinue": "You can continue in this conversation.",
+        "quirkyStopCrash": "Quirky on {{machine}} stopped unexpectedly while this response was in progress.",
+        "quirkyStopQuit": "Quirky on {{machine}} was closed while this response was in progress.",
+        "quirkyStopRemote": "Quirky on {{machine}} stopped while this response was in progress.",
+        "quirkyStopUnnamedServer": "the remote server",
+        "quirkyStopUpdate": "Quirky on {{machine}} restarted for an update while this response was in progress.",
+        "stoppedBeforeStart": "Stopped manually"
+      },
+      "providerFrame": {
+        "byteLength": "{{value0}} bytes"
       },
       "question": {
         "other": "Other…"
       },
       "queuedMessages": {
+        "behindReturnedHold": "Waiting — a message ahead needs attention",
+        "cancelEditing": "Cancel editing",
+        "clearAll": "Clear all",
+        "collapse": "Collapse",
+        "delete": "Delete",
+        "editMessage": "Edit message",
+        "editingMessage": "Editing message",
+        "expand": "Expand",
+        "fromSender": "From",
+        "imageCount": "{{count}} images",
         "imageCount_one": "{{count}} image",
-        "imageCount_other": "{{count}} images"
+        "imageCount_other": "{{count}} images",
+        "listLabel": "Queued messages",
+        "moreActions": "More actions",
+        "pasteOrDropImages": "Paste or drop images",
+        "paused": "Paused",
+        "pausedSendFailed": "Couldn't send — press Send to retry.",
+        "pausedSendFailedWaiting": "Couldn't send — press Send to retry once the agent finishes.",
+        "queued": "Queued",
+        "resume": "Resume",
+        "save": "Save",
+        "saveNeedsContent": "Add text or an image to save",
+        "send": "Send",
+        "sendHint": "Send this message now",
+        "showFullMessage": "Show full message",
+        "showLess": "Show less",
+        "steer": "Steer",
+        "steerHint": "Submit without interrupting the model",
+        "turnOffQueueing": "Turn off queueing",
+        "withdrawnHold": "Stopped before it was sent"
       },
+      "railEmptyMessage": "Message",
+      "railImageMessage": "Image attachment",
+      "railLabel": "Your messages",
+      "reasoning": "Reasoning",
       "receipt": {
         "cancelled": "Cancelled",
         "cancelledBy": "Cancelled on {{device}}",
@@ -3303,9 +3493,15 @@
         "resolver": "Answered on {{device}}",
         "unavailable": "Selected answer unavailable"
       },
+      "resumeCommand": {
+        "argumentHint": "[search]",
+        "description": "Open Agent Session History",
+        "workspaceUnavailable": "This chat's workspace isn't loaded yet. Try /resume again in a moment."
+      },
       "resumeInNewChat": {
         "cannotResume": "This {{agent}} conversation can't be resumed in a native chat."
       },
+      "scrollMessageToTop": "Scroll this message to top",
       "state": {
         "empty": {
           "subtitle": "Ask {{value0}} to inspect code, explain output, or make a change.",
@@ -3316,6 +3512,7 @@
           "title": "Could not load conversation"
         },
         "loading": {
+          "label": "Loading chat",
           "subtitle": "Reading the agent transcript.",
           "title": "Loading conversation…"
         },
@@ -3330,10 +3527,13 @@
         "queueAfterStop": "Queue a message to run after the stop",
         "responding": "Agent is responding",
         "sendAfterStop": "Send a message to run after the stop",
+        "thinking": "Thinking",
         "toggleDetails": "Toggle turn details",
         "workedFor": "Worked for {{value0}}",
+        "working": "Working…",
         "workingFor": "Working for {{value0}}"
       },
+      "stop": "Stop the agent",
       "subagents": {
         "ranN": "Ran {{value0}} subagents",
         "ranOne": "Ran 1 subagent",
@@ -3352,28 +3552,143 @@
           "working": "working",
           "workingCount": "{{value0}} working"
         },
-        "tokens": "{{value0}} tokens"
+        "tokens": "{{value0}} tokens",
+        "unnamed": "Subagent"
+      },
+      "taskList": {
+        "added": "Added {{task}}",
+        "completed": "Completed",
+        "empty": "No tasks",
+        "finished": "Completed {{task}}",
+        "inProgress": "In progress",
+        "pending": "Pending",
+        "progress": "{{completed}} of {{total}} tasks completed",
+        "removed": "Removed {{task}}",
+        "reset": "Marked pending: {{task}}",
+        "showAll": "Full task list",
+        "started": "Started {{task}}",
+        "title": "Tasks",
+        "unchanged": "Tasks unchanged",
+        "updated": "Updated {{task}}"
+      },
+      "thought": "Thought",
+      "thoughtForDuration": "Thought for {{duration}}",
+      "toggle": {
+        "showTerminal": "Show terminal"
       },
       "tool": {
+        "copyDiff": "Copy diff",
         "countN": "{{value0}} tool calls",
         "countOne": "1 tool call",
+        "diffGap": "Lines not shown",
+        "diffTruncated": "Diff truncated",
+        "exitCode": "exit {{value0}}",
         "failedCallsLabel": "Failed tool calls: {{value0}}",
         "failedCount": "{{value0}} failed",
+        "fullOutputFailed": "Couldn't load the full output.",
+        "fullOutputPartial": "Showing {{shown}} of {{total}}.",
         "interruptedCallsLabel": "Interrupted tool calls: {{value0}}",
         "interruptedCount": "{{value0}} interrupted",
+        "milliseconds": "{{value0}}ms",
         "moreCalls": "+{{value0}} more",
         "ranCommandManyToolsSummary": "Ran {{commandCount}} command and used {{toolCount}} tools",
         "ranCommandOneToolSummary": "Ran {{commandCount}} command and used {{toolCount}} tool",
         "ranCommandsManyToolsSummary": "Ran {{commandCount}} commands and used {{toolCount}} tools",
         "ranCommandsOneToolSummary": "Ran {{commandCount}} commands and used {{toolCount}} tool",
+        "result": "Result",
+        "row": {
+          "added": "Added",
+          "deleted": "Deleted",
+          "edited": "Edited",
+          "editing": "Editing",
+          "fetched": "Fetched",
+          "fetching": "Fetching",
+          "listed": "Listed",
+          "listing": "Listing",
+          "ran": "Ran",
+          "read": "Read",
+          "reading": "Reading",
+          "renamed": "Renamed",
+          "running": "Running",
+          "searched": "Searched",
+          "searchedWeb": "Searched the web",
+          "searching": "Searching",
+          "searchingWeb": "Searching the web",
+          "subagent": "Subagent",
+          "triedEdit": "Tried to edit",
+          "triedFetch": "Tried to fetch",
+          "triedList": "Tried to list",
+          "triedRead": "Tried to read",
+          "triedSearch": "Tried to search",
+          "triedSearchWeb": "Tried to search the web"
+        },
+        "runAgentMany": "Ran {{value0}} agents",
+        "runAgentOne": "Ran 1 agent",
+        "runCommandMany": "Ran {{value0}} commands",
+        "runCommandOne": "Ran 1 command",
+        "runFileChangeMany": "Edited {{value0}} files",
+        "runFileChangeOne": "Edited 1 file",
+        "runIntegrationMany": "Used {{value0}} integrations",
+        "runIntegrationOne": "Used 1 integration",
+        "runList": "{{value0}}, and {{value1}}",
+        "runListFilesMany": "Listed {{value0}} directories",
+        "runListFilesOne": "Listed 1 directory",
+        "runLiveAgentMany": "Running {{value0}} agents",
+        "runLiveAgentOne": "Running 1 agent",
+        "runLiveCommandMany": "Running {{value0}} commands",
+        "runLiveCommandOne": "Running 1 command",
+        "runLiveFileChangeMany": "Editing {{value0}} files",
+        "runLiveFileChangeOne": "Editing 1 file",
+        "runLiveIntegrationMany": "Using {{value0}} integrations",
+        "runLiveIntegrationOne": "Using 1 integration",
+        "runLiveListFilesMany": "Listing {{value0}} directories",
+        "runLiveListFilesOne": "Listing 1 directory",
+        "runLivePlanMany": "Updating the plan {{value0}} times",
+        "runLivePlanOne": "Updating the plan",
+        "runLiveReadMany": "Reading {{value0}} files",
+        "runLiveReadOne": "Reading 1 file",
+        "runLiveSearchMany": "Searching {{value0}} times",
+        "runLiveSearchOne": "Searching 1 time",
+        "runLiveToolMany": "Using {{value0}} tools",
+        "runLiveToolOne": "Using 1 tool",
+        "runLiveWebSearchMany": "Searching the web {{value0}} times",
+        "runLiveWebSearchOne": "Searching the web 1 time",
+        "runPair": "{{value0}} and {{value1}}",
+        "runPlanMany": "Updated the plan {{value0}} times",
+        "runPlanOne": "Updated the plan",
+        "runReadMany": "Read {{value0}} files",
+        "runReadOne": "Read 1 file",
+        "runSearchMany": "Searched {{value0}} times",
+        "runSearchOne": "Searched 1 time",
+        "runToolMany": "Used {{value0}} tools",
+        "runToolOne": "Used 1 tool",
+        "runWebSearchMany": "Searched the web {{value0}} times",
+        "runWebSearchOne": "Searched the web 1 time",
         "running": "Running…",
         "runningCommand": "Running command",
         "runningNamed": "Running {{toolName}}",
         "runningNamedPreview": "Running {{toolName}} {{preview}}",
         "runningPreview": "Running {{preview}}",
+        "showFullOutput": "Show full output",
         "usedManySummary": "Used {{toolCount}} tools",
         "usedOneSummary": "Used 1 tool"
       },
+      "transcriptLabel": "Conversation",
+      "turnDiff": {
+        "hideDiff": "Hide diff",
+        "many": "{{count}} changed files",
+        "one": "1 changed file",
+        "partial": "Partial diff",
+        "showDiff": "Show diff"
+      },
+      "userMessage": {
+        "showFull": "Show full message",
+        "showLess": "Show less"
+      },
+      "visualLoading": "Loading visualization",
+      "visualOpenInNewTab": "Open in new tab",
+      "visualUnavailable": "Visualization unavailable",
+      "wrapLines": "Wrap lines",
       "writeNotice": {
         "agentRefused": "The agent turned this down.",
         "agentStarting": "The agent is still starting.",
