@@ -86,11 +86,15 @@ type ChatHistoryItem = z.infer<typeof ChatHistoryResultSchema>['page']['items'][
 
 const TURN_LOOKUP_PAGE_SIZE = 50
 
-async function readTailItems(client: ChatClient, sessionId: string): Promise<ChatHistoryItem[]> {
+async function readTailItems(
+  client: ChatClient,
+  sessionId: string,
+  bound?: { signal: AbortSignal; timeoutMs: number }
+): Promise<ChatHistoryItem[]> {
   const response = await client.call<unknown>(
     'agentSession.history',
     { sessionId, direction: 'tail', limit: TURN_LOOKUP_PAGE_SIZE },
-    publicCallOptions()
+    { ...publicCallOptions(), ...bound }
   )
   const parsed = ChatHistoryResultSchema.safeParse(response.result)
   return parsed.success ? parsed.data.page.items : []
@@ -140,38 +144,44 @@ function turnIdOfMessage(
     : null
 }
 
-/** Resolves to `promise`'s value, or to null once `ms` elapse or it rejects; the late result is dropped. */
-async function settleWithin<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      promise.catch(() => null),
-      new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), Math.max(0, ms))))
-    ])
-  } finally {
-    clearTimeout(timer)
-  }
+/**
+ * One journal read, or null when it fails, `ms` elapse or `signal` aborts. The read is cancelled in
+ * the last two cases, and its own timeout lets the transport release the socket and timer even
+ * when a transport cannot cancel, so nothing it holds outlives the budget.
+ */
+async function readTailWithin(
+  client: ChatClient,
+  sessionId: string,
+  ms: number,
+  signal: AbortSignal | undefined
+): Promise<ChatHistoryItem[] | null> {
+  const expiry = AbortSignal.timeout(Math.max(0, ms))
+  return await readTailItems(client, sessionId, {
+    signal: signal === undefined ? expiry : AbortSignal.any([signal, expiry]),
+    timeoutMs: Math.max(1, Math.ceil(ms))
+  }).catch(() => null)
 }
 
 /**
  * Polls the journal until the turn that answers `clientMessageId` exists, `budgetMs` elapses or
- * `stopped` reports true. The host accepts a send before it opens the turn, so the send result
- * cannot carry the turn id. Null when none appeared: a read that fails or outlasts the budget
+ * `signal` aborts. The request still in flight when the lookup ends is cancelled, so nothing it
+ * holds keeps the process alive past the budget. The host accepts a send before it opens the turn,
+ * so the send result cannot carry the turn id. Null when none appeared: a read that fails or outlasts the budget
  * counts as not yet, because the message is already accepted and must not be sent again.
  */
 export async function awaitMessageTurnId(
   client: ChatClient,
   sessionId: string,
   clientMessageId: string,
-  options: { budgetMs: number; intervalMs: number; stopped?: () => boolean }
+  options: { budgetMs: number; intervalMs: number; signal?: AbortSignal }
 ): Promise<string | null> {
   const deadline = Date.now() + options.budgetMs
   for (;;) {
-    const items = await settleWithin(readTailItems(client, sessionId), deadline - Date.now())
+    const items = await readTailWithin(client, sessionId, deadline - Date.now(), options.signal)
     const turnId = items === null ? null : turnIdOfMessage(items, clientMessageId)
     if (
       turnId !== null ||
-      options.stopped?.() === true ||
+      options.signal?.aborted === true ||
       Date.now() + options.intervalMs > deadline
     ) {
       return turnId
@@ -182,11 +192,11 @@ export async function awaitMessageTurnId(
 
 /**
  * Decides which turn events belong to one send. Until the journal lookup for the accepted message
- * ends, events are held back, because any turn not in the journal before the send could be it. Once
- * it ends, a found turn is matched by id; with none found, a turn that was not in the journal
- * before the send may be it. An event naming no turn counts only when the send was already
- * accepted when it arrived, and a finish or failure naming none only when no turn was found.
- * A refused send settles under its own message key at once.
+ * ends, events are held back, because any turn not in the journal before the send could be it, and
+ * an event can arrive before the send's own reply does. Once the lookup ends, a found turn is
+ * matched by id; with none found, a turn that was not in the journal before the send may be it. An
+ * event naming no turn that asks for input always counts, and a finish or failure naming none only
+ * when no turn was found. A refused send settles under its own message key at once.
  *
  * `redeliver` feeds each held event back to the caller's event loop after the lookup ends, so
  * `offer` judges it again.
@@ -204,8 +214,7 @@ export function createSendTurnTracker(
   const turnIds = new Set<string>()
   let turnId: string | null = null
   let lookupEnded = false
-  let sendAccepted = false
-  let finished = false
+  const lookupAbort = new AbortController()
   const held: PublicEvent[] = []
 
   const turnIdOf = (event: PublicEvent) =>
@@ -234,9 +243,6 @@ export function createSendTurnTracker(
     /** True when `event` settles this send; otherwise it is dropped, or held until the lookup ends. */
     offer(event: PublicEvent): boolean {
       const eventTurnId = turnIdOf(event)
-      if (eventTurnId === undefined && !sendAccepted) {
-        return false
-      }
       if (lookupEnded || turnIds.has(eventTurnId ?? '')) {
         return judge(event)
       }
@@ -245,7 +251,6 @@ export function createSendTurnTracker(
     },
     /** Starts looking for the turn of the accepted message; stops at `finish`. */
     accepted(clientMessageId: string | undefined): void {
-      sendAccepted = true
       if (clientMessageId === undefined) {
         endLookup(null)
         return
@@ -253,11 +258,11 @@ export function createSendTurnTracker(
       turnIds.add(agentJournalSubmissionKey(clientMessageId))
       void awaitMessageTurnId(client, sessionId, clientMessageId, {
         ...options,
-        stopped: () => finished
+        signal: lookupAbort.signal
       }).then(endLookup)
     },
     finish(): void {
-      finished = true
+      lookupAbort.abort()
     }
   }
 }

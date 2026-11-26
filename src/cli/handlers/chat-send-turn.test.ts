@@ -167,4 +167,29 @@ describe('chat send turn id', () => {
 
     expect(printedResult()).toMatchObject({ turnId: 't-mine', status: 'finished' })
   })
+
+  it('--wait settles on a needs-input event that arrives before the send reply', async () => {
+    const needsInput: Frame = {
+      seq: 3,
+      at: 1003,
+      topic: 'chat',
+      type: 'turn.needs-input',
+      data: { sessionId: SESSION, requestId: 'req-1' }
+    }
+    const client = host({ before: [], after: [turnRow('t-mine', MESSAGE_KEY)] }, [needsInput])
+    const answer = client.call.getMockImplementation()
+    client.call.mockImplementation(async (method: string) => {
+      if (method === 'agentSession.send') {
+        await new Promise((resolve) => setTimeout(resolve, 80))
+      }
+      return answer ? answer(method) : (undefined as never)
+    })
+    await CHAT_HANDLERS['chat send'](sendContext(client, { wait: true, timeout: '5000' }))
+
+    expect(printedResult()).toMatchObject({
+      turnId: 't-mine',
+      status: 'needs-input',
+      requestId: 'req-1'
+    })
+  })
 })
