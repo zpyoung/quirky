@@ -21,6 +21,7 @@ import {
   resolveHoveredWorkspaceDeleteTarget
 } from '../components/sidebar/hovered-workspace-delete'
 import { useAppStore } from '../store'
+import { hasUnsentDiffNotesForActiveWorktree } from '../store/slices/ui/ui-slice-agent-actions'
 import type { usePluginCommands } from '@/store/plugin-panels'
 import { isGitRepoKind } from '../../../shared/repo-kind'
 import {
@@ -122,6 +123,9 @@ function resolveRenameTargetTabId(activeWorktreeId: string | null): string | nul
   return activeTab?.contentType === 'agent-session' ? activeTab.id : null
 }
 
+/** A command that only sometimes applies: `check` reads state, `run` acts and reports whether it did. */
+type ConditionalAction = { check: () => boolean; run: () => boolean }
+
 type HandlerContext = {
   state: AppShortcutState
   options: AppCommandHandlerOptions
@@ -131,8 +135,7 @@ type HandlerContext = {
   decline: (actionId: KeybindingActionId, reason: string) => false
   /** Claims the command and runs it; a key event is consumed and may show the capture notice. */
   claim: (actionId: KeybindingActionId, run: () => void) => boolean
-  /** Runs first and claims only when `run` reports it acted. */
-  claimIfActed: (actionId: KeybindingActionId, run: () => boolean, reason: string) => boolean
+  claimWhen: (actionId: KeybindingActionId, action: ConditionalAction, reason: string) => boolean
   revealRightSidebarTab: (
     actionId: KeybindingActionId,
     tab: Parameters<AppShortcutActions['setRightSidebarTab']>[0]
@@ -386,9 +389,12 @@ const STORE_FACTORIES: Partial<Record<KeybindingActionId, HandlerFactory>> = {
     context.revealRightSidebarTab('sidebar.ports.toggle', 'ports'),
   'sourceControl.sendReviewNotes': (context) => () =>
     context.canRevealRightSidebar
-      ? context.claimIfActed(
+      ? context.claimWhen(
           'sourceControl.sendReviewNotes',
-          () => context.state.actions.openDiffNotesSendMenuForActiveWorktree(),
+          {
+            check: () => hasUnsentDiffNotesForActiveWorktree(() => useAppStore.getState()),
+            run: () => context.state.actions.openDiffNotesSendMenuForActiveWorktree()
+          },
           'the active workspace has no unsent review notes'
         )
       : context.decline(
@@ -454,15 +460,18 @@ export function createAppCommandHandlers(
     run()
     return true
   }
-  const claimIfActed = (
+  const claimWhen = (
     actionId: KeybindingActionId,
-    run: () => boolean,
+    action: ConditionalAction,
     reason: string
   ): boolean => {
+    if (!action.check()) {
+      return decline(actionId, reason)
+    }
     if (options.probeOnly) {
       return true
     }
-    if (!run()) {
+    if (!action.run()) {
       return decline(actionId, reason)
     }
     consumeKey(actionId)
@@ -476,7 +485,7 @@ export function createAppCommandHandlers(
     canRevealRightSidebar,
     decline,
     claim,
-    claimIfActed,
+    claimWhen,
     revealRightSidebarTab: (actionId, tab) =>
       canRevealRightSidebar
         ? claim(actionId, () => {
