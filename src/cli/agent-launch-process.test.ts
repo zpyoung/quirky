@@ -118,7 +118,7 @@ it('real CLI processes carry surface choices and refuse invalid or unsupported p
       const beforeInvalid = requests.length
       for (const flags of [['--surface='], ['--surface'], ['--surface', 'invalid']]) {
         const response = await run(flags)
-        expect(response.code).toBe(1)
+        expect(response.code).toBe(2)
         expect(response.stdout).toContain('invalid_argument')
       }
       expect(requests).toHaveLength(beforeInvalid)

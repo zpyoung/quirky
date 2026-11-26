@@ -151,7 +151,7 @@ export const NAMESPACE_DEFAULTS: Readonly<Record<string, MethodClass>> = {
   'workspacePorts.': UNSTABLE
 }
 
-const PREFIXES_LONGEST_FIRST = Object.keys(NAMESPACE_DEFAULTS).toSorted(
+const PREFIXES_LONGEST_FIRST = Object.keys(NAMESPACE_DEFAULTS).sort(
   (a, b) => b.length - a.length
 )
 

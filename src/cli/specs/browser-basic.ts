@@ -265,7 +265,7 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
     summary: 'Close a browser tab',
     usage:
       'quirky tab close [--index <n>] [--page <id>] [--type <all|terminal|editor|markdown|chat|browser>] [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'index', 'worktree', 'type'],
+    allowedFlags: [...GLOBAL_FLAGS, 'index', 'page', 'worktree', 'type'],
     notes: TAB_TYPE_NOTES
   },
   {

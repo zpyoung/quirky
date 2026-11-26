@@ -35,7 +35,7 @@ const GUIDE_REFERENCES = {
     'recovery-and-cleanup.md',
     'worker-contract.md'
   ],
-  'quirky-cli': ['automations.md', 'browser.md', 'publishing.md'],
+  'quirky-cli': ['agent-api.md', 'automations.md', 'browser.md', 'publishing.md'],
   'quirky-per-workspace-env': [
     'docker-ssh.md',
     'failure-modes.md',

@@ -110,7 +110,7 @@ describe('packaged CLI assets', () => {
         },
         timeoutMs: 10_000
       })
-      expect(result.code, result.stderr).toBe(1)
+      expect(result.code, result.stderr).toBe(2)
       expect(JSON.parse(result.stdout)).toMatchObject({
         ok: false,
         error: { code: 'invalid_argument', message: 'Pass a positive safe integer for --pr.' }
