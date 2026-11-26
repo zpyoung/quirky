@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
+import type { NativeChatComposerImageAttachment } from './native-chat-composer-image-attachment'
 
 const NO_PREVIEWS: ReadonlyMap<string, string> = new Map()
 

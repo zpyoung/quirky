@@ -4,7 +4,7 @@ import { useContext, useRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EditorCommandOwnerContext } from './editor-command-owner-context'
 import { usePdfViewerFindShortcut } from './use-pdf-viewer-find-shortcut'
-import { useNativeChatFind } from '../native-chat/use-native-chat-find'
+import { useChatFind } from '../chat/session/use-chat-find'
 
 vi.mock('@/store', () => ({ useAppStore: { getState: () => ({ keybindings: undefined }) } }))
 vi.mock('../../store', () => ({ useAppStore: { getState: () => ({ keybindings: undefined }) } }))
@@ -131,8 +131,7 @@ describe('PDF viewer find shortcut', () => {
     function Chat({ testId }: { testId: string }): React.JSX.Element {
       const rootRef = useRef<HTMLDivElement>(null)
       const composerRef = useRef(null)
-      const listRef = useRef(null)
-      const find = useNativeChatFind(true, rootRef, composerRef, listRef)
+      const find = useChatFind(true, rootRef, composerRef, () => {})
       return (
         <div ref={rootRef} tabIndex={-1} data-native-chat-root="true" data-testid={testId}>
           {find.isOpen ? <div data-testid={`${testId}-find`} /> : null}

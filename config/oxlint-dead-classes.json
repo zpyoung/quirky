@@ -30,6 +30,9 @@
           "error",
           {
             "allow": [
+              "chat-diff",
+              "chat-diff-*",
+              "chat-view-list",
               "comment-md-*",
               "compact-agent-*",
               "feature-wall-*",
@@ -47,6 +50,8 @@
               "mobile-browser-driver-banner",
               "mobile-driver-banner",
               "native-chat-*",
+              "qmd",
+              "qmd-*",
               "quirky-*",
               "pdfViewer",
               "popover-scroll-content",

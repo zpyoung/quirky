@@ -614,8 +614,7 @@ export function isUnitTestSupportSource(file) {
     file === 'src/renderer/src/store/slices/browser-slice-test-harness.ts' ||
     file === 'src/renderer/src/runtime/web-runtime-session-test-harness.ts' ||
     file === 'src/renderer/src/runtime/sync-runtime-graph-test-harness.ts' ||
-    file === 'src/renderer/src/runtime/web-session-tabs-sync-test-harness.ts' ||
-    file === 'src/renderer/src/components/native-chat/NativeChatStructuredSession.test-harness.tsx'
+    file === 'src/renderer/src/runtime/web-session-tabs-sync-test-harness.ts'
   )
 }
 

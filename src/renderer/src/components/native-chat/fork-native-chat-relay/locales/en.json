@@ -1,9 +1,0 @@
-{
-  "components": {
-    "native-chat": {
-      "state": {
-        "readErrorNotice": "Chat history could not be refreshed. {{value0}}"
-      }
-    }
-  }
-}

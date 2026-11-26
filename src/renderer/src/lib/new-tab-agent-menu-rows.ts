@@ -1,5 +1,4 @@
 import type { GlobalSettings } from '../../../shared/global-settings-types'
-import { isNativeChatProviderDisplayedOn } from '../../../shared/native-chat-providers'
 import {
   isNativeChatEnabled,
   type NativeChatDefaultSettings
@@ -22,7 +21,7 @@ export type NewTabAgentMenuRow = (
 ) & { executionHostId?: ExecutionHostId }
 
 export type NewTabAgentMenuSettings = NativeChatDefaultSettings &
-  Partial<Pick<GlobalSettings, 'defaultTuiAgent' | 'disabledTuiAgents'>>
+  Partial<Pick<GlobalSettings, 'defaultTuiAgent' | 'disabledTuiAgents' | 'nativeChatProviders'>>
 
 export function buildNewTabAgentMenuRows(args: {
   settings: NewTabAgentMenuSettings | null | undefined
@@ -41,7 +40,8 @@ export function buildNewTabAgentMenuRows(args: {
   const runnable: TuiAgent[] = []
   const unavailable = new Map<TuiAgent, ChatUnavailableReason>()
   for (const agent of filterEnabledTuiAgents(args.chatAgents, settings?.disabledTuiAgents)) {
-    if (!isNativeChatProviderDisplayedOn(settings, agent, args.detectedOnHost)) {
+    // a chat provider the owner switched off stays hidden; an uninstalled one still shows, disabled
+    if (settings?.nativeChatProviders?.[agent] === false) {
       continue
     }
     const answer = args.hostChatAnswer(agent)

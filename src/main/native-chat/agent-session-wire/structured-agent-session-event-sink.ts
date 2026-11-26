@@ -75,7 +75,7 @@ export type StructuredAgentSessionRevisionJournal = Pick<
 /** Rows already journaled and who produced each, read by a producer that has to agree with them. */
 export type StructuredAgentSessionLinkageJournal = Pick<
   AgentSessionJournal,
-  'epoch' | 'visitItemsWithLinkage' | 'threadGoal' | 'threadGoalSource'
+  'epoch' | 'visitItemsWithLinkage'
 >
 
 /** The row a revision rewrites and its whole new body, read from the journal at execution. */

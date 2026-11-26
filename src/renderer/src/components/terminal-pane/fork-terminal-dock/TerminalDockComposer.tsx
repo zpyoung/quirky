@@ -1,142 +1,71 @@
-import { useMemo, type RefObject } from 'react'
+import { useCallback, useMemo, type Ref } from 'react'
 import { useAppStore } from '../../../store'
 import type { AgentType } from '../../../../../shared/agent-status-types'
-import { isNativeChatSupportedAgent } from '../../../../../shared/native-chat-agent-support'
-import type { ComposerSendTier } from '../../native-chat/fork-agent-composer/composer-send-tier'
-import type { SendOutcome } from '../../native-chat/fork-agent-composer/native-chat-send-outcome'
-import type { NativeChatComposerHandle } from '../../native-chat/native-chat-composer-types'
-import { NativeChatComposer } from '../../native-chat/NativeChatComposer'
-import { NativeChatInteractiveCard } from '../../native-chat/NativeChatInteractiveCard'
-import { useNativeChatInteractivePromptCard } from '../../native-chat/use-native-chat-interactive-prompt-card'
-import { useNativeChatPromptCardPresentation } from '../../native-chat/use-native-chat-prompt-card-presentation'
-import { NativeChatPromptStrip } from '../../native-chat/NativeChatPromptCollapse'
-import { findTerminalTabWorktreeId } from '../../native-chat/native-chat-file-link'
-import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
-import {
-  useNativeChatInteractiveSend,
-  type NativeChatInteractiveSend
-} from '../../native-chat/use-native-chat-interactive-send'
-import { useNativeChatRetainedSession } from '../../native-chat/use-native-chat-retained-session'
-import { terminalDockHistoryPrompts } from './terminal-dock-history'
+import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-label'
+import { Composer } from '../../chat/composer/Composer'
+import type {
+  ComposerHandle,
+  ComposerSubmit,
+  ComposerWorkspace
+} from '../../chat/composer/composer-types'
+import type { NativeChatResolvedTarget } from '../../native-chat/native-chat-composer-target'
+import { useNativeChatInteractiveSend } from '../../native-chat/use-native-chat-interactive-send'
+import { isTerminalInputQuarantined } from '../terminal-input-quarantine'
+import { submitToTerminalAgent } from './terminal-dock-submit'
+import { useTerminalInputQuarantined } from './use-terminal-input-quarantined'
 
 export type TerminalDockComposerProps = {
-  ref: React.Ref<NativeChatComposerHandle>
+  ref: Ref<ComposerHandle>
   terminalTabId: string
   paneKey: string
   targetPtyId: string | null
   agent: AgentType
+  /** False greys the composer out: the terminal can't take input right now. */
   canSend: boolean
-  sendTier: ComposerSendTier
-  readTerminalScreen?: () => string | null
-  /** The question card's free-text row. The dock keeps its composer mounted
-   *  beside an active card, so pane-level Paste needs this to tell the two
-   *  apart by focus. */
-  answerInputRef?: RefObject<HTMLInputElement | null>
-  onSendOutcome?: (outcome: SendOutcome) => void
 }
 
+/**
+ * The composer under an agent terminal. It types straight into the agent's PTY, with the same
+ * editor, attachments and IME handling as the chat, and holds sends while the terminal's input is
+ * quarantined after a re-attach.
+ */
 export function TerminalDockComposer({
-  answerInputRef,
-  ...props
+  ref,
+  terminalTabId,
+  paneKey,
+  targetPtyId,
+  agent,
+  canSend
 }: TerminalDockComposerProps): React.JSX.Element {
-  const status = useAppStore((state) => state.agentStatusByPaneKey[props.paneKey])
-  const isWorking = status?.state === 'working'
-  const interactiveSend = useNativeChatInteractiveSend(
-    props.terminalTabId,
-    props.paneKey,
-    props.targetPtyId,
-    props.agent
+  const working = useAppStore((state) => state.agentStatusByPaneKey[paneKey]?.state === 'working')
+  const quarantined = useTerminalInputQuarantined(terminalTabId)
+  const interactiveSend = useNativeChatInteractiveSend(terminalTabId, paneKey, targetPtyId, agent)
+  const resolveTarget = useCallback((): NativeChatResolvedTarget | null => {
+    if (!targetPtyId || isTerminalInputQuarantined(terminalTabId)) {
+      return null
+    }
+    return { terminalTabId, ptyId: targetPtyId }
+  }, [targetPtyId, terminalTabId])
+  const workspace = useMemo<ComposerWorkspace>(
+    () => ({ paneKey, terminalTabId, agent, targetPtyId, resolveTarget }),
+    [agent, paneKey, resolveTarget, targetPtyId, terminalTabId]
   )
-  if (isNativeChatSupportedAgent(props.agent)) {
-    return (
-      <TerminalDockCardComposer
-        {...props}
-        answerInputRef={answerInputRef}
-        isWorking={isWorking}
-        interactiveSend={interactiveSend}
-      />
-    )
-  }
+  const onSubmit: ComposerSubmit = (text, attachments) =>
+    submitToTerminalAgent({ agent, target: resolveTarget(), text, attachments })
+
   return (
-    <NativeChatComposer
-      {...props}
-      layout="dock"
-      isWorking={isWorking}
+    <Composer
+      ref={ref}
+      mode="terminal"
+      onSubmit={onSubmit}
+      draftScopeKey={paneKey}
+      disabled={!canSend || targetPtyId === null}
+      quarantined={quarantined}
+      working={working}
+      canStop={working}
       onStop={interactiveSend.cancel}
+      workspace={workspace}
+      agentLabel={structuredAgentLabel(agent)}
     />
-  )
-}
-
-function TerminalDockCardComposer({
-  answerInputRef,
-  ...props
-}: TerminalDockComposerProps & {
-  isWorking: boolean
-  interactiveSend: NativeChatInteractiveSend
-}): React.JSX.Element {
-  const status = useAppStore((state) => state.agentStatusByPaneKey[props.paneKey])
-  const runtimeEnvironmentId = useAppStore((state) =>
-    runtimeEnvironmentIdUnlessTwin(
-      state,
-      findTerminalTabWorktreeId(state.tabsByWorktree, props.terminalTabId)
-    )
-  )
-  const session = useNativeChatRetainedSession({
-    paneKey: props.paneKey,
-    agent: props.agent,
-    sessionId: status?.providerSession?.id ?? null,
-    transcriptPath: status?.providerSession?.transcriptPath ?? null,
-    runtimeEnvironmentId
-  })
-  const { interactiveSend } = props
-  const historyPrompts = useMemo(
-    () => terminalDockHistoryPrompts(session.messages, status),
-    [session.messages, status]
-  )
-  const promptCard = useNativeChatInteractivePromptCard({
-    paneKey: props.paneKey,
-    messages: session.messages,
-    transcriptSettled: session.readPhase === 'ready'
-  })
-  const presentation = useNativeChatPromptCardPresentation({
-    paneKey: props.paneKey,
-    targetPtyId: props.targetPtyId,
-    card: promptCard,
-    canSend: props.canSend,
-    transcriptSettled: session.readPhase === 'ready'
-  })
-  const { card: shownCard, collapsedCard } = presentation
-  const mountedCard = shownCard ?? collapsedCard
-
-  return (
-    <>
-      <div className="absolute inset-x-0 bottom-full z-30" data-terminal-dock-card-overlay="">
-        {mountedCard ? (
-          <div hidden={collapsedCard !== null} inert={collapsedCard !== null} className="contents">
-            <NativeChatInteractiveCard
-              key={presentation.occurrenceKey ?? 'prompt'}
-              card={mountedCard}
-              send={interactiveSend}
-              onDismiss={presentation.dismiss}
-              onCollapse={presentation.collapse}
-              answerInputRef={answerInputRef}
-            />
-          </div>
-        ) : null}
-        {collapsedCard ? (
-          <NativeChatPromptStrip card={collapsedCard} onExpand={presentation.expand} />
-        ) : null}
-      </div>
-      <NativeChatComposer
-        {...props}
-        layout="dock"
-        canSend={props.canSend}
-        sendDisabled={shownCard !== null}
-        isWorking={props.isWorking}
-        onStop={interactiveSend.cancel}
-        historyPrompts={historyPrompts}
-        reportedSessionOptions={session.sessionOptions}
-      />
-    </>
   )
 }

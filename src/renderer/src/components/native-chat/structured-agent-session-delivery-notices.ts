@@ -7,10 +7,15 @@ import type { AgentJournalSubmission } from '../../../../shared/agent-session-jo
 import { structuredAgentSessionRecordedRejectionParts } from '../../../../shared/structured-agent-session-rejection-words'
 import { structuredAgentSessionRejectedShownInPlace } from '../../../../shared/structured-agent-session-message-projection'
 import { agentSessionWriteNoticeText } from './agent-session-write-notice-text'
-import type { NativeChatDeliveryNotice } from './NativeChatMessageRow'
 import type { StructuredAgentSessionPendingSend } from './structured-agent-session-pending-sends'
 
 /** One shared value, so a rebuilt map re-renders no row still sending. */
+/** What a message row shows in place of its time: that it is still being sent, or that it did not
+ *  go through, with its own Retry when the surface can send it again. */
+export type NativeChatDeliveryNotice =
+  | { sending: true; text?: never; onDismiss?: never }
+  | { sending?: never; text: string; onDismiss?: () => void }
+
 const STRUCTURED_AGENT_SESSION_DELIVERY_SENDING: NativeChatDeliveryNotice = { sending: true }
 const NO_COMMANDS: ReadonlySet<string> = new Set()
 

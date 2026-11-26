@@ -37,10 +37,9 @@
 1 tests/e2e/headless-paired-remote-terminal-reveal-grid.spec.ts
 1 tests/e2e/headless-serve-desktop-activation.spec.ts
 5 tests/e2e/helpers/headless-paired-runtime-host.ts
-1 tests/e2e/helpers/native-chat-view.ts
 2 tests/e2e/helpers/nested-runtime-ssh-client-route.ts
-1 tests/e2e/helpers/quirkyd-managed-workspace.ts
 2 tests/e2e/helpers/paired-terminal-cold-activation-oracle.ts
+1 tests/e2e/helpers/quirkyd-managed-workspace.ts
 2 tests/e2e/helpers/shortcuts.ts
 1 tests/e2e/host-agent-launch-settings-hook-bookkeeping.unit.test.ts
 4 tests/e2e/issue-12656-terminal-link-tooltip.spec.ts
@@ -51,10 +50,6 @@
 1 tests/e2e/local-worktree-visibility-runtime-active.spec.ts
 1 tests/e2e/markdown-tab-scroll-restore.spec.ts
 2 tests/e2e/multi-client-navigation-isolation.spec.ts
-2 tests/e2e/native-chat-history-prepend-anchor.spec.ts
-2 tests/e2e/native-chat-startup-option-pickers.unit.test.ts
-1 tests/e2e/nested-agent-idle-session-owner.spec.ts
-2 tests/e2e/omp-model-picker.spec.ts
 2 tests/e2e/orchestration-legacy-worker-missing-terminal-recovery.spec.ts
 1 tests/e2e/orchestration-worker-settlement-release-cli.spec.ts
 1 tests/e2e/orchestration-worker-terminal-visibility.spec.ts
@@ -117,4 +112,3 @@
 1 tests/e2e/workspace-space-git-status.spec.ts
 1 tests/tools/omp-child-history-rendered/fixture.tsx
 1 tests/tools/omp-remote-sidebar-rendered/fixture.tsx
-1 tests/tools/omp-transcript-rendered/fixture.tsx

@@ -274,29 +274,6 @@ describe('SortableTabContextMenu', () => {
     expect(container.textContent).not.toContain('Continue in Chat UI')
   })
 
-  it('hides switching a terminal-view tab into chat view', () => {
-    const { container } = renderMenu({ canToggleViewMode: true, onToggleViewMode: vi.fn() })
-
-    expect(container.textContent).not.toContain('Continue in Chat UI')
-  })
-
-  it('keeps the way back for a tab already in chat view, in the chat/CLI move section', () => {
-    const onToggleViewMode = vi.fn()
-    const { container } = renderMenu({
-      canToggleViewMode: true,
-      isChatView: true,
-      onToggleViewMode
-    })
-    const marker = getSurfaceSwitchMarker(container)
-
-    expect(
-      getButton(container, 'Continue with Terminal Agent').compareDocumentPosition(marker)
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-    expect(marker.getAttribute('data-leading-separator')).toBe('false')
-    act(() => getButton(container, 'Continue with Terminal Agent').click())
-    expect(onToggleViewMode).toHaveBeenCalled()
-  })
-
   it('offers the session-history chat/CLI move right above Pin Tab', () => {
     const { container } = renderMenu({ nativeChat: { sessionId: 'quirky-chat-1', agent: 'codex' } })
     const marker = getSurfaceSwitchMarker(container)

@@ -1,0 +1,15 @@
+.chat-diff .chat-diff-added {
+  background: var(--diff-added-ground);
+}
+
+.chat-diff .chat-diff-removed {
+  background: var(--diff-removed-ground);
+}
+
+.chat-diff .chat-diff-hunk {
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+
+.chat-view-list {
+  overflow-anchor: none;
+}

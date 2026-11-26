@@ -95,7 +95,15 @@ const SNAPSHOT = {
     'row.kind': ['dispatch', 'epoch', 'item', 'lifecycle-batch', 'submission', 'tombstone'],
     'row.mutations[].kind': ['item', 'tombstone'],
     'body.contextUsage.used.kind': ['estimate', 'report', 'unknown'],
-    'body.contextUsage.used.categories[].deferred': [true]
+    'body.contextUsage.used.categories[].deferred': [true],
+    'body.status': ['approved', 'not-answered', 'revised', 'waiting'],
+    'body.reason': ['feedback', 'mode-switch', 'restarted', 'stopped'],
+    'body.source': ['edit-tools', 'git-tree'],
+    'body.files[].status': ['added', 'deleted', 'modified', 'renamed'],
+    'body.mode': ['accept-edits', 'ask', 'auto', 'full-access', 'plan'],
+    'body.previous': ['accept-edits', 'ask', 'auto', 'full-access', 'plan'],
+    'body.placement': ['inline', 'pane'],
+    'body.state': ['failed', 'passed', 'running']
   },
   catchAll: ['body.blocks[].type', 'body.subject.kind', 'body.threadGoal.state', 'body.kind']
 }

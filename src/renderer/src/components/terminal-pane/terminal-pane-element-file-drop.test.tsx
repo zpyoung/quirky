@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
 import { act, cleanup, render } from '@testing-library/react'
-import { createPortal } from 'react-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isTerminalLeafId } from '../../../../shared/stable-pane-id'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
@@ -10,10 +9,6 @@ import type { ManagedPaneInternal } from '@/lib/pane-manager/pane-manager-types'
 import { collectPublicPanes, toPublicPane } from '@/lib/pane-manager/pane-public-view'
 import type { PtyTransport } from './pty-transport-types'
 import type { TerminalPaneController } from './use-terminal-pane-controller'
-import {
-  NativeChatPaneFileDropSurface,
-  useNativeChatPaneFileDropClaim
-} from '@/components/native-chat/NativeChatPaneFileDropSurface'
 import { TerminalPaneSurface } from './TerminalPaneSurface'
 import { installOsFileDropCancellationGuard } from '@/lib/os-file-drop-cancellation-guard'
 
@@ -34,13 +29,9 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   importPaths: vi.fn(),
   resolvePaths: vi.fn(),
-  chatDrop: vi.fn(),
   toastError: vi.fn(),
   legacyIpc: vi.fn(),
-  editorOpen: vi.fn(),
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The portal target starts absent and is assigned only a fixture pane container.
-  chatPane: null as HTMLElement | null,
-  chatDisabled: false
+  editorOpen: vi.fn()
 }))
 vi.mock('electron', () => ({
   ipcRenderer: { on: vi.fn(), send: mocks.legacyIpc, removeListener: vi.fn() },
@@ -94,28 +85,6 @@ vi.mock('./TerminalPaneRuntimePortals', () => ({
   TerminalPaneSshReconnectPortals: () => null
 }))
 
-function ChatClaim(): null {
-  useNativeChatPaneFileDropClaim({
-    disabled: mocks.chatDisabled,
-    destinationKey: 'chat-A',
-    captureExternalDrop: () => mocks.chatDrop,
-    onDragOverCapture: vi.fn(),
-    onDropCapture: vi.fn()
-  })
-  return null
-}
-vi.mock('./TerminalPaneNativeChatPortal', () => ({
-  TerminalPaneNativeChatPortal: () =>
-    mocks.chatPane &&
-    createPortal(
-      <NativeChatPaneFileDropSurface className="chat-drop">
-        <ChatClaim />
-        <span data-testid="chat-target" />
-      </NativeChatPaneFileDropSurface>,
-      mocks.chatPane
-    )
-}))
-
 function makePane(id: number): ManagedPaneInternal {
   const leafId = `00000000-0000-4000-8000-00000000000${id}`
   if (!isTerminalLeafId(leafId)) {
@@ -133,7 +102,6 @@ function makePane(id: number): ManagedPaneInternal {
 
 function mountSurface(
   options: {
-    chat?: boolean
     hidden?: 'display' | 'inert'
     host?: string
     runtime?: string
@@ -163,7 +131,6 @@ function mountSurface(
   const manager = { getPanes, getActivePane: () => toPublicPane(active) } as unknown as PaneManager
   const divider = document.createElement('div')
   const activate = vi.fn()
-  mocks.chatPane = options.chat ? panes[0].container : null
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: All live surface fields are supplied; unrelated dialogs and controller operations are mocked out.
   const controller = {
     activePane: active,
@@ -246,8 +213,6 @@ beforeEach(() => {
       mocks.editorOpen()
     }
   })
-  mocks.chatPane = null
-  mocks.chatDisabled = false
   mocks.state.worktreesByRepo = {
     repo: [{ id: 'wt-1', repoId: 'repo', path: '/owner/workspace', hostId: 'local' }]
   }
@@ -404,21 +369,6 @@ describe('terminal element file drops', () => {
       ['/client/second.txt ', 'driving']
     ])
   })
-  it.each([false, true])(
-    'keeps nested chat drops out of terminal (disabled=%s)',
-    async (disabled) => {
-      mocks.chatDisabled = disabled
-      const fixture = mountSurface({ chat: true })
-      drop(fixture.view.getByTestId('chat-target'))
-      await settle()
-      expect(mocks.chatDrop).toHaveBeenCalledTimes(disabled ? 0 : 1)
-      expect(fixture.sends[0]).not.toHaveBeenCalled()
-      drop(fixture.body)
-      await settle()
-      expect(fixture.sends[0]).toHaveBeenCalledExactlyOnceWith('/client/file.txt ', 'driving')
-      expect(mocks.chatDrop).toHaveBeenCalledTimes(disabled ? 0 : 1)
-    }
-  )
   it.each(['display', 'inert'] as const)('refuses hidden terminal owners (%s)', async (hidden) => {
     const fixture = mountSurface({ hidden })
     expect(fixture.body.hasAttribute('data-os-file-drop-owner')).toBe(true)

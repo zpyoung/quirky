@@ -46,7 +46,6 @@ const StructuredAgentSessionOverlaySlot = memo(function StructuredAgentSessionOv
       onFocusOwningGroup={onFocusOwningGroup}
     >
       <NativeChatView
-        mode="structured"
         tabId={tab.id}
         groupId={groupId}
         sessionId={tab.entityId}

@@ -37,7 +37,6 @@ import type {
   AgentSessionOptionsResult,
   AgentSessionSlashCommand
 } from '../../../shared/agent-session-wire'
-import type { AgentSessionThreadGoalChange } from '../../../shared/agent-session-thread-goal-wire'
 import type { AgentSessionRefusalReason } from '../../../shared/agent-session-wire-refusals'
 import type { SubmissionRejectionFact } from '../../../shared/agent-session-failure'
 import type {
@@ -341,17 +340,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
      *  interrupt is issued. Absent for direct callers with no journal. */
     resolveLiveTurnId?: () => string | null
   }): Promise<AgentSessionCancelOutcome>
-  /** Changes the provider thread's goal. `rejected` is the provider refusing the
-   *  change; a throw leaves its effect unknown. Absent where no goal exists. */
-  changeThreadGoal?(input: {
-    sessionId: string
-    fence: number
-    change: AgentSessionThreadGoalChange
-    /** True when the journal records a goal, whatever its status: a `set` must
-     *  start a new goal rather than rewrite that one's objective in place. */
-    replacesGoal: boolean
-    signal?: AbortSignal
-  }): Promise<{ ok: true } | { ok: false; rejected: string }>
   /** Stops exactly the tasks `taskIds` names, which the host resolves from its child records.
    *  `stillRunning` is the provider's own answer that one survived its stop; a throw leaves the
    *  effect unknown. `acknowledge` names each task the provider accepted the stop of as its answer

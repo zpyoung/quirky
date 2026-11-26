@@ -10,6 +10,7 @@ import { ItemParams } from '../../../../shared/rpc-contract/structured-agent-ses
 import { shortenedAgentJournalItem } from '../../../native-chat/agent-session-wire/agent-session-item-wire-form'
 import { REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES } from '../../../../shared/remote-runtime-memory-limits'
 import { defineMethod } from '../core'
+import { projectV1Item } from './structured-agent-session-v1-items-capability'
 import { requireInstalledStructuredHost } from './structured-agent-session-gate'
 
 /** The item's share of one reply, with room for the envelope beside it. */
@@ -29,7 +30,7 @@ export const STRUCTURED_AGENT_SESSION_ITEM_METHODS = [
         return { item: null }
       }
       // Null only for an item whose identifiers alone exceed a reply; the client keeps its head.
-      return { item: shortenedAgentJournalItem(item, ITEM_REPLY_MAX_BYTES) }
+      return { item: projectV1Item(ctx, shortenedAgentJournalItem(item, ITEM_REPLY_MAX_BYTES)) }
     }
   })
 ]

@@ -110,6 +110,13 @@ export const AGENT_SESSION_REWIND_RECOVERY_CAPABILITY = 'agent-session.rewind-re
 // status form to clients that do not advertise this. Transitional: drop the downgrade once no
 // supported release lacks the capability.
 export const AGENT_SESSION_TURN_ITEM_CAPABILITY = 'agent-session.turn-item.v1' as const
+// Why: the plan, turn-changes, mode, fork, visual and test-result items are unknown kinds to an
+// older client, so the host publishes a status row to clients that do not advertise this.
+export const AGENT_SESSION_V1_CHAT_ITEMS_CAPABILITY = 'agent-session.v1-chat-items.v1' as const
+// Why: the host serves queuedMessageMove, fork, turnDiff and view.*; clients hide those controls
+// on a host that lacks it.
+export const AGENT_SESSION_V1_CHAT_METHODS_RUNTIME_CAPABILITY =
+  'agent-session.v1-chat-methods.v1' as const
 /** The client retires acknowledged echoes even when a catch-up snapshot skips their rows. */
 export const AGENT_SESSION_SNAPSHOT_CATCH_UP_CLIENT_CAPABILITY =
   'agent-session.snapshot-catch-up.v1' as const
@@ -166,6 +173,7 @@ export const AGENT_SESSION_RUNTIME_CAPABILITIES = [
   AGENT_SESSION_ATTACHMENTS_RUNTIME_CAPABILITY,
   AGENT_SESSION_PHONE_ATTACHMENTS_RUNTIME_CAPABILITY,
   AGENT_SESSION_TURN_ITEM_CAPABILITY,
+  AGENT_SESSION_V1_CHAT_METHODS_RUNTIME_CAPABILITY,
   AGENT_SESSION_BACKGROUND_TASK_ROW_STOP_CAPABILITY,
   AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY,
   ...AGENT_SESSION_RESUME_RUNTIME_CAPABILITIES

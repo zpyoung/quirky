@@ -1,8 +1,3 @@
-import relayZH from '../components/native-chat/fork-native-chat-relay/locales/zh.json'
-import relayKO from '../components/native-chat/fork-native-chat-relay/locales/ko.json'
-import relayJA from '../components/native-chat/fork-native-chat-relay/locales/ja.json'
-import relayES from '../components/native-chat/fork-native-chat-relay/locales/es.json'
-import relayEN from '../components/native-chat/fork-native-chat-relay/locales/en.json'
 import worktreeGroupsEN from '../components/sidebar/fork-worktree-groups/locales/en.json'
 import worktreeGroupsES from '../components/sidebar/fork-worktree-groups/locales/es.json'
 import worktreeGroupsJA from '../components/sidebar/fork-worktree-groups/locales/ja.json'
@@ -29,11 +24,6 @@ import handoffSettingsES from '../components/settings/fork-session-handoff/local
 import handoffSettingsJA from '../components/settings/fork-session-handoff/locales/ja.json'
 import handoffSettingsKO from '../components/settings/fork-session-handoff/locales/ko.json'
 import handoffSettingsZH from '../components/settings/fork-session-handoff/locales/zh.json'
-import agentComposerEN from '../components/native-chat/fork-agent-composer/locales/en.json'
-import agentComposerES from '../components/native-chat/fork-agent-composer/locales/es.json'
-import agentComposerJA from '../components/native-chat/fork-agent-composer/locales/ja.json'
-import agentComposerKO from '../components/native-chat/fork-agent-composer/locales/ko.json'
-import agentComposerZH from '../components/native-chat/fork-agent-composer/locales/zh.json'
 import skillPluginsEN from '../components/native-chat/fork-skill-plugin-attribution/locales/en.json'
 import skillPluginsES from '../components/native-chat/fork-skill-plugin-attribution/locales/es.json'
 import skillPluginsJA from '../components/native-chat/fork-skill-plugin-attribution/locales/ja.json'
@@ -107,13 +97,11 @@ type ForkCatalogRegistrar = {
 
 const FORK_CATALOGS: Record<ForkLocale, ForkCatalog[]> = {
   en: [
-    relayEN,
     worktreeGroupsEN,
     dockEN,
     dockSettingsEN,
     sidebarSeparatorEN,
     handoffSettingsEN,
-    agentComposerEN,
     skillPluginsEN,
     handoffEN,
     dirtyBranchEN,
@@ -130,13 +118,11 @@ const FORK_CATALOGS: Record<ForkLocale, ForkCatalog[]> = {
     recipeOverridesEN
   ],
   es: [
-    relayES,
     worktreeGroupsES,
     dockES,
     dockSettingsES,
     sidebarSeparatorES,
     handoffSettingsES,
-    agentComposerES,
     skillPluginsES,
     handoffES,
     dirtyBranchES,
@@ -154,13 +140,11 @@ const FORK_CATALOGS: Record<ForkLocale, ForkCatalog[]> = {
   ],
   fr: [heimdallCatalogs.fr, heimdallObjectiveCatalogs.fr, loopsCatalogs.fr],
   ja: [
-    relayJA,
     worktreeGroupsJA,
     dockJA,
     dockSettingsJA,
     sidebarSeparatorJA,
     handoffSettingsJA,
-    agentComposerJA,
     skillPluginsJA,
     handoffJA,
     dirtyBranchJA,
@@ -177,13 +161,11 @@ const FORK_CATALOGS: Record<ForkLocale, ForkCatalog[]> = {
     recipeOverridesJA
   ],
   ko: [
-    relayKO,
     worktreeGroupsKO,
     dockKO,
     dockSettingsKO,
     sidebarSeparatorKO,
     handoffSettingsKO,
-    agentComposerKO,
     skillPluginsKO,
     handoffKO,
     dirtyBranchKO,
@@ -200,13 +182,11 @@ const FORK_CATALOGS: Record<ForkLocale, ForkCatalog[]> = {
     recipeOverridesKO
   ],
   zh: [
-    relayZH,
     worktreeGroupsZH,
     dockZH,
     dockSettingsZH,
     sidebarSeparatorZH,
     handoffSettingsZH,
-    agentComposerZH,
     skillPluginsZH,
     handoffZH,
     dirtyBranchZH,

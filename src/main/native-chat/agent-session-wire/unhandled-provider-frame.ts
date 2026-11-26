@@ -5,7 +5,6 @@ import {
   PROVIDER_FRAME_PAYLOAD_LIMITS,
   type JournalPayloadLimits
 } from '../agent-session-journal/journal-payload-bounds'
-import { codexGoalRowText, codexThreadGoalState } from '../../codex/codex-goal-journal-rows'
 import { isProviderRecord } from '../../provider-process/provider-json-record'
 import { classifyProviderFrame } from './provider-frame-disposition'
 
@@ -178,16 +177,13 @@ export function unhandledProviderFrameJournalItem(
         : null
     message = typeof content === 'string' && content.trim() ? content.trim() : message
   }
-  const goalText = provider === 'codex' ? codexGoalRowText(method, payload) : null
-  const threadGoal = provider === 'codex' ? codexThreadGoalState(method, payload) : null
   return {
     body: {
       kind: 'status',
-      text: compaction ? 'Context compacted' : goalText || message || `${provider} · ${kind}`,
+      text: compaction ? 'Context compacted' : message || `${provider} · ${kind}`,
       ...(compaction ? { presentation: 'compaction' } : {}),
       ...(tone ? { tone } : {}),
-      providerFrame: { provider, kind, payload: bounded },
-      ...(threadGoal ? { threadGoal } : {})
+      providerFrame: { provider, kind, payload: bounded }
     },
     classification: classification === 'error-surface' ? 'error-surface' : 'timeline-substantive'
   }

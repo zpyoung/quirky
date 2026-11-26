@@ -20,6 +20,7 @@ import type { AgentSessionProviderHandle } from './agent-session-provider-handle
 import type { NativeChatBlock, NativeChatRole } from './native-chat-types'
 import type { AgentMessageSource } from './agent-session-message-source'
 import type { AgentSessionExecutionOptions } from './agent-session-execution-options'
+import type { AgentJournalV1ChatItem } from './agent-session-journal-v1-items'
 
 export { type AgentType }
 
@@ -377,6 +378,7 @@ export type AgentJournalItemBody =
   | AgentJournalQuestionItem
   | AgentJournalStatusItem
   | AgentJournalTurnItem
+  | AgentJournalV1ChatItem
 
 /** Agent work, versus a backgrounded shell or command task. Classified once by
  *  the producer, which holds the provider vocabulary, so no reader re-derives it. */

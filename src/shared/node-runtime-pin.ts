@@ -30,9 +30,11 @@ export const COMPAT_SERVER_TARGET_BASES: Record<CompatServerTarget, ServerTarget
   'linux-x64-glibc217': 'linux-x64-glibc'
 }
 
-// Every target: Windows SSH relays take their node-pty/ConPTY slot from here (design D5), even
-// though managed quirkyd launch stays POSIX-only (quirkyd-remote-host-support.ts).
-export const QUIRKYD_TEMPLATE_TARGETS: readonly ServerTarget[] = SERVER_TARGETS
+// Quirky is macOS-only and CI builds no win32 node-pty prebuild, so the template carries no
+// Windows slot.
+export const QUIRKYD_TEMPLATE_TARGETS: readonly ServerTarget[] = SERVER_TARGETS.filter(
+  (target) => !target.startsWith('win32-')
+)
 
 export type NodeRuntimePin = {
   version: string

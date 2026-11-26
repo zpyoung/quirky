@@ -41,7 +41,6 @@ import {
 } from './codex-structured-turn-end-settlement'
 import { createCodexStructuredNotificationRetry } from './codex-structured-notification-retry'
 import { acquireCodexStructuredSession } from './codex-structured-session-acquire'
-import { changeCodexThreadGoal } from './codex-structured-thread-goal'
 import { startCodexTerminalStopProbe } from './codex-background-terminals'
 import { codexBackgroundTaskStops, stopCodexBackgroundTasks } from './codex-background-task-stops'
 import {
@@ -295,15 +294,6 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
       throw error
     }
   }
-
-  changeThreadGoal: NonNullable<StructuredAgentSessionAdapter['changeThreadGoal']> = (input) =>
-    changeCodexThreadGoal(
-      this.session(input.sessionId),
-      input.change,
-      input.replacesGoal,
-      this.deps.requestTimeoutMs,
-      input.signal
-    )
 
   answerPrompt: StructuredAgentSessionAdapter['answerPrompt'] = (request) =>
     answerCodexStructuredPrompt({ request, sessions: this.sessions })

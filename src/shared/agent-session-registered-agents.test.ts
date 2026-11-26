@@ -6,7 +6,6 @@ const CODEX = {
   capabilities: {
     rewind: true,
     compact: true,
-    threadGoal: true,
     contextUsage: false,
     imagePrompts: true,
     steering: 'inject',
@@ -52,7 +51,6 @@ describe('decodeAgentSessionAgentsResult', () => {
         capabilities: {
           rewind: false,
           compact: false,
-          threadGoal: false,
           contextUsage: false,
           imagePrompts: false,
           steering: 'queue',

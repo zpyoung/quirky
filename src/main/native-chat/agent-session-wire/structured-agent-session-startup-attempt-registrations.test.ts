@@ -100,7 +100,7 @@ async function hostFor(definition: StructuredAgentDefinition): Promise<{
   const declared: StructuredAgentDefinition = {
     ...definition,
     // The double implements none of the optional capabilities' methods.
-    capabilities: { ...definition.capabilities, rewind: false, compact: false, threadGoal: false }
+    capabilities: { ...definition.capabilities, rewind: false, compact: false }
   }
   const host = new StructuredAgentSessionHost({
     agents: new StructuredAgentRegistry([{ definition: declared, adapter }]),

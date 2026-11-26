@@ -26,6 +26,7 @@ import {
   consumeQueuedMessageInTransaction,
   getQueuedMessage,
   insertQueuedMessage,
+  isUnsettledQueuedMessage,
   listQueuedMessages,
   queuedMessagesSettledByOp,
   withdrawQueuedMessages,
@@ -33,7 +34,11 @@ import {
   type QueuedMessageRow
 } from './queued-message-table'
 import { draftsDeliveredByAppliedEcho } from './queued-message-delivered-echo'
-import { moveQueuedMessages, type QueuedMessagePositionMove } from './queued-message-positions'
+import {
+  moveQueuedMessages,
+  queuedMessageReorderMoves,
+  type QueuedMessagePositionMove
+} from './queued-message-positions'
 import { pruneQueuedMessages, retainedSubmissionVerdict } from './queued-message-retention'
 import {
   queuedMessageSettlementOwed,
@@ -99,6 +104,42 @@ export class JournalQueuedMessages {
       (result) => result.status === 'updated',
       undefined,
       () => this.editLeases.retire(input.messageId)
+    )
+  }
+
+  /** Puts one card at `toIndex` among the cards still waiting, clamped to the queue. `stale`
+   *  when `expectedRevision` is not the queue's `revision()`; nothing moves then. */
+  move(input: {
+    messageId: string
+    toIndex: number
+    expectedRevision?: number
+  }): Promise<'moved' | 'not-found' | 'sending' | 'stale'> {
+    let moved = false
+    return this.transact(
+      (db) => {
+        const rows = listQueuedMessages(db, this.deps.sessionId)
+        const row = rows.find((card) => card.messageId === input.messageId)
+        if (!row || row.state === 'withdrawn') {
+          return 'not-found' as const
+        }
+        if (row.state === 'dispatched') {
+          return 'sending' as const
+        }
+        if (
+          input.expectedRevision !== undefined &&
+          input.expectedRevision !== this.changeRevision
+        ) {
+          return 'stale' as const
+        }
+        const moves = queuedMessageReorderMoves(
+          rows.filter(isUnsettledQueuedMessage),
+          input.messageId,
+          input.toIndex
+        )
+        moved = moveQueuedMessages(db, this.deps.sessionId, moves) > 0
+        return 'moved' as const
+      },
+      () => moved
     )
   }
 

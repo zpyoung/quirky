@@ -3,8 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { adfToMarkdownText } from '../../../../main/jira/adf-markdown'
 import CommentMarkdown, { remarkGitHubReferences } from './CommentMarkdown'
 import { MarkdownPreviewBody } from '@/components/editor/MarkdownPreviewBody'
-import { NativeChatCodeBlock } from '@/components/native-chat/NativeChatCodeBlock'
-import { NativeChatMarkdown } from '@/components/native-chat/NativeChatMarkdown'
 
 describe('CommentMarkdown', () => {
   it('marks compact headings so a parent can opt into block flow', () => {
@@ -228,33 +226,6 @@ describe('CommentMarkdown', () => {
     expect(markup).not.toContain('<pre')
   })
 
-  it('uses the supplied code-block renderer for fenced document markdown', () => {
-    const markup = renderToStaticMarkup(
-      <CommentMarkdown
-        variant="document"
-        content={'```ts\nconst answer = 42\n```'}
-        renderCodeBlock={NativeChatCodeBlock}
-      />
-    )
-
-    expect(markup).toContain('aria-label="Copy code"')
-    expect(markup).toContain('data-code-language="ts"')
-    expect(markup).toContain('const answer = 42')
-  })
-
-  it('does not invent a language label for a bare code fence', () => {
-    const markup = renderToStaticMarkup(
-      <CommentMarkdown
-        variant="document"
-        content={'```\nconst answer = 42\n```'}
-        renderCodeBlock={NativeChatCodeBlock}
-      />
-    )
-
-    expect(markup).toContain('aria-label="Copy code"')
-    expect(markup).not.toContain('data-code-language')
-  })
-
   it('keeps compact mermaid fences as bounded source blocks', () => {
     const markup = renderToStaticMarkup(
       <CommentMarkdown content={'```mermaid\ngraph TD; A-->B;\n```'} />
@@ -350,23 +321,6 @@ describe('GitHub callouts', () => {
     expect(markup).not.toContain('data-callout')
     expect(markup).toContain('<blockquote')
     expect(markup).toContain(literal)
-  })
-
-  it('renders callouts in native chat assistant messages', () => {
-    const markup = renderToStaticMarkup(
-      <NativeChatMarkdown
-        content={'Done.\n\n> [!IMPORTANT]\n> Restart the app to pick up `config.ts`.'}
-        variant="document"
-        renderCodeBlock={NativeChatCodeBlock}
-        onLinkClick={() => {}}
-        linkifyFilePaths
-      />
-    )
-
-    expect(markup).toContain('data-callout="important"')
-    expect(markup).toContain('Important')
-    expect(markup).not.toContain('[!IMPORTANT]')
-    expect(markup).toContain('Restart the app to pick up')
   })
 
   it('renders callouts in the markdown preview', () => {
