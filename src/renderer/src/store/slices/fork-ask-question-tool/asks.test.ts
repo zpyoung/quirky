@@ -91,7 +91,8 @@ describe('asks slice', () => {
         status: 'registered',
         spec: event.spec,
         partial: { q1: { confirm: true } },
-        result: undefined
+        result: undefined,
+        worktreeId: null
       }
     ])
     expect(store.getState().askWatermark).toEqual({ seq: 5, epoch: 'epoch-a' })
