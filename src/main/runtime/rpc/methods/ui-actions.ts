@@ -5,19 +5,48 @@ import {
   UiRunActionParams
 } from '../../../../shared/public-rpc/public-methods/ui'
 import type { QuirkyRuntimeService } from '../../quirky-runtime'
-import {
-  UiBridgeError,
-  requestRendererAction,
-  requestRendererUiState
-} from '../../ui-bridge/ui-renderer-request'
+import { requestRendererAction, requestRendererUiState } from '../../ui-bridge/ui-renderer-request'
 import { defineMethod, type RpcContext } from '../core'
 import { registerDestructivePreviewer } from '../destructive-previewers'
+import { PublicRpcError } from '../public-rpc-error'
+
+function noUiError(): PublicRpcError {
+  return new PublicRpcError(
+    'unavailable',
+    'no_ui',
+    [
+      { command: 'quirky status', why: 'this host has no window; UI commands need the desktop app' }
+    ],
+    undefined,
+    'no app window is open; start the desktop app first'
+  )
+}
+
+function notApplicableError(message: string): PublicRpcError {
+  return new PublicRpcError(
+    'unavailable',
+    'not_applicable',
+    [{ command: 'quirky action list --available', why: 'shows which actions apply right now' }],
+    undefined,
+    message
+  )
+}
+
+function invalidActionArgument(message: string): PublicRpcError {
+  return new PublicRpcError(
+    'invalid_argument',
+    'invalid_argument',
+    [{ command: 'quirky action list', why: 'lists valid action ids' }],
+    undefined,
+    message
+  )
+}
 
 function requireUiWindow(runtime: QuirkyRuntimeService): BrowserWindow {
   try {
     return runtime.getAuthoritativeWindow()
   } catch {
-    throw new UiBridgeError('no_ui', 'no app window is open; start the desktop app first')
+    throw noUiError()
   }
 }
 
@@ -117,16 +146,13 @@ export const UI_ACTION_METHODS = [
         ? ACTION_CATALOG[params.actionId]
         : undefined
       if (!entry) {
-        throw new UiBridgeError('invalid_argument', `unknown action ${params.actionId}`)
+        throw invalidActionArgument(`unknown action ${params.actionId}`)
       }
       if (entry.dispatch === 'ui-only') {
-        throw new UiBridgeError(
-          'not_applicable',
-          entry.uiOnlyReason ?? 'runs only in the app window'
-        )
+        throw notApplicableError(entry.uiOnlyReason ?? 'runs only in the app window')
       }
       if (entry.takesWorkspace && entry.destructive && params.workspace === undefined) {
-        throw new UiBridgeError('invalid_argument', `${params.actionId} requires a workspace`)
+        throw invalidActionArgument(`${params.actionId} requires a workspace`)
       }
       const win = requireUiWindow(runtime)
       const worktreeId = await resolveWorkspaceId(runtime, params.workspace)
@@ -135,10 +161,7 @@ export const UI_ACTION_METHODS = [
         ...(worktreeId ? { worktreeId } : {})
       })
       if (!reply.claimed) {
-        throw new UiBridgeError(
-          'not_applicable',
-          reply.reason ?? `${params.actionId} is not available right now`
-        )
+        throw notApplicableError(reply.reason ?? `${params.actionId} is not available right now`)
       }
       return { claimed: true }
     }

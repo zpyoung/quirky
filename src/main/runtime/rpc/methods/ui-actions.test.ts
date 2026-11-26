@@ -3,6 +3,7 @@ import { ACTION_CATALOG } from '../../../../shared/keybindings/action-catalog'
 import type { UiStateSnapshot } from '../../../../shared/public-rpc/ui-state'
 import type { RpcContext } from '../core'
 import { getDestructivePreviewer } from '../destructive-previewers'
+import { PublicRpcError } from '../public-rpc-error'
 
 const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (event: { sender: unknown }, reply: unknown) => void>()
@@ -22,6 +23,15 @@ vi.mock('electron', () => ({
 }))
 
 import { UI_ACTION_METHODS, previewUiRunAction } from './ui-actions'
+
+const NO_UI_NEXT = [
+  { command: 'quirky status', why: 'this host has no window; UI commands need the desktop app' }
+]
+const NOT_APPLICABLE_NEXT = [
+  { command: 'quirky action list --available', why: 'shows which actions apply right now' }
+]
+const TIMEOUT_NEXT = [{ command: 'quirky ui state', why: 'check the window is responsive' }]
+const INVALID_ARGUMENT_NEXT = [{ command: 'quirky action list', why: 'lists valid action ids' }]
 
 const SNAPSHOT: UiStateSnapshot = {
   worktreeId: 'repo::/a',
@@ -105,13 +115,13 @@ describe('ui.* methods without a window', () => {
     ['ui.state', null],
     ['ui.listActions', {}],
     ['ui.runAction', { actionId: 'view.tasks' }]
-  ])('%s fails with no_ui when the app is headless', async (name, params) => {
+  ])('%s fails with unavailable/no_ui when the app is headless', async (name, params) => {
     const runtime = makeRuntime(null)
 
-    await expect(call(name, params, runtime)).rejects.toMatchObject({
-      message: 'no_ui',
-      code: 'no_ui'
-    })
+    const error = await call(name, params, runtime).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(PublicRpcError)
+    expect(error).toMatchObject({ code: 'unavailable', reason: 'no_ui', next: NO_UI_NEXT })
   })
 })
 
@@ -130,19 +140,25 @@ describe('ui.runAction', () => {
     )
   })
 
-  it('passes the renderer reason through as not_applicable', async () => {
+  it('surfaces the renderer reason as the message of unavailable/not_applicable', async () => {
     const win = makeWindow(() => ({
       claimed: false,
       reason: 'no focused tab in workspace resolved:feature'
     }))
     const runtime = makeRuntime(win)
 
-    await expect(
-      call('ui.runAction', { actionId: 'tab.close', workspace: 'feature' }, runtime)
-    ).rejects.toMatchObject({
-      message: 'not_applicable',
-      code: 'not_applicable',
-      data: { reason: 'no focused tab in workspace resolved:feature' }
+    const error = await call(
+      'ui.runAction',
+      { actionId: 'tab.close', workspace: 'feature' },
+      runtime
+    ).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(PublicRpcError)
+    expect(error).toMatchObject({
+      code: 'unavailable',
+      reason: 'not_applicable',
+      message: 'no focused tab in workspace resolved:feature',
+      next: NOT_APPLICABLE_NEXT
     })
   })
 
@@ -151,8 +167,10 @@ describe('ui.runAction', () => {
     const runtime = makeRuntime(win)
 
     await expect(call('ui.runAction', { actionId: 'editor.find' }, runtime)).rejects.toMatchObject({
-      message: 'not_applicable',
-      data: { reason: ACTION_CATALOG['editor.find'].uiOnlyReason }
+      code: 'unavailable',
+      reason: 'not_applicable',
+      message: ACTION_CATALOG['editor.find'].uiOnlyReason,
+      next: NOT_APPLICABLE_NEXT
     })
     expect(win.webContents.send).not.toHaveBeenCalled()
   })
@@ -160,12 +178,16 @@ describe('ui.runAction', () => {
   it('rejects an unknown action id', async () => {
     const runtime = makeRuntime(makeWindow(() => ({ claimed: true })))
 
-    await expect(call('ui.runAction', { actionId: 'nope.nothing' }, runtime)).rejects.toMatchObject(
-      {
-        message: 'invalid_argument',
-        code: 'invalid_argument'
-      }
+    const error = await call('ui.runAction', { actionId: 'nope.nothing' }, runtime).catch(
+      (caught: unknown) => caught
     )
+
+    expect(error).toBeInstanceOf(PublicRpcError)
+    expect(error).toMatchObject({
+      code: 'invalid_argument',
+      reason: 'invalid_argument',
+      next: INVALID_ARGUMENT_NEXT
+    })
   })
 
   it('requires an explicit workspace for workspace.delete', async () => {
@@ -173,19 +195,24 @@ describe('ui.runAction', () => {
 
     await expect(
       call('ui.runAction', { actionId: 'workspace.delete' }, makeRuntime(win))
-    ).rejects.toMatchObject({ message: 'invalid_argument' })
+    ).rejects.toMatchObject({
+      code: 'invalid_argument',
+      reason: 'invalid_argument',
+      next: INVALID_ARGUMENT_NEXT
+    })
     expect(win.webContents.send).not.toHaveBeenCalled()
   })
 
-  it('fails with renderer_timeout after 10 seconds without a reply and stops listening', async () => {
+  it('fails with timeout/renderer_timeout after 10 seconds without a reply and stops listening', async () => {
     vi.useFakeTimers()
     const runtime = makeRuntime(makeWindow(null))
 
     const outcome = expect(
       call('ui.runAction', { actionId: 'view.tasks' }, runtime)
     ).rejects.toMatchObject({
-      message: 'renderer_timeout',
-      code: 'renderer_timeout'
+      code: 'timeout',
+      reason: 'renderer_timeout',
+      next: TIMEOUT_NEXT
     })
     await vi.advanceTimersByTimeAsync(9_999)
     expect(mocks.listeners.has('ui:actionReply')).toBe(true)
@@ -202,7 +229,8 @@ describe('ui.runAction', () => {
     const outcome = expect(
       call('ui.runAction', { actionId: 'view.tasks' }, runtime)
     ).rejects.toMatchObject({
-      message: 'renderer_timeout'
+      code: 'timeout',
+      reason: 'renderer_timeout'
     })
     const sent = win.webContents.send.mock.calls[0]?.[1] as SentRequest
     mocks.listeners.get('ui:actionReply')?.(
