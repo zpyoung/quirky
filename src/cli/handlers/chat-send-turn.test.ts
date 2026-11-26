@@ -131,4 +131,40 @@ describe('chat send turn id', () => {
       CHAT_HANDLERS['chat send'](sendContext(client, { wait: true, timeout: '100' }))
     ).rejects.toMatchObject({ code: 'timeout' })
   })
+
+  it('--wait settles on its turn when that turn finishes before the journal names it', async () => {
+    const client = host({ before: [], after: [turnRow('t-mine', MESSAGE_KEY)] }, [
+      finished('t-stray', 3),
+      finished('t-mine', 4)
+    ])
+    const answer = client.call.getMockImplementation()
+    let sent = false
+    client.call.mockImplementation(async (method: string) => {
+      if (method === 'agentSession.history' && sent) {
+        await new Promise((resolve) => setTimeout(resolve, 80))
+      }
+      sent ||= method === 'agentSession.send'
+      return answer ? answer(method) : (undefined as never)
+    })
+    await CHAT_HANDLERS['chat send'](sendContext(client, { wait: true, timeout: '5000' }))
+
+    expect(printedResult()).toMatchObject({ turnId: 't-mine', status: 'finished' })
+  })
+
+  it('--wait ignores a finish that names no turn once the journal has named the turn', async () => {
+    const noTurn: Frame = {
+      seq: 3,
+      at: 1003,
+      topic: 'chat',
+      type: 'turn.finished',
+      data: { sessionId: SESSION }
+    }
+    const client = host({ before: [], after: [turnRow('t-mine', MESSAGE_KEY)] }, [
+      noTurn,
+      finished('t-mine', 4)
+    ])
+    await CHAT_HANDLERS['chat send'](sendContext(client, { wait: true, timeout: '5000' }))
+
+    expect(printedResult()).toMatchObject({ turnId: 't-mine', status: 'finished' })
+  })
 })

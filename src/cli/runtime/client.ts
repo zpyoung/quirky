@@ -65,7 +65,10 @@ function publicCallMayAwaitApproval(method: string): boolean {
     )
   }
   const classification = classifyMethod(method)
-  return classification?.kind === 'unstable' && classification.destructive !== undefined
+  return (
+    (classification?.kind === 'unstable' || classification?.kind === 'legacy-cli') &&
+    classification.destructive !== undefined
+  )
 }
 
 const loadWebSocketTransport = async () => await import('./websocket-transport.js')

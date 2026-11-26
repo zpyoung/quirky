@@ -141,6 +141,40 @@ describe('public-contract request timeout', () => {
     )
   })
 
+  it('covers the approval window for destructive legacy-cli methods', () => {
+    const client = new RuntimeClient('/unused', 60_000, null, null, 'quirky')
+
+    for (const method of ['worktree.rm', 'automation.delete', 'files.writeBase64']) {
+      expect(timeoutFor(client, method, { publicContract: true })).toBeGreaterThan(
+        APPROVAL_TIMEOUT_MS
+      )
+      expect(timeoutFor(client, method)).toBe(60_000)
+    }
+  })
+
+  it('keeps the approval-length timeout on a paired websocket connection', async () => {
+    const client = new RuntimeClient('/unused', 60_000, null, null, 'quirky')
+    const seen: number[] = []
+    ;(client as unknown as { remote: unknown }).remote = { endpoint: 'ws://unused' }
+    ;(
+      client as unknown as { ensurePublicCliContract: () => Promise<void> }
+    ).ensurePublicCliContract = async () => {}
+    ;(
+      client as unknown as {
+        remoteCompat: { send: (r: { timeoutMs: number }) => Promise<unknown> }
+      }
+    ).remoteCompat = {
+      send: async (request) => {
+        seen.push(request.timeoutMs)
+        return { ok: true, result: {}, _meta: { runtimeId: 'r' } }
+      }
+    }
+
+    await client.call('worktree.rm', {}, { publicContract: true, confirm: true })
+
+    expect(seen[0]).toBeGreaterThan(APPROVAL_TIMEOUT_MS)
+  })
+
   it('keeps the default timeout for reads and for legacy calls', () => {
     const client = new RuntimeClient('/unused', 60_000, null, null, 'quirky')
 

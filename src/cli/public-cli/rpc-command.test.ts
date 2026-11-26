@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { RPC_METHODS_WITHOUT_SHARED_PARAMS } from '../../shared/rpc-contract/rpc-params-catalog.generated'
 import { buildRpcList } from './rpc-command'
 
 describe('buildRpcList', () => {
@@ -23,6 +24,14 @@ describe('buildRpcList', () => {
       class: 'unstable',
       stability: 'unstable'
     })
+  })
+
+  it('lists the registered methods that have no shared params schema', () => {
+    const missing = RPC_METHODS_WITHOUT_SHARED_PARAMS.filter((method) => !byMethod.has(method))
+
+    expect(missing).toEqual([])
+    expect(byMethod.get('ask.answer')).toMatchObject({ class: 'legacy-cli', stability: null })
+    expect(byMethod.get('orchestration.send')).toBeDefined()
   })
 
   it('includes layout apply regardless of the build', () => {
