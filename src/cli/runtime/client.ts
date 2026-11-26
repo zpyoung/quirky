@@ -17,6 +17,7 @@ import { sendStreamingRequest } from './streaming-transport'
 import type { CallerHint } from '../../shared/public-rpc/caller-hint'
 import type { RemoteRuntimeRequestEnvelope } from '../../shared/remote-runtime-memory-limits'
 import { RuntimeClientError, RuntimeRpcFailureError, type RuntimeRpcSuccess } from './types'
+import { markPublicContractError } from '../cli-error'
 import {
   attachDurableMutationRecovery,
   attachLegacyTerminalPromptRecovery,
@@ -47,6 +48,30 @@ import {
 const LONG_POLL_CLIENT_GRACE_MS = 10_000
 
 const loadWebSocketTransport = async () => await import('./websocket-transport.js')
+
+type CallOptions = {
+  timeoutMs?: number
+  legacyTerminalPrompt?: true
+  terminalPromptPreflight?: { runtimeId: string | null }
+  /** Opts into the public-CLI server contract: preview-then-confirm gating and attribution. */
+  publicContract?: true
+  confirm?: boolean
+  caller?: CallerHint
+} & RuntimeOrchestrationEnvelope
+
+type StreamOptions = {
+  timeoutMs?: number
+  signal?: AbortSignal
+  publicContract?: true
+  caller?: CallerHint
+}
+
+/** Marks client and server failures of a public-contract call so the CLI reports their stable code. */
+function markClientFailure(error: unknown): unknown {
+  return error instanceof RuntimeRpcFailureError || error instanceof RuntimeClientError
+    ? markPublicContractError(error)
+    : error
+}
 
 export class RuntimeClient {
   readonly userDataPath: string
@@ -92,15 +117,19 @@ export class RuntimeClient {
   async call<TResult>(
     method: string,
     params?: unknown,
-    options?: {
-      timeoutMs?: number
-      legacyTerminalPrompt?: true
-      terminalPromptPreflight?: { runtimeId: string | null }
-      /** Opts into the public-CLI server contract: preview-then-confirm gating and attribution. */
-      publicContract?: true
-      confirm?: boolean
-      caller?: CallerHint
-    } & RuntimeOrchestrationEnvelope
+    options?: CallOptions
+  ): Promise<RuntimeRpcSuccess<TResult>> {
+    try {
+      return await this.callUnmarked<TResult>(method, params, options)
+    } catch (error) {
+      throw options?.publicContract ? markClientFailure(error) : error
+    }
+  }
+
+  private async callUnmarked<TResult>(
+    method: string,
+    params?: unknown,
+    options?: CallOptions
   ): Promise<RuntimeRpcSuccess<TResult>> {
     const effectiveTimeoutMs = options?.timeoutMs ?? this.resolveMethodTimeoutMs(method, params)
     const orchestrationMutation = isOrchestrationMutation(method, params)
@@ -215,12 +244,20 @@ export class RuntimeClient {
     method: string,
     params: unknown,
     onFrame: (result: unknown) => void,
-    options?: {
-      timeoutMs?: number
-      signal?: AbortSignal
-      publicContract?: true
-      caller?: CallerHint
+    options?: StreamOptions
+  ): Promise<void> {
+    try {
+      await this.streamUnmarked(method, params, onFrame, options)
+    } catch (error) {
+      throw options?.publicContract ? markClientFailure(error) : error
     }
+  }
+
+  private async streamUnmarked(
+    method: string,
+    params: unknown,
+    onFrame: (result: unknown) => void,
+    options?: StreamOptions
   ): Promise<void> {
     if (this.remote) {
       const transport = await loadWebSocketTransport()

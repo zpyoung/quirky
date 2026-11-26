@@ -42,7 +42,18 @@ export function markPublicContractError<T>(error: T): T {
   return error
 }
 
-const PUBLIC_CONTRACT_COMMAND_ROOTS: ReadonlySet<string> = new Set(['rpc', 'schema', 'events'])
+const PUBLIC_CONTRACT_COMMAND_ROOTS: ReadonlySet<string> = new Set([
+  'rpc',
+  'schema',
+  'events',
+  'ui',
+  'action',
+  'layout',
+  'chat',
+  'settings',
+  'notifications',
+  'plugins'
+])
 
 function usesPublicContract(error: unknown, context: CliErrorContext): boolean {
   return (
