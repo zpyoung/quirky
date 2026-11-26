@@ -32,14 +32,14 @@ describe('OrchestrationSkillAgentCoverage', () => {
         skills={[
           {
             id: 'claude-skill',
-            name: 'orchestration',
+            name: 'quirky-orchestration',
             description: null,
             providers: ['claude'],
             sourceKind: 'home',
             sourceLabel: 'Claude Code home',
             rootPath: '/Users/test/.claude/skills',
-            directoryPath: '/Users/test/.claude/skills/orchestration',
-            skillFilePath: '/Users/test/.claude/skills/orchestration/SKILL.md',
+            directoryPath: '/Users/test/.claude/skills/quirky-orchestration',
+            skillFilePath: '/Users/test/.claude/skills/quirky-orchestration/SKILL.md',
             installed: true,
             updatedAt: null
           }

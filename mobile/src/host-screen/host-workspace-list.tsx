@@ -47,7 +47,6 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
     noticeParam,
     now,
     reconnectAttempts,
-    relayRecovery,
     routeNotice,
     router,
     sectionsResult,
@@ -71,8 +70,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
 
   return (
     <>
-      {/* Auth failed: a latched relay rejection must reach the same re-pair affordance. */}
-      {(connState === 'auth-failed' || relayRecovery.pairingRejected) && (
+      {connState === 'auth-failed' && (
         <AuthFailedBanner
           canRetry={!!hostId && forceReconnectHost !== null}
           onRetry={() => hostId && forceReconnectHost && void forceReconnectHost(hostId)}
@@ -81,10 +79,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
         />
       )}
 
-      {connState !== 'connected' &&
-      !relayRecovery.pairingRejected &&
-      reconnectAttempts >= 3 &&
-      hostId ? (
+      {connState !== 'connected' && reconnectAttempts >= 3 && hostId ? (
         <HostDiagnosticsLink
           onPress={() =>
             router.push({ pathname: '/connection-log', params: { hostId: String(hostId) } })
@@ -99,12 +94,6 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
           onDismiss={() => setDismissedNotice(noticeParam ?? null)}
         />
       )}
-      {state.serverNotice ? (
-        <HostRouteNoticeBanner
-          message={state.serverNotice}
-          onDismiss={() => state.setServerNotice(null)}
-        />
-      ) : null}
 
       {/* An action that did not happen. Above the list and dismissible, because the list, the
           header and the confirm it re-opens all have to stay on screen. */}

@@ -10,7 +10,6 @@ import {
   useMemo,
   reconcileRepoSelection,
   useLastConnectedAt,
-  useRelayRecoveryStatus,
   useLocalSearchParams,
   useReconnectAttempt,
   useRef,
@@ -19,8 +18,6 @@ import {
   useState
 } from './mobile-tasks-dependencies'
 import { newTabRepoListRead } from '../session/mobile-session-read-operations'
-import { useHostProtocolGates } from '../components/host-protocol-gates-context'
-import { useTaskHostRepos } from './use-task-host-repos'
 import {
   type ActionableTaskItem,
   DEFAULT_LINEAR_DISPLAY_PROPERTIES,
@@ -56,10 +53,8 @@ export function useMobileTasksRouteAndItemState() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { client: desktopClient, state: connState } = useHostClient(hostId)
-  const { hostCapabilities } = useHostProtocolGates()
   const reconnectAttempts = useReconnectAttempt(hostId)
   const lastConnectedAt = useLastConnectedAt(hostId)
-  const relayRecovery = useRelayRecoveryStatus(hostId)
   const clientRef = useRef<RpcClient | null>(null)
   const loadGenerationRef = useRef(0)
   const taskResumeRef = useRef<TaskResumeState>({})
@@ -73,15 +68,10 @@ export function useMobileTasksRouteAndItemState() {
         }
       : null
   )
-  // Why one client: every call naming a server's repo then runs on that server.
-  const { client, repos, serverRepoList, repoListEnsureLoaded, repoListReload, repoHostLabels } =
-    useTaskHostRepos({
-      hostId,
-      desktopClient,
-      connState,
-      hostCapabilities,
-      desktopRepoList: repoList
-    })
+  const client = desktopClient
+  const repos = repoList.state.repos
+  const repoListEnsureLoaded = repoList.ensureLoaded
+  const repoListReload = repoList.reload
   const [provider, setProvider] = useState<TaskProvider>('github')
   const [visibleProviders, setVisibleProviders] = useState<TaskProvider[]>(() =>
     normalizeVisibleTaskProviders(undefined)
@@ -201,14 +191,11 @@ export function useMobileTasksRouteAndItemState() {
     connState,
     reconnectAttempts,
     lastConnectedAt,
-    relayRecovery,
     clientRef,
     loadGenerationRef,
     taskResumeRef,
     repoList,
     repos,
-    serverRepoList,
-    repoHostLabels,
     repoListEnsureLoaded,
     repoListReload,
     provider,

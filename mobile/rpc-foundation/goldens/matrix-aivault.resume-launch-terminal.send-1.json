@@ -4,11 +4,6 @@
   "family": "aiVault.resume-launch",
   "namedDeltas": [],
   "values": {
-    "0bce25f5646d": {
-      "name": "session.tabs.createTerminal#1",
-      "ordinal": 2,
-      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"session.tabs.createTerminal\",\"params\":{\"worktree\":\"id:workspace-1\",\"env\":{\"QUIRKY_RESUME\":\"1\"},\"envToDelete\":[\"CODEX_HOME\"],\"launchAgent\":\"codex\",\"clientMutationId\":\"resume-mutation-1\",\"activate\":false,\"select\":true,\"navigation\":\"caller\"}}"
-    },
     "1953443d1eef": {
       "status": "rejected",
       "startedAt": 0,
@@ -204,6 +199,54 @@
       "ordinal": 4,
       "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"terminal.send\",\"params\":{\"terminal\":\"terminal-9\",\"text\":\"codex resume rollout\",\"enter\":true}}"
     },
+    "80988ca7b466": {
+      "name": "session.tabs.createTerminal#1",
+      "ordinal": 1,
+      "args": [
+        {
+          "name": "method",
+          "value": "session.tabs.createTerminal"
+        },
+        {
+          "name": "params",
+          "value": {
+            "activate": false,
+            "clientMutationId": "resume-mutation-1",
+            "env": {
+              "QUIRKY_RESUME": "1"
+            },
+            "envToDelete": ["CODEX_HOME"],
+            "launchAgent": "codex",
+            "navigation": "caller",
+            "select": true,
+            "worktree": "id:workspace-1"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "timeoutMs": 30000
+          }
+        }
+      ],
+      "settlement": {
+        "status": "fulfilled",
+        "startedAt": 0,
+        "settledAt": 0,
+        "value": {
+          "id": "frame-1",
+          "ok": true,
+          "result": {
+            "tab": {
+              "id": "tab-9",
+              "terminal": "terminal-9",
+              "title": "codex",
+              "type": "terminal"
+            }
+          }
+        }
+      }
+    },
     "8511f0debfc0": {
       "status": "rejected",
       "startedAt": 0,
@@ -253,54 +296,6 @@
     "96f24b3825b5": {
       "failure": "Failed to send resume command",
       "launched": "unlaunched"
-    },
-    "a67829619e64": {
-      "name": "session.tabs.createTerminal#1",
-      "ordinal": 1,
-      "args": [
-        {
-          "name": "method",
-          "value": "session.tabs.createTerminal"
-        },
-        {
-          "name": "params",
-          "value": {
-            "activate": false,
-            "clientMutationId": "resume-mutation-1",
-            "env": {
-              "QUIRKY_RESUME": "1"
-            },
-            "envToDelete": ["CODEX_HOME"],
-            "launchAgent": "codex",
-            "navigation": "caller",
-            "select": true,
-            "worktree": "id:workspace-1"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "timeoutMs": 30000
-          }
-        }
-      ],
-      "settlement": {
-        "status": "fulfilled",
-        "startedAt": 0,
-        "settledAt": 0,
-        "value": {
-          "id": "frame-1",
-          "ok": true,
-          "result": {
-            "tab": {
-              "id": "tab-9",
-              "terminal": "terminal-9",
-              "title": "codex",
-              "type": "terminal"
-            }
-          }
-        }
-      }
     },
     "a947768bc0ed": {
       "status": "rejected",
@@ -352,6 +347,11 @@
           }
         }
       }
+    },
+    "aed61586aede": {
+      "name": "session.tabs.createTerminal#1",
+      "ordinal": 2,
+      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"session.tabs.createTerminal\",\"params\":{\"worktree\":\"id:workspace-1\",\"env\":{\"QUIRKY_RESUME\":\"1\"},\"envToDelete\":[\"CODEX_HOME\"],\"launchAgent\":\"codex\",\"clientMutationId\":\"resume-mutation-1\",\"activate\":false,\"select\":true,\"navigation\":\"caller\"}}"
     },
     "b948e8307e81": {
       "status": "rejected",
@@ -571,8 +571,8 @@
       {
         "id": "aivault-resume-launch-sent.normal:resumed",
         "observation": {
-          "sender": ["a67829619e64", "cceac9bcb36d"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "cceac9bcb36d"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "6e79da536ca9"
           },
@@ -583,8 +583,8 @@
       {
         "id": "aivault-resume-launch-sent.result-absent:resumed",
         "observation": {
-          "sender": ["a67829619e64", "f4b97a58af06"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "f4b97a58af06"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "1953443d1eef"
           },
@@ -595,8 +595,8 @@
       {
         "id": "aivault-resume-launch-sent.result-null:resumed",
         "observation": {
-          "sender": ["a67829619e64", "96a8247b729c"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "96a8247b729c"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "1953443d1eef"
           },
@@ -607,8 +607,8 @@
       {
         "id": "aivault-resume-launch-sent.inner-ok-missing:resumed",
         "observation": {
-          "sender": ["a67829619e64", "59a693e61f7f"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "59a693e61f7f"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "6e79da536ca9"
           },
@@ -619,8 +619,8 @@
       {
         "id": "aivault-resume-launch-sent.inner-false-string-error:resumed",
         "observation": {
-          "sender": ["a67829619e64", "aaec35c3c986"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "aaec35c3c986"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "6e79da536ca9"
           },
@@ -631,8 +631,8 @@
       {
         "id": "aivault-resume-launch-sent.inner-false-object-error:resumed",
         "observation": {
-          "sender": ["a67829619e64", "69a3762ddd69"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "69a3762ddd69"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "6e79da536ca9"
           },
@@ -643,8 +643,8 @@
       {
         "id": "aivault-resume-launch-sent.outer-refused:resumed",
         "observation": {
-          "sender": ["a67829619e64", "c71e5404242d"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "c71e5404242d"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "32a7c0ae7918"
           },
@@ -655,8 +655,8 @@
       {
         "id": "aivault-resume-launch-sent.outer-refused-no-message:resumed",
         "observation": {
-          "sender": ["a67829619e64", "dd3aa7f2cd31"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "dd3aa7f2cd31"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "8511f0debfc0"
           },
@@ -667,8 +667,8 @@
       {
         "id": "aivault-resume-launch-sent.method-not-found:resumed",
         "observation": {
-          "sender": ["a67829619e64", "7cc4cda01467"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "7cc4cda01467"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "b948e8307e81"
           },
@@ -679,8 +679,8 @@
       {
         "id": "aivault-resume-launch-sent.transport-rejection:resumed",
         "observation": {
-          "sender": ["a67829619e64", "e7f336fd1821"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "e7f336fd1821"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "a947768bc0ed"
           },
@@ -691,8 +691,8 @@
       {
         "id": "aivault-resume-launch-sent.transport-rejection-no-message:resumed",
         "observation": {
-          "sender": ["a67829619e64", "21981de13ba2"],
-          "payloads": ["0bce25f5646d", "7d9e7036f3d0"],
+          "sender": ["80988ca7b466", "21981de13ba2"],
+          "payloads": ["aed61586aede", "7d9e7036f3d0"],
           "settlements": {
             "full": "c7584e82c72f"
           },

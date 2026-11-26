@@ -15,8 +15,7 @@ import {
 } from '../transport/host-client-hooks'
 import {
   useLastConnectedAt,
-  useReconnectAttempt,
-  useRelayRecoveryStatus
+  useReconnectAttempt
 } from '../transport/client-context-connection-metrics'
 import { useHostDisplayWorktrees, useResolvedHostPlatform } from './use-host-display-worktrees'
 import { useHostListSections } from './use-host-list-sections'
@@ -64,7 +63,6 @@ export function useHostScreenController({
   const { client, state: connState } = useHostClient(hostId)
   const reconnectAttempts = useReconnectAttempt(hostId)
   const lastConnectedAt = useLastConnectedAt(hostId)
-  const relayRecovery = useRelayRecoveryStatus(hostId)
   const forgetHostClient = useForgetHostClient()
   const forceReconnectHost = useForceReconnect()
   // One tick drives every visible agent row's relative timestamp.
@@ -109,7 +107,6 @@ export function useHostScreenController({
     connState,
     embedded,
     fetchRepoMetadata,
-    hostCapabilities,
     hostId,
     sidebarFeed: sidebarFeed?.triggers ?? null,
     state,
@@ -121,7 +118,6 @@ export function useHostScreenController({
     embedded,
     fetchWorktrees: catalog.fetchWorktrees,
     forgetHostClient,
-    hostCapabilities,
     hostId,
     pathname,
     router,
@@ -186,7 +182,6 @@ export function useHostScreenController({
     now,
     onHideSidebar,
     reconnectAttempts,
-    relayRecovery,
     routeNotice,
     router,
     sectionsResult,

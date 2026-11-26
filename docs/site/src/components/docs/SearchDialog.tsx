@@ -261,7 +261,7 @@ export default function SearchDialog({ dialogId = 'docs-search-dialog', onClose 
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <a
-                  href="https://github.com/stablyai/orca"
+                  href="https://github.com/zpyoung/quirky"
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={onClose}

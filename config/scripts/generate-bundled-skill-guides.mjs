@@ -13,39 +13,39 @@ const SCRIPT_DIR = import.meta.dirname
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..', '..')
 
 const CANONICAL_GUIDE_NAMES = [
-  'computer-use',
-  'jira-tickets',
-  'linear-tickets',
   'quirky-ask',
   'quirky-cli',
+  'quirky-computer-use',
   'quirky-emulator',
   'quirky-emulator-android',
   'quirky-heimdall',
   'quirky-jira',
+  'quirky-jira-tickets',
   'quirky-ledger',
   'quirky-linear',
+  'quirky-linear-tickets',
   'quirky-loop',
-  'quirky-per-workspace-env',
-  'orchestration'
+  'quirky-orchestration',
+  'quirky-per-workspace-env'
 ]
 
 // Why: old discovery stubs can outlive a rename indefinitely, so aliases are
 // a compatibility ledger: add entries for renames, but never remove them.
 const GUIDE_ALIASES = {
-  'computer-use': [],
-  'jira-tickets': [],
-  'linear-tickets': [],
   'quirky-ask': [],
   'quirky-cli': [],
+  'quirky-computer-use': ['computer-use'],
   'quirky-emulator': [],
   'quirky-emulator-android': [],
   'quirky-heimdall': [],
   'quirky-jira': [],
+  'quirky-jira-tickets': ['jira-tickets'],
   'quirky-ledger': [],
   'quirky-linear': [],
+  'quirky-linear-tickets': ['linear-tickets'],
   'quirky-loop': [],
-  'quirky-per-workspace-env': [],
-  orchestration: []
+  'quirky-orchestration': ['orchestration'],
+  'quirky-per-workspace-env': []
 }
 
 // Why: a stubbed topic ships a hybrid discovery stub as its installable projection while
@@ -54,20 +54,20 @@ const GUIDE_ALIASES = {
 // landing to converge — so entries are added as skills convert, never removed. The stub
 // body lives in skill-stubs/<topic>.md; the projection reuses the guide's own frontmatter.
 const STUB_TOPICS = [
-  'computer-use',
-  'jira-tickets',
-  'linear-tickets',
   'quirky-ask',
   'quirky-cli',
+  'quirky-computer-use',
   'quirky-emulator',
   'quirky-emulator-android',
   'quirky-heimdall',
   'quirky-jira',
+  'quirky-jira-tickets',
   'quirky-ledger',
   'quirky-linear',
+  'quirky-linear-tickets',
   'quirky-loop',
-  'quirky-per-workspace-env',
-  'orchestration'
+  'quirky-orchestration',
+  'quirky-per-workspace-env'
 ]
 
 function normalizeMarkdown(markdown) {

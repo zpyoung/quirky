@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   },
   activeRow: {
     borderLeftWidth: 2,
-    borderLeftColor: colors.accentBlue
+    borderLeftColor: colors.accent
   },
   prefix: {
     width: 18,

@@ -2,7 +2,6 @@ import type { LinearItemActionsModel } from './use-mobile-tasks-linear-item-acti
 import { colors, useCallback } from './mobile-tasks-dependencies'
 import {
   type RepoSummary,
-  type TaskItem,
   createGitHubTask,
   createGitLabTask,
   createLinearTask
@@ -134,12 +133,12 @@ export function useMobileTasksTaskCreateActions(model: LinearItemActionsModel) {
             title: result.title ?? title,
             description: createBody.trim(),
             url: result.url ?? '',
-            state: { name: 'Open', type: 'unstarted', color: colors.accentBlue },
+            state: { name: 'Open', type: 'unstarted', color: colors.accent },
             team,
             labels: [],
             priority: 0,
             updatedAt: new Date().toISOString()
-          }) as Extract<TaskItem, { provider: 'linear' }>
+          })
         )
       }
       setShowCreateTask(false)

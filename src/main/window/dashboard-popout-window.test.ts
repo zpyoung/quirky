@@ -144,8 +144,12 @@ import { readBrowserClientHostIdArgument } from '../../shared/browser-client-hos
 
 type FakeWindow = InstanceType<typeof BrowserWindowMock>
 
-function makeStore(ui: Record<string, unknown> = {}): {
+function makeStore(
+  ui: Record<string, unknown> = {},
+  theme: 'system' | 'dark' | 'light' = 'system'
+): {
   getUI: () => Record<string, unknown>
+  getSettings: () => { theme: 'system' | 'dark' | 'light' }
   updateUI: ReturnType<typeof vi.fn>
   onUIChanged: ReturnType<typeof vi.fn>
   emitUIChanged: (next: Record<string, unknown>) => void
@@ -155,6 +159,7 @@ function makeStore(ui: Record<string, unknown> = {}): {
   const uiChangeUnsubscribe = vi.fn()
   return {
     getUI: () => ui,
+    getSettings: () => ({ theme }),
     updateUI: vi.fn(),
     onUIChanged: vi.fn((listener: (next: Record<string, unknown>) => void) => {
       listeners.push(listener)
@@ -205,7 +210,7 @@ describe('createOrFocusDashboardPopout', () => {
     // Native frame: neither a custom titleBarStyle nor frame:false is set.
     expect(opts.titleBarStyle).toBeUndefined()
     expect(opts.frame).toBeUndefined()
-    expect(opts.backgroundColor).toBe('#0a0a0a') // dark theme mock
+    expect(opts.backgroundColor).toBe('#0c0d0f') // system theme with the dark OS mock
     expect(opts.webPreferences?.sandbox).toBe(true)
     expect(opts.webPreferences?.partition).toBe('quirky-dashboard-popout')
     expect(opts.webPreferences?.webviewTag).toBe(false)
@@ -269,6 +274,13 @@ describe('createOrFocusDashboardPopout', () => {
     expect(isDashboardPopoutRenderer({ id: win.webContents.id } as never)).toBe(false)
     win.destroyed = true
     expect(isDashboardPopoutRenderer(win.webContents as never)).toBe(false)
+  })
+
+  it('lets a saved light preference win over a dark operating system', () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fake store provides the settings and UI methods the popout reads.
+    createOrFocusDashboardPopout(makeStore({}, 'light') as never)
+
+    expect(instances[0].options.backgroundColor).toBe('#eef0f3')
   })
 
   it('restores a minimized window when re-requested', () => {

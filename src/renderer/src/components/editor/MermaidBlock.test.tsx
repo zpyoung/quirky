@@ -8,10 +8,15 @@ const mermaid = vi.hoisted(() => ({
   render: vi.fn<(id: string, content: string) => Promise<{ svg: string }>>(),
   sanitize: vi.fn<(svg: string) => string>()
 }))
+const themeColors = vi.hoisted(() => ({
+  read: vi.fn<() => MermaidThemeColors | undefined>()
+}))
 vi.mock('mermaid', () => ({ default: mermaid }))
+vi.mock('./mermaid-theme-colors', () => ({ readMermaidThemeColors: themeColors.read }))
 vi.mock('dompurify', () => ({ default: { sanitize: mermaid.sanitize } }))
 
 import MermaidBlock from './MermaidBlock'
+import type { MermaidThemeColors } from './mermaid-config'
 
 const partial = 'flowchart TD\n A["Sync with main '
 const complete = `${partial}once"]`
@@ -21,6 +26,8 @@ beforeEach(() => {
   mermaid.render.mockReset()
   mermaid.render.mockResolvedValue({ svg: diagram })
   mermaid.sanitize.mockReset().mockImplementation((svg) => svg)
+  mermaid.initialize.mockReset()
+  themeColors.read.mockReset().mockReturnValue(undefined)
 })
 afterEach(cleanup)
 
@@ -59,6 +66,47 @@ describe('MermaidBlock rendering', () => {
     rerender(<MermaidBlock content={partial} isDark={false} onExpand={onExpand} />)
     await screen.findByText(/Diagram error: Parse error/)
     expect(screen.queryByRole('button', { name: 'Expand diagram' })).toBeNull()
+  })
+
+  it.each([true, false])('themes the diagram from the tokens when isDark is %s', async (isDark) => {
+    const colors = {
+      background: isDark ? '#16171b' : '#ffffff',
+      foreground: isDark ? '#eceef2' : '#1b1d22',
+      primary: isDark ? '#22242b' : '#e7e9ef',
+      secondary: isDark ? '#101114' : '#f6f7f9',
+      tertiary: isDark ? '#16171b' : '#ffffff',
+      line: isDark ? '#7c828d' : '#646b76',
+      pie: [
+        '#bedbff',
+        '#2b7fff',
+        '#155dfc',
+        '#1447e6',
+        '#193cb8',
+        '#1c398e',
+        '#162456',
+        '#0b1437'
+      ] as const
+    }
+    themeColors.read.mockReturnValue(colors)
+    const onExpand = vi.fn()
+    const { container } = render(
+      <MermaidBlock content={complete} isDark={isDark} onExpand={onExpand} />
+    )
+    await waitFor(() => expect(container.querySelector('svg')).not.toBeNull())
+    expect(mermaid.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: 'base',
+        themeVariables: expect.objectContaining({
+          darkMode: isDark,
+          background: colors.background,
+          lineColor: colors.line,
+          pie1: colors.pie[0],
+          pie5: colors.pie[4]
+        })
+      })
+    )
+    fireEvent.click(container.querySelector('svg')!)
+    expect(onExpand).toHaveBeenCalledWith({ svg: diagram, background: colors.background })
   })
 
   it('keeps the displayed source in place until the SVG is ready', async () => {

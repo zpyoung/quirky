@@ -33,7 +33,7 @@ function renderDotClassNames(state: AgentDotState): string[] {
 }
 
 describe('AgentStateDot', () => {
-  it('renders working as a yellow spinner', () => {
+  it('renders working as the pulsing blue dot', () => {
     const markup = renderMarkup('working')
 
     // The spinner's own classes and animation contract belong to AgentWorkingSpinner.test.tsx;
@@ -41,7 +41,7 @@ describe('AgentStateDot', () => {
     expect(markup).toContain('data-agent-spinner')
   })
 
-  it('renders monitoring as a static yellow heartbeat glyph', () => {
+  it('renders monitoring as a static blue heartbeat glyph', () => {
     const markup = renderMarkup('monitoring')
 
     expect(markup).toContain('aria-label="Monitoring background tasks"')
@@ -50,17 +50,18 @@ describe('AgentStateDot', () => {
     expect(markup).not.toContain('data-agent-spinner')
   })
 
-  it('renders done as an emerald check icon', () => {
+  it('renders done as a green check icon', () => {
     const markup = renderMarkup('done')
 
     // Why: 'done' renders a CircleCheck icon rather than a dot so it is
-    // visually distinct from other emerald-adjacent states across surfaces.
-    // Note: the sidebar's StatusIndicator intentionally diverges and uses an
-    // emerald dot for 'done'. Assertion targets the lucide 'circle-check'
-    // class hook + emerald text color, identifying the check icon without
+    // visually distinct from other green-adjacent states across surfaces.
+    // Note: the sidebar's StatusIndicator intentionally diverges and uses a
+    // green dot for 'done'. Assertion targets the lucide 'circle-check'
+    // class hook + the done token, identifying the check icon without
     // coupling to the exact SVG path markup lucide emits.
     expect(markup).toContain('lucide-circle-check')
-    expect(markup).toContain('text-emerald-500')
+    expect(markup).toContain('text-agent-done')
+    expect(markup).not.toContain('text-emerald-500')
   })
 
   it.each(['permission', 'waiting'] satisfies AgentDotState[])(
@@ -76,21 +77,26 @@ describe('AgentStateDot', () => {
     }
   )
 
-  it('renders unverifiable as an amber dashed ring, never the done check or the spinner', () => {
-    const markup = renderMarkup('unverifiable')
+  it.each(['unverifiable', 'unconfirmed'] satisfies AgentDotState[])(
+    'renders %s as a question-toned dashed ring, never the done check or the spinner',
+    (state) => {
+      const markup = renderMarkup(state)
 
-    expect(markup).toContain('lucide-circle-dashed')
-    expect(markup).toContain('text-amber-500')
-    expect(markup).not.toContain('lucide-circle-check')
-    expect(markup).not.toContain('data-agent-spinner')
-  })
+      expect(markup).toContain('lucide-circle-dashed')
+      expect(markup).toContain('text-agent-question')
+      expect(markup).not.toContain('text-amber-500')
+      expect(markup).not.toContain('lucide-circle-check')
+      expect(markup).not.toContain('data-agent-spinner')
+    }
+  )
 
   it.each(['blocked', 'failed'] satisfies AgentDotState[])(
-    'renders %s as a red attention dot',
+    'renders %s as a failed-token attention dot',
     (state) => {
       const classNames = renderDotClassNames(state)
 
-      expect(classNames).toContain('bg-red-500')
+      expect(classNames).toContain('bg-agent-failed')
+      expect(classNames).not.toContain('bg-red-500')
       expect(classNames).not.toContain('bg-amber-500')
     }
   )
@@ -99,7 +105,14 @@ describe('AgentStateDot', () => {
     const classNames = renderDotClassNames('interrupted')
 
     expect(classNames).toContain('bg-muted-foreground')
-    expect(classNames).not.toContain('bg-red-500')
+    expect(classNames).not.toContain('bg-agent-failed')
+    expect(classNames).not.toContain('bg-muted-foreground/40')
+  })
+
+  it('renders idle as the quiet muted dot', () => {
+    const classNames = renderDotClassNames('idle')
+
+    expect(classNames).toContain('bg-muted-foreground/40')
     expect(classNames).not.toContain('bg-neutral-500/40')
   })
 

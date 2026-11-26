@@ -4,16 +4,6 @@
   "family": "speech.setup-sheet",
   "namedDeltas": [],
   "values": {
-    "100447f8b483": {
-      "status": "rejected",
-      "startedAt": 0,
-      "settledAt": 0,
-      "error": {
-        "category": "Error",
-        "message": "Update the paired desktop Quirky app to use mobile voice settings.",
-        "isRpcDeliveryUnknown": false
-      }
-    },
     "44136fa355b3": {},
     "4f793e38be31": {
       "name": "speech.models.list#1",
@@ -54,6 +44,16 @@
           "ok": false
         }
       }
+    },
+    "e378fc66e7c2": {
+      "status": "rejected",
+      "startedAt": 0,
+      "settledAt": 0,
+      "error": {
+        "category": "Error",
+        "message": "Update the paired desktop Quirky app to use mobile voice settings.",
+        "isRpcDeliveryUnknown": false
+      }
     }
   },
   "recording": {
@@ -65,7 +65,7 @@
           "sender": ["9b9e5dcda8ac"],
           "payloads": ["4f793e38be31"],
           "settlements": {
-            "list": "100447f8b483"
+            "list": "e378fc66e7c2"
           },
           "state": "44136fa355b3",
           "effects": []

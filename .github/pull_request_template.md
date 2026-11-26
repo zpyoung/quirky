@@ -14,7 +14,6 @@
 
 _If you do not have one and are an outside contributors, your PR **wiil** be ignored. Refs is not sufficient. Link an actual issue_
 <!-- Link the issue this PR addresses, there should ALWAYS be one (for outside contributors) -->
-<!-- SPECIAL CASE: If you are a maintainer (member of stablyai org) AVOID opening needless issues. Only attach pre-existing ones -->
 
 Fixes #
 
@@ -33,7 +32,6 @@ Fixes #
 
 ## AI Disclosure
 
-<!-- DO NOT FILL IN IF YOU ARE STABLYAI TEAM MEMBER (INTERNAL CONTRIBUTOR), IGNORE SECTION: -->
 <!-- Which AI model if anyone was used, please state the details -->
 
 ## Review

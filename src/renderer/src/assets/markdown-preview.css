@@ -606,12 +606,9 @@
   text-decoration-style: dotted;
 }
 
-.markdown-light .markdown-body a {
-  color: #0969da;
-}
-
+.markdown-light .markdown-body a,
 .markdown-dark .markdown-body a {
-  color: #58a6ff;
+  color: var(--primary);
 }
 
 .markdown-light .markdown-body .markdown-doc-link-broken,
@@ -626,12 +623,9 @@
   font-family: var(--font-mono, monospace);
 }
 
-.markdown-dark .markdown-body code {
-  background: rgba(255, 255, 255, 0.1);
-}
-
+.markdown-dark .markdown-body code,
 .markdown-light .markdown-body code {
-  background: rgba(0, 0, 0, 0.07);
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
 }
 
 .markdown-body pre {
@@ -642,14 +636,10 @@
   line-height: 1.55;
 }
 
-.markdown-dark .markdown-body pre {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
+.markdown-dark .markdown-body pre,
 .markdown-light .markdown-body pre {
-  background: #f6f8fa;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--code-background);
+  border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
 }
 
 .markdown-body pre code {
@@ -812,14 +802,10 @@
   border-radius: 0 6px 6px 0;
 }
 
-.markdown-dark .markdown-body blockquote {
-  background: rgba(255, 255, 255, 0.025);
-  color: rgba(255, 255, 255, 0.72);
-}
-
+.markdown-dark .markdown-body blockquote,
 .markdown-light .markdown-body blockquote {
-  background: rgba(0, 0, 0, 0.02);
-  color: rgba(0, 0, 0, 0.6);
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+  color: var(--muted-foreground);
 }
 
 /* Border and title colors come from the callout component. */
@@ -858,22 +844,16 @@
   letter-spacing: 0.03em;
 }
 
-.markdown-dark .markdown-body th {
-  background: rgba(255, 255, 255, 0.06);
-}
-
+.markdown-dark .markdown-body th,
 .markdown-light .markdown-body th {
-  background: rgba(0, 0, 0, 0.04);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 
 .markdown-dark .markdown-body tr:nth-child(even):not([data-preview-table-row-even='false']) td,
-.markdown-dark .markdown-body tr[data-preview-table-row-even='true'] td {
-  background: rgba(255, 255, 255, 0.02);
-}
-
+.markdown-dark .markdown-body tr[data-preview-table-row-even='true'] td,
 .markdown-light .markdown-body tr:nth-child(even):not([data-preview-table-row-even='false']) td,
 .markdown-light .markdown-body tr[data-preview-table-row-even='true'] td {
-  background: rgba(0, 0, 0, 0.015);
+  background: color-mix(in srgb, var(--foreground) 2%, transparent);
 }
 
 .markdown-body hr {
@@ -890,7 +870,7 @@
 /* ── Syntax Highlighting (GitHub-inspired) ────────── */
 
 .markdown-light .hljs {
-  color: #24292f;
+  color: var(--foreground);
 }
 
 .markdown-light .hljs-comment,
@@ -969,7 +949,7 @@
 }
 
 .markdown-dark .hljs {
-  color: #e6edf3;
+  color: var(--foreground);
 }
 
 .markdown-dark .hljs-comment,

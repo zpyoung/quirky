@@ -95,6 +95,65 @@ describe('chat transcript color tokens', () => {
     }
   })
 
+  it('keeps every --quirky-security-* token a literal hex copy of the matching core token', () => {
+    const SECURITY_ROLES = [
+      'background',
+      'foreground',
+      'card',
+      'card-foreground',
+      'popover',
+      'popover-foreground',
+      'primary',
+      'primary-foreground',
+      'secondary',
+      'secondary-foreground',
+      'muted',
+      'muted-foreground',
+      'accent',
+      'accent-foreground',
+      'border',
+      'input',
+      'ring'
+    ]
+    for (const selector of [':root', '.dark']) {
+      const block = getCssBlockBody(mainCss, selector)
+      const read = (name: string): string | undefined =>
+        block.match(new RegExp(`^  ${name}: ([^;]+);`, 'm'))?.[1]
+      for (const role of SECURITY_ROLES) {
+        const security = read(`--quirky-security-${role}`)
+        expect(security, `${selector} --quirky-security-${role}`).toMatch(/^#[0-9a-f]{6}$/)
+        expect(security, `${selector} --quirky-security-${role}`).toBe(read(`--${role}`))
+      }
+    }
+  })
+
+  it.each([
+    [':root', '#f6f7f9', '#eceef2', '#1f9d63', '#d6455d'],
+    ['.dark', '#101114', '#1b1c21', '#4cc38a', '#ef6b73']
+  ])(
+    'defines the code and agent outcome tokens in %s',
+    (selector, codeBg, codeHeader, done, failed) => {
+      const block = getCssBlockBody(mainCss, selector)
+      expect(block).toContain(`--code-background: ${codeBg};`)
+      expect(block).toContain(`--code-header: ${codeHeader};`)
+      expect(block).toContain(`--agent-done: ${done};`)
+      expect(block).toContain(`--agent-failed: ${failed};`)
+      expect(block).toContain('--workspace-status-progress: var(--agent-working);')
+    }
+  )
+
+  it('exposes the new tokens as Tailwind colors', () => {
+    const themeInline = getCssBlockBody(mainCss, '@theme inline')
+    for (const name of ['agent-done', 'agent-failed', 'code-background', 'code-header']) {
+      expect(themeInline).toContain(`--color-${name}: var(--${name});`)
+    }
+  })
+
+  it('declares the browser color scheme for each mode', () => {
+    expect(getCssBlockBody(mainCss, ':root')).toContain('color-scheme: light;')
+    expect(getCssBlockBody(mainCss, '.dark')).toContain('color-scheme: dark;')
+  })
+
   it('does not add any of the 27 new tokens to .plugin-security-chrome', () => {
     const pluginSecurityChrome = getCssBlockBody(mainCss, '.plugin-security-chrome')
 

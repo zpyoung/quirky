@@ -66,7 +66,7 @@ async function main() {
   const home = path.join(sandbox, 'home')
   const stateHome = path.join(home, '.state')
   const targetName = 'quirky-cli'
-  const controlName = 'orchestration'
+  const controlName = 'quirky-orchestration'
   const manifest = JSON.parse(await readFile('resources/skills/current-manifest.json', 'utf8'))
 
   function currentDigest(name) {

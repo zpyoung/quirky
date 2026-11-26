@@ -4420,7 +4420,7 @@
         "share": {
           "card": {
             "utils": {
-              "19f4b4dc75": "github.com/stablyai/orca",
+              "19f4b4dc75": "github.com/zpyoung/quirky",
               "d864fc5f98": "出力",
               "5d66fdd7c2": "入力",
               "7080aeaebb": "推論",
@@ -14169,7 +14169,8 @@
           "pairThisComputer": "このコンピュータをペアリングします。",
           "androidHelp": {
             "guide": "インストールガイド"
-          }
+          },
+          "noInstallLink": "TestFlight からインストールしてください。招待は所有者に依頼してください。"
         },
         "MobilePage": {
           "e17393c6a3": "スマートフォンプレビュー",

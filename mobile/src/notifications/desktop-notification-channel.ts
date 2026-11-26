@@ -22,6 +22,6 @@ export async function ensureDesktopNotificationChannel(): Promise<void> {
     name: 'Desktop Notifications',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250],
-    lightColor: '#6366f1'
+    lightColor: '#5fd0d6'
   })
 }

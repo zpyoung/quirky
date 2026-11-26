@@ -55,6 +55,14 @@
       "ordinal": 7,
       "json": "{\"id\":\"frame-5\",\"deviceToken\":\"recording-device\",\"method\":\"notifications.getMissedSince\",\"params\":{\"lastSeenSeq\":9007199254740991,\"deliveredPushes\":[{\"notificationId\":\"note-1\",\"notificationEpoch\":\"epoch-1\",\"notificationSeq\":7},{\"notificationId\":\"note-2\",\"notificationEpoch\":\"epoch-1\",\"notificationSeq\":8}]}}"
     },
+    "24a0633371a2": {
+      "name": "device-store.setItem",
+      "ordinal": 8,
+      "value": {
+        "key": "quirky:pushDismissalWatermarks:v1",
+        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-2\\\"]\",\"seq\":8,\"expiresAt\":1767312000000}]"
+      }
+    },
     "255bc308b04a": {
       "name": "notifications.getMissedSince#2",
       "ordinal": 6,
@@ -119,14 +127,6 @@
     },
     "5359579cc62d": {
       "running": true
-    },
-    "7956587756c3": {
-      "name": "device-store.setItem",
-      "ordinal": 8,
-      "value": {
-        "key": "quirky:pushDismissalWatermarks:v1",
-        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-2\\\"]\",\"seq\":8,\"expiresAt\":1767312000000}]"
-      }
     },
     "865d199fe5a5": {
       "name": "notification-tray.dismiss",
@@ -206,7 +206,7 @@
             "cutover": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["7956587756c3", "865d199fe5a5"]
+          "effects": ["24a0633371a2", "865d199fe5a5"]
         }
       },
       {
@@ -227,7 +227,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["7956587756c3", "865d199fe5a5"]
+          "effects": ["24a0633371a2", "865d199fe5a5"]
         }
       }
     ]

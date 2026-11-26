@@ -2,6 +2,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createTerminalDocumentScope } from './document/document-scope'
 import { applyTerminalTheme, resolveTerminalContrastFloor } from './document/terminal-theme'
+import { colors } from '../theme/mobile-theme'
+import { DEFAULT_TERMINAL_THEME } from './terminal-webview-html/theme'
 import type {
   TerminalDocumentThemeMessage,
   TerminalDocumentThemeTarget
@@ -19,7 +21,7 @@ const LIGHT_FLOOR = 4.5
  */
 function themeScope(term: TerminalDocumentThemeTarget | null = null) {
   const scope = createTerminalDocumentScope({ paintDocumentBackground: () => {} })
-  scope.defaultTheme = { background: '#1a1b26', foreground: '#c0caf5' }
+  scope.defaultTheme = { background: '#16171b', foreground: '#eceef2' }
   if (term) {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the target is the members `applyTerminalTheme` writes, which is what each case then reads back.
     scope.term = term as unknown as typeof scope.term
@@ -39,10 +41,39 @@ function loadThemeApplier(
   return (input: TerminalDocumentThemeMessage) => applyTerminalTheme(scope, input)
 }
 
+describe('mobile terminal-webview fallback palette', () => {
+  it('is Quirky Graphite Dark over the terminal surface', () => {
+    expect(DEFAULT_TERMINAL_THEME).toEqual({
+      background: colors.terminalBg,
+      foreground: '#eceef2',
+      cursor: '#eceef2',
+      cursorAccent: colors.terminalBg,
+      selectionBackground: '#5fd0d640',
+      selectionForeground: '#eceef2',
+      black: '#101114',
+      red: '#ef6b73',
+      green: '#4cc38a',
+      yellow: '#e5b454',
+      blue: '#6fb3ff',
+      magenta: '#bd8ee8',
+      cyan: '#63c5cf',
+      white: '#c5c9d2',
+      brightBlack: '#7c828d',
+      brightRed: '#ff8b93',
+      brightGreen: '#70dba5',
+      brightYellow: '#f5ce7e',
+      brightBlue: '#9fcbff',
+      brightMagenta: '#d4acf4',
+      brightCyan: '#8ddce3',
+      brightWhite: '#eceef2'
+    })
+  })
+})
+
 describe('mobile terminal-webview contrast floor gate', () => {
   it('picks the dark floor for dark composed backgrounds', () => {
     const resolveTerminalContrastFloor = loadContrastFloorResolver()
-    for (const bg of ['#1a1b26', '#1e242a', '#282828', '#000000', 'black']) {
+    for (const bg of ['#16171b', '#1e242a', '#282828', '#000000', 'black']) {
       expect(resolveTerminalContrastFloor(bg)).toBe(DARK_FLOOR)
     }
   })
@@ -146,8 +177,8 @@ describe('mobile terminal theme idempotence', () => {
   it('preserves a live palette through repeated equal normalized host themes', () => {
     const { scope, term, themeWrite, contrastWrite } = countingThemeScope()
     const livePalette = term.options.theme
-    const second = { theme: { foreground: '#c0caf5', background: '#1a1b26', ignored: '#ffffff' } }
-    applyTerminalTheme(scope, { theme: { background: '#1a1b26' } })
+    const second = { theme: { foreground: '#eceef2', background: '#16171b', ignored: '#ffffff' } }
+    applyTerminalTheme(scope, { theme: { background: '#16171b' } })
     applyTerminalTheme(scope, second)
     expect(themeWrite).not.toHaveBeenCalled()
     expect(contrastWrite).not.toHaveBeenCalled()

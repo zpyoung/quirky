@@ -95,7 +95,7 @@ async function main() {
   // expand bash-style "$TAG" in argv. The step still exports TAG.
   const tag = process.argv[2] || process.env.TAG
   const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN
-  const repo = process.env.GITHUB_REPOSITORY || 'stablyai/orca'
+  const repo = process.env.GITHUB_REPOSITORY || 'zpyoung/quirky'
   const restored = await restorePublishedDesktopReleasesToDraft({
     repo,
     tag,

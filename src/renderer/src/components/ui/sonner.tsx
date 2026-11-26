@@ -6,9 +6,10 @@ import {
   TriangleAlertIcon
 } from 'lucide-react'
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
+import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const Toaster = ({ toastOptions, ...props }: ToasterProps) => {
   const theme = useAppStore((s) => s.settings?.theme) || 'system'
 
   return (
@@ -23,6 +24,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
       offset={{ bottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}
       mobileOffset={{ bottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}
       className="toaster group"
+      toastOptions={{
+        ...toastOptions,
+        classNames: {
+          ...toastOptions?.classNames,
+          warning: cn('border-l-2! border-l-agent-question!', toastOptions?.classNames?.warning)
+        }
+      }}
       icons={{
         success: <CircleCheckIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,

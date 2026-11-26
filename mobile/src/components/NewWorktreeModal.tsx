@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Keyboard } from 'react-native'
 import { getComposerRepoWorktreeBranches } from '../../../src/shared/composer-branch-selection'
-import { getRepoExecutionHostId, parseExecutionHostId } from '../../../src/shared/execution-host'
 import { getProjectIdentityKey } from '../../../src/shared/project-host-setup-projection'
 import { shouldPreserveWorkspaceSourceOnRepoChange } from '../../../src/shared/new-workspace/workspace-source'
 import type { SmartModeAvailabilityInput } from '../tasks/mobile-smart-source-modes'
@@ -9,7 +8,6 @@ import { deriveRepoSlug, type PasteRepoCandidate } from '../tasks/smart-source-p
 import { useMobileComposerSource } from '../tasks/use-mobile-composer-source'
 import { useNewWorktreeRuntimeCapabilities } from '../tasks/worktree-create-capability'
 import { useWorktreeCreateBasePrefetch } from '../tasks/use-worktree-create-base-prefetch'
-import { useHostDescriptor } from '../transport/host-descriptor-store'
 import { isSameMobileWorkspaceRepo } from '../worktree/new-workspace-dialog-repo-selection'
 import {
   buildRetiredWorktreeNamesRefreshKey,
@@ -36,12 +34,6 @@ import { useNewWorkspaceRuntimeContext } from './use-new-workspace-runtime-conte
 import { useNewWorkspaceSetupScript } from './use-new-workspace-setup-script'
 import { useNewWorktreeDrawerNavigation } from './use-new-worktree-drawer-navigation'
 
-/** The server a repo runs on; undefined for the desktop's own (local, SSH, folder). */
-function serverOf(repo: MobileWorkspaceRepo): `runtime:${string}` | undefined {
-  const host = parseExecutionHostId(getRepoExecutionHostId(repo))
-  return host?.kind === 'runtime' ? host.id : undefined
-}
-
 export function NewWorktreeModal(props: NewWorktreeModalProps) {
   // Why: each drawer opening is a fresh form session; remounting resets local
   // form state before paint instead of clearing it in a visible-prop Effect.
@@ -67,8 +59,7 @@ export function NewWorktreeModal(props: NewWorktreeModalProps) {
 function NewWorktreeModalContent(props: NewWorktreeModalProps) {
   const {
     visible,
-    client: desktopClient,
-    serverClients,
+    client,
     hostId,
     hostLabelById,
     existingWorktreePaths,
@@ -78,24 +69,17 @@ function NewWorktreeModalContent(props: NewWorktreeModalProps) {
     onClose
   } = props
   const { repos, selectedRepo, setSelectedRepo, loading } = useNewWorkspaceRepositories({
-    client: desktopClient,
-    serverClients,
+    client,
     hostId,
     visible
   })
-  // Why: everything about the picked repo runs where it does; the routing table keeps the
-  // desktop's own concerns (settings, accounts) on the desktop.
-  const repoServer = selectedRepo ? serverOf(selectedRepo) : undefined
-  const client = repoServer ? (serverClients?.get(repoServer) ?? null) : desktopClient
   const navigation = useNewWorktreeDrawerNavigation(visible)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const runtime = useNewWorkspaceRuntimeContext(client, visible, hostId)
   const repoRuntime = useNewWorktreeRuntimeCapabilities(client, visible)
   const { tasksSupported, getWorktreeCreateCutoverSupport, getAgentLaunchSupport } = repoRuntime
-  // The desktop's own run target is named for the desktop, whichever host the picked repo is on.
-  const desktopPlatform = useHostDescriptor(hostId)?.platform ?? null
-  const hostPlatform = repoServer ? desktopPlatform : repoRuntime.hostPlatform
+  const hostPlatform = repoRuntime.hostPlatform
   const selectedRepoConnectionId = selectedRepo?.connectionId ?? null
   const executionTarget = useNewWorkspaceExecutionTarget({
     client,
@@ -159,7 +143,7 @@ function NewWorktreeModalContent(props: NewWorktreeModalProps) {
     getAgentLaunchSupport,
     transitionDrawer: navigation.transitionDrawer,
     setError,
-    onCreated: (worktreeId, name, warning) => onCreated(worktreeId, name, warning, repoServer),
+    onCreated,
     onClose
   })
 
@@ -172,19 +156,14 @@ function NewWorktreeModalContent(props: NewWorktreeModalProps) {
     linearAvailable: runtime.availableProviders.includes('linear'),
     jiraAvailable: runtime.jiraConnection.connected && runtime.availableProviders.includes('jira')
   }
-  // Why one client's: a source's repo switch is looked up through the picked repo's client.
-  const hostRepos = useMemo(
-    () => repos.filter((repo) => serverOf(repo) === repoServer),
-    [repoServer, repos]
-  )
   const pasteRepos = useMemo<PasteRepoCandidate[]>(
     () =>
-      hostRepos.map((repo) => ({
+      repos.map((repo) => ({
         id: repo.id,
         displayName: repo.displayName,
         slug: deriveRepoSlug(repo)
       })),
-    [hostRepos]
+    [repos]
   )
   const projectPickerItems = useMemo(() => buildNewWorkspaceProjectOptions(repos), [repos])
   const selectedProjectId = selectedRepo ? getProjectIdentityKey(selectedRepo) : null
@@ -279,7 +258,7 @@ function NewWorktreeModalContent(props: NewWorktreeModalProps) {
         composer={composer}
         sourceAvailability={sourceAvailability}
         selectedRepo={selectedRepo}
-        repos={hostRepos}
+        repos={repos}
         pasteRepos={pasteRepos}
         jiraSiteId={runtime.jiraConnection.selection}
         jiraSites={runtime.jiraConnection.sites}

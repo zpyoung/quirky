@@ -38,7 +38,7 @@ on:
       - '!src/main/daemon/daemon-endpoint-reachability-test-harness.ts'
       - 'src/main/providers/local-pty-provider.ts'
       - 'native/computer-use-macos/**'
-      - 'skills/computer-use/SKILL.md'
+      - 'skills/quirky-computer-use/SKILL.md'
       - 'src/cli/**'
       - 'src/main/computer/**'
       - 'src/main/runtime/rpc/dispatcher.ts'

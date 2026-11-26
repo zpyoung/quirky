@@ -52,7 +52,7 @@ export const mobileNativeChatComposerStyles = StyleSheet.create({
   },
   sendButton: {
     ...roundControl,
-    backgroundColor: colors.surfaceBright
+    backgroundColor: colors.accent
   },
   sendButtonDisabled: {
     backgroundColor: colors.composerControl

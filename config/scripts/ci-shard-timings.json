@@ -19,7 +19,6 @@
       "config/scripts/build-native-for-platform.test.mjs": 54,
       "config/scripts/build-quirkyd-prebuilds.test.mjs": 144,
       "config/scripts/build-quirkyd-template.test.mjs": 180,
-      "config/scripts/bump-android-apk-download-version.test.mjs": 42,
       "config/scripts/casting-code-quality.test.mjs": 824,
       "config/scripts/check-changed-code-quality.test.mjs": 2564,
       "config/scripts/check-compat-boundary-imports.test.mjs": 124,

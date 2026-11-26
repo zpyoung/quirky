@@ -224,10 +224,6 @@ jobs:
         if: steps.ruby-scope.outputs.should_run != 'false'
         run: ruby fastlane/ios_release_version_test.rb
 
-      - name: Test TestFlight lane arguments
-        if: steps.ruby-scope.outputs.should_run != 'false'
-        run: ruby fastlane/fastfile_testflight_arguments_test.rb
-
       # Why: nothing else in CI loads the Fastfile, so a syntax error, a broken
       # require, or an undefined constant only surfaces mid-release — the
       # ios-distribute job failed every run for six days that way. `lanes` just

@@ -192,7 +192,7 @@ describe('AgentKanbanCard', () => {
       card: card({ bucket: 'done', dotState: 'done', unseen: true }),
       now: 2_000
     })
-    expect(done.firstElementChild?.className).toContain('border-emerald-500/40')
+    expect(done.firstElementChild?.className).toContain('border-agent-done/40')
 
     cleanup()
     const { container: idle } = renderCard({
@@ -201,7 +201,7 @@ describe('AgentKanbanCard', () => {
     })
     const idleClassName = idle.firstElementChild?.className ?? ''
     expect(idleClassName).toContain('border-border/60')
-    expect(idleClassName).not.toContain('emerald')
+    expect(idleClassName).not.toContain('agent-done')
     expect(idleClassName).not.toContain('agent-question')
   })
 

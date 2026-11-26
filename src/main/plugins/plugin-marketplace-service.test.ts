@@ -144,13 +144,13 @@ describe('PluginMarketplaceService', () => {
   it('derives the Official badge only from the canonical marketplace and source organization', async () => {
     const officialMarketplace: PluginMarketplace = {
       name: 'Quirky Plugins',
-      owner: 'stablyai',
+      owner: 'zpyoung',
       plugins: [
         {
-          id: 'stablyai.quirky-shortcuts',
+          id: 'zpyoung.quirky-shortcuts',
           source: {
             kind: 'git',
-            url: 'git@github.com:stablyai/quirky-shortcuts.git',
+            url: 'git@github.com:zpyoung/quirky-shortcuts.git',
             ref: 'main'
           },
           categories: ['keybindings']
@@ -162,10 +162,10 @@ describe('PluginMarketplaceService', () => {
       fetcher: async () => fetched(officialMarketplace)
     })
 
-    await service.addSource(source('https://github.com/stablyai/quirky-plugins.git'))
+    await service.addSource(source('https://github.com/zpyoung/quirky-plugins.git'))
 
     await expect(service.listPlugins()).resolves.toEqual([
-      expect.objectContaining({ pluginKey: 'stablyai.quirky-shortcuts', official: true })
+      expect.objectContaining({ pluginKey: 'zpyoung.quirky-shortcuts', official: true })
     ])
   })
 

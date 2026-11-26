@@ -1,7 +1,6 @@
 import type { RpcClient } from './rpc-client'
 import type { HostClientOpenRegistry } from './host-client-open-registry'
 import type { HostClientStoreEntry } from './host-entry-opener'
-import type { RelayHostReachability } from './relay-host-reachability'
 import type { MobileConnectionPath, StableLogicalRpcClient } from './stable-logical-rpc-client'
 import type { ConnectionState, HostProfile } from './types'
 
@@ -86,24 +85,8 @@ export function createHostClientSelectors(
     getLastConnectedAt: (hostId: string): number | null =>
       entries.get(hostId)?.client.getLastConnectedAt() ?? null,
     getActivePath: (hostId: string): MobileConnectionPath =>
-      clientActivePath(entries.get(hostId)?.client),
-    getPendingPath: (hostId: string): MobileConnectionPath | null =>
-      clientPendingPath(entries.get(hostId)?.client),
-    isPairingRejected: (hostId: string): boolean =>
-      clientPairingRejected(entries.get(hostId)?.client),
-    getRelayHostReachability: (hostId: string): RelayHostReachability =>
-      clientRelayHostReachability(entries.get(hostId)?.client)
+      clientActivePath(entries.get(hostId)?.client)
   }
-}
-
-export function clientRelayHostReachability(client: RpcClient | undefined): RelayHostReachability {
-  const logical = client as Partial<StableLogicalRpcClient> | undefined
-  return logical?.getRelayHostReachability?.() ?? 'connecting'
-}
-
-export function clientPairingRejected(client: RpcClient | undefined): boolean {
-  const logical = client as Partial<StableLogicalRpcClient> | undefined
-  return logical?.isPairingRejected?.() ?? false
 }
 
 export function clientActivePath(client: RpcClient | undefined): MobileConnectionPath {
@@ -111,11 +94,5 @@ export function clientActivePath(client: RpcClient | undefined): MobileConnectio
   if (typeof logical?.getActivePath !== 'function') {
     return 'lan'
   }
-  // Why: during migration the pending path is what the user is waiting on.
-  return logical.getPendingPath?.() ?? logical.getActivePath()
-}
-
-export function clientPendingPath(client: RpcClient | undefined): MobileConnectionPath | null {
-  const logical = client as Partial<StableLogicalRpcClient> | undefined
-  return logical?.getPendingPath?.() ?? null
+  return logical.getActivePath()
 }

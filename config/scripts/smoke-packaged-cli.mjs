@@ -53,7 +53,10 @@ try {
   const list = JSON.parse((await run(['skills', 'list', '--json'])).stdout)
   assert(list.topics.some((topic) => topic.name === 'quirky-cli'))
   assert.match((await run(['skills', 'get', 'quirky-cli'])).stdout, /name: quirky-cli/)
-  assert.match((await run(['skills', 'get', 'computer-use'])).stdout, /name: computer-use/)
+  assert.match(
+    (await run(['skills', 'get', 'quirky-computer-use'])).stdout,
+    /name: quirky-computer-use/
+  )
   const install = JSON.parse(
     (
       await run([

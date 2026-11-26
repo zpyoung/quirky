@@ -1,8 +1,11 @@
 # Quirky
 
 Quirky is a macOS desktop app for running coding agents side by side, each in its own git
-worktree, with everything tracked in one place. It is a hard fork of the upstream app at
-`stablyai/orca`.
+worktree, with everything tracked in one place.
+
+Quirky is an independent app. It began as a copy of the open-source `stablyai/orca` codebase and
+has been developed separately since. Nothing from that project merges in automatically, and Quirky
+isn't affiliated with Lovecast Inc.
 
 ## Install
 
@@ -25,4 +28,4 @@ pnpm build:mac    # build a local app bundle
 
 MIT. See [LICENSE](LICENSE).
 
-Based on Orca by Lovecast Inc. (MIT).
+Includes code from Orca by Lovecast Inc. (MIT).

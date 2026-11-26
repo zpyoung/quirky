@@ -677,6 +677,36 @@
         }
       }
     },
+    "663c2c91a50e": {
+      "status": "fulfilled",
+      "startedAt": 0,
+      "settledAt": 0,
+      "value": {
+        "committed": true,
+        "error": "Quirky could not confirm whether this branch already has a pull request. Try again in a moment.",
+        "ok": false,
+        "status": {
+          "branch": "feature",
+          "conflictOperation": "unknown",
+          "entries": [],
+          "head": "def5678",
+          "upstreamStatus": {
+            "ahead": 1,
+            "behind": 0,
+            "behindCommitsArePatchEquivalent": {
+              "$rpc": "undefined"
+            },
+            "hasConfiguredPushTarget": {
+              "$rpc": "undefined"
+            },
+            "hasUpstream": true,
+            "upstreamName": {
+              "$rpc": "undefined"
+            }
+          }
+        }
+      }
+    },
     "682fbd1f6b74": {
       "name": "progress",
       "ordinal": 11,
@@ -814,6 +844,33 @@
       "ordinal": 22,
       "json": "{\"id\":\"frame-9\",\"deviceToken\":\"recording-device\",\"method\":\"git.status\",\"params\":{\"worktree\":\"id:repo42::/p\"}}"
     },
+    "6fd40ed83bc7": {
+      "outcome": {
+        "committed": true,
+        "error": "Quirky could not confirm whether this branch already has a pull request. Try again in a moment.",
+        "ok": false,
+        "status": {
+          "branch": "feature",
+          "conflictOperation": "unknown",
+          "entries": [],
+          "head": "def5678",
+          "upstreamStatus": {
+            "ahead": 1,
+            "behind": 0,
+            "behindCommitsArePatchEquivalent": {
+              "$rpc": "undefined"
+            },
+            "hasConfiguredPushTarget": {
+              "$rpc": "undefined"
+            },
+            "hasUpstream": true,
+            "upstreamName": {
+              "$rpc": "undefined"
+            }
+          }
+        }
+      }
+    },
     "72b388fd3302": {
       "outcome": "unrun"
     },
@@ -941,36 +998,6 @@
           "ok": true,
           "result": {
             "ok": true
-          }
-        }
-      }
-    },
-    "83e80c98d259": {
-      "status": "fulfilled",
-      "startedAt": 0,
-      "settledAt": 0,
-      "value": {
-        "committed": true,
-        "error": "Quirky could not confirm whether this branch already has a pull request. Try again in a moment.",
-        "ok": false,
-        "status": {
-          "branch": "feature",
-          "conflictOperation": "unknown",
-          "entries": [],
-          "head": "def5678",
-          "upstreamStatus": {
-            "ahead": 1,
-            "behind": 0,
-            "behindCommitsArePatchEquivalent": {
-              "$rpc": "undefined"
-            },
-            "hasConfiguredPushTarget": {
-              "$rpc": "undefined"
-            },
-            "hasUpstream": true,
-            "upstreamName": {
-              "$rpc": "undefined"
-            }
           }
         }
       }
@@ -1395,33 +1422,6 @@
         }
       }
     },
-    "dd5d9b4070b7": {
-      "outcome": {
-        "committed": true,
-        "error": "Quirky could not confirm whether this branch already has a pull request. Try again in a moment.",
-        "ok": false,
-        "status": {
-          "branch": "feature",
-          "conflictOperation": "unknown",
-          "entries": [],
-          "head": "def5678",
-          "upstreamStatus": {
-            "ahead": 1,
-            "behind": 0,
-            "behindCommitsArePatchEquivalent": {
-              "$rpc": "undefined"
-            },
-            "hasConfiguredPushTarget": {
-              "$rpc": "undefined"
-            },
-            "hasUpstream": true,
-            "upstreamName": {
-              "$rpc": "undefined"
-            }
-          }
-        }
-      }
-    },
     "ddee63fd3bf5": {
       "name": "git.status#1",
       "ordinal": 2,
@@ -1687,9 +1687,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1715,9 +1715,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1743,9 +1743,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1771,9 +1771,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1799,9 +1799,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1827,9 +1827,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1855,9 +1855,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1883,9 +1883,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1911,9 +1911,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1939,9 +1939,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1967,9 +1967,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -1995,9 +1995,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2023,9 +2023,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2051,9 +2051,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2079,9 +2079,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2107,9 +2107,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2135,9 +2135,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2163,9 +2163,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2191,9 +2191,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2219,9 +2219,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2247,9 +2247,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2275,9 +2275,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2303,9 +2303,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2331,9 +2331,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2359,9 +2359,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2387,9 +2387,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2415,9 +2415,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2443,9 +2443,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2471,9 +2471,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       },
@@ -2499,9 +2499,9 @@
             "395c47c3d42e"
           ],
           "settlements": {
-            "run": "83e80c98d259"
+            "run": "663c2c91a50e"
           },
-          "state": "dd5d9b4070b7",
+          "state": "6fd40ed83bc7",
           "effects": ["e83dca631c9c", "b2ae4b8e30b7", "682fbd1f6b74"]
         }
       }

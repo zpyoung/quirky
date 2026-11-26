@@ -51,7 +51,7 @@ describe('RpcSessionLivenessWatchdog', () => {
     const terminate = vi.fn()
     const identity = {}
     const watchdog = new RpcSessionLivenessWatchdog({
-      transport: 'relay',
+      transport: 'direct',
       idleProbeMs: null,
       probeTimeoutMs: 4_000,
       missedProbeLimit: 2,
@@ -66,7 +66,7 @@ describe('RpcSessionLivenessWatchdog', () => {
     await vi.advanceTimersByTimeAsync(8_000)
 
     expect(onTimeout).toHaveBeenCalledWith({
-      transport: 'relay',
+      transport: 'direct',
       reason: 'probe-timeout',
       missedProbes: 2,
       missedProbeLimit: 2,
@@ -115,7 +115,7 @@ describe('RpcSessionLivenessWatchdog', () => {
     let callback: (() => void) | null = null
     const terminate = vi.fn()
     const watchdog = new RpcSessionLivenessWatchdog({
-      transport: 'relay',
+      transport: 'direct',
       idleProbeMs: null,
       probeTimeoutMs: 4_000,
       missedProbeLimit: 2,

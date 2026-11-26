@@ -57,4 +57,16 @@ describe('the terminal document stylesheet', () => {
     const scoped = scopeStyleToHost(TERMINAL_DOCUMENT_ROOT_STYLE, PREFIX)
     expect(scoped.trim()).toBe('')
   })
+
+  it('paints the selection handles and menu in graphite and teal', () => {
+    const sheet = TERMINAL_DOCUMENT_ELEMENT_STYLE
+    expect(sheet).toContain('background: #5fd0d6')
+    expect(sheet).toContain('background: #22242b')
+    expect(sheet).toContain('color: #eceef2')
+    expect(sheet).toContain('button:active { background: rgba(95, 208, 214, 0.16)')
+    expect(sheet).toContain('border-left: 1px solid #24262c')
+    for (const tokyoNight of ['#7aa2f7', '#c0caf5', '#2a2f4a', '#414868']) {
+      expect(sheet).not.toContain(tokyoNight)
+    }
+  })
 })

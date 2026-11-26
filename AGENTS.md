@@ -73,7 +73,7 @@ Run one test file locally, after `pnpm run build:packages`:
 QUIRKY_ALLOW_LOCAL_TESTS=1 pnpm exec vitest run --config config/vitest.config.ts <file>
 ```
 
-Never run the full suite on the Mac. It runs on GitHub Actions: a draft PR runs the tests your change selects, and a PR marked ready runs everything. Read the result with `gh pr checks <number> --watch`. Run `unset GITHUB_TOKEN` before pushing, because the shell's token can't push.
+Never run the full suite on the Mac. It runs on GitHub Actions, and only for a PR marked ready: a draft PR skips every check, so run `gh pr ready <number>` when you want results. Read the result with `gh pr checks <number> --watch`. Run `unset GITHUB_TOKEN` before pushing, because the shell's token can't push.
 
 ## Typechecking: Scope It to What You Changed
 

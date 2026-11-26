@@ -30,7 +30,7 @@ export function NewWorkspaceFab({ onPress, disabled }: NewWorkspaceFabProps): Re
       accessibilityLabel="New workspace"
       hitSlop={8}
     >
-      <Plus size={24} color={colors.bgBase} strokeWidth={2.75} />
+      <Plus size={24} color={colors.onAccent} strokeWidth={2.75} />
     </Pressable>
   )
 }
@@ -44,10 +44,8 @@ const styles = StyleSheet.create({
     borderRadius: FAB_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    // Crisp near-white surface + dark icon: high contrast against the dark canvas
-    // reads as the primary action while staying monochrome (STYLEGUIDE: color is
-    // for state). Tight shadow avoids the muddy halo that made it look disabled.
-    backgroundColor: colors.surfaceBright,
+    // tight shadow avoids the muddy halo that made it look disabled
+    backgroundColor: colors.accent,
     shadowColor: '#000',
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -55,7 +53,7 @@ const styles = StyleSheet.create({
     elevation: 4
   },
   fabPressed: {
-    backgroundColor: colors.textPrimary
+    opacity: 0.85
   },
   fabDisabled: {
     opacity: 0.5

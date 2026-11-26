@@ -53,7 +53,7 @@ const sleepingStatusIconClassName = 'size-[13px] text-muted-foreground'
 // Why: a left-edge badge overlays unread on the status glyph without widening
 // the lane or indenting the title; ring-sidebar cuts the dot out from busy icons.
 const newCardUnreadAlertClassName =
-  'pointer-events-none absolute left-0 top-1/2 size-[6px] -translate-y-1/2 rounded-full bg-amber-500 ring-2 ring-sidebar'
+  'pointer-events-none absolute left-0 top-1/2 size-[6px] -translate-y-1/2 rounded-full bg-agent-question ring-2 ring-sidebar'
 
 function overlayNewCardUnreadStatus(
   status: React.JSX.Element,
@@ -152,8 +152,8 @@ export function WorktreeCardStatusSlot({
     newCardStyle && isUnread ? `${passiveStatusLabel} · Unread` : passiveStatusLabel
   // Why: working and permission already own the new-card status lane, but
   // unread state should still surface to assistive technology and reappear afterward.
-  const showNewCardUnreadAlert =
-    newCardStyle && isUnread && showStatus && status !== 'working' && status !== 'permission'
+  const statusOutranksUnread = showStatus && (status === 'working' || status === 'permission')
+  const showNewCardUnreadAlert = newCardStyle && isUnread && !statusOutranksUnread
   const reviewStatusIconClassName = compactReviewAndBranchStatusIconClassName
   const branchStatusIcon = <GitBranch className={branchStatusIconClassName} aria-hidden="true" />
   const heimdallGlyph = useHeimdallGlyph(worktreeId, status, passiveStatusAnnouncement, className)
@@ -215,7 +215,9 @@ export function WorktreeCardStatusSlot({
 
   const actionLabel = isUnread ? 'Mark as read' : 'Mark as unread'
   const tooltip =
-    showStatus && !isUnread ? `${passiveStatusLabel} · ${unreadTooltip}` : unreadTooltip
+    showStatus && (!isUnread || statusOutranksUnread)
+      ? `${passiveStatusLabel} · ${unreadTooltip}`
+      : unreadTooltip
 
   return (
     <>
@@ -253,8 +255,8 @@ export function WorktreeCardStatusSlot({
               ) : (
                 <span className="sr-only">{actionLabel}</span>
               )
-            ) : isUnread ? (
-              <FilledBellIcon className="size-[13px] text-amber-500 drop-shadow-sm" />
+            ) : isUnread && !statusOutranksUnread ? (
+              <FilledBellIcon className="size-[13px] text-agent-question drop-shadow-sm" />
             ) : showStatus ? (
               <>
                 {withLoopGlyph(loopGlyph, withHeimdallGlyph(heimdallGlyph, status))}

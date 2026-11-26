@@ -5,6 +5,7 @@ import type { Repo } from '../../shared/repo-types'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
+import { isLegacyTerminalDefaultSetting } from '../persistence/applying-settings/terminal-settings-migrations'
 import { ImportFailure } from './import-failure'
 import { ORCA_AUTOMATION_CREATION_KEY_PREFIX, type ImportPlan } from './plan'
 
@@ -355,6 +356,7 @@ function applyScalarState(
       if (
         key !== 'claudeManagedAccounts' &&
         key !== 'codexManagedAccounts' &&
+        !isLegacyTerminalDefaultSetting(key, plan.settings[key]) &&
         isDeepStrictEqual(settingsBefore[key], options.defaultSettings[key])
       ) {
         Object.assign(updates, { [key]: plan.settings[key] })
@@ -383,9 +385,8 @@ function applyScalarState(
     record('settings.codexManagedAccounts', account.id)
   }
 
-  const uiBefore = store.getUI()
   if (plan.ui !== null) {
-    const previous = pickPrevious(uiBefore, plan.ui)
+    const previous = pickPrevious(store.getUI(), plan.ui)
     store.updateUI(plan.ui)
     undo.push(() => store.updateUI(previous))
     record('ui', 'ui')

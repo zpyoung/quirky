@@ -98,7 +98,7 @@ function WorktreeListRowComponent({
     >
       <View style={styles.indicatorCol}>
         <AgentSpinner status={status} workingMode={item.workingMode} />
-        {item.unread && (
+        {item.unread && status !== 'working' && status !== 'permission' && (
           <Bell
             size={10}
             color={colors.statusAmber}

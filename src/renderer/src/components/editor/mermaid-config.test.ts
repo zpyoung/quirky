@@ -2,7 +2,30 @@
 import { describe, expect, it } from 'vitest'
 import mermaid from 'mermaid'
 
-import { getMermaidConfig } from './mermaid-config'
+import { getMermaidConfig, type MermaidThemeColors } from './mermaid-config'
+
+const pieColors = {
+  dark: [
+    '#3f6fd0',
+    '#7b52c6',
+    '#0f7f8a',
+    '#b4532f',
+    '#3a7d52',
+    '#a8408a',
+    '#50698a',
+    '#8a6a1c'
+  ] as const,
+  light: [
+    '#2f62c0',
+    '#6c42b8',
+    '#0b6f79',
+    '#a64624',
+    '#2f6f45',
+    '#962f7a',
+    '#44607f',
+    '#7a5c12'
+  ] as const
+}
 
 const darkColors = {
   background: '#0a0a0a',
@@ -10,14 +33,49 @@ const darkColors = {
   primary: '#193cb8',
   secondary: '#1447e6',
   tertiary: '#155dfc',
-  border: '#8ec5ff'
+  line: '#a1a1a1',
+  pie: [
+    '#bedbff',
+    '#2b7fff',
+    '#155dfc',
+    '#1447e6',
+    '#193cb8',
+    '#1c398e',
+    '#162456',
+    '#0b1437'
+  ] as const
+}
+
+const graphiteDark = {
+  background: '#16171b',
+  foreground: '#eceef2',
+  primary: '#22242b',
+  secondary: '#101114',
+  tertiary: '#16171b',
+  line: '#7c828d',
+  pie: pieColors.dark
+}
+
+const graphiteLight = {
+  background: '#ffffff',
+  foreground: '#1b1d22',
+  primary: '#e7e9ef',
+  secondary: '#f6f7f9',
+  tertiary: '#ffffff',
+  line: '#646b76',
+  pie: pieColors.light
 }
 
 function luminance(color: string | boolean | undefined): number {
   if (typeof color !== 'string') {
     throw new Error('Expected a resolved Mermaid color')
   }
-  const hex = color === 'lightgrey' ? '#d3d3d3' : color === 'white' ? '#ffffff' : color
+  const named: Record<string, string> = {
+    lightgrey: '#d3d3d3',
+    white: '#ffffff',
+    black: '#000000'
+  }
+  const hex = named[color] ?? color
   if (!/^#[\da-f]{6}$/i.test(hex)) {
     throw new Error(`Unsupported contrast-test color: ${color}`)
   }
@@ -28,10 +86,28 @@ function luminance(color: string | boolean | undefined): number {
   return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
 }
 
-function resolvedDarkTheme(): NonNullable<
-  ReturnType<typeof mermaid.mermaidAPI.getConfig>['themeVariables']
-> {
-  mermaid.initialize(getMermaidConfig(true, false, darkColors))
+function contrastRatio(first: string, second: string): number {
+  const a = luminance(first)
+  const b = luminance(second)
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+}
+
+function pieSlots(variables: ReturnType<typeof resolvedTheme>): { name: string; color: string }[] {
+  return Array.from({ length: 12 }, (_, index) => {
+    const name = `pie${index + 1}`
+    const color = variables[name]
+    if (typeof color !== 'string') {
+      throw new Error(`Expected ${name} to resolve to a color`)
+    }
+    return { name, color }
+  })
+}
+
+function resolvedTheme(
+  isDark: boolean,
+  colors: MermaidThemeColors = darkColors
+): NonNullable<ReturnType<typeof mermaid.mermaidAPI.getConfig>['themeVariables']> {
+  mermaid.initialize(getMermaidConfig(isDark, false, colors))
   const variables = mermaid.mermaidAPI.getConfig().themeVariables
   if (!variables) {
     throw new Error('Mermaid did not resolve the theme')
@@ -69,30 +145,101 @@ describe('getMermaidConfig', () => {
         tertiaryColor: colors.tertiary,
         primaryTextColor: colors.foreground,
         tertiaryTextColor: colors.foreground,
-        primaryBorderColor: colors.border,
-        lineColor: colors.foreground,
-        edgeLabelBackground: colors.background
+        primaryBorderColor: colors.line,
+        lineColor: colors.line,
+        edgeLabelBackground: colors.background,
+        pie1: colors.pie[0],
+        pie5: colors.pie[4]
       },
       htmlLabels: false
     })
   })
 
-  it('keeps Gantt labels readable on completed and active tasks and alternate sections', () => {
-    const variables = resolvedDarkTheme()
-    for (const [text, background] of [
-      ['taskTextDarkColor', 'doneTaskBkgColor'],
-      ['taskTextDarkColor', 'activeTaskBkgColor'],
-      ['taskTextOutsideColor', 'altSectionBkgColor']
-    ]) {
-      const first = luminance(variables[text])
-      const second = luminance(variables[background])
-      const contrast = (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)
-      expect(contrast, `${text} on ${background}`).toBeGreaterThanOrEqual(4.5)
+  it('themes light previews from the same tokens instead of the stock palette', () => {
+    const colors = graphiteLight
+    expect(getMermaidConfig(false, false, colors)).toMatchObject({
+      theme: 'base',
+      darkMode: false,
+      themeVariables: {
+        darkMode: false,
+        background: colors.background,
+        primaryColor: colors.primary,
+        secondaryColor: colors.secondary,
+        tertiaryColor: colors.tertiary,
+        primaryTextColor: colors.foreground,
+        primaryBorderColor: colors.line,
+        lineColor: colors.line,
+        textColor: colors.foreground,
+        edgeLabelBackground: colors.background
+      }
+    })
+  })
+
+  it.each([
+    ['dark', true, graphiteDark],
+    ['light', false, graphiteLight]
+  ] as const)(
+    'keeps Gantt labels readable on completed and active tasks and alternate sections (%s)',
+    (_mode, isDark, colors) => {
+      const variables = resolvedTheme(isDark, colors)
+      for (const [text, background] of [
+        ['taskTextDarkColor', 'doneTaskBkgColor'],
+        ['taskTextDarkColor', 'activeTaskBkgColor'],
+        ['taskTextOutsideColor', 'altSectionBkgColor']
+      ]) {
+        const first = luminance(variables[text])
+        const second = luminance(variables[background])
+        const contrast = (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)
+        expect(contrast, `${text} on ${background}`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  )
+
+  it.each([
+    ['dark', true, graphiteDark],
+    ['light', false, graphiteLight]
+  ] as const)('sets all twelve pie slots (%s)', (_mode, isDark, colors) => {
+    const variables = resolvedTheme(isDark, colors)
+    for (const slot of pieSlots(variables)) {
+      expect(slot.color, slot.name).toMatch(/^#[\da-f]{6}$/i)
     }
   })
 
-  it('gives the first three pie categories distinct resolved colors', () => {
-    const variables = resolvedDarkTheme()
-    expect(new Set([variables.pie1, variables.pie2, variables.pie3]).size).toBe(3)
+  it.each([
+    ['dark', true, graphiteDark],
+    ['light', false, graphiteLight]
+  ] as const)('keeps pie slice labels readable on every slice (%s)', (_mode, isDark, colors) => {
+    const variables = resolvedTheme(isDark, colors)
+    expect(variables.pieSectionTextColor).toBe('#ffffff')
+    for (const slot of pieSlots(variables)) {
+      expect(contrastRatio('#ffffff', slot.color), `white on ${slot.name}`).toBeGreaterThanOrEqual(
+        4.5
+      )
+    }
+  })
+
+  it.each([
+    ['dark', true, graphiteDark],
+    ['light', false, graphiteLight]
+  ] as const)(
+    'never puts the same color on adjacent slices for any slice count (%s)',
+    (_mode, isDark, colors) => {
+      const slots = pieSlots(resolvedTheme(isDark, colors))
+      for (let count = 2; count <= 12; count++) {
+        for (let index = 0; index < count; index++) {
+          const next = (index + 1) % count
+          expect(
+            slots[index].color.toLowerCase(),
+            `${count} slices: ${slots[index].name} vs ${slots[next].name}`
+          ).not.toBe(slots[next].color.toLowerCase())
+        }
+      }
+    }
+  )
+
+  it('keeps node borders off the surface fills so shapes stay outlined', () => {
+    const variables = resolvedTheme(true, graphiteDark)
+    expect(variables.primaryBorderColor).toBe(graphiteDark.line)
+    expect(variables.primaryBorderColor).not.toBe(variables.primaryColor)
   })
 })

@@ -1,11 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  getDiagnosticsSubmissionState,
   readConnectionDiagnosticsSnapshot,
   readHydratedConnectionLog,
   resolveDiagnosticsHostId,
-  selectDiagnosticsHostId,
-  updateDiagnosticsSubmissionState
+  selectDiagnosticsHostId
 } from './connection-diagnostics-screen-data'
 import type { ConnectionLogEntry, HostProfile } from '../transport/types'
 
@@ -40,15 +38,6 @@ describe('connection diagnostics screen data', () => {
 
     expect(resolveDiagnosticsHostId(hosts, 'c', manualSelection, routeC)).toBe('c')
     expect(resolveDiagnosticsHostId(hosts, 'a', manualSelection, secondRouteA)).toBe('a')
-  })
-
-  it('keeps async submission completion scoped to its host incident', () => {
-    let states = updateDiagnosticsSubmissionState({}, 'host-a:incident-1', 'sending')
-    states = updateDiagnosticsSubmissionState(states, 'host-b:incident-2', 'sending')
-    states = updateDiagnosticsSubmissionState(states, 'host-a:incident-1', 'sent')
-
-    expect(getDiagnosticsSubmissionState(states, 'host-a:incident-1')).toBe('sent')
-    expect(getDiagnosticsSubmissionState(states, 'host-b:incident-2')).toBe('sending')
   })
 
   it('waits for hydration and then reads the refreshed log', async () => {
@@ -90,16 +79,14 @@ describe('connection diagnostics screen data', () => {
       getState: vi.fn(() => state),
       getReconnectAttempt: vi.fn(() => 2),
       getLastConnectedAt: vi.fn(() => 1),
-      getActivePath: vi.fn(() => 'relay' as const),
-      getPendingPath: vi.fn(() => null)
+      getActivePath: vi.fn(() => 'lan' as const)
     }
 
     await expect(readConnectionDiagnosticsSnapshot(context, store, 'host-a')).resolves.toEqual({
       state: 'reconnecting',
       reconnectAttempts: 2,
       lastConnectedAt: 1,
-      activePath: 'relay',
-      pendingPath: null,
+      activePath: 'lan',
       entries: [{ id: 'new', ts: 2, level: 'warn', message: 'new event' }]
     })
     expect(context.getState).toHaveBeenCalledAfter(store.hydrate)

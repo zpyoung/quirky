@@ -16,10 +16,12 @@ export function getSolidStateTone(item: GitHubWorkItem): string {
       return 'bg-purple-600 text-white'
     }
     if (item.state === 'draft') {
-      return 'bg-slate-500 text-white'
+      return 'bg-muted text-muted-foreground'
     }
   }
-  return item.state === 'closed' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
+  return item.state === 'closed'
+    ? 'bg-destructive text-destructive-foreground'
+    : 'bg-agent-done-text text-primary-foreground'
 }
 
 export function WorkItemStateBadge({

@@ -20,11 +20,11 @@ vi.mock('../ui/dropdown-menu', () => ({
 }))
 
 const plugin: PluginHostListEntry = {
-  pluginKey: 'stablyai.quirky-skills',
+  pluginKey: 'zpyoung.quirky-skills',
   consentFingerprint: 'sha256-consent',
   name: 'Quirky Skills',
   version: '1.0.0',
-  publisher: 'stablyai',
+  publisher: 'zpyoung',
   status: 'disabled',
   needsReconsent: false,
   isDev: false,
@@ -37,7 +37,7 @@ const plugin: PluginHostListEntry = {
   restarts: 0,
   source: {
     kind: 'bundled',
-    reference: 'bundled:stablyai.quirky-skills',
+    reference: 'bundled:zpyoung.quirky-skills',
     resolvedCommit: null,
     contentHash: 'sha256-content'
   }

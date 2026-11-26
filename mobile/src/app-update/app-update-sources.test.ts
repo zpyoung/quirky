@@ -17,9 +17,9 @@ const release050 = fixture('github-release-mobile-android-v0.0.50.json')
 const lookup = fixture('itunes-lookup-com.zpyoung.quirky.mobile.json')
 
 const REFS_URL =
-  'https://api.github.com/repos/stablyai/orca/git/matching-refs/tags/mobile-android-v'
+  'https://api.github.com/repos/zpyoung/quirky/git/matching-refs/tags/mobile-android-v'
 const releaseUrl = (version: string) =>
-  `https://api.github.com/repos/stablyai/orca/releases/tags/mobile-android-v${version}`
+  `https://api.github.com/repos/zpyoung/quirky/releases/tags/mobile-android-v${version}`
 
 function fakeFetch(routes: Record<string, { status: number; body?: unknown }>) {
   const requested: string[] = []
@@ -58,7 +58,7 @@ describe('GitHub release source (Android sideload)', () => {
 
   it('accepts the recorded release only because it is published with an APK', () => {
     expect(installableReleaseUrl(release050)).toBe(
-      'https://github.com/stablyai/orca/releases/tag/mobile-android-v0.0.50'
+      'https://github.com/zpyoung/quirky/releases/tag/mobile-android-v0.0.50'
     )
     expect(installableReleaseUrl({ ...Object(release050), draft: true })).toBeNull()
     expect(installableReleaseUrl({ ...Object(release050), assets: [] })).toBeNull()
@@ -74,7 +74,7 @@ describe('GitHub release source (Android sideload)', () => {
     ).resolves.toEqual({
       kind: 'available',
       version: '0.0.50',
-      url: 'https://github.com/stablyai/orca/releases/tag/mobile-android-v0.0.50'
+      url: 'https://github.com/zpyoung/quirky/releases/tag/mobile-android-v0.0.50'
     })
     expect(requested).toEqual([REFS_URL, releaseUrl('0.0.50')])
   })
@@ -123,7 +123,7 @@ describe('GitHub release source (Android sideload)', () => {
   it('opens the release page GitHub reports, not one built from the tag', async () => {
     const renamed = {
       ...Object(release050),
-      html_url: 'https://github.com/stablyai/orca/releases/tag/renamed-page'
+      html_url: 'https://github.com/zpyoung/quirky/releases/tag/renamed-page'
     }
     const { fetchImpl } = fakeFetch({
       [REFS_URL]: { status: 200, body: tagRefs },
@@ -134,7 +134,7 @@ describe('GitHub release source (Android sideload)', () => {
     ).resolves.toEqual({
       kind: 'available',
       version: '0.0.50',
-      url: 'https://github.com/stablyai/orca/releases/tag/renamed-page'
+      url: 'https://github.com/zpyoung/quirky/releases/tag/renamed-page'
     })
   })
 
@@ -170,7 +170,7 @@ describe('App Store source (iOS)', () => {
   it('reads the store version and App Store page from the recorded lookup', () => {
     expect(parseAppStoreLookup(lookup)).toEqual({
       version: '0.0.51',
-      url: 'https://apps.apple.com/us/app/orca-ide/id6766130217?uo=4'
+      url: 'https://apps.apple.com/us/app/example/id0000000000?uo=4'
     })
   })
 
@@ -180,7 +180,7 @@ describe('App Store source (iOS)', () => {
     await expect(source.check('0.0.48', signal)).resolves.toEqual({
       kind: 'available',
       version: '0.0.51',
-      url: 'https://apps.apple.com/us/app/orca-ide/id6766130217?uo=4'
+      url: 'https://apps.apple.com/us/app/example/id0000000000?uo=4'
     })
     await expect(source.check('0.0.51', signal)).resolves.toEqual({ kind: 'current' })
   })

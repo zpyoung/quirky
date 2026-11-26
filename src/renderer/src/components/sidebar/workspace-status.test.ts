@@ -4,6 +4,7 @@ import {
   WORKSPACE_STATUS_DRAG_IDS_TYPE,
   WORKSPACE_STATUS_DRAG_PAYLOAD_MAX_BYTES,
   WORKSPACE_STATUS_DRAG_TYPE,
+  getWorkspaceStatusColorOptions,
   hasWorkspaceDragData,
   readWorkspaceDragData,
   readWorkspaceDragDataIds,
@@ -118,5 +119,21 @@ describe('workspace status drag data', () => {
 
     expect(result).toEqual([])
     expect(filterCallCount).toBe(0)
+  })
+})
+
+describe('workspace status color options', () => {
+  it.each([
+    ['conductor-done', 'workspace-status-done'],
+    ['conductor-review', 'workspace-status-review'],
+    ['conductor-progress', 'workspace-status-progress']
+  ])('%s resolves through the %s token, never a hex literal', (id, token) => {
+    const option = getWorkspaceStatusColorOptions().find((candidate) => candidate.id === id)
+
+    expect(option).toBeDefined()
+    expect(option!.tone).toBe(`text-${token}`)
+    expect(option!.swatch).toBe(`bg-${token}`)
+    expect(option!.border).toBe(`border-t-${token}/70`)
+    expect(option!.laneTint).toBe(`bg-${token}/[0.04]`)
   })
 })

@@ -1,27 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { resolveConfiguredTerminalColors, selectTerminalTheme } from './terminal-theme-selection'
+import {
+  DEFAULT_TERMINAL_THEME_DARK,
+  DEFAULT_TERMINAL_THEME_LIGHT,
+  resolveConfiguredTerminalColors,
+  selectTerminalTheme
+} from './terminal-theme-selection'
 import { TERMINAL_THEME_CATALOG } from './terminal-themes'
 
 const base = {
   theme: 'system' as const,
-  terminalThemeDark: 'Ghostty Default Style Dark',
+  terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
   terminalUseSeparateLightTheme: true,
-  terminalThemeLight: 'Builtin Tango Light'
+  terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT
 }
 
 describe('the terminal colours a host configures', () => {
   it('uses the light theme for a light appearance, so a light user is not told dark', () => {
     expect(resolveConfiguredTerminalColors(base, false)).toEqual({
-      foreground: '#2e3434',
+      foreground: '#1b1d22',
       background: '#ffffff'
     })
     expect(resolveConfiguredTerminalColors({ ...base, theme: 'light' }, true)).toEqual({
-      foreground: '#2e3434',
+      foreground: '#1b1d22',
       background: '#ffffff'
     })
     expect(resolveConfiguredTerminalColors(base, true)).toEqual({
-      foreground: '#ffffff',
-      background: '#282c34'
+      foreground: '#eceef2',
+      background: '#16171b'
     })
   })
 
@@ -38,15 +43,15 @@ describe('the terminal colours a host configures', () => {
         { ...base, terminalColorOverrides: { background: '#101010' } },
         true
       )
-    ).toEqual({ foreground: '#ffffff', background: '#101010' })
+    ).toEqual({ foreground: '#eceef2', background: '#101010' })
     expect(
       resolveConfiguredTerminalColors({ ...base, terminalThemeDark: 'no such theme' }, true)
-    ).toEqual({ foreground: '#ffffff', background: '#282c34' })
+    ).toEqual({ foreground: '#eceef2', background: '#16171b' })
   })
 
   it('keeps using the dark theme in light mode when no separate light theme is set', () => {
     expect(
       selectTerminalTheme({ ...base, theme: 'light', terminalUseSeparateLightTheme: false }, true)
-    ).toEqual({ mode: 'light', useLightVariant: false, themeName: 'Ghostty Default Style Dark' })
+    ).toEqual({ mode: 'light', useLightVariant: false, themeName: DEFAULT_TERMINAL_THEME_DARK })
   })
 })

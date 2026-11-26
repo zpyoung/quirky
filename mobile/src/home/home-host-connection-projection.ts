@@ -1,12 +1,8 @@
-import type { RelayHostReachability } from '../transport/relay-host-reachability'
 import type { MobileConnectionPath } from '../transport/stable-logical-rpc-client'
 
 export type HomeHostConnectionProjectionEntry = {
   hostId: string
   path: MobileConnectionPath
-  pendingPath: MobileConnectionPath | null
-  pairingRejected: boolean
-  relayHostReachability: RelayHostReachability
 }
 
 export type HomeHostConnections = Record<string, HomeHostConnectionProjectionEntry>

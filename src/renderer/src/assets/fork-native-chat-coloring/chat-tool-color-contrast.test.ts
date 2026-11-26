@@ -39,6 +39,7 @@ function resolveColorMix(fg: RgbaColor, bg: RgbaColor, fgPercent: number): RgbaC
 
 type ThemeColors = {
   background: RgbaColor
+  sidebar: RgbaColor
   muted: RgbaColor
   foreground: RgbaColor
   toolRead: RgbaColor
@@ -57,6 +58,7 @@ function readThemeColors(block: string): ThemeColors {
   const codeAccent = readToken(block, '--code-accent')
   return {
     background,
+    sidebar: readToken(block, '--sidebar'),
     muted: readToken(block, '--muted'),
     foreground: readToken(block, '--foreground'),
     toolRead,
@@ -106,6 +108,13 @@ function buildContrastTable(colors: ThemeColors): ContrastCase[] {
       ground: '--background',
       foreground: colors[key],
       background: colors.background,
+      floor: 4.5
+    })
+    table.push({
+      token: `${token} (text)`,
+      ground: '--sidebar',
+      foreground: colors[key],
+      background: colors.sidebar,
       floor: 4.5
     })
     table.push({

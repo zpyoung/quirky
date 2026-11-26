@@ -26,7 +26,7 @@ const projectDir = path.resolve(import.meta.dirname, '..', '..')
 const temporaryDirectories = []
 const execFileAsync = promisify(execFile)
 const GUIDE_REFERENCES = {
-  orchestration: [
+  'quirky-orchestration': [
     'coordinator-loop.md',
     'legacy-contract-migration.md',
     'low-level-topology.md',
@@ -301,8 +301,10 @@ describe('bundled skill guide generator', () => {
     await writeArtifacts(artifacts)
     await expect(verifyArtifacts(artifacts, root)).resolves.toBeUndefined()
 
-    await writeFile(path.join(root, 'skills', 'computer-use', 'SKILL.md'), 'stale\n')
-    await expect(verifyArtifacts(artifacts, root)).rejects.toThrow('skills/computer-use/SKILL.md')
+    await writeFile(path.join(root, 'skills', 'quirky-computer-use', 'SKILL.md'), 'stale\n')
+    await expect(verifyArtifacts(artifacts, root)).rejects.toThrow(
+      'skills/quirky-computer-use/SKILL.md'
+    )
   })
 
   // Why: the stale-artifact assertions above only hit the Windows separator when the host is
@@ -312,17 +314,17 @@ describe('bundled skill guide generator', () => {
       toPosixRelativePath('C:\\repo', 'C:\\repo\\src\\cli\\bundled-skill-guides.ts', path.win32)
     ).toBe('src/cli/bundled-skill-guides.ts')
     expect(
-      toPosixRelativePath('C:\\repo', 'C:\\repo\\skills\\computer-use\\SKILL.md', path.win32)
-    ).toBe('skills/computer-use/SKILL.md')
-    expect(toPosixRelativePath('/repo', '/repo/skills/computer-use/SKILL.md', path.posix)).toBe(
-      'skills/computer-use/SKILL.md'
-    )
+      toPosixRelativePath('C:\\repo', 'C:\\repo\\skills\\quirky-computer-use\\SKILL.md', path.win32)
+    ).toBe('skills/quirky-computer-use/SKILL.md')
+    expect(
+      toPosixRelativePath('/repo', '/repo/skills/quirky-computer-use/SKILL.md', path.posix)
+    ).toBe('skills/quirky-computer-use/SKILL.md')
   })
 
   it('rejects mismatched source names and ambiguous aliases', async () => {
     const root = await createFixture()
     await writeFile(
-      path.join(root, 'skill-guides', 'computer-use.md'),
+      path.join(root, 'skill-guides', 'quirky-computer-use.md'),
       '---\nname: wrong\ndescription: present\n---\n'
     )
     await expect(buildArtifacts(root)).rejects.toThrow('declares mismatched name wrong')

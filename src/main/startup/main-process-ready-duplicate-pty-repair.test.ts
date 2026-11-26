@@ -37,7 +37,7 @@ vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN
 vi.mock('electron', () => ({
   app: { isPackaged: false, on: vi.fn(), once: vi.fn(), getPath: () => fixture.userData },
   ipcMain: { handle: vi.fn(), removeHandler: vi.fn(), on: vi.fn(), removeListener: vi.fn() },
-  nativeTheme: {}
+  nativeTheme: { on: vi.fn() }
 }))
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: false } }))
 vi.mock('./main-process-state', () => ({ mainProcessState: fixture.state }))

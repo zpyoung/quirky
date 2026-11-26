@@ -4420,7 +4420,7 @@
         "share": {
           "card": {
             "utils": {
-              "19f4b4dc75": "github.com/stablyai/orca",
+              "19f4b4dc75": "github.com/zpyoung/quirky",
               "d864fc5f98": "输出",
               "5d66fdd7c2": "输入",
               "7080aeaebb": "推理",
@@ -14169,7 +14169,8 @@
           "pairThisComputer": "配对这台计算机。",
           "androidHelp": {
             "guide": "安装指南"
-          }
+          },
+          "noInstallLink": "请通过 TestFlight 安装：向所有者索取邀请。"
         },
         "MobilePage": {
           "e17393c6a3": "手机预览",

@@ -11,9 +11,6 @@ export type DiagnosticsHostSelection = {
   routeKey?: DiagnosticsRouteKey
 }
 
-export type DiagnosticsSubmissionState = 'sending' | 'sent' | 'failed'
-export type DiagnosticsSubmissionStates = Readonly<Record<string, DiagnosticsSubmissionState>>
-
 export function selectDiagnosticsHostId(
   hosts: readonly HostProfile[],
   requestedHostId: string | undefined,
@@ -44,27 +41,6 @@ export function resolveDiagnosticsHostId(
   return selectDiagnosticsHostId(hosts, requestedHostId, null)
 }
 
-export function getDiagnosticsSubmissionState(
-  states: DiagnosticsSubmissionStates,
-  key: string | null
-): DiagnosticsSubmissionState | 'idle' {
-  return key ? (states[key] ?? 'idle') : 'idle'
-}
-
-export function updateDiagnosticsSubmissionState(
-  states: DiagnosticsSubmissionStates,
-  key: string,
-  state: DiagnosticsSubmissionState | null
-): DiagnosticsSubmissionStates {
-  const next = { ...states }
-  if (state) {
-    next[key] = state
-  } else {
-    delete next[key]
-  }
-  return next
-}
-
 export async function readHydratedConnectionLog(
   store: Pick<ConnectionLogStore, 'hydrate' | 'get'>,
   hostId: string
@@ -80,7 +56,7 @@ export async function readHydratedConnectionLog(
 export async function readConnectionDiagnosticsSnapshot(
   context: Pick<
     RpcClientContextValue,
-    'getState' | 'getReconnectAttempt' | 'getLastConnectedAt' | 'getActivePath' | 'getPendingPath'
+    'getState' | 'getReconnectAttempt' | 'getLastConnectedAt' | 'getActivePath'
   >,
   store: Pick<ConnectionLogStore, 'hydrate' | 'get'>,
   hostId: string
@@ -91,7 +67,6 @@ export async function readConnectionDiagnosticsSnapshot(
     reconnectAttempts: context.getReconnectAttempt(hostId),
     lastConnectedAt: context.getLastConnectedAt(hostId),
     activePath: context.getActivePath(hostId),
-    pendingPath: context.getPendingPath(hostId),
     entries
   }
 }

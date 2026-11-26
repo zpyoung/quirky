@@ -23,7 +23,6 @@ import { startPushTokenSync } from '../src/notifications/push-registration'
 import { ensureDesktopNotificationChannel } from '../src/notifications/desktop-notification-channel'
 import { loadHostCatalog } from '../src/transport/host-store'
 import { extractPairingCodeFromUrl } from '../src/transport/pairing'
-import { recoverMobileRelayPairing } from '../src/transport/mobile-relay-pairing-recovery'
 import { appUpdateChecker } from '../src/app-update/app-update-runtime'
 import { SideSafeArea } from '../src/layout/side-safe-area'
 
@@ -61,12 +60,6 @@ export default function RootLayout() {
   }, [pathname, hostId, worktreeId, executionHost])
   const openNotificationRoute = useOpenNotificationRoute()
   const handledNotificationIdsRef = useRef<Set<string>>(new Set())
-
-  useEffect(() => {
-    // Why: pairing publication is journaled across process death; startup must
-    // reconcile the server result before another scan can replace that journal.
-    void recoverMobileRelayPairing()
-  }, [])
 
   // Why: a rolled APNs/FCM token stops delivering silently, so every paired host
   // has to be re-registered with the new one as soon as the provider hands it over.

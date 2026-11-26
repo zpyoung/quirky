@@ -99,25 +99,6 @@
         "startedAt": 0
       }
     },
-    "1813829924d9": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "Pressable": 2,
-        "Text": 6,
-        "View": 3
-      },
-      "labels": ["Send test notification"],
-      "text": [
-        "Having trouble receiving alerts?",
-        "Send a test through Quirky’s push service.",
-        "Send test notification",
-        "Send test notification",
-        "Troubleshooting",
-        "Accepted by Quirky’s push service. Check for the notification."
-      ]
-    },
     "1d12f3e78a48": {
       "name": "notifications.testPush#1",
       "ordinal": 1,
@@ -155,25 +136,6 @@
           }
         }
       }
-    },
-    "2632a7be552e": {
-      "crash": {
-        "$rpc": "null"
-      },
-      "elements": {
-        "Pressable": 2,
-        "Text": 6,
-        "View": 3
-      },
-      "labels": ["Send test notification"],
-      "text": [
-        "Having trouble receiving alerts?",
-        "Send a test through Quirky’s push service.",
-        "Send test notification",
-        "Send test notification",
-        "Troubleshooting",
-        "Update your desktop to run this test."
-      ]
     },
     "401bb4233294": {
       "name": "notifications.testPush#1",
@@ -240,7 +202,7 @@
         }
       }
     },
-    "4f67ed2e2c74": {
+    "62b6ce652d4f": {
       "crash": {
         "$rpc": "null"
       },
@@ -294,22 +256,42 @@
         }
       }
     },
-    "6967f95147f9": {
+    "7292b1dfd4e8": {
       "crash": {
         "$rpc": "null"
       },
       "elements": {
         "Pressable": 2,
-        "Text": 5,
+        "Text": 6,
         "View": 3
       },
-      "labels": ["Sending…"],
+      "labels": ["Send test notification"],
       "text": [
         "Having trouble receiving alerts?",
         "Send a test through Quirky’s push service.",
         "Send test notification",
-        "Sending…",
-        "Troubleshooting"
+        "Send test notification",
+        "Troubleshooting",
+        "Could not send through Quirky’s push service. Try again."
+      ]
+    },
+    "8a146be2e5f9": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "Pressable": 2,
+        "Text": 6,
+        "View": 3
+      },
+      "labels": ["Send test notification"],
+      "text": [
+        "Having trouble receiving alerts?",
+        "Send a test through Quirky’s push service.",
+        "Send test notification",
+        "Send test notification",
+        "Troubleshooting",
+        "transport failure"
       ]
     },
     "95172d96bab4": {
@@ -383,7 +365,25 @@
         }
       }
     },
-    "b7f125cb7db0": {
+    "a399799faa16": {
+      "crash": {
+        "$rpc": "null"
+      },
+      "elements": {
+        "Pressable": 2,
+        "Text": 5,
+        "View": 3
+      },
+      "labels": ["Send test notification"],
+      "text": [
+        "Having trouble receiving alerts?",
+        "Send a test through Quirky’s push service.",
+        "Send test notification",
+        "Send test notification",
+        "Troubleshooting"
+      ]
+    },
+    "a59deeea695c": {
       "crash": {
         "$rpc": "null"
       },
@@ -399,7 +399,7 @@
         "Send test notification",
         "Send test notification",
         "Troubleshooting",
-        "transport failure"
+        "Update your desktop to run this test."
       ]
     },
     "c37bd4097e53": {
@@ -474,7 +474,7 @@
         }
       }
     },
-    "d86c08a509c4": {
+    "c72a7d810f35": {
       "crash": {
         "$rpc": "null"
       },
@@ -483,12 +483,12 @@
         "Text": 5,
         "View": 3
       },
-      "labels": ["Send test notification"],
+      "labels": ["Sending…"],
       "text": [
         "Having trouble receiving alerts?",
         "Send a test through Quirky’s push service.",
         "Send test notification",
-        "Send test notification",
+        "Sending…",
         "Troubleshooting"
       ]
     },
@@ -536,7 +536,7 @@
         }
       }
     },
-    "f3e2e816b496": {
+    "f00545950686": {
       "crash": {
         "$rpc": "null"
       },
@@ -552,7 +552,7 @@
         "Send test notification",
         "Send test notification",
         "Troubleshooting",
-        "Could not send through Quirky’s push service. Try again."
+        "Accepted by Quirky’s push service. Check for the notification."
       ]
     },
     "f68b017d64bd": {
@@ -572,7 +572,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "d86c08a509c4",
+          "state": "a399799faa16",
           "effects": []
         }
       },
@@ -585,7 +585,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "6967f95147f9",
+          "state": "c72a7d810f35",
           "effects": []
         }
       },
@@ -598,7 +598,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "1813829924d9",
+          "state": "f00545950686",
           "effects": []
         }
       },
@@ -611,7 +611,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "f3e2e816b496",
+          "state": "7292b1dfd4e8",
           "effects": []
         }
       },
@@ -624,7 +624,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "f3e2e816b496",
+          "state": "7292b1dfd4e8",
           "effects": []
         }
       },
@@ -637,7 +637,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "f3e2e816b496",
+          "state": "7292b1dfd4e8",
           "effects": []
         }
       },
@@ -650,7 +650,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "f3e2e816b496",
+          "state": "7292b1dfd4e8",
           "effects": []
         }
       },
@@ -663,7 +663,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "f3e2e816b496",
+          "state": "7292b1dfd4e8",
           "effects": []
         }
       },
@@ -676,7 +676,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "4f67ed2e2c74",
+          "state": "62b6ce652d4f",
           "effects": []
         }
       },
@@ -689,7 +689,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "4f67ed2e2c74",
+          "state": "62b6ce652d4f",
           "effects": []
         }
       },
@@ -702,7 +702,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "2632a7be552e",
+          "state": "a59deeea695c",
           "effects": []
         }
       },
@@ -715,7 +715,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "b7f125cb7db0",
+          "state": "8a146be2e5f9",
           "effects": []
         }
       },
@@ -728,7 +728,7 @@
             "mount": "eb79a9b3682a",
             "press": "eb79a9b3682a"
           },
-          "state": "d86c08a509c4",
+          "state": "a399799faa16",
           "effects": []
         }
       }

@@ -54,12 +54,8 @@ export function RpcClientProvider({
       getReconnectAttempt: () => client.getReconnectAttempt(),
       getLastConnectedAt: () => client.getLastConnectedAt(),
       // The page reaches its host through the shell bridge, which rides whatever path the RN
-      // client already negotiated. 'relay' is the honest default until init carries the real one.
-      getActivePath: () => 'relay',
-      getPendingPath: () => null,
-      // Both are pairing verdicts, and pairing happened natively before this document existed.
-      isPairingRejected: () => false,
-      getRelayHostReachability: () => 'connecting',
+      // client already negotiated. 'lan' is the honest default until init carries the real one.
+      getActivePath: () => 'lan',
       subscribeHostState: (_hostId: string, listener: (next: ConnectionState) => void) =>
         client.onStateChange(listener),
       getAllClients: () => [...acquiredRef.current].map((hostId) => ({ hostId, client })),

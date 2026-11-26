@@ -5,7 +5,7 @@ import { ThemeSwitch } from 'fumadocs-ui/layouts/shared/slots/theme-switch'
 
 async function getGithubStars(): Promise<number | undefined> {
   try {
-    const response = await fetch('https://api.github.com/repos/stablyai/orca', {
+    const response = await fetch('https://api.github.com/repos/zpyoung/quirky', {
       headers: { Accept: 'application/vnd.github+json' },
       next: { revalidate: 3600 }
     })
@@ -89,7 +89,7 @@ export async function DocsHeader() {
             </span>
           </a>
           <a
-            href="https://github.com/stablyai/orca"
+            href="https://github.com/zpyoung/quirky"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"

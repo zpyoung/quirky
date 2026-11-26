@@ -37,14 +37,12 @@ import {
 } from './notification-test-screen-mount-adapters'
 import { newWorkspaceMountAdapters } from './new-workspace-mount-adapters'
 import { newWorkspaceRepositoryMountAdapters } from './new-workspace-repository-mount-adapters'
-import { pairingJournalMountAdapters } from './pairing-journal-mount-adapters'
 import { prSidebarMountAdapters } from './pr-sidebar-mount-adapters'
 import { pushDismissalMountAdapters } from './push-dismissal-mount-adapters'
 import {
   pushRegistrationMountAdapters,
   pushRegistrationMountExposures
 } from './push-registration-mount-adapters'
-import { relayCredentialMountAdapters } from './relay-credential-mount-adapters'
 import { sessionNotesMountAdapters } from './session-notes-mount-adapters'
 import { sessionScreenReadMountAdapters } from './session-screen-read-mount-adapters'
 import { sessionScreenTabMountAdapters } from './session-screen-tab-mount-adapters'
@@ -144,7 +142,6 @@ export const MOUNTED_OPERATION_MODULES: readonly MountedOperationModule[] = [
     mounts: notificationTestScreenMountAdapters,
     exposes: notificationTestScreenMountExposures
   },
-  { source: 'pairing-journal-mount-adapters.ts', mounts: pairingJournalMountAdapters },
   { source: 'pr-sidebar-mount-adapters.ts', mounts: prSidebarMountAdapters },
   { source: 'push-dismissal-mount-adapters.ts', mounts: pushDismissalMountAdapters },
   {
@@ -152,7 +149,6 @@ export const MOUNTED_OPERATION_MODULES: readonly MountedOperationModule[] = [
     mounts: pushRegistrationMountAdapters,
     exposes: pushRegistrationMountExposures
   },
-  { source: 'relay-credential-mount-adapters.ts', mounts: relayCredentialMountAdapters },
   { source: 'session-notes-mount-adapters.ts', mounts: sessionNotesMountAdapters },
   {
     source: 'session-screen-read-mount-adapters.ts',

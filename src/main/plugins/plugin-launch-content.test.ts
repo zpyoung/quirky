@@ -29,9 +29,9 @@ describe('Phase 1 launch plugin content', () => {
       await readJson(join(launchRoot, 'quirky-marketplace.json'))
     )
     expect(marketplace.plugins.map((plugin) => plugin.id).sort()).toEqual([
-      'stablyai.quirky-multipass-recipes',
-      'stablyai.quirky-navigation-shortcuts',
-      'stablyai.quirky-portuguese'
+      'zpyoung.quirky-multipass-recipes',
+      'zpyoung.quirky-navigation-shortcuts',
+      'zpyoung.quirky-portuguese'
     ])
     expect(
       marketplace.plugins.filter(
@@ -108,6 +108,6 @@ describe('Phase 1 launch plugin content', () => {
     })
 
     expect(result.errors).toEqual([])
-    expect(result.installed).toEqual(['stablyai.quirky-navigation-shortcuts'])
+    expect(result.installed).toEqual(['zpyoung.quirky-navigation-shortcuts'])
   })
 })

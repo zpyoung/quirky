@@ -23,7 +23,7 @@ export type TerminalDocumentThemeMessage =
 const DARK_BG_MIN_CONTRAST = 3
 const LIGHT_BG_MIN_CONTRAST = 4.5
 // Dark app surface a transparent terminal background composites over (matches desktop APP_SURFACE_COLORS.dark).
-const CONTRAST_APP_SURFACE = { r: 10, g: 10, b: 10 }
+const CONTRAST_APP_SURFACE = { r: 22, g: 23, b: 27 }
 
 export function parseTerminalBackgroundRgba(value: unknown): TerminalDocumentRgba | null {
   if (typeof value !== 'string') {

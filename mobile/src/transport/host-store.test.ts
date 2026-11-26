@@ -1,8 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  toStoredMobileRelayHostOverlay,
-  type MobileRelayHostOverlay
-} from './mobile-relay-host-overlay'
 
 const asyncStorageMock = vi.hoisted(() => ({
   getItem: vi.fn(),
@@ -44,20 +40,15 @@ vi.mock('./host-credential-cleanup', () => ({
 import {
   loadHostCatalog,
   loadHosts,
-  RelayRoutingHostRemovedError,
   removeHost,
   resolvePairingHostIdentity,
   resetHostStoreForTests,
   savePairedHost,
-  setRelayRouting,
   updateHostNameAndEndpoint,
   updateLastConnected
 } from './host-store'
-import { resetMobileRelayHostOverlayStoreForTests } from './mobile-relay-host-overlay-store'
-import { writeMobileRelayCredentialBundle } from './mobile-relay-credential-bundle'
 
 const HOSTS_STORAGE_KEY = 'quirky:hosts'
-const OVERLAY_STORAGE_KEY = 'quirky:mobile-relay:host-overlays:v2'
 const HOST_ONE = {
   id: 'host-1',
   name: 'Host 1',
@@ -72,26 +63,6 @@ const HOST_TWO = {
   publicKeyB64: 'key-2',
   lastConnected: 0
 }
-const HOST_ONE_RELAY = {
-  v: 1 as const,
-  directorUrl: 'https://relay.onorca.dev',
-  cellUrl: 'https://relay-c1.onorca.dev',
-  assignmentEpoch: 7,
-  relayHostId: 'AbCdEf0123_-xyZ9',
-  e2eeFraming: 2 as const
-}
-const HOST_ONE_RELAY_BUNDLE = {
-  v: 1 as const,
-  hostId: HOST_ONE.id,
-  deviceToken: 'replacement-token',
-  current: {
-    token: 'A'.repeat(43),
-    hash: 'B'.repeat(43),
-    version: 1,
-    expiresAt: 10_000
-  }
-}
-
 function scheduledCleanup(hostId: string): (id: string) => Promise<void> {
   const cleanup = scheduleCleanupMock.mock.calls.find(([id]) => id === hostId)?.[1]
   expect(cleanup).toBeTypeOf('function')
@@ -100,13 +71,11 @@ function scheduledCleanup(hostId: string): (id: string) => Promise<void> {
 
 describe('host-store list mutations', () => {
   let storedHostsRaw: string
-  let storedOverlayRaw: string | null
 
   beforeEach(() => {
     vi.clearAllMocks()
     resetHostStoreForTests()
     platformMock.OS = 'ios'
-    resetMobileRelayHostOverlayStoreForTests()
     scheduleCleanupMock.mockReset()
     scheduleCleanupMock.mockResolvedValue(undefined)
     cancelCleanupMock.mockReset()
@@ -114,21 +83,15 @@ describe('host-store list mutations', () => {
     recordCleanupIntentMock.mockReset()
     recordCleanupIntentMock.mockResolvedValue(undefined)
     storedHostsRaw = JSON.stringify([HOST_ONE, HOST_TWO])
-    storedOverlayRaw = null
     asyncStorageMock.getItem.mockImplementation(async (key: string) => {
       if (key === HOSTS_STORAGE_KEY) {
         return storedHostsRaw
-      }
-      if (key === OVERLAY_STORAGE_KEY) {
-        return storedOverlayRaw
       }
       return null
     })
     asyncStorageMock.setItem.mockImplementation(async (key: string, raw: string) => {
       if (key === HOSTS_STORAGE_KEY) {
         storedHostsRaw = raw
-      } else if (key === OVERLAY_STORAGE_KEY) {
-        storedOverlayRaw = raw
       }
     })
     secureStoreMock.setItemAsync.mockResolvedValue(undefined)
@@ -310,130 +273,6 @@ describe('host-store list mutations', () => {
     expect(secureStoreMock.deleteItemAsync).not.toHaveBeenCalled()
   })
 
-  it('does not let stale removal cleanup delete a replacement relay bundle before publication', async () => {
-    await removeHost(HOST_ONE.id)
-    const staleCleanup = scheduledCleanup(HOST_ONE.id)
-    await writeMobileRelayCredentialBundle(HOST_ONE_RELAY_BUNDLE)
-
-    await expect(staleCleanup(HOST_ONE.id)).rejects.toThrow('credential write superseded cleanup')
-
-    expect(secureStoreMock.deleteItemAsync).not.toHaveBeenCalled()
-  })
-
-  it('keeps stale cleanup pending when a replacement relay write fails', async () => {
-    await removeHost(HOST_ONE.id)
-    const staleCleanup = scheduledCleanup(HOST_ONE.id)
-    secureStoreMock.setItemAsync.mockRejectedValueOnce(new Error('keychain write failed'))
-
-    await expect(writeMobileRelayCredentialBundle(HOST_ONE_RELAY_BUNDLE)).rejects.toThrow(
-      'keychain write failed'
-    )
-    await expect(staleCleanup(HOST_ONE.id)).rejects.toThrow('credential write superseded cleanup')
-
-    expect(secureStoreMock.deleteItemAsync).not.toHaveBeenCalled()
-  })
-
-  it('stops stale cleanup when a replacement relay write starts during token deletion', async () => {
-    await removeHost(HOST_ONE.id)
-    const staleCleanup = scheduledCleanup(HOST_ONE.id)
-    let releaseTokenDelete: () => void = () => {}
-    secureStoreMock.deleteItemAsync.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        releaseTokenDelete = resolve
-      })
-    )
-
-    const cleanup = staleCleanup(HOST_ONE.id)
-    await vi.waitFor(() => {
-      expect(secureStoreMock.deleteItemAsync).toHaveBeenCalledWith(
-        'quirky.host-token.host-1',
-        expect.anything()
-      )
-    })
-    const bundleWrite = writeMobileRelayCredentialBundle(HOST_ONE_RELAY_BUNDLE)
-    releaseTokenDelete()
-    await bundleWrite
-    await expect(cleanup).rejects.toThrow('credential write superseded cleanup')
-
-    expect(secureStoreMock.deleteItemAsync).not.toHaveBeenCalledWith(
-      'quirky.mobile-relay.credentials.host-1',
-      expect.anything()
-    )
-  })
-
-  it('rechecks the write generation immediately before starting credential deletion', async () => {
-    await removeHost(HOST_ONE.id)
-    const staleCleanup = scheduledCleanup(HOST_ONE.id)
-    let resolveCleanupRead: (raw: string) => void = () => {}
-    const cleanupRead = new Promise<string>((resolve) => {
-      resolveCleanupRead = resolve
-    })
-    let cleanupReadStarted = false
-    asyncStorageMock.getItem.mockImplementation(async (key: string) => {
-      if (key === HOSTS_STORAGE_KEY && !cleanupReadStarted) {
-        cleanupReadStarted = true
-        return cleanupRead
-      }
-      if (key === HOSTS_STORAGE_KEY) {
-        return storedHostsRaw
-      }
-      if (key === OVERLAY_STORAGE_KEY) {
-        return storedOverlayRaw
-      }
-      return null
-    })
-
-    const cleanup = staleCleanup(HOST_ONE.id)
-    await vi.waitFor(() => expect(cleanupReadStarted).toBe(true))
-    let bundleWrite: Promise<void> | null = null
-    resolveCleanupRead(storedHostsRaw)
-    queueMicrotask(() => {
-      bundleWrite = writeMobileRelayCredentialBundle(HOST_ONE_RELAY_BUNDLE)
-    })
-    await expect(cleanup).rejects.toThrow('credential write superseded cleanup')
-    await vi.waitFor(() => expect(bundleWrite).not.toBeNull())
-    await bundleWrite
-
-    expect(secureStoreMock.deleteItemAsync).not.toHaveBeenCalled()
-  })
-
-  it('clears stale relay state when an existing host is re-paired direct-only', async () => {
-    const overlay: MobileRelayHostOverlay = {
-      v: 2,
-      hostId: HOST_ONE.id,
-      endpoints: [
-        { id: 'direct-primary', kind: 'lan', url: HOST_ONE.endpoint },
-        {
-          id: 'relay-primary',
-          kind: 'relay',
-          url: 'wss://relay-c1.onorca.dev/v1/connect/AbCdEf0123_-xyZ9'
-        }
-      ],
-      relayHostId: HOST_ONE_RELAY.relayHostId,
-      relay: HOST_ONE_RELAY
-    }
-    storedOverlayRaw = JSON.stringify([overlay])
-
-    await savePairedHost({ ...HOST_ONE, deviceToken: 'replacement-token' })
-
-    expect(JSON.parse(storedOverlayRaw!)).toEqual([])
-    expect(secureStoreMock.deleteItemAsync).not.toHaveBeenCalled()
-  })
-
-  it('does not touch relay storage when saving a new direct-only host', async () => {
-    await savePairedHost({
-      id: 'host-new',
-      name: 'New Host',
-      endpoint: 'ws://127.0.0.1:3',
-      publicKeyB64: 'key-new',
-      deviceToken: 'new-token',
-      lastConnected: 0
-    })
-
-    expect(asyncStorageMock.getItem).not.toHaveBeenCalledWith(OVERLAY_STORAGE_KEY)
-    expect(secureStoreMock.deleteItemAsync).not.toHaveBeenCalled()
-  })
-
   it('keeps the normal iOS save on the existing default keychain service', async () => {
     await savePairedHost({
       id: 'host-new',
@@ -516,60 +355,6 @@ describe('host-store list mutations', () => {
       'quirky.host-token.host-1',
       expect.anything()
     )
-  })
-
-  it('keeps a concurrently re-published orphan overlay authoritative', async () => {
-    const overlay: MobileRelayHostOverlay = {
-      v: 2,
-      hostId: HOST_ONE.id,
-      endpoints: [
-        { id: 'direct-primary', kind: 'lan', url: HOST_ONE.endpoint },
-        {
-          id: 'relay-primary',
-          kind: 'relay',
-          url: 'wss://relay-c1.onorca.dev/v1/connect/AbCdEf0123_-xyZ9'
-        }
-      ],
-      relayHostId: HOST_ONE_RELAY.relayHostId,
-      relay: HOST_ONE_RELAY
-    }
-    storedOverlayRaw = JSON.stringify([overlay, { ...overlay, hostId: 'removed-by-old-build' }])
-    let releaseCleanup: () => void = () => {}
-    scheduleCleanupMock.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        releaseCleanup = resolve
-      })
-    )
-
-    const hostsLoad = loadHosts()
-    await vi.waitFor(() => expect(scheduleCleanupMock).toHaveBeenCalled())
-    await savePairedHost({
-      ...HOST_ONE,
-      id: 'removed-by-old-build',
-      publicKeyB64: 'restored-key',
-      deviceToken: 'restored-token',
-      relay: overlay.relay
-    })
-    releaseCleanup()
-    const hosts = await hostsLoad
-
-    expect(hosts.find(({ id }) => id === HOST_ONE.id)).toMatchObject({ relay: overlay.relay })
-    expect(hosts.some(({ id }) => id === 'removed-by-old-build')).toBe(false)
-    expect(JSON.parse(storedOverlayRaw!)).toContainEqual(
-      toStoredMobileRelayHostOverlay('removed-by-old-build', HOST_ONE_RELAY)
-    )
-  })
-
-  it('refuses to resurrect a removed host during relay upgrade publication', async () => {
-    storedHostsRaw = JSON.stringify([HOST_TWO])
-
-    await expect(setRelayRouting(HOST_ONE.id, HOST_ONE_RELAY)).rejects.toBeInstanceOf(
-      RelayRoutingHostRemovedError
-    )
-
-    expect(JSON.parse(storedHostsRaw)).toEqual([HOST_TWO])
-    expect(storedOverlayRaw).toBeNull()
-    expect(secureStoreMock.setItemAsync).not.toHaveBeenCalled()
   })
 
   it('awaits cleanup scheduling after metadata commit', async () => {
@@ -836,7 +621,6 @@ describe('host-store pairing save after an Android encryption rejection', () => 
     vi.clearAllMocks()
     resetHostStoreForTests()
     platformMock.OS = 'android'
-    resetMobileRelayHostOverlayStoreForTests()
     scheduleCleanupMock.mockReset()
     scheduleCleanupMock.mockResolvedValue(undefined)
     cancelCleanupMock.mockReset()

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { salvagingArray } from '../../../src/shared/zod-salvage'
-import { FakeSession } from './mobile-endpoint-supervisor-test-fakes'
+import { FakeSession } from './rpc-session-test-fake'
 import { captureRpcOperationSettlement, defineRpcOperation } from './rpc-operation'
 import { rpcResultVariant, rpcResultVariants } from './rpc-operation-result-reader'
 import {

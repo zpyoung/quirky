@@ -89,7 +89,7 @@ describe('MobileHomeQuickActions', () => {
   it('asks which host to use when multiple are connected', async () => {
     const callbacks = await renderQuickActions([
       host('desk', 'Desk', 'ws://192.168.1.2:6768'),
-      host('laptop', 'Laptop', 'wss://relay.example.com/mobile')
+      host('laptop', 'Laptop', 'wss://laptop.example.com/mobile')
     ])
 
     act(() => newWorkspaceButton().props.onPress())
@@ -99,7 +99,7 @@ describe('MobileHomeQuickActions', () => {
     expect(picker().props.title).toBe('Create Workspace On')
     expect(picker().props.options).toEqual([
       { value: 'desk', label: 'Desk', subtitle: '192.168.1.2:6768' },
-      { value: 'laptop', label: 'Laptop', subtitle: 'relay.example.com' }
+      { value: 'laptop', label: 'Laptop', subtitle: 'laptop.example.com' }
     ])
 
     act(() => picker().props.onSelect('laptop'))

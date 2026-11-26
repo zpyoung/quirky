@@ -62,7 +62,7 @@ export function MobileNativeChatQueuedMessageEditor({
           value={editor.text}
           editable={!editor.saving}
           multiline
-          selectionColor={colors.accentBlue}
+          selectionColor={colors.accent}
           textAlignVertical="top"
           style={[
             mobileNativeChatInputStyles.freeInput,
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     marginVertical: TARGET_OVERHANG
   },
   fieldFocused: {
-    borderColor: colors.accentBlue
+    borderColor: colors.accent
   },
   // As tall as a one-line field plus both overhangs, so the square sits centred on that field.
   target: {

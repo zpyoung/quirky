@@ -96,11 +96,19 @@
   --color-agent-question: var(--agent-question);
   --color-agent-working: var(--agent-working);
   --color-agent-question-text: var(--agent-question-text);
+  --color-agent-done: var(--agent-done);
+  --color-agent-done-text: var(--agent-done-text);
+  --color-agent-failed: var(--agent-failed);
+  --color-code-background: var(--code-background);
+  --color-code-header: var(--code-header);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-worktree-sidebar: var(--worktree-sidebar);
@@ -179,26 +187,27 @@
     'SF Mono', SFMono-Regular, ui-monospace, 'Cascadia Code', Menlo, Consolas, 'Liberation Mono',
     monospace;
   --radius: 0.625rem;
-  --quirky-security-background: #fff;
-  --quirky-security-foreground: #0a0a0a;
-  --quirky-security-card: #fff;
-  --quirky-security-card-foreground: #0a0a0a;
-  --quirky-security-popover: #fff;
-  --quirky-security-popover-foreground: #0a0a0a;
-  --quirky-security-primary: #171717;
-  --quirky-security-primary-foreground: #fafafa;
-  --quirky-security-secondary: #f5f5f5;
-  --quirky-security-secondary-foreground: #171717;
-  --quirky-security-muted: #f5f5f5;
-  --quirky-security-muted-foreground: #737373;
-  --quirky-security-accent: #f5f5f5;
-  --quirky-security-accent-foreground: #171717;
-  --quirky-security-border: #e5e5e5;
-  --quirky-security-input: #e5e5e5;
-  --quirky-security-ring: #a1a1a1;
-  --background: #fff;
+  color-scheme: light;
+  --quirky-security-background: #ffffff;
+  --quirky-security-foreground: #1b1d22;
+  --quirky-security-card: #ffffff;
+  --quirky-security-card-foreground: #1b1d22;
+  --quirky-security-popover: #ffffff;
+  --quirky-security-popover-foreground: #1b1d22;
+  --quirky-security-primary: #14808a;
+  --quirky-security-primary-foreground: #ffffff;
+  --quirky-security-secondary: #e7e9ef;
+  --quirky-security-secondary-foreground: #1b1d22;
+  --quirky-security-muted: #e7e9ef;
+  --quirky-security-muted-foreground: #646b76;
+  --quirky-security-accent: #e7e9ef;
+  --quirky-security-accent-foreground: #1b1d22;
+  --quirky-security-border: #e3e5ea;
+  --quirky-security-input: #e3e5ea;
+  --quirky-security-ring: #14808a;
+  --background: #ffffff;
   --editor-surface: #ffffff;
-  --foreground: #0a0a0a;
+  --foreground: #1b1d22;
   --chat-canvas-mix: 0%;
   --chat-foreground-mix: 82%;
   --chat-strong-mix: 92%;
@@ -214,55 +223,60 @@
   --chat-composer-base: var(--chat-canvas);
   --chat-composer-border-mix: 11%;
   --chat-content-max-width: 46rem;
-  --card: #fff;
-  --card-foreground: #0a0a0a;
-  --popover: #fff;
-  --popover-foreground: #0a0a0a;
-  --primary: #171717;
-  --primary-foreground: #fafafa;
-  --secondary: #f5f5f5;
-  --secondary-foreground: #171717;
-  --muted: #f5f5f5;
-  --muted-foreground: #737373;
-  --accent: #f5f5f5;
-  --accent-foreground: #171717;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
-  --ring: #a1a1a1;
+  --card: #ffffff;
+  --card-foreground: #1b1d22;
+  --popover: #ffffff;
+  --popover-foreground: #1b1d22;
+  --primary: #14808a;
+  --primary-foreground: #ffffff;
+  --secondary: #e7e9ef;
+  --secondary-foreground: #1b1d22;
+  --muted: #e7e9ef;
+  --muted-foreground: #646b76;
+  --accent: #e7e9ef;
+  --accent-foreground: #1b1d22;
+  --border: #e3e5ea;
+  --input: #e3e5ea;
+  --ring: #14808a;
   --terminal-pane-locate: var(--color-blue-600);
   --ai-action-accent: var(--color-violet-500);
   /* "An agent is asking you something" — one hue for every surface that shows
-     it (sidebar, tabs, dashboard, kanban). Orange, not amber: it has to stay
-     separable from working-yellow at a glance. */
-  --agent-question: var(--color-orange-600);
-  /* The working-state yellow every agent working/monitoring glyph paints. */
-  --agent-working: var(--color-yellow-500);
+     it (sidebar, tabs, dashboard, kanban). */
+  --agent-question: #a56e08;
+  --agent-working: #2f74c0;
   /* Legible weight for text/glyphs on a tinted --agent-question surface. */
-  --agent-question-text: var(--color-orange-700);
-  /* Workspace PR-state tones: same hue in both themes so a status keeps its
-     identity when the theme flips. */
-  --workspace-status-done: #c7a594;
-  --workspace-status-review: #16a34a;
-  --workspace-status-progress: #d4a300;
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --worktree-sidebar: #f5f5f5;
-  --worktree-sidebar-foreground: #0a0a0a;
-  --worktree-sidebar-accent: #eaeaea;
-  --worktree-sidebar-accent-foreground: #171717;
-  --worktree-sidebar-border: #e5e5e5;
-  --worktree-sidebar-ring: #a1a1a1;
-  --sidebar: #fafafa;
-  --sidebar-foreground: #0a0a0a;
-  --sidebar-primary: #171717;
-  --sidebar-primary-foreground: #fafafa;
-  --sidebar-accent: #f5f5f5;
-  --sidebar-accent-foreground: #171717;
-  --sidebar-border: #e5e5e5;
-  --sidebar-ring: #a1a1a1;
+  --agent-question-text: #855706;
+  --agent-done: #1f9d63;
+  /* Legible weight for done green as text, or as a fill under text. */
+  --agent-done-text: #167747;
+  --agent-failed: #d6455d;
+  --workspace-status-done: #8f6a3a;
+  --workspace-status-review: #1f9d63;
+  --workspace-status-progress: var(--agent-working);
+  --code-background: #f6f7f9;
+  --code-header: #eceef2;
+  --chart-1: #2f62c0;
+  --chart-2: #6c42b8;
+  --chart-3: #0b6f79;
+  --chart-4: #a64624;
+  --chart-5: #2f6f45;
+  --chart-6: #962f7a;
+  --chart-7: #44607f;
+  --chart-8: #7a5c12;
+  --worktree-sidebar: #eef0f3;
+  --worktree-sidebar-foreground: #1b1d22;
+  --worktree-sidebar-accent: #e7e9ef;
+  --worktree-sidebar-accent-foreground: #1b1d22;
+  --worktree-sidebar-border: #e3e5ea;
+  --worktree-sidebar-ring: #14808a;
+  --sidebar: #eef0f3;
+  --sidebar-foreground: #1b1d22;
+  --sidebar-primary: #14808a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e7e9ef;
+  --sidebar-accent-foreground: #1b1d22;
+  --sidebar-border: #e3e5ea;
+  --sidebar-ring: #14808a;
   --terminal-pane-title-on-dark-fg: rgb(255 255 255 / 0.52);
   --terminal-pane-title-on-dark-input-fg: rgb(255 255 255 / 0.7);
   --terminal-pane-title-on-dark-placeholder: rgb(255 255 255 / 0.38);
@@ -298,26 +312,27 @@
 /* ── Dark Mode ───────────────────────────────────────── */
 
 .dark {
-  --quirky-security-background: #0a0a0a;
-  --quirky-security-foreground: #fafafa;
-  --quirky-security-card: #171717;
-  --quirky-security-card-foreground: #fafafa;
-  --quirky-security-popover: #171717;
-  --quirky-security-popover-foreground: #fafafa;
-  --quirky-security-primary: #e5e5e5;
-  --quirky-security-primary-foreground: #171717;
-  --quirky-security-secondary: #262626;
-  --quirky-security-secondary-foreground: #fafafa;
-  --quirky-security-muted: #262626;
-  --quirky-security-muted-foreground: #a1a1a1;
-  --quirky-security-accent: #404040;
-  --quirky-security-accent-foreground: #fafafa;
-  --quirky-security-border: rgb(255 255 255 / 0.07);
-  --quirky-security-input: rgb(255 255 255 / 0.15);
-  --quirky-security-ring: #737373;
-  --background: #0a0a0a;
-  --editor-surface: #1e1e1e;
-  --foreground: #fafafa;
+  color-scheme: dark;
+  --quirky-security-background: #16171b;
+  --quirky-security-foreground: #eceef2;
+  --quirky-security-card: #16171b;
+  --quirky-security-card-foreground: #eceef2;
+  --quirky-security-popover: #1b1c21;
+  --quirky-security-popover-foreground: #eceef2;
+  --quirky-security-primary: #5fd0d6;
+  --quirky-security-primary-foreground: #0c0d0f;
+  --quirky-security-secondary: #22242b;
+  --quirky-security-secondary-foreground: #eceef2;
+  --quirky-security-muted: #22242b;
+  --quirky-security-muted-foreground: #7c828d;
+  --quirky-security-accent: #22242b;
+  --quirky-security-accent-foreground: #eceef2;
+  --quirky-security-border: #24262c;
+  --quirky-security-input: #24262c;
+  --quirky-security-ring: #5fd0d6;
+  --background: #16171b;
+  --editor-surface: #16171b;
+  --foreground: #eceef2;
   --chat-canvas-mix: 5%;
   --chat-foreground-mix: 78%;
   --chat-strong-mix: 90%;
@@ -333,51 +348,56 @@
   --chat-composer-base: transparent;
   --chat-composer-border-mix: 9%;
   --chat-content-max-width: 46rem;
-  --card: #171717;
-  --card-foreground: #fafafa;
-  --popover: #171717;
-  --popover-foreground: #fafafa;
-  --primary: #e5e5e5;
-  --primary-foreground: #171717;
-  --secondary: #262626;
-  --secondary-foreground: #fafafa;
-  --muted: #262626;
-  --muted-foreground: #a1a1a1;
-  --accent: #404040;
-  --accent-foreground: #fafafa;
-  --border: rgb(255 255 255 / 0.07);
-  --input: rgb(255 255 255 / 0.15);
-  --ring: #737373;
+  --card: #16171b;
+  --card-foreground: #eceef2;
+  --popover: #1b1c21;
+  --popover-foreground: #eceef2;
+  --primary: #5fd0d6;
+  --primary-foreground: #0c0d0f;
+  --secondary: #22242b;
+  --secondary-foreground: #eceef2;
+  --muted: #22242b;
+  --muted-foreground: #7c828d;
+  --accent: #22242b;
+  --accent-foreground: #eceef2;
+  --border: #24262c;
+  --input: #24262c;
+  --ring: #5fd0d6;
   --terminal-pane-locate: var(--color-blue-400);
   --ai-action-accent: var(--color-violet-400);
-  --agent-question: var(--color-orange-500);
-  --agent-question-text: var(--color-orange-300);
-  --workspace-status-done: #c7a594;
-  --workspace-status-review: #16a34a;
-  --workspace-status-progress: #d4a300;
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  /* Why: light mode sets worktree-sidebar to secondary (#f5f5f5); mirror that
-     lift in dark mode so the panel reads clearly above #0a0a0a canvas. */
-  --worktree-sidebar: #2a2a2a;
-  --worktree-sidebar-foreground: #fafafa;
-  --worktree-sidebar-accent: #353535;
-  --worktree-sidebar-accent-foreground: #fafafa;
-  /* Match --border / --sidebar-border (7%) so the left sidebar's divider lines
-     aren't brighter than the rest of the UI in dark mode (#5906). */
-  --worktree-sidebar-border: rgb(255 255 255 / 0.07);
-  --worktree-sidebar-ring: #737373;
-  --sidebar: #171717;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #1447e6;
-  --sidebar-primary-foreground: #fafafa;
-  --sidebar-accent: #262626;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: rgb(255 255 255 / 0.07);
-  --sidebar-ring: #525252;
+  --agent-question: #e5b454;
+  --agent-working: #6fb3ff;
+  --agent-question-text: #e5b454;
+  --agent-done: #4cc38a;
+  --agent-done-text: #4cc38a;
+  --agent-failed: #ef6b73;
+  --workspace-status-done: #d6b58c;
+  --workspace-status-review: #4cc38a;
+  --workspace-status-progress: var(--agent-working);
+  --code-background: #101114;
+  --code-header: #1b1c21;
+  --chart-1: #3f6fd0;
+  --chart-2: #7b52c6;
+  --chart-3: #0f7f8a;
+  --chart-4: #b4532f;
+  --chart-5: #3a7d52;
+  --chart-6: #a8408a;
+  --chart-7: #50698a;
+  --chart-8: #8a6a1c;
+  --worktree-sidebar: #0c0d0f;
+  --worktree-sidebar-foreground: #eceef2;
+  --worktree-sidebar-accent: #22242b;
+  --worktree-sidebar-accent-foreground: #eceef2;
+  --worktree-sidebar-border: #24262c;
+  --worktree-sidebar-ring: #5fd0d6;
+  --sidebar: #0c0d0f;
+  --sidebar-foreground: #eceef2;
+  --sidebar-primary: #5fd0d6;
+  --sidebar-primary-foreground: #0c0d0f;
+  --sidebar-accent: #22242b;
+  --sidebar-accent-foreground: #eceef2;
+  --sidebar-border: #24262c;
+  --sidebar-ring: #5fd0d6;
   --terminal-pane-title-on-dark-fg: rgb(255 255 255 / 0.52);
   --terminal-pane-title-on-dark-input-fg: rgb(255 255 255 / 0.7);
   --terminal-pane-title-on-dark-placeholder: rgb(255 255 255 / 0.38);
@@ -411,18 +431,17 @@
 /* Status and diff colors follow the chat scheme without copying the app palette. */
 :root,
 .native-chat-appearance[data-native-chat-scheme='light'] {
-  --destructive: #e40014;
-  --destructive-foreground: #fcf3f3;
-  --status-success: #15803d;
+  --destructive: #d6455d;
+  --destructive-foreground: #ffffff;
+  --status-success: #1f9d63;
   --status-success-background: color-mix(in srgb, var(--status-success) 10%, transparent);
   --status-success-border: color-mix(in srgb, var(--status-success) 25%, transparent);
-  /* Needs-attention states use yellow, separate from errors and working states. */
-  --status-warning: #ca8a04;
+  --status-warning: #a56e08;
   --jira-priority-high: var(--destructive);
   --jira-priority-medium: var(--status-warning);
   --jira-priority-low: var(--callout-note);
   --status-warning-background: color-mix(in srgb, var(--status-warning) 10%, transparent);
-  --status-warning-foreground: #78350f;
+  --status-warning-foreground: #855706;
   --status-warning-border: color-mix(in srgb, var(--status-warning) 25%, transparent);
   /* GitHub's own hues for the two callout kinds no status token covers. */
   --callout-note: #0969da;
@@ -434,25 +453,27 @@
   --git-decoration-untracked: #007100;
   --git-decoration-copied: #007acc;
   --git-decoration-ignored: #8c8c8c;
-  --diff-added-ground: color-mix(in srgb, var(--git-decoration-added) 13%, transparent);
-  --diff-added-gutter: color-mix(in srgb, var(--git-decoration-added) 26%, transparent);
-  --diff-removed-ground: color-mix(in srgb, var(--git-decoration-deleted) 11%, transparent);
-  --diff-removed-gutter: color-mix(in srgb, var(--git-decoration-deleted) 22%, transparent);
+  --diff-added-ground: #2da44e1f;
+  --diff-added-gutter: color-mix(in srgb, #2da44e 26%, transparent);
+  --diff-removed-ground: #cf222e1a;
+  --diff-removed-gutter: color-mix(in srgb, #cf222e 22%, transparent);
+  --chat-diff-added: #116329;
+  --chat-diff-removed: #82071e;
 }
 
 .dark,
 .native-chat-appearance[data-native-chat-scheme='dark'] {
-  --destructive: #ff6568;
-  --destructive-foreground: #df2225;
-  --status-success: #86efac;
+  --destructive: #ef6b73;
+  --destructive-foreground: #0c0d0f;
+  --status-success: #4cc38a;
   --status-success-background: color-mix(in srgb, var(--status-success) 10%, transparent);
   --status-success-border: color-mix(in srgb, var(--status-success) 25%, transparent);
-  --status-warning: #eab308;
+  --status-warning: #e5b454;
   --jira-priority-high: var(--destructive);
   --jira-priority-medium: var(--status-warning);
   --jira-priority-low: var(--callout-note);
   --status-warning-background: color-mix(in srgb, var(--status-warning) 10%, transparent);
-  --status-warning-foreground: #fde68a;
+  --status-warning-foreground: #e5b454;
   --status-warning-border: color-mix(in srgb, var(--status-warning) 25%, transparent);
   --callout-note: #4493f8;
   --callout-important: #ab7df8;
@@ -463,10 +484,12 @@
   --git-decoration-untracked: #73c991;
   --git-decoration-copied: #73c991;
   --git-decoration-ignored: #6e6e6e;
-  --diff-added-ground: color-mix(in srgb, var(--git-decoration-added) 16%, transparent);
-  --diff-added-gutter: color-mix(in srgb, var(--git-decoration-added) 30%, transparent);
-  --diff-removed-ground: color-mix(in srgb, var(--git-decoration-deleted) 18%, transparent);
-  --diff-removed-gutter: color-mix(in srgb, var(--git-decoration-deleted) 32%, transparent);
+  --diff-added-ground: #3fb95024;
+  --diff-added-gutter: color-mix(in srgb, #3fb950 30%, transparent);
+  --diff-removed-ground: #e5534b24;
+  --diff-removed-gutter: color-mix(in srgb, #e5534b 32%, transparent);
+  --chat-diff-added: #a6f0b0;
+  --chat-diff-removed: #ffb3ad;
 }
 
 .plugin-security-chrome {
@@ -492,11 +515,11 @@
 }
 
 .linear-priority-bars {
-  --linear-priority-bar-inactive-fill: color-mix(in srgb, lch(39.576 1.25 282) 34%, transparent);
+  --linear-priority-bar-inactive-fill: color-mix(in srgb, var(--muted-foreground) 34%, transparent);
 }
 
 .dark .linear-priority-bars {
-  --linear-priority-bar-inactive-fill: color-mix(in srgb, lch(39.576 1.25 282) 62%, transparent);
+  --linear-priority-bar-inactive-fill: color-mix(in srgb, var(--muted-foreground) 62%, transparent);
 }
 
 [data-sonner-toaster] {
@@ -566,7 +589,7 @@ body:has(> [data-slot='dialog-overlay'], > [data-slot='sheet-overlay']) {
      background to the same color; keep the X readable on both Quirky themes. */
   color: var(--popover-foreground);
   background: var(--popover);
-  border-color: rgb(0 0 0 / 0.14);
+  border-color: color-mix(in srgb, var(--popover-foreground) 14%, transparent);
 }
 
 [data-sonner-toaster][data-sonner-theme='dark']
@@ -574,11 +597,7 @@ body:has(> [data-slot='dialog-overlay'], > [data-slot='sheet-overlay']) {
   [data-close-button] {
   color: var(--popover-foreground);
   background: var(--popover);
-  border-color: rgb(255 255 255 / 0.14);
-}
-
-.dark [data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-close-button] {
-  border-color: rgb(255 255 255 / 0.14);
+  border-color: color-mix(in srgb, var(--popover-foreground) 14%, transparent);
 }
 
 [data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-close-button]:hover {
@@ -626,17 +645,9 @@ body:has(> [data-slot='dialog-overlay'], > [data-slot='sheet-overlay']) {
     transparent
   );
   --chat-code-foreground: color-mix(in srgb, var(--chat-source-foreground) 85%, var(--chat-canvas));
-  --chat-code-surface: color-mix(
-    in srgb,
-    var(--chat-source-foreground) var(--chat-code-mix),
-    var(--chat-code-base)
-  );
+  --chat-code-surface: var(--code-background);
   --chat-code-border: color-mix(in srgb, var(--chat-source-foreground) 7%, transparent);
-  --chat-inline-code-surface: color-mix(
-    in srgb,
-    var(--chat-source-foreground) var(--chat-inline-code-mix),
-    var(--chat-inline-code-base)
-  );
+  --chat-inline-code-surface: var(--code-background);
   --chat-inline-code-border: color-mix(
     in srgb,
     var(--chat-source-foreground) var(--chat-inline-code-border-mix),
@@ -657,15 +668,18 @@ body:has(> [data-slot='dialog-overlay'], > [data-slot='sheet-overlay']) {
   --chat-warning: color-mix(in srgb, var(--status-warning) 70%, var(--chat-source-foreground));
   /* What the reader has not seen yet: the transcript's "New" marker, in the note hue. */
   --chat-unread: color-mix(in srgb, var(--callout-note) 70%, var(--chat-source-foreground));
-  --chat-diff-added: color-mix(
+}
+
+.native-chat-appearance[data-native-chat-scheme] {
+  --chat-code-surface: color-mix(
     in srgb,
-    var(--git-decoration-added) 70%,
-    var(--chat-source-foreground)
+    var(--chat-source-foreground) var(--chat-code-mix),
+    var(--chat-code-base)
   );
-  --chat-diff-removed: color-mix(
+  --chat-inline-code-surface: color-mix(
     in srgb,
-    var(--git-decoration-deleted) 70%,
-    var(--chat-source-foreground)
+    var(--chat-source-foreground) var(--chat-inline-code-mix),
+    var(--chat-inline-code-base)
   );
 }
 
@@ -780,7 +794,7 @@ body:has(> [data-slot='dialog-overlay'], > [data-slot='sheet-overlay']) {
 .scrollbar-editor,
 .xterm .xterm-viewport {
   scrollbar-width: thin;
-  scrollbar-color: rgba(121, 121, 121, 0.4) transparent;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground, #737373) 34%, transparent) transparent;
 }
 
 .scrollbar-editor::-webkit-scrollbar,
@@ -795,7 +809,7 @@ body:has(> [data-slot='dialog-overlay'], > [data-slot='sheet-overlay']) {
 
 .scrollbar-editor::-webkit-scrollbar-thumb,
 .xterm .xterm-viewport::-webkit-scrollbar-thumb {
-  background: rgba(121, 121, 121, 0.4);
+  background: color-mix(in srgb, var(--muted-foreground, #737373) 28%, transparent);
   border: 3px solid transparent;
   border-radius: 7px;
   background-clip: padding-box;
@@ -803,7 +817,7 @@ body:has(> [data-slot='dialog-overlay'], > [data-slot='sheet-overlay']) {
 
 .scrollbar-editor::-webkit-scrollbar-thumb:hover,
 .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: rgba(121, 121, 121, 0.7);
+  background: color-mix(in srgb, var(--muted-foreground, #737373) 48%, transparent);
   border: 3px solid transparent;
   background-clip: padding-box;
 }
@@ -1765,9 +1779,28 @@ html.native-shell .app-layout {
   animation: agent-spinner-rotate 86400s steps(1036800, end) infinite;
 }
 
+@keyframes agent-working-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent-working) 30%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--agent-working) 12%, transparent);
+  }
+}
+
+.agent-working-pulse {
+  animation: agent-working-pulse 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .agent-working-spinner {
     animation: none;
+  }
+
+  .agent-working-pulse {
+    animation: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent-working) 30%, transparent);
   }
 }
 
@@ -2440,7 +2473,7 @@ html.native-shell .app-layout {
 }
 
 .monaco-editor .monaco-markdown-doc-link {
-  color: #58a6ff !important;
+  color: var(--primary) !important;
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   text-underline-offset: 2px;

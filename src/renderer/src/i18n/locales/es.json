@@ -4415,7 +4415,7 @@
         "share": {
           "card": {
             "utils": {
-              "19f4b4dc75": "github.com/stablyai/orca",
+              "19f4b4dc75": "github.com/zpyoung/quirky",
               "d864fc5f98": "salida",
               "5d66fdd7c2": "entrada",
               "7080aeaebb": "Razonamiento",
@@ -14164,7 +14164,8 @@
           "pairThisComputer": "Empareja este equipo.",
           "androidHelp": {
             "guide": "Guía de instalación"
-          }
+          },
+          "noInstallLink": "Instálala desde TestFlight: pide una invitación al propietario."
         },
         "MobilePage": {
           "e17393c6a3": "Vista previa del teléfono",

@@ -14,8 +14,8 @@ import { matchesSettingsSearch } from './settings-search'
 import { SKILLS_CLI_VERSION } from '../../../../shared/agent-feature-install-commands'
 import { QUIRKY_SKILLS_REPOSITORY_URL } from '../../../../shared/fork-skills-repository/skills-repository-url'
 
-const INSTALL_COMMAND = `npx skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${QUIRKY_BUILD_COMMIT} --skill orchestration --global`
-const WINDOWS_INSTALL_COMMAND = `cmd.exe /d /s /c "where.exe npx >nul 2>nul & if errorlevel 1 (echo ERROR: npx was not found. Install Node.js LTS from https://nodejs.org/ to get npx. & echo Then close this terminal and start skill setup again - a new terminal picks up the updated PATH. & exit /b 1) else (npx skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${QUIRKY_BUILD_COMMIT} --skill orchestration --global)"`
+const INSTALL_COMMAND = `npx skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${QUIRKY_BUILD_COMMIT} --skill quirky-orchestration --global`
+const WINDOWS_INSTALL_COMMAND = `cmd.exe /d /s /c "where.exe npx >nul 2>nul & if errorlevel 1 (echo ERROR: npx was not found. Install Node.js LTS from https://nodejs.org/ to get npx. & echo Then close this terminal and start skill setup again - a new terminal picks up the updated PATH. & exit /b 1) else (npx skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${QUIRKY_BUILD_COMMIT} --skill quirky-orchestration --global)"`
 
 const mocks = vi.hoisted(() => ({
   dialogProps: [] as Record<string, unknown>[],
@@ -64,14 +64,14 @@ vi.mock('@/hooks/useInstalledAgentSkills', () => ({
     skills: [
       {
         id: 'claude',
-        name: 'orchestration',
+        name: 'quirky-orchestration',
         description: null,
         providers: ['claude'],
         sourceKind: 'home',
         sourceLabel: 'Claude Code home',
         rootPath: '/Users/test/.claude/skills',
-        directoryPath: '/Users/test/.claude/skills/orchestration',
-        skillFilePath: '/Users/test/.claude/skills/orchestration/SKILL.md',
+        directoryPath: '/Users/test/.claude/skills/quirky-orchestration',
+        skillFilePath: '/Users/test/.claude/skills/quirky-orchestration/SKILL.md',
         installed: true,
         updatedAt: null
       }

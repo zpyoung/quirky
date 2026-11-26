@@ -62,7 +62,7 @@ describe('extractGitHubIssueSourceFallback', () => {
     ).toEqual({
       repoId: 'repo-1',
       repoPath: '/work/quirky',
-      repoLabel: 'stablyai/orca'
+      repoLabel: 'stablyai/quirky'
     })
   })
 

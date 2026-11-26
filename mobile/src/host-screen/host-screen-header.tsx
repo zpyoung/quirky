@@ -36,7 +36,6 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
     lastConnectedAt,
     onHideSidebar,
     reconnectAttempts,
-    relayRecovery,
     state
   } = controller
 
@@ -56,9 +55,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
           const headerVerdict = classifyConnection({
             state: connState,
             reconnectAttempts,
-            lastConnectedAt,
-            hostName: state.hostName,
-            ...relayRecovery
+            lastConnectedAt
           })
           return (
             <>

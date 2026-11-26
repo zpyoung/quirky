@@ -109,7 +109,7 @@ describe('onboarding feature setup runner', () => {
 
     expect(text).toBe(ALL_SKILL_INSTALL_COMMAND)
     expect(text).toBe(
-      `npx skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${QUIRKY_BUILD_COMMIT} --skill quirky-cli --skill computer-use --skill orchestration --skill quirky-linear --global`
+      `npx skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${QUIRKY_BUILD_COMMIT} --skill quirky-cli --skill quirky-computer-use --skill quirky-orchestration --skill quirky-linear --global`
     )
   })
 

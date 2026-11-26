@@ -5,9 +5,7 @@ import type { RpcClientContextValue } from '../transport/rpc-client-context-cont
 import { connectionLogStore } from '../transport/persisted-connection-log-store'
 import { loadHostAppVersion } from '../transport/host-app-version-store'
 import { readConnectionDiagnosticsSnapshot } from './connection-diagnostics-screen-data'
-import { getReportableConnectionIncidentId } from './connection-diagnostics-analysis'
 import { buildConnectionDiagnosticsReport } from './connection-diagnostics-report'
-import { submitConnectionDiagnostics } from './connection-diagnostics-submission'
 import type { DiagnosticsDeviceOperations } from './diagnostics-device-operations'
 import { BRIDGE_PROTOCOL_VERSION } from '../mobile-web-shell/bridge/bridge-frame-fields'
 
@@ -34,20 +32,11 @@ export function createNativeDiagnosticsOperations(
           desktopAppVersion,
           entries: snapshot.entries,
           activePath: snapshot.activePath,
-          pendingPath: snapshot.pendingPath,
           bridgeProtocolVersion: BRIDGE_PROTOCOL_VERSION
         }),
         appVersion,
-        platform,
-        incidentId: getReportableConnectionIncidentId({
-          endpoint: host.endpoint,
-          state: snapshot.state,
-          activePath: snapshot.activePath,
-          pendingPath: snapshot.pendingPath,
-          entries: snapshot.entries
-        })
+        platform
       }
-    },
-    submit: submitConnectionDiagnostics
+    }
   }
 }

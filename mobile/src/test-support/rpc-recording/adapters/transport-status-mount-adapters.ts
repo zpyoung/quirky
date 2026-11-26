@@ -2,14 +2,13 @@ import type { ConnectionState } from '../../../transport/types'
 import type { MountAdapter, MountContext } from '../recording-scenario'
 import type { operationModuleLoader } from '../operation-module-loader'
 import { hookMount } from '../hook-mount'
-import { candidateClient } from '../relay-pairing-fixtures'
 
 const HOST = 'host-1'
 
 /**
- * The three `status.get` readers the transport owns: the protocol gate hook, the retrying
- * capability probe, and the pairing race that treats a reply as "this path works". They agree on
- * acceptance and disagree on what a refusal costs, which is what the recordings have to show.
+ * The `status.get` readers the transport owns: the protocol gate hook and the retrying capability
+ * probe. They agree on acceptance and disagree on what a refusal costs, which is what the
+ * recordings have to show.
  */
 export function transportStatusMountAdapters(
   modules: ReturnType<typeof operationModuleLoader>
@@ -72,42 +71,6 @@ export function transportStatusMountAdapters(
         },
         state: () => ({ published }),
         dispose: () => stop?.()
-      }
-    },
-    'transport.pairing-race': ({ client, effect }: MountContext) => {
-      const race = modules.load<typeof import('../../../transport/pairing-candidate-race')>(
-        'mobile/src/transport/pairing-candidate-race.ts'
-      ).racePairingCandidates
-      let outcome: unknown = 'unraced'
-      const candidate = (path: 'direct' | 'relay') => ({
-        path,
-        client: candidateClient(client, effect, path)
-      })
-      return {
-        action(_name, args) {
-          const candidates =
-            args.relay === false
-              ? [candidate('direct')]
-              : args.order === 'relay-first'
-                ? [candidate('relay'), candidate('direct')]
-                : [candidate('direct'), candidate('relay')]
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the adapter supplies the two members racePairingCandidates reads.
-          const settled = race(candidates as Parameters<typeof race>[0])
-          // The winner carries a live client, which the recorder cannot observe; the path it chose
-          // is the whole decision, so settle on that and let the rejection through unchanged.
-          return settled.then(
-            (winner) => {
-              outcome = winner.path
-              return winner.path
-            },
-            (error: unknown) => {
-              outcome = `failed: ${error instanceof Error ? error.message : String(error)}`
-              throw error
-            }
-          )
-        },
-        state: () => ({ outcome }),
-        dispose: () => {}
       }
     }
   }

@@ -10,7 +10,7 @@ declare const rpcSessionIdentityBrand: unique symbol
 export type RpcSessionIdentity = object & { readonly [rpcSessionIdentityBrand]?: never }
 
 type WatchdogOptions = {
-  transport: 'direct' | 'relay'
+  transport: 'direct'
   sendProbe: (identity: RpcSessionIdentity) => boolean
   terminate: (identity: RpcSessionIdentity) => void
   onTimeout?: (evidence: LivenessTimeoutEvidence) => void
@@ -24,7 +24,7 @@ type WatchdogOptions = {
 }
 
 export type LivenessTimeoutEvidence = {
-  transport: 'direct' | 'relay'
+  transport: 'direct'
   reason: 'probe-send-failed' | 'probe-timeout'
   missedProbes: number
   missedProbeLimit: number

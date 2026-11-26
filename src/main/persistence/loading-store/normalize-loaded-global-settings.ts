@@ -34,6 +34,7 @@ export function normalizeLoadedGlobalSettings(
     migratedExternalVisibility,
     migratedTerminalScrollback,
     migratedTerminalTuiScrollSensitivity,
+    migratedTerminalGraphiteDefaults,
     migratedSourceControlAi,
     migratedOptionAsAlt,
     migratedFloatingTerminalEnabled,
@@ -101,6 +102,7 @@ export function normalizeLoadedGlobalSettings(
         : defaults.settings.terminalRightClickToPaste,
     terminalRightClickToPasteDefaultedForPlatform: true,
     ...migratedTerminalTuiScrollSensitivity.settings,
+    ...migratedTerminalGraphiteDefaults.settings,
     experimentalActivity: migratedExperimentalActivity,
     experimentalActivityDefaultedOffForAllUsers: true,
     // Preserve the legacy opt-in so the one-time introduction copy can target existing users.

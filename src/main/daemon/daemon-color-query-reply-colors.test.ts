@@ -47,7 +47,7 @@ describe('daemon OSC 10/11 colours', () => {
       )
     })
 
-    expect(subprocess.write.mock.calls[0]).toEqual(['\x1b]11;rgb:2828/2c2c/3434\x1b\\'])
+    expect(subprocess.write.mock.calls[0]).toEqual(['\x1b]11;rgb:1616/1717/1b1b\x1b\\'])
   })
 
   it('resends the last colours when an adapter connects, so a push made while offline lands', async () => {
