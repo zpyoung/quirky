@@ -30,9 +30,13 @@ const ALIAS_X = testQuirkySessionId('5c7e2a94-1d3b-4f68-b9a0-e4c2d6f81b37')
 const ALIAS_Y = testQuirkySessionId('8a4d6f20-3e1c-4b79-a5d2-c0f7e9b3a164')
 
 const hostRef = vi.hoisted((): { current: unknown } => ({ current: null }))
-vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry', () => ({
-  getStructuredAgentSessionHost: () => hostRef.current
-}))
+vi.mock(
+  '../../native-chat/agent-session-wire/structured-agent-session-registry',
+  async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    getStructuredAgentSessionHost: () => hostRef.current
+  })
+)
 vi.mock('../orchestration/canonical-quirky-session-id', () => ({
   canonicalQuirkySessionId: (id: string) =>
     id === '5c7e2a94-1d3b-4f68-b9a0-e4c2d6f81b37'
