@@ -1,6 +1,6 @@
 # Agent-drivable Quirky: one public CLI and API surface
 
-**Status:** Draft
+**Status:** Approved (2026-11-26)
 
 ## Status & amendments
 
