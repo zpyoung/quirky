@@ -52,10 +52,6 @@ vi.mock('../../store', async () => {
   return { useAppStore }
 })
 
-vi.mock('../native-chat/use-native-chat-toggle-shortcut', () => ({
-  useNativeChatToggleShortcut: () => {}
-}))
-
 vi.mock('./terminal-parking-e2e-overrides', () => ({
   getTerminalParkingPolicyOverrides: () => ({})
 }))

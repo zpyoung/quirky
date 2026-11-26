@@ -267,7 +267,7 @@ describe('LocalPtyProvider', () => {
         transformed: true
       })
       expect(mockProc.write.mock.calls).toEqual([
-        ['\x1b]10;rgb:ffff/ffff/ffff\x1b\\'],
+        ['\x1b]10;rgb:ecec/eeee/f2f2\x1b\\'],
         ['\x1b]10;rgb:1212/3434/5656\x1b\\']
       ])
     })

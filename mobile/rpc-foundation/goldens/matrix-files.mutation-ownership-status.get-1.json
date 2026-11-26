@@ -134,6 +134,16 @@
     "518ec57c381a": {
       "ownership": "uncaptured"
     },
+    "7aa321708c59": {
+      "status": "rejected",
+      "startedAt": 0,
+      "settledAt": 0,
+      "error": {
+        "category": "Error",
+        "message": "Remote file changes require a newer Quirky server. Update the HUB and try again.",
+        "isRpcDeliveryUnknown": false
+      }
+    },
     "7f0419402be8": {
       "name": "status.get#1",
       "ordinal": 1,
@@ -200,16 +210,6 @@
     "9270aeb7d9c6": {
       "status": "pending",
       "startedAt": 0
-    },
-    "9ce0c7923c41": {
-      "status": "rejected",
-      "startedAt": 0,
-      "settledAt": 0,
-      "error": {
-        "category": "Error",
-        "message": "Remote file changes require a newer Quirky server. Update the HUB and try again.",
-        "isRpcDeliveryUnknown": false
-      }
     },
     "a947768bc0ed": {
       "status": "rejected",
@@ -650,7 +650,7 @@
           "sender": ["0fbf6809f292"],
           "payloads": ["d08f74d65ee6"],
           "settlements": {
-            "capture": "9ce0c7923c41"
+            "capture": "7aa321708c59"
           },
           "state": "518ec57c381a",
           "effects": []
@@ -662,7 +662,7 @@
           "sender": ["b5476ba1aabe"],
           "payloads": ["d08f74d65ee6"],
           "settlements": {
-            "capture": "9ce0c7923c41"
+            "capture": "7aa321708c59"
           },
           "state": "518ec57c381a",
           "effects": []
@@ -674,7 +674,7 @@
           "sender": ["7f0419402be8"],
           "payloads": ["d08f74d65ee6"],
           "settlements": {
-            "capture": "9ce0c7923c41"
+            "capture": "7aa321708c59"
           },
           "state": "518ec57c381a",
           "effects": []

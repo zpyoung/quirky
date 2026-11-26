@@ -16,6 +16,10 @@ import {
 } from './left-sidebar-appearance'
 import { DEFAULT_SOURCE_CONTROL_GROUP_ORDER } from './source-control-group-order'
 import { DESKTOP_TERMINAL_SCROLLBACK_ROWS_DEFAULT } from './terminal-scrollback-policy'
+import {
+  DEFAULT_TERMINAL_THEME_DARK,
+  DEFAULT_TERMINAL_THEME_LIGHT
+} from './terminal-theme-selection'
 
 export function buildDefaultSettings(args: {
   workspaceDir: string
@@ -80,12 +84,13 @@ export function buildDefaultSettings(args: {
     terminalCursorStyle: 'block',
     terminalCursorStyleDefaultedToBlock: true,
     terminalCursorBlink: true,
-    terminalThemeDark: 'Ghostty Default Style Dark',
-    terminalDividerColorDark: '#3f3f46',
+    terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
+    terminalDividerColorDark: '#24262c',
     terminalUseSeparateLightTheme: true,
-    terminalThemeLight: 'Builtin Tango Light',
+    terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT,
     terminalCustomThemes: [],
-    terminalDividerColorLight: '#d4d4d8',
+    terminalDividerColorLight: '#e3e5ea',
+    terminalGraphiteDefaultsMigrated: true,
     terminalInactivePaneOpacity: args.terminalInactivePaneOpacity,
     terminalActivePaneOpacity: 1,
     terminalPaneOpacityTransitionMs: 140,

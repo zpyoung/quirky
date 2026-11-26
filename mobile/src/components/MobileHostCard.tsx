@@ -45,10 +45,6 @@ export function MobileHostCard(props: {
     !credentialMissing && !credentialUnavailable && connected
       ? mobileConnectionPathLabel(props.path)
       : null
-  const discoveryHint =
-    props.verdict.kind === 'unreachable' && !props.host.relay
-      ? 'Update desktop Quirky and sign in to connect from anywhere'
-      : null
   const credentialHint = credentialMissing
     ? 'Tap to re-pair with your desktop'
     : credentialUnavailable
@@ -63,7 +59,6 @@ export function MobileHostCard(props: {
     statusLabel,
     connectionPathLabel?.replace(' · ', ' via '),
     connected ? worktreeSummary?.replace(' · ', ', ') : null,
-    discoveryHint,
     credentialHint,
     verdictDetail
   ]
@@ -111,11 +106,6 @@ export function MobileHostCard(props: {
           {connected && worktreeSummary ? (
             <Text style={styles.worktreeMetaText} numberOfLines={1}>
               {worktreeSummary}
-            </Text>
-          ) : null}
-          {discoveryHint ? (
-            <Text style={styles.discoveryHint} numberOfLines={2}>
-              {discoveryHint}
             </Text>
           ) : null}
           {credentialHint ? (

@@ -180,7 +180,6 @@ function readAtRest(store: AgentModelCatalogStore, record: AgentSessionRecord) {
     child: null,
     params: { provider: 'claude' },
     journal: {
-      threadGoal: () => null,
       visitItems: () => {},
       submissions: () => [],
       contextUsage: () => null,

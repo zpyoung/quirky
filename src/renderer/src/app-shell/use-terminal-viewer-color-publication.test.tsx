@@ -40,8 +40,8 @@ describe('useTerminalViewerColorPublication', () => {
   it('publishes a theme change with no terminal pane open, to main and to paired hosts', () => {
     const { unmount } = renderHook(() => useTerminalViewerColorPublication())
     expect(mocks.setColors).toHaveBeenLastCalledWith({
-      foreground: '#ffffff',
-      background: '#282c34'
+      foreground: '#eceef2',
+      background: '#16171b'
     })
 
     act(() => {
@@ -51,7 +51,7 @@ describe('useTerminalViewerColorPublication', () => {
 
     expect(mocks.publishTerminalViewAttributes).toHaveBeenCalledTimes(2)
     expect(mocks.setColors).toHaveBeenLastCalledWith({
-      foreground: '#2e3434',
+      foreground: '#1b1d22',
       background: '#ffffff'
     })
     unmount()

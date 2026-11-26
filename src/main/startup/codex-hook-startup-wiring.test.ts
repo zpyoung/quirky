@@ -12,7 +12,7 @@ const fixture = vi.hoisted(() => {
   }
 })
 
-vi.mock('electron', () => ({ app: fixture.app, nativeTheme: {} }))
+vi.mock('electron', () => ({ app: fixture.app, nativeTheme: { on: vi.fn() } }))
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: false } }))
 vi.mock('../codex/codex-hook-reconcile', () => ({ startCodexHooks: fixture.startCodexHooks }))
 vi.mock('../agent-hooks/local-agent-cli-presence', () => ({

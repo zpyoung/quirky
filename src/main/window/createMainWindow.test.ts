@@ -443,7 +443,7 @@ describe('createMainWindow', () => {
       expect(browserWindowOptions.vibrancy).toBeUndefined()
       expect(browserWindowOptions.transparent).toBeUndefined()
       expect(browserWindowOptions.backgroundMaterial).toBe(expected.backgroundMaterial)
-      expect(browserWindowOptions.backgroundColor).toBe('#ffffff')
+      expect(browserWindowOptions.backgroundColor).toBe('#eef0f3')
     }
   })
 

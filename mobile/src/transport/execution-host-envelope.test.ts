@@ -1,73 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
 import {
-  reachableServerClients,
   relaysToServers,
   scopeRpcClientToExecutionHost,
   workspaceRouteExecutionHost
 } from './execution-host-scoped-rpc-client'
-import { MobileRelayRpcStreams } from './mobile-relay-rpc-streams'
 import type { RpcClient } from './rpc-client'
 import { directWire, directWireRegistry, directWireTracker } from './direct-rpc-wire-test-harness'
 import type { RpcResponse } from './types'
 
 const SERVER = 'runtime:env-1' as const
-
-type Frame = { id: string; method: string; params?: unknown; envelope?: unknown }
-
-describe('executionHost on the envelope', () => {
-  it('does not let a local terminal stream evict a same-handle stream on a server', async () => {
-    const sent: Frame[] = []
-    let id = 0
-    const streams = new MobileRelayRpcStreams({
-      nextId: () => `relay-${++id}`,
-      sendFrame: (frame) => {
-        sent.push(frame)
-        return true
-      },
-      waitForConnected: async () => {}
-    })
-    const params = { terminal: 't1', client: { id: 'phone', type: 'mobile' } }
-    const disposeServer = streams.subscribe('terminal.subscribe', params, () => {}, {
-      envelope: { executionHost: SERVER }
-    })
-    await vi.waitFor(() => expect(sent).toHaveLength(1))
-    streams.subscribe('terminal.subscribe', params, () => {})
-    await vi.waitFor(() => expect(sent).toHaveLength(2))
-    disposeServer()
-    expect(sent.at(-1)).toMatchObject({
-      method: 'terminal.unsubscribe',
-      envelope: { executionHost: SERVER }
-    })
-  })
-})
-
-describe('a relay stream slot', () => {
-  it('reads an envelope in any key order as one slot', async () => {
-    const sent: Frame[] = []
-    let id = 0
-    const streams = new MobileRelayRpcStreams({
-      nextId: () => `relay-${++id}`,
-      sendFrame: (frame) => {
-        sent.push(frame)
-        return true
-      },
-      waitForConnected: async () => {}
-    })
-    const params = { terminal: 't1', client: { id: 'phone', type: 'mobile' } }
-    const disposeOlder = streams.subscribe('terminal.subscribe', params, () => {}, {
-      envelope: { executionHost: SERVER, trace: 't' }
-    })
-    await vi.waitFor(() => expect(sent).toHaveLength(1))
-    streams.subscribe('terminal.subscribe', params, () => {}, {
-      envelope: { trace: 't', executionHost: SERVER }
-    })
-    await vi.waitFor(() => expect(sent).toHaveLength(2))
-    // The newer sibling already holds the slot on the server, so the older one sends no unsubscribe.
-    disposeOlder()
-    expect(sent.map((frame) => frame.method)).toEqual(['terminal.subscribe', 'terminal.subscribe'])
-  })
-})
 
 describe('a server workspace call on the direct wire', () => {
   it('reaches the desktop as the same top-level executionHost frame as before the envelope', async () => {
@@ -157,20 +99,5 @@ describe('scopeRpcClientToExecutionHost', () => {
     expect(relaysToServers(scopeRpcClientToExecutionHost(fakeClient(false), SERVER), relays)).toBe(
       false
     )
-  })
-
-  it('offers only the servers the desktop can relay to now, each as its scoped view', () => {
-    const client = fakeClient()
-    const relays = [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY]
-    const hosts = [
-      { hostId: SERVER, relay: 'ready' },
-      { hostId: 'runtime:old', relay: 'update-needed' },
-      { hostId: 'runtime:down', relay: 'unavailable' }
-    ] as const
-    const clients = reachableServerClients(client, relays, hosts)
-    expect([...clients.keys()]).toEqual([SERVER])
-    expect(clients.get(SERVER)).toBe(scopeRpcClientToExecutionHost(client, SERVER))
-    expect(reachableServerClients(client, [], hosts).size).toBe(0)
-    expect(reachableServerClients(fakeClient(false), relays, hosts).size).toBe(0)
   })
 })

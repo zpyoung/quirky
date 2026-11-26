@@ -31,7 +31,7 @@ export const styles = StyleSheet.create({
     textDecorationLine: 'line-through'
   },
   link: {
-    color: colors.accentBlue,
+    color: colors.accent,
     textDecorationLine: 'underline'
   },
   inlineCode: {
@@ -43,7 +43,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 4
   },
   inlineCodeLink: {
-    color: colors.accentBlue,
+    color: colors.accent,
     textDecorationLine: 'underline'
   },
   quote: {

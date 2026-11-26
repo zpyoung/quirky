@@ -11,13 +11,13 @@ export const CLAUDE_STRUCTURED_AGENT: DirectoryAccountAgentDefinition = {
     // By forking the kept conversation; see the adapter's forkForRewind.
     rewind: true,
     compact: true,
-    threadGoal: false,
     // A session at rest still reports the usage its journal recorded.
     contextUsage: true,
     imagePrompts: true,
     steering: 'inject',
     // The permission mode is a launch flag the CLI enforces.
-    approvalEnforcement: 'provider'
+    approvalEnforcement: 'provider',
+    planMode: true
   },
   restingOptions: {
     acceptsKey: isClaudeStructuredOptionKey,

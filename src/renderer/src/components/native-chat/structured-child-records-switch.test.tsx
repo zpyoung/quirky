@@ -68,7 +68,7 @@ vi.mock('@/components/sidebar/CacheTimer', () => ({
 }))
 
 import { StructuredAgentSessionStatusBridge } from './StructuredAgentSessionStatusBridge'
-import { NativeChatStructuredSessionStatus } from './NativeChatStructuredSessionStatus'
+import { BackgroundTasksPanel } from '@/components/chat/session/BackgroundTasksPanel'
 import { structuredSessionBackgroundTasksView } from '../../../../shared/structured-session-background-tasks-view'
 import { CompactAgentRow } from '@/components/sidebar/worktree-card-compact-agent-row'
 import { buildSubagentChildRows } from '@/components/sidebar/worktree-subagent-child-rows'
@@ -189,7 +189,7 @@ function Surfaces(props: { roster: AgentSessionBackgroundTaskState | null }): Re
   return (
     <TooltipProvider>
       <StructuredAgentSessionStatusBridge />
-      <NativeChatStructuredSessionStatus
+      <BackgroundTasksPanel
         sessionId={tab.entityId}
         paneKey={PANE_KEY}
         isVisible

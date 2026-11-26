@@ -489,6 +489,14 @@
         }
       }
     },
+    "d09ceb6acab9": {
+      "name": "device-store.setItem",
+      "ordinal": 3,
+      "value": {
+        "key": "quirky:pushDismissalWatermarks:v1",
+        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-1\\\"]\",\"seq\":7,\"expiresAt\":1767312000000}]"
+      }
+    },
     "ea1440778921": {
       "name": "notifications.getMissedSince#1",
       "ordinal": 1,
@@ -540,14 +548,6 @@
       "value": {
         "$rpc": "undefined"
       }
-    },
-    "fa03fdca3d1d": {
-      "name": "device-store.setItem",
-      "ordinal": 3,
-      "value": {
-        "key": "quirky:pushDismissalWatermarks:v1",
-        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-1\\\"]\",\"seq\":7,\"expiresAt\":1767312000000}]"
-      }
     }
   },
   "recording": {
@@ -574,7 +574,7 @@
             "catchup": "eb79a9b3682a"
           },
           "state": "cf9c28129225",
-          "effects": ["fa03fdca3d1d", "6cfa895b17c4"]
+          "effects": ["d09ceb6acab9", "6cfa895b17c4"]
         }
       },
       {

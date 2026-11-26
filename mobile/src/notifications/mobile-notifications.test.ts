@@ -3,7 +3,6 @@ import { subscribeToDesktopNotifications } from './mobile-notifications'
 import { dismissHostPushNotification } from './push-socket-dismissal'
 import { requestNotificationCatchup } from './push-dismissal-reconciliation'
 import { RpcClientStreamRegistry } from '../transport/rpc-client-stream-registry'
-import { MobileRelayRpcStreams } from '../transport/mobile-relay-rpc-streams'
 import type { RpcClient } from '../transport/rpc-client'
 import type { RpcResponse } from '../transport/types'
 
@@ -78,27 +77,6 @@ function registryClient() {
   }
 }
 
-/** The real relay stream manager, the other transport a paired phone reaches a host through. */
-function relayClient() {
-  const sent: SentFrame[] = []
-  let id = 0
-  const streams = new MobileRelayRpcStreams({
-    nextId: () => `relay-${++id}`,
-    sendFrame: (frame) => {
-      sent.push(readSentFrame(frame))
-      return true
-    },
-    waitForConnected: async () => {}
-  })
-  return {
-    streams,
-    sent,
-    ...transportClient((method, params, onData, options) =>
-      streams.subscribe(method, params, onData, options)
-    )
-  }
-}
-
 /** Every `notifications.unsubscribe` the phone put on the wire, by either route. */
 function notificationReleases(rpc: {
   sent: SentFrame[]
@@ -163,7 +141,7 @@ describe('subscribeToDesktopNotifications', () => {
     expect(dismissHostPushNotification).toHaveBeenCalledWith(dismissal, 'host-1')
   })
 
-  it('releases the host stream once a ready lands after the disposer ran (direct)', () => {
+  it('releases the host stream once a ready lands after the disposer ran', () => {
     const rpc = registryClient()
     const stop = subscribeToDesktopNotifications(rpc.client, 'host-1')
     const subscribeFrame = rpc.sent[0]!
@@ -176,36 +154,10 @@ describe('subscribeToDesktopNotifications', () => {
     expect(notificationReleases(rpc)).toEqual([{ subscriptionId: 'sub-1' }])
   })
 
-  it('releases the host stream once a ready lands after the disposer ran (relay)', async () => {
-    const rpc = relayClient()
-    const stop = subscribeToDesktopNotifications(rpc.client, 'host-1')
-    await Promise.resolve()
-    const subscribeFrame = rpc.sent[0]!
-    expect(subscribeFrame.method).toBe('notifications.subscribe')
-
-    stop()
-    rpc.streams.handleResponse(readyReply(subscribeFrame.id, 'sub-1'))
-
-    expect(requestNotificationCatchup).not.toHaveBeenCalled()
-    expect(notificationReleases(rpc)).toEqual([{ subscriptionId: 'sub-1' }])
-  })
-
-  it('closes the host stream once when the disposer runs after the ready reply (direct)', async () => {
+  it('closes the host stream once when the disposer runs after the ready reply', async () => {
     const rpc = registryClient()
     const stop = subscribeToDesktopNotifications(rpc.client, 'host-1')
     rpc.registry.handleResponse(readyReply(rpc.sent[0]!.id, 'sub-1'))
-
-    stop()
-    await Promise.resolve()
-
-    expect(notificationReleases(rpc)).toEqual([{ subscriptionId: 'sub-1' }])
-  })
-
-  it('closes the host stream once when the disposer runs after the ready reply (relay)', async () => {
-    const rpc = relayClient()
-    const stop = subscribeToDesktopNotifications(rpc.client, 'host-1')
-    await Promise.resolve()
-    rpc.streams.handleResponse(readyReply(rpc.sent[0]!.id, 'sub-1'))
 
     stop()
     await Promise.resolve()

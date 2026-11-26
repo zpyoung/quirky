@@ -37,6 +37,7 @@ import {
 import { lookupQuirkyAgentSession } from '../orchestration/structured-session-mail-address'
 import { readAgentSessionRecordStore } from '../orchestration/structured-session-lineage'
 import { structuredWorkerHostScope } from '../structured-worker-identity'
+import { AgentSessionViewError } from '../../native-chat/agent-session-wire/agent-session-view-error'
 import type { RpcRequest } from './core'
 
 type CallerParam = 'from' | 'terminal' | 'callerTerminalHandle'
@@ -65,6 +66,19 @@ export const ORCHESTRATION_CALLER_PARAM: Readonly<Record<string, CallerParam>> =
   'orchestration.workerStart': 'from'
 }
 
+/**
+ * Methods that act as the calling session but name no party param: `quirky view` writes into the
+ * chat it runs in. A session claim on one is resolved like any other, and a refusal reaches the
+ * CLI as `session-refused`. With no claim they resolve nothing, and the method refuses itself.
+ */
+export const SESSION_CALLER_ONLY_METHODS: ReadonlySet<string> = new Set([
+  'agentSession.view.open',
+  'agentSession.view.update',
+  'agentSession.view.patch',
+  'agentSession.view.close',
+  'agentSession.view.get'
+])
+
 export type OrchestrationRequestRoute = {
   /** Set only by the paired WebSocket route: the request came from another host's client. */
   pairedDeviceId?: string
@@ -83,7 +97,10 @@ const NO_EFFECTS = { effectsApplied: false } as const
  * caller. Synchronous, so every other request, terminal callers included, takes no extra async hop.
  */
 export function needsOrchestrationCallerResolution(request: RpcRequest): boolean {
-  if (!request.method.startsWith('orchestration.')) {
+  if (
+    !request.method.startsWith('orchestration.') &&
+    !SESSION_CALLER_ONLY_METHODS.has(request.method)
+  ) {
     return false
   }
   return (
@@ -105,6 +122,24 @@ function declaredSessionAddress(request: RpcRequest): string | undefined {
 
 /** Only for a request `needsOrchestrationCallerResolution` accepts. Throws the refusal, if any. */
 export async function resolveOrchestrationSessionCaller(
+  runtime: QuirkyRuntimeService,
+  request: RpcRequest,
+  route: OrchestrationRequestRoute | undefined
+): Promise<ResolvedOrchestrationRequest> {
+  if (!SESSION_CALLER_ONLY_METHODS.has(request.method)) {
+    return resolveSessionClaim(runtime, request, route)
+  }
+  try {
+    return await resolveSessionClaim(runtime, request, route)
+  } catch (error) {
+    if (error instanceof OrchestrationError) {
+      throw new AgentSessionViewError('session-refused', error.message)
+    }
+    throw error
+  }
+}
+
+async function resolveSessionClaim(
   runtime: QuirkyRuntimeService,
   request: RpcRequest,
   route: OrchestrationRequestRoute | undefined

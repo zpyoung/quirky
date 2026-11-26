@@ -34,6 +34,7 @@ import { EVENTS_COMMAND_SPECS } from './events'
 import { PUBLIC_CLI_COMMAND_SPECS } from './public-cli'
 import { buildGeneratedCommands } from '../public-cli/generated-commands'
 import { PUBLIC_METHOD_SPECS } from '../../shared/public-rpc/public-methods'
+import { VIEW_COMMAND_SPECS } from './view'
 
 const HAND_WRITTEN_COMMAND_SPECS: CommandSpec[] = [
   ...CORE_COMMAND_SPECS,
@@ -65,6 +66,7 @@ const HAND_WRITTEN_COMMAND_SPECS: CommandSpec[] = [
   ...LEDGER_COMMAND_SPECS,
   ...SEARCH_COMMAND_SPECS,
   ...PROFILE_STATE_COMMAND_SPECS,
+  ...VIEW_COMMAND_SPECS,
   ...PUBLIC_CLI_COMMAND_SPECS,
   ...EVENTS_COMMAND_SPECS,
   ...CHAT_COMMAND_SPECS,

@@ -4,6 +4,7 @@
     "LICENSE",
     "CHANGELOG.md",
     "docs/quirk/specs/2026-11-24-orca-based-quirky/**",
+  "docs/quirk/specs/2026-11-25-native-chat-port/**",
     "src/main/import-from-orca/**",
     "src/shared/repo-config-paths.ts",
     "src/shared/repo-config-paths.test.ts",
@@ -28,20 +29,22 @@
     "onorca-cloud",
     "apps.apple.com/us/app/orca-ide",
     "no-orca-strings",
-    "Based on Orca",
+    "Includes code from Orca",
     "Orca Dev",
     "importFromOrca",
     "ImportFromOrca",
-    "import-from-orca"
+    "import-from-orca",
+    "orca.boot()",
+    "<p>orca</p>"
   ],
   "creditLines": [
     {
       "path": "README.md",
-      "match": "Based on Orca"
+      "match": "Includes code from Orca"
     },
     {
       "path": "src/main/startup/gpu-lifecycle.ts",
-      "match": "Based on Orca"
+      "match": "Includes code from Orca"
     }
   ]
 }

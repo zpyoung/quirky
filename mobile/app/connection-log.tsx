@@ -57,7 +57,7 @@ export default function NativeConnectionLogRoute() {
     connState: state
   })
   const reconnectAttempts = useReconnectAttempt(selected?.id)
-  const { activePath, pendingPath } = useConnectionPathStatus(selected?.id)
+  const { activePath } = useConnectionPathStatus(selected?.id)
 
   useEffect(() => {
     if (selectedId) {
@@ -90,7 +90,6 @@ export default function NativeConnectionLogRoute() {
       state={state}
       reconnectAttempts={reconnectAttempts}
       activePath={activePath}
-      pendingPath={pendingPath}
       entries={entries}
       writeClipboard={(report) => Clipboard.setStringAsync(report)}
       onBack={() => router.back()}

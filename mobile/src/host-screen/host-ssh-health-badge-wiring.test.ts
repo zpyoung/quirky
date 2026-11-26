@@ -10,7 +10,7 @@ vi.mock('../cache/worktree-cache', () => ({
 }))
 vi.mock('../cache/repo-cache', () => ({ setCachedRepos: () => {} }))
 
-import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import { FakeSession } from '../transport/rpc-session-test-fake'
 import type { RpcResponse } from '../transport/types'
 import type { Worktree } from '../worktree/workspace-list-types'
 import { useHostDisplayWorktrees, useResolvedHostPlatform } from './use-host-display-worktrees'

@@ -80,10 +80,9 @@ function buildController(options: SheetOptions) {
         sharesOtherClientFilter: true,
         newCardStyle: options.newCardStyle
       },
-      hostLabelById: new Map(),
+      hostLabelById: new Map([['ssh:box', 'Box']]),
       hostPlatform: null,
       repoHostIdByRepoId: new Map([['r2', 'ssh:box']]),
-      serverWorkspaces: { hosts: [{ hostId: 'runtime:vm', label: 'VM' }], worktrees: [] },
       setShowWorkspaceOptions: vi.fn(),
       showWorkspaceOptions: true,
       worktrees: options.hasFolderRow ? [{ workspaceKind: 'folder-workspace' }] : []
@@ -156,12 +155,12 @@ describe('the phone Workspace options sheet', () => {
       'Filters',
       'Hide sleeping',
       'Except default branch',
-      'Hide other-client workspaces',
       'Hide detached HEAD'
     ]) {
       expect(shown).toContain(label)
     }
     expect(shown).not.toContain('Card display')
+    expect(shown).not.toContain('Hide other-client workspaces')
     // The choices themselves live on each option's page.
     expect(shown).not.toContain('Agent activity layout')
   })
@@ -211,8 +210,8 @@ describe('the phone Workspace options sheet', () => {
     expect(settings.setProjectOrderBy).toHaveBeenCalledWith('recent')
     back()
     press('Hosts, All hosts')
-    press('VM')
-    expect(settings.setFilter).toHaveBeenCalledWith('visibleHostIds', ['runtime:vm'])
+    press('Box')
+    expect(settings.setFilter).toHaveBeenCalledWith('visibleHostIds', ['ssh:box'])
     back()
     press('Projects, All projects')
     press('docs')

@@ -26,7 +26,7 @@ function resolveRowContent(row: SourceRow): RowContent {
       }
     case 'create-branch':
       return {
-        icon: <GitBranch size={16} color={colors.accentBlue} />,
+        icon: <GitBranch size={16} color={colors.accent} />,
         title: `Create branch "${row.name}"`,
         subtitle: 'New branch'
       }

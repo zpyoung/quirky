@@ -4,6 +4,14 @@
   "family": "notifications.desktop-stream",
   "namedDeltas": [],
   "values": {
+    "042c50488e5c": {
+      "name": "device-store.setItem",
+      "ordinal": 6,
+      "value": {
+        "key": "quirky:pushDismissalWatermarks:v1",
+        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-2\\\"]\",\"seq\":8,\"expiresAt\":1767312000000}]"
+      }
+    },
     "18a100fb6bae": {
       "name": "notifications.getMissedSince#1",
       "ordinal": 2,
@@ -85,14 +93,6 @@
         "identifier": "tray-2"
       }
     },
-    "4924583cde9d": {
-      "name": "device-store.setItem",
-      "ordinal": 6,
-      "value": {
-        "key": "quirky:pushDismissalWatermarks:v1",
-        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-2\\\"]\",\"seq\":8,\"expiresAt\":1767312000000}]"
-      }
-    },
     "5359579cc62d": {
       "running": true
     },
@@ -154,6 +154,14 @@
       "ordinal": 7,
       "json": "{\"id\":\"frame-3\",\"deviceToken\":\"recording-device\",\"method\":\"notifications.unsubscribe\",\"params\":{\"subscriptionId\":\"sub-1\"}}"
     },
+    "b2d895fc6dcd": {
+      "name": "device-store.setItem",
+      "ordinal": 4,
+      "value": {
+        "key": "quirky:pushDismissalWatermarks:v1",
+        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-1\\\"]\",\"seq\":7,\"expiresAt\":1767312000000}]"
+      }
+    },
     "e074c0b6fa0a": {
       "name": "notifications.getMissedSince#1",
       "ordinal": 3,
@@ -177,14 +185,6 @@
       "ordinal": 5,
       "value": {
         "identifier": "tray-1"
-      }
-    },
-    "ff11f542ada5": {
-      "name": "device-store.setItem",
-      "ordinal": 4,
-      "value": {
-        "key": "quirky:pushDismissalWatermarks:v1",
-        "value": "[{\"key\":\"[\\\"Yw3NKWbEM2aRElRI\\\",\\\"epoch-1\\\",\\\"note-1\\\"]\",\"seq\":7,\"expiresAt\":1767312000000}]"
       }
     }
   },
@@ -224,7 +224,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -236,7 +236,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "4924583cde9d", "45aca32cac62"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "042c50488e5c", "45aca32cac62"]
         }
       },
       {
@@ -249,7 +249,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "4924583cde9d", "45aca32cac62"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "042c50488e5c", "45aca32cac62"]
         }
       },
       {
@@ -262,7 +262,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "4924583cde9d", "45aca32cac62"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "042c50488e5c", "45aca32cac62"]
         }
       },
       {
@@ -274,7 +274,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "6c8af7ab87ce"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "6c8af7ab87ce"]
         }
       },
       {
@@ -287,7 +287,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "6c8af7ab87ce"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "6c8af7ab87ce"]
         }
       },
       {
@@ -300,7 +300,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "6c8af7ab87ce"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "6c8af7ab87ce"]
         }
       },
       {
@@ -312,7 +312,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "240eb3112b9a"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "240eb3112b9a"]
         }
       },
       {
@@ -325,7 +325,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "240eb3112b9a"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "240eb3112b9a"]
         }
       },
       {
@@ -338,7 +338,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819", "240eb3112b9a"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819", "240eb3112b9a"]
         }
       },
       {
@@ -350,7 +350,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -363,7 +363,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -376,7 +376,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -388,7 +388,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -401,7 +401,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -414,7 +414,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -426,7 +426,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -439,7 +439,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -452,7 +452,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -464,7 +464,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -477,7 +477,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -490,7 +490,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -502,7 +502,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -515,7 +515,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -528,7 +528,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -540,7 +540,7 @@
             "start": "eb79a9b3682a"
           },
           "state": "5359579cc62d",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -553,7 +553,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       },
       {
@@ -566,7 +566,7 @@
             "stop": "eb79a9b3682a"
           },
           "state": "a0b2bcfcde77",
-          "effects": ["ff11f542ada5", "f79cc42f0819"]
+          "effects": ["b2d895fc6dcd", "f79cc42f0819"]
         }
       }
     ]

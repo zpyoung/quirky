@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { findDockComposerTextarea, focusPaneOrDockComposer } from './dock-composer-focus-redirect'
+import { findDockComposerInput, focusPaneOrDockComposer } from './dock-composer-focus-redirect'
 
 function createPaneSurface(): {
   pane: HTMLDivElement
@@ -17,6 +17,13 @@ function createPaneSurface(): {
   return { pane, surface }
 }
 
+function createDockInput(editable = true): HTMLDivElement {
+  const input = document.createElement('div')
+  input.className = 'cm-content'
+  input.setAttribute('contenteditable', String(editable))
+  return input
+}
+
 function appendDock(pane: HTMLElement): HTMLDivElement {
   const dock = document.createElement('div')
   dock.dataset.terminalDock = ''
@@ -28,43 +35,42 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
-describe('findDockComposerTextarea', () => {
+describe('findDockComposerInput', () => {
   it('finds the enabled composer in the surface pane', () => {
     const { pane, surface } = createPaneSurface()
-    const composer = document.createElement('textarea')
+    const composer = createDockInput()
     appendDock(pane).appendChild(composer)
 
-    expect(findDockComposerTextarea(surface)).toBe(composer)
+    expect(findDockComposerInput(surface)).toBe(composer)
   })
 
   it('returns null when the pane has no dock', () => {
     const { surface } = createPaneSurface()
 
-    expect(findDockComposerTextarea(surface)).toBeNull()
+    expect(findDockComposerInput(surface)).toBeNull()
   })
 
   it('returns null when the only composer is disabled', () => {
     const { pane, surface } = createPaneSurface()
-    const composer = document.createElement('textarea')
-    composer.disabled = true
+    const composer = createDockInput(false)
     appendDock(pane).appendChild(composer)
 
-    expect(findDockComposerTextarea(surface)).toBeNull()
+    expect(findDockComposerInput(surface)).toBeNull()
   })
 
   it('returns null while the dock is in passthrough mode', () => {
     const { pane, surface } = createPaneSurface()
     const dock = appendDock(pane)
     dock.dataset.terminalDockPassthrough = ''
-    dock.appendChild(document.createElement('textarea'))
+    dock.appendChild(createDockInput())
 
-    expect(findDockComposerTextarea(surface)).toBeNull()
+    expect(findDockComposerInput(surface)).toBeNull()
   })
 
   it('returns null when the surface has no pane ancestor', () => {
     const surface = document.createElement('textarea')
 
-    expect(findDockComposerTextarea(surface)).toBeNull()
+    expect(findDockComposerInput(surface)).toBeNull()
   })
 
   it('does not match the interactive card input', () => {
@@ -74,14 +80,14 @@ describe('findDockComposerTextarea', () => {
     overlay.appendChild(document.createElement('input'))
     appendDock(pane).appendChild(overlay)
 
-    expect(findDockComposerTextarea(surface)).toBeNull()
+    expect(findDockComposerInput(surface)).toBeNull()
   })
 })
 
 describe('focusPaneOrDockComposer', () => {
   it('prefers the enabled dock composer over the terminal', () => {
     const { pane } = createPaneSurface()
-    const composer = document.createElement('textarea')
+    const composer = createDockInput()
     const terminal = { focus: vi.fn() }
     appendDock(pane).appendChild(composer)
     const composerFocus = vi.spyOn(composer, 'focus')
@@ -105,7 +111,7 @@ describe('focusPaneOrDockComposer', () => {
     const { pane } = createPaneSurface()
     const dock = appendDock(pane)
     dock.dataset.terminalDockPassthrough = ''
-    dock.appendChild(document.createElement('textarea'))
+    dock.appendChild(createDockInput())
     const terminal = { focus: vi.fn() }
 
     focusPaneOrDockComposer({ container: pane, terminal })

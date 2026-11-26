@@ -30,24 +30,24 @@ const DEFAULT_FOREGROUND: ParsedCssColor = { rgb: [0xff, 0xff, 0xff], alpha: 0xf
 const DEFAULT_BACKGROUND: ParsedCssColor = { rgb: [0x00, 0x00, 0x00], alpha: 0xff }
 const DEFAULT_CURSOR: ParsedCssColor = { rgb: [0xff, 0xff, 0xff], alpha: 0xff }
 
-// xterm's DEFAULT_ANSI_COLORS first 16 entries (browser/Types.ts).
+// Quirky Graphite Dark's ANSI, the palette a pane paints until its theme is applied.
 const DEFAULT_ANSI_16: readonly string[] = [
-  '#2e3436',
-  '#cc0000',
-  '#4e9a06',
-  '#c4a000',
-  '#3465a4',
-  '#75507b',
-  '#06989a',
-  '#d3d7cf',
-  '#555753',
-  '#ef2929',
-  '#8ae234',
-  '#fce94f',
-  '#729fcf',
-  '#ad7fa8',
-  '#34e2e2',
-  '#eeeeec'
+  '#101114',
+  '#ef6b73',
+  '#4cc38a',
+  '#e5b454',
+  '#6fb3ff',
+  '#bd8ee8',
+  '#63c5cf',
+  '#c5c9d2',
+  '#7c828d',
+  '#ff8b93',
+  '#70dba5',
+  '#f5ce7e',
+  '#9fcbff',
+  '#d4acf4',
+  '#8ddce3',
+  '#eceef2'
 ]
 
 const THEME_ANSI_KEYS: readonly (keyof ITheme)[] = [

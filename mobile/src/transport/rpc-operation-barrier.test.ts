@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RpcResponse } from './types'
-import { FakeSession } from './mobile-endpoint-supervisor-test-fakes'
+import { FakeSession } from './rpc-session-test-fake'
 import { isRpcDeliveryUnknown, markRpcDeliveryUnknown } from './rpc-delivery-ambiguity'
 import { interpretAtRpcBarrier, startRpcOperation } from './rpc-operation'
 import {

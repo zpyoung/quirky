@@ -6,9 +6,9 @@ export const PLUGIN_MARKETPLACE_FILENAME = 'quirky-marketplace.json'
 export const PLUGIN_MARKETPLACE_ENTRY_LIMIT = 2_048
 export const PLUGIN_MARKETPLACE_CATEGORY_LIMIT = 16
 
-export const OFFICIAL_PLUGIN_PUBLISHER = 'stablyai'
+export const OFFICIAL_PLUGIN_PUBLISHER = 'zpyoung'
 export const OFFICIAL_PLUGIN_ID_PREFIX = 'quirky-'
-export const OFFICIAL_MARKETPLACE_OWNER = 'stablyai'
+export const OFFICIAL_MARKETPLACE_OWNER = 'zpyoung'
 export const OFFICIAL_MARKETPLACE_REPOSITORY = 'quirky-plugins'
 
 // Why: theme/icon/skill contributions were deferred, so `contributes` now

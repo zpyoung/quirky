@@ -125,7 +125,23 @@ export function settleAttentionRemovedBy(
   remove: () => void,
   options?: { settleFlags?: boolean }
 ): void {
-  const before = get()
+  // Why a copy: inside an agent-status batch `get()` is the staged state, which `set()` mutates in place.
+  const {
+    unreadTerminalTabs,
+    unreadTerminalPanes,
+    unreadAgentCompletionPanes,
+    tabsByWorktree,
+    unifiedTabsByWorktree,
+    terminalLayoutsByTabId
+  } = get()
+  const before: AttentionRemovalSnapshot = {
+    unreadTerminalTabs,
+    unreadTerminalPanes,
+    unreadAgentCompletionPanes,
+    tabsByWorktree,
+    unifiedTabsByWorktree,
+    terminalLayoutsByTabId
+  }
   remove()
   const removed = collectRemovedAttention(before, get())
   if (!removed) {

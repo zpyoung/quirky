@@ -207,14 +207,12 @@
       "invariant": "A retained transcript cursor fingerprint contains only bytes actually consumed at that cursor. A larger in-place rewrite during publication must be delivered, and subsequent ordinary appends arrive once. Closing or failing a test leaves no active watcher.",
       "oracle": "Synchronous larger rewrites during append, initial snapshot and replacement snapshot callbacks deliver new exactly once, followed by followup exactly once. A 4 MiB read retains an independent 64-byte backing allocation. Hidden Electron reproduces the same ordering at snapshot IPC publication and asserts the new rendered text replaces the old conversation.",
       "commands": [
-        "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/main/native-chat/transcript-watch-inplace-drain-race.test.ts src/main/native-chat/transcript-file-version.test.ts src/main/native-chat/transcript-watch.test.ts --maxWorkers=2",
-        "QUIRKY_BACKGROUND_LAUNCH=1 pnpm run test:e2e tests/e2e/native-chat-inplace-drain-race.spec.ts --workers=1"
+        "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/main/native-chat/transcript-watch-inplace-drain-race.test.ts src/main/native-chat/transcript-file-version.test.ts src/main/native-chat/transcript-watch.test.ts --maxWorkers=2"
       ],
       "testFiles": [
         "src/main/native-chat/transcript-watch-inplace-drain-race.test.ts",
         "src/main/native-chat/transcript-file-version.test.ts",
-        "src/main/native-chat/transcript-watch.test.ts",
-        "tests/e2e/native-chat-inplace-drain-race.spec.ts"
+        "src/main/native-chat/transcript-watch.test.ts"
       ],
       "assertionRefs": [
         {
@@ -224,12 +222,6 @@
         {
           "file": "src/main/native-chat/transcript-file-version.test.ts",
           "assertions": ["owns only the final 64 bytes of a large read"]
-        },
-        {
-          "file": "tests/e2e/native-chat-inplace-drain-race.spec.ts",
-          "assertions": [
-            "renders a larger transcript rewrite during snapshot publication, then ordinary appends"
-          ]
         }
       ],
       "evidenceRuns": [
@@ -289,25 +281,18 @@
       "invariant": "A prompt occurrence leaves the input region only when an accepted reply answers it (a current host's provider acknowledgment, or an older host's whole-write acceptance as before) or the user collapses it to a strip above the composer, which writes nothing and keeps the card mounted with its partial answer; status-backed occurrences are told apart by the host wait's start, so view toggles and remounts preserve them while real clear/replacement supersedes them, and a transcript-only one is dropped when the view stops observing it; obsolete results cannot change replacements; selector groups wait for complete writes before pacing; refusal or unknown handoff never causes replay; a card retires an unsubmitted composer send without writing under it or losing its text, and the hidden composer cannot send or interrupt; Collapse or Escape folds a card without writing, never during an in-flight answer, and a new occurrence shows expanded again; the phone blocks only Send while a card is expanded and shows one card per occurrence; cancellation stops unsent groups and active dictation can stop.",
       "oracle": "After acknowledged phone replies with stale host status, the exact card disappears and Send is enabled; unknown, refused or unverifiable-settlement replies retain enabled choices, while an older host's accepted reply dismisses like an acknowledged one; a same-occurrence view toggle retains pending acknowledgment and real replacements discard it. A slow 32 KiB SSH answer completes all chunks before Enter; cancellation preserves issued bytes but omits remaining groups. Paired settlement invokes the actual provider and lost callbacks remain unknown; older hosts deliver ordinary messages, launch and selector groups once and their accepted answers dismiss as before. An answered card stays hidden across a view remount; a collapsed card is a strip that frees the composer and expands back; an identical question in a new wait shows again; a composer send caught by a new card keeps its bubble without submitting or clearing the line under it.",
       "commands": [
-        "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/components/native-chat/NativeChatInteractiveCard.test.tsx src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx src/renderer/src/components/native-chat/native-chat-observed-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-input.test.tsx src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-composer.test.tsx src/renderer/src/components/native-chat/use-native-chat-prompt-card-presentation.test.ts src/renderer/src/runtime/runtime-terminal-verified-input.test.ts src/renderer/src/components/native-chat/NativeChatComposer.test.tsx src/renderer/src/components/native-chat/NativeChatResolvedView.turn-status.test.tsx src/renderer/src/components/native-chat/NativeChatApprovalCard.test.tsx src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts src/renderer/src/runtime/runtime-terminal-inspection.test.ts src/renderer/src/lib/agent-paste-draft.test.ts src/renderer/src/lib/agent-paste-draft-submit-retry.test.ts src/renderer/src/lib/agent-followup-delivery.test.ts src/main/ipc/pty/ipc/write-input-acceptance.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/ipc/pty/ipc/write-input-chunk-yield.test.ts src/main/ipc/pty-write-ipc-validation.test.ts src/main/daemon/daemon-pty-write-settlement-recovery.test.ts src/main/runtime/runtime-terminal-writer.test.ts src/main/runtime/rpc/terminal-send.test.ts src/main/runtime/rpc/terminal-send-launch-draft-resolution.test.ts src/main/runtime/terminal-send-stale-leaf-liveness.test.ts src/renderer/src/lib/agent-paste-draft-readiness-budget.test.ts tests/e2e/native-chat-ssh-delivery.unit.test.ts --maxWorkers=2",
+        "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx src/renderer/src/components/native-chat/native-chat-observed-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts src/renderer/src/runtime/runtime-terminal-verified-input.test.ts src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts src/renderer/src/runtime/runtime-terminal-inspection.test.ts src/renderer/src/lib/agent-paste-draft.test.ts src/renderer/src/lib/agent-paste-draft-submit-retry.test.ts src/renderer/src/lib/agent-followup-delivery.test.ts src/main/ipc/pty/ipc/write-input-acceptance.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/ipc/pty/ipc/write-input-chunk-yield.test.ts src/main/ipc/pty-write-ipc-validation.test.ts src/main/daemon/daemon-pty-write-settlement-recovery.test.ts src/main/runtime/runtime-terminal-writer.test.ts src/main/runtime/rpc/terminal-send.test.ts src/main/runtime/rpc/terminal-send-launch-draft-resolution.test.ts src/main/runtime/terminal-send-stale-leaf-liveness.test.ts src/renderer/src/lib/agent-paste-draft-readiness-budget.test.ts tests/e2e/native-chat-ssh-delivery.unit.test.ts --maxWorkers=2",
         "QUIRKY_BACKGROUND_LAUNCH=1 mobile/node_modules/.bin/vitest run --config mobile/vitest.config.ts mobile/src/session/MobileNativeChatView.prompt-presentation.test.ts mobile/src/session/use-mobile-native-chat-controller.test.ts mobile/src/session/use-mobile-native-chat-ask-dismiss.test.ts mobile/src/session/MobileNativeChatView.stop.test.ts mobile/src/session/MobileNativeChatView.failure-banner.test.ts mobile/src/session/MobileNativeChatView.rows.test.ts mobile/src/session/MobileNativeChatView.composer-lock.test.ts mobile/src/session/MobileNativeChatView.tail-follow.test.ts mobile/src/session/MobileNativeChatView.history-paging.test.ts mobile/src/session/mobile-prompt-controller.test.ts mobile/src/session/mobile-native-chat-permission-send.test.ts mobile/src/session/use-mobile-native-chat-cancel-ask.test.ts mobile/src/session/use-mobile-native-chat-answer-send.test.ts mobile/src/session/use-mobile-native-chat-message-send.test.ts mobile/src/session/mobile-native-chat-send.test.ts mobile/src/session/MobileNativeChatCardHeaderAction.test.tsx mobile/src/session/MobileNativeChatPromptCard.test.tsx --maxWorkers=2",
         "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test tests/e2e/cross-version-wire/cross-version-terminal-wire.unit.test.ts --maxWorkers=1",
-        "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/components/native-chat/NativeChatInteractiveCard.test.tsx src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx src/renderer/src/components/native-chat/native-chat-observed-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-input.test.tsx src/renderer/src/components/native-chat/NativeChatResolvedView.turn-status.test.tsx src/renderer/src/components/native-chat/NativeChatApprovalCard.test.tsx src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts src/renderer/src/runtime/runtime-terminal-inspection.test.ts src/renderer/src/lib/agent-paste-draft.test.ts src/renderer/src/lib/agent-paste-draft-submit-retry.test.ts src/renderer/src/lib/agent-followup-delivery.test.ts src/main/ipc/pty/ipc/write-input-acceptance.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/ipc/pty/ipc/write-input-chunk-yield.test.ts src/main/ipc/pty-write-ipc-validation.test.ts src/main/daemon/daemon-pty-write-settlement-recovery.test.ts --maxWorkers=2",
+        "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx src/renderer/src/components/native-chat/native-chat-observed-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts src/renderer/src/runtime/runtime-terminal-inspection.test.ts src/renderer/src/lib/agent-paste-draft.test.ts src/renderer/src/lib/agent-paste-draft-submit-retry.test.ts src/renderer/src/lib/agent-followup-delivery.test.ts src/main/ipc/pty/ipc/write-input-acceptance.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/ipc/pty/ipc/write-input-chunk-yield.test.ts src/main/ipc/pty-write-ipc-validation.test.ts src/main/daemon/daemon-pty-write-settlement-recovery.test.ts --maxWorkers=2",
         "QUIRKY_BACKGROUND_LAUNCH=1 mobile/node_modules/.bin/vitest run --config mobile/vitest.config.ts mobile/src/session/MobileNativeChatView.prompt-presentation.test.ts mobile/src/session/use-mobile-native-chat-controller.test.ts mobile/src/session/use-mobile-native-chat-ask-dismiss.test.ts mobile/src/session/MobileNativeChatView.stop.test.ts mobile/src/session/MobileNativeChatView.failure-banner.test.ts mobile/src/session/MobileNativeChatView.rows.test.ts mobile/src/session/MobileNativeChatView.composer-lock.test.ts mobile/src/session/MobileNativeChatView.tail-follow.test.ts mobile/src/session/MobileNativeChatView.history-paging.test.ts --maxWorkers=2"
       ],
       "testFiles": [
-        "src/renderer/src/components/native-chat/NativeChatInteractiveCard.test.tsx",
         "src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx",
         "src/renderer/src/components/native-chat/native-chat-observed-send.test.ts",
         "src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts",
         "src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts",
-        "src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-input.test.tsx",
-        "src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-composer.test.tsx",
-        "src/renderer/src/components/native-chat/use-native-chat-prompt-card-presentation.test.ts",
         "src/renderer/src/runtime/runtime-terminal-verified-input.test.ts",
-        "src/renderer/src/components/native-chat/NativeChatComposer.test.tsx",
-        "src/renderer/src/components/native-chat/NativeChatResolvedView.turn-status.test.tsx",
-        "src/renderer/src/components/native-chat/NativeChatApprovalCard.test.tsx",
         "src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts",
         "src/renderer/src/runtime/runtime-terminal-inspection.test.ts",
         "src/renderer/src/lib/agent-paste-draft.test.ts",
@@ -344,14 +329,6 @@
         "tests/e2e/cross-version-wire/cross-version-terminal-wire.unit.test.ts"
       ],
       "assertionRefs": [
-        {
-          "file": "src/renderer/src/components/native-chat/NativeChatInteractiveCard.test.tsx",
-          "assertions": [
-            "ignores approval A settling after answered replacement B",
-            "ignores a raw acknowledgment from a rebound PTY",
-            "sends only one cancellation, can cancel an answer, and permits retry after unknown"
-          ]
-        },
         {
           "file": "mobile/src/session/MobileNativeChatView.prompt-presentation.test.ts",
           "assertions": [
@@ -394,23 +371,6 @@
           ]
         },
         {
-          "file": "src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-composer.test.tsx",
-          "assertions": [
-            "keeps an in-flight message visible and never submits it into the approval",
-            "routes no typing to the hidden composer until the card is answered"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-input.test.tsx",
-          "assertions": [
-            "keeps an answered approval hidden across a chat view remount and a PTY rebind",
-            "collapses to a strip that frees the composer, and expanding gives the card the input back",
-            "shows an identical question again in a new wait that arrived while the view was unmounted",
-            "keeps a collapsed transcript question collapsed while the transcript re-reads",
-            "keeps a partly answered question across collapse and expand, and Escape in its text field"
-          ]
-        },
-        {
           "file": "src/main/runtime/runtime-terminal-writer.test.ts",
           "assertions": [
             "waits for complete body settlement before Enter",
@@ -425,7 +385,7 @@
           "date": "2026-10-05",
           "runner": "local",
           "platform": "macos",
-          "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/components/native-chat/NativeChatInteractiveCard.test.tsx src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx src/renderer/src/components/native-chat/native-chat-observed-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-input.test.tsx src/renderer/src/components/native-chat/NativeChatResolvedView.turn-status.test.tsx src/renderer/src/components/native-chat/NativeChatApprovalCard.test.tsx src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts src/renderer/src/runtime/runtime-terminal-inspection.test.ts src/renderer/src/lib/agent-paste-draft.test.ts src/renderer/src/lib/agent-paste-draft-submit-retry.test.ts src/renderer/src/lib/agent-followup-delivery.test.ts src/main/ipc/pty/ipc/write-input-acceptance.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/ipc/pty/ipc/write-input-chunk-yield.test.ts src/main/ipc/pty-write-ipc-validation.test.ts src/main/daemon/daemon-pty-write-settlement-recovery.test.ts --maxWorkers=2",
+          "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx src/renderer/src/components/native-chat/native-chat-observed-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts src/renderer/src/runtime/runtime-terminal-inspection.test.ts src/renderer/src/lib/agent-paste-draft.test.ts src/renderer/src/lib/agent-paste-draft-submit-retry.test.ts src/renderer/src/lib/agent-followup-delivery.test.ts src/main/ipc/pty/ipc/write-input-acceptance.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/ipc/pty/ipc/write-input-chunk-yield.test.ts src/main/ipc/pty-write-ipc-validation.test.ts src/main/daemon/daemon-pty-write-settlement-recovery.test.ts --maxWorkers=2",
           "result": "passed",
           "durationSeconds": 232.36,
           "summary": "257 tests passed across 19 explicit files, covering production cards, observed sends, existing launch/paste callers, IPC validation, SSH acknowledgment and daemon settlement recovery."
@@ -443,7 +403,7 @@
           "date": "2026-10-06",
           "runner": "local",
           "platform": "macos",
-          "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/components/native-chat/NativeChatInteractiveCard.test.tsx src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx src/renderer/src/components/native-chat/native-chat-observed-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-input.test.tsx src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-composer.test.tsx src/renderer/src/components/native-chat/use-native-chat-prompt-card-presentation.test.ts src/renderer/src/runtime/runtime-terminal-verified-input.test.ts src/renderer/src/components/native-chat/NativeChatComposer.test.tsx src/renderer/src/components/native-chat/NativeChatResolvedView.turn-status.test.tsx src/renderer/src/components/native-chat/NativeChatApprovalCard.test.tsx src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts src/renderer/src/runtime/runtime-terminal-inspection.test.ts src/renderer/src/lib/agent-paste-draft.test.ts src/renderer/src/lib/agent-paste-draft-submit-retry.test.ts src/renderer/src/lib/agent-followup-delivery.test.ts src/main/ipc/pty/ipc/write-input-acceptance.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/ipc/pty/ipc/write-input-chunk-yield.test.ts src/main/ipc/pty-write-ipc-validation.test.ts src/main/daemon/daemon-pty-write-settlement-recovery.test.ts src/main/runtime/runtime-terminal-writer.test.ts src/main/runtime/rpc/terminal-send.test.ts src/main/runtime/rpc/terminal-send-launch-draft-resolution.test.ts src/main/runtime/terminal-send-stale-leaf-liveness.test.ts src/renderer/src/lib/agent-paste-draft-readiness-budget.test.ts tests/e2e/native-chat-ssh-delivery.unit.test.ts --maxWorkers=2",
+          "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx src/renderer/src/components/native-chat/native-chat-observed-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts src/renderer/src/runtime/runtime-terminal-verified-input.test.ts src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts src/renderer/src/runtime/runtime-terminal-inspection.test.ts src/renderer/src/lib/agent-paste-draft.test.ts src/renderer/src/lib/agent-paste-draft-submit-retry.test.ts src/renderer/src/lib/agent-followup-delivery.test.ts src/main/ipc/pty/ipc/write-input-acceptance.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/ipc/pty/ipc/write-input-chunk-yield.test.ts src/main/ipc/pty-write-ipc-validation.test.ts src/main/daemon/daemon-pty-write-settlement-recovery.test.ts src/main/runtime/runtime-terminal-writer.test.ts src/main/runtime/rpc/terminal-send.test.ts src/main/runtime/rpc/terminal-send-launch-draft-resolution.test.ts src/main/runtime/terminal-send-stale-leaf-liveness.test.ts src/renderer/src/lib/agent-paste-draft-readiness-budget.test.ts tests/e2e/native-chat-ssh-delivery.unit.test.ts --maxWorkers=2",
           "result": "passed",
           "durationSeconds": 14.53,
           "summary": "391 tests passed across 29 explicit files after the round-4 review fix, including older-host acceptance, the inert hidden composer, collapse that keeps a partial answer and returns focus to the composer, pane-scoped card focus, wait-start occurrence identity and the pane remount signal."
@@ -1547,7 +1507,7 @@
       "oracle": "Inject adapter/RPC acknowledgement loss, caller replacement, logical-client close after response, auth recovery with a written request, missing host submissions, legacy pending rows, stale fences, expiry, mobile remount, and phone storage refusal. Assert at most one dispatch for repeated transmission of one operation. For a later phone Send, assert a fresh id and second delivery while the original host entry remains unknown; equal images use current uploaded paths and delivery fields follow current host capabilities.",
       "commands": [
         "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/shared/agent-session-operation-ledger.test.ts src/shared/structured-agent-session-send-evidence.test.ts src/main/runtime/agent-session-operation-admission.test.ts src/main/native-chat/agent-session-wire/structured-agent-session-send-idempotency.test.ts src/main/native-chat/agent-session-wire/structured-agent-session-send.test.ts src/main/runtime/orchestration/structured-mailbox-pointer-delivery.test.ts src/main/runtime/orchestration/structured-mailbox-pointer-host.test.ts src/main/runtime/orchestration/structured-pointer-operation-id.test.ts src/renderer/src/components/native-chat/structured-agent-session-message-sender.test.ts src/renderer/src/components/native-chat/use-structured-agent-session.test.tsx src/renderer/src/lib/launch-structured-agent-session.test.ts",
-        "QUIRKY_BACKGROUND_LAUNCH=1 pnpm --dir mobile test ../mobile/src/session/mobile-structured-send-new-action.test.ts ../mobile/src/session/use-mobile-structured-agent-session-send.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-queued.test.tsx ../mobile/src/session/mobile-structured-send-delivery.test.ts ../mobile/src/session/use-mobile-structured-agent-session-background-tasks.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-newer-approval-send.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-read-failure.test.tsx ../mobile/src/session/use-mobile-structured-agent-session.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-prompt-cancel.test.tsx ../mobile/src/session/mobile-native-chat-image-attachment.test.ts ../mobile/src/session/use-mobile-native-chat-image-attachments.test.ts ../mobile/src/session/use-mobile-structured-native-chat-send-bridge.test.ts ../mobile/src/mobile-web-shell/page-storage-keys.test.ts ../mobile/src/mobile-web-shell/bridge/page-async-storage.test.ts ../mobile/src/mobile-web-shell/use-page-host-snapshot.test.tsx ../mobile/src/mobile-web-shell/bridge-host-init.test.ts ../mobile/src/transport/mobile-relay-rpc-session.test.ts ../mobile/src/transport/rpc-client-delivery-ambiguity.test.ts ../mobile/src/transport/stable-logical-rpc-client.test.ts --maxWorkers=2"
+        "QUIRKY_BACKGROUND_LAUNCH=1 pnpm --dir mobile test ../mobile/src/session/mobile-structured-send-new-action.test.ts ../mobile/src/session/use-mobile-structured-agent-session-send.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-queued.test.tsx ../mobile/src/session/mobile-structured-send-delivery.test.ts ../mobile/src/session/use-mobile-structured-agent-session-background-tasks.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-newer-approval-send.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-read-failure.test.tsx ../mobile/src/session/use-mobile-structured-agent-session.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-prompt-cancel.test.tsx ../mobile/src/session/mobile-native-chat-image-attachment.test.ts ../mobile/src/session/use-mobile-native-chat-image-attachments.test.ts ../mobile/src/session/use-mobile-structured-native-chat-send-bridge.test.ts ../mobile/src/mobile-web-shell/page-storage-keys.test.ts ../mobile/src/mobile-web-shell/bridge/page-async-storage.test.ts ../mobile/src/mobile-web-shell/use-page-host-snapshot.test.tsx ../mobile/src/mobile-web-shell/bridge-host-init.test.ts ../mobile/src/transport/rpc-client-delivery-ambiguity.test.ts ../mobile/src/transport/stable-logical-rpc-client.test.ts --maxWorkers=2"
       ],
       "testFiles": [
         "src/shared/agent-session-operation-ledger.test.ts",
@@ -1567,7 +1527,6 @@
         "mobile/src/session/mobile-structured-send-delivery.test.ts",
         "mobile/src/session/use-mobile-structured-agent-session-send.test.tsx",
         "mobile/src/session/use-mobile-structured-agent-session.test.tsx",
-        "mobile/src/transport/mobile-relay-rpc-session.test.ts",
         "mobile/src/transport/rpc-client-delivery-ambiguity.test.ts",
         "mobile/src/transport/stable-logical-rpc-client.test.ts",
         "mobile/src/session/use-mobile-structured-agent-session-queued.test.tsx",
@@ -1629,10 +1588,6 @@
           "assertions": ["preserves a committed response when logical close wins the callback race"]
         },
         {
-          "file": "mobile/src/transport/mobile-relay-rpc-session.test.ts",
-          "assertions": ["keeps a synchronous pre-write relay failure definite"]
-        },
-        {
           "file": "src/renderer/src/components/native-chat/structured-agent-session-message-sender.test.ts",
           "assertions": [
             "gives back at once, as unconfirmed, a send whose request threw, and never sends it again"
@@ -1644,7 +1599,7 @@
           "date": "2026-10-07",
           "runner": "local",
           "platform": "macos",
-          "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm --dir mobile test ../mobile/src/session/mobile-structured-send-new-action.test.ts ../mobile/src/session/use-mobile-structured-agent-session-send.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-queued.test.tsx ../mobile/src/session/mobile-structured-send-delivery.test.ts ../mobile/src/session/use-mobile-structured-agent-session-background-tasks.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-newer-approval-send.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-read-failure.test.tsx ../mobile/src/session/use-mobile-structured-agent-session.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-prompt-cancel.test.tsx ../mobile/src/session/mobile-native-chat-image-attachment.test.ts ../mobile/src/session/use-mobile-native-chat-image-attachments.test.ts ../mobile/src/session/use-mobile-structured-native-chat-send-bridge.test.ts ../mobile/src/mobile-web-shell/page-storage-keys.test.ts ../mobile/src/mobile-web-shell/bridge/page-async-storage.test.ts ../mobile/src/mobile-web-shell/use-page-host-snapshot.test.tsx ../mobile/src/mobile-web-shell/bridge-host-init.test.ts ../mobile/src/transport/mobile-relay-rpc-session.test.ts ../mobile/src/transport/rpc-client-delivery-ambiguity.test.ts ../mobile/src/transport/stable-logical-rpc-client.test.ts --maxWorkers=2",
+          "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm --dir mobile test ../mobile/src/session/mobile-structured-send-new-action.test.ts ../mobile/src/session/use-mobile-structured-agent-session-send.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-queued.test.tsx ../mobile/src/session/mobile-structured-send-delivery.test.ts ../mobile/src/session/use-mobile-structured-agent-session-background-tasks.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-newer-approval-send.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-read-failure.test.tsx ../mobile/src/session/use-mobile-structured-agent-session.test.tsx ../mobile/src/session/use-mobile-structured-agent-session-prompt-cancel.test.tsx ../mobile/src/session/mobile-native-chat-image-attachment.test.ts ../mobile/src/session/use-mobile-native-chat-image-attachments.test.ts ../mobile/src/session/use-mobile-structured-native-chat-send-bridge.test.ts ../mobile/src/mobile-web-shell/page-storage-keys.test.ts ../mobile/src/mobile-web-shell/bridge/page-async-storage.test.ts ../mobile/src/mobile-web-shell/use-page-host-snapshot.test.tsx ../mobile/src/mobile-web-shell/bridge-host-init.test.ts ../mobile/src/transport/rpc-client-delivery-ambiguity.test.ts ../mobile/src/transport/stable-logical-rpc-client.test.ts --maxWorkers=2",
           "result": "passed",
           "durationSeconds": 5.42,
           "summary": "Nineteen focused mobile files passed 241 tests for fresh Send identity, remount, attachment paths, storage refusal, mixed host capabilities, queued cards, and written-request ambiguity."
@@ -1705,7 +1660,7 @@
       "invariant": "An observed completed turn retains the same host-recorded duration and initiating user-message attribution through client reload, settlement retry and loading older history; older clients receive the compatible item carrier, and a host-recorded unknown duration suppresses local estimates.",
       "oracle": "Render a host-settled duration without observing completion locally; preserve an exit at 2000 through failed settlement at 60000 and later retry; retain a seven-second older turn beyond 256 submitted turns; prune aliases with removed user items and preserve alias identity during item-only streaming; render no completed duration for an unverifiable turn both before and after client reload.",
       "commands": [
-        "QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/run-vitest.mjs run --config config/vitest.config.ts src/shared/native-chat-unverifiable-turn-status.test.ts src/main/codex/codex-requested-close-turn-timing.test.ts src/main/native-chat/agent-session-wire/structured-agent-session-unexpected-exit.test.ts src/shared/structured-agent-session-turn-timing-retention.test.ts src/shared/structured-agent-session-turn-timing.test.ts src/main/codex/codex-structured-journal-translation-turn-lifecycle.test.ts src/main/runtime/rpc/methods/structured-agent-session-turn-item-capability.test.ts src/renderer/src/components/native-chat/NativeChatMessageList.turn-membership.test.tsx --maxWorkers=4 --reporter=json --outputFile=notes/bun-migration/performance/ci-throughput-resume-20261009/next_capacity_wave_owner/reliability-path-correction/fresh-eight-root-stock-config.json"
+        "QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/run-vitest.mjs run --config config/vitest.config.ts src/shared/native-chat-unverifiable-turn-status.test.ts src/main/codex/codex-requested-close-turn-timing.test.ts src/main/native-chat/agent-session-wire/structured-agent-session-unexpected-exit.test.ts src/shared/structured-agent-session-turn-timing-retention.test.ts src/shared/structured-agent-session-turn-timing.test.ts src/main/codex/codex-structured-journal-translation-turn-lifecycle.test.ts src/main/runtime/rpc/methods/structured-agent-session-turn-item-capability.test.ts --maxWorkers=4 --reporter=json --outputFile=notes/bun-migration/performance/ci-throughput-resume-20261009/next_capacity_wave_owner/reliability-path-correction/fresh-eight-root-stock-config.json"
       ],
       "testFiles": [
         "src/shared/native-chat-unverifiable-turn-status.test.ts",
@@ -1714,8 +1669,7 @@
         "src/shared/structured-agent-session-turn-timing-retention.test.ts",
         "src/shared/structured-agent-session-turn-timing.test.ts",
         "src/main/codex/codex-structured-journal-translation-turn-lifecycle.test.ts",
-        "src/main/runtime/rpc/methods/structured-agent-session-turn-item-capability.test.ts",
-        "src/renderer/src/components/native-chat/NativeChatMessageList.turn-membership.test.tsx"
+        "src/main/runtime/rpc/methods/structured-agent-session-turn-item-capability.test.ts"
       ],
       "assertionRefs": [
         {
@@ -1738,10 +1692,6 @@
             "keeps an older page duration after the recent submission budget fills",
             "drops an old alias once rewind removes its user item"
           ]
-        },
-        {
-          "file": "src/renderer/src/components/native-chat/NativeChatMessageList.turn-membership.test.tsx",
-          "assertions": ["renders a host-settled duration without ever clocking the turn locally"]
         }
       ],
       "evidenceRuns": [
@@ -1749,7 +1699,7 @@
           "date": "2026-10-10",
           "runner": "local",
           "platform": "macos",
-          "command": "QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/run-vitest.mjs run --config config/vitest.config.ts src/shared/native-chat-unverifiable-turn-status.test.ts src/main/codex/codex-requested-close-turn-timing.test.ts src/main/native-chat/agent-session-wire/structured-agent-session-unexpected-exit.test.ts src/shared/structured-agent-session-turn-timing-retention.test.ts src/shared/structured-agent-session-turn-timing.test.ts src/main/codex/codex-structured-journal-translation-turn-lifecycle.test.ts src/main/runtime/rpc/methods/structured-agent-session-turn-item-capability.test.ts src/renderer/src/components/native-chat/NativeChatMessageList.turn-membership.test.tsx --maxWorkers=4 --reporter=json --outputFile=notes/bun-migration/performance/ci-throughput-resume-20261009/next_capacity_wave_owner/reliability-path-correction/fresh-eight-root-stock-config.json",
+          "command": "QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/run-vitest.mjs run --config config/vitest.config.ts src/shared/native-chat-unverifiable-turn-status.test.ts src/main/codex/codex-requested-close-turn-timing.test.ts src/main/native-chat/agent-session-wire/structured-agent-session-unexpected-exit.test.ts src/shared/structured-agent-session-turn-timing-retention.test.ts src/shared/structured-agent-session-turn-timing.test.ts src/main/codex/codex-structured-journal-translation-turn-lifecycle.test.ts src/main/runtime/rpc/methods/structured-agent-session-turn-item-capability.test.ts --maxWorkers=4 --reporter=json --outputFile=notes/bun-migration/performance/ci-throughput-resume-20261009/next_capacity_wave_owner/reliability-path-correction/fresh-eight-root-stock-config.json",
           "result": "passed",
           "durationSeconds": 5.688707999999999,
           "summary": "87 tests passed across exactly eight current files at source commit aea00c5c02c3dccaa83aee3207ba6fcb586ffa5c using stock config/vitest.config.ts, Node 24.21.0, Bun 1.4.2 and four workers; no failures, skips or todo. Natural CLI close took 5.688708 seconds. The prior 2026-09-09 record (58 tests, 4.65 seconds, source 5acb404bf244cdc0bd3643c4e79beb189ce9a0cd) is preserved verbatim in Git history and notes/bun-migration/performance/ci-throughput-resume-20261009/next_capacity_wave_owner/reliability-path-correction/before.jsonc. This manifest-only change records the new run without changing tested source."
@@ -3937,200 +3887,6 @@
       "demotionRule": "Keep experimental or demote if parent rerenders can restart drawer hiding, after-close delivery duplicates or goes stale, the focused contract flakes, or either mobile platform retains a touch-blocking modal."
     },
     {
-      "id": "mobile-relay.endpoint-recovery",
-      "title": "Mobile relay recovery retries offline hosts and races direct endpoints",
-      "maturity": "experimental",
-      "protection": "partial",
-      "owner": "mobile-runtime",
-      "layer": "shared-mobile-transport-contract",
-      "surfaces": [
-        "paired mobile reconnect",
-        "cloud relay host-offline recovery",
-        "LAN direct endpoint",
-        "Tailscale direct endpoint"
-      ],
-      "platforms": ["ios", "android", "macos", "linux", "windows"],
-      "providers": ["lan", "tailscale", "cloud-relay"],
-      "coveredPlatforms": ["macos"],
-      "coveredProviders": ["lan", "tailscale", "cloud-relay"],
-      "coverageNotes": "Deterministic TypeScript tests cover shared close-code policy, foreground retry timers, continuous-outage escalation, persistent pairing-rejection escalation, a bounded background Relay grace, direct-winner and background cancellation, credential-gated Relay presentation, and concurrent LAN/Tailscale authentication. Physical iOS/Android radios, GFE, and production relay recovery remain live-test gaps.",
-      "motivatingLinks": [
-        "https://github.com/stablyai/orca-cloud/pull/96",
-        "https://linear.app/stably/issue/STA-4587",
-        "https://linear.app/stably/issue/STA-4681"
-      ],
-      "invariant": "A foregrounded paired phone must recover from relay HOST_OFFLINE without a foreground or network-change signal, while direct recovery must select the first authenticated configured LAN or Tailscale endpoint without serial timeout delays. Relay recovery presentation starts only for a failed active Relay or a dial backed by an eligible credential, remains pending through a genuine failed-dial cooldown, and exposes the supervisor's consecutive failed-dial count so a continuous outage escalates to unreachable. A relay credential the desktop keeps refusing escalates to re-pair once its transient-rejection budget is spent, and only an authenticated session clears that verdict. A healthy Relay survives backgrounding for at most 30 seconds and is reused on a quick foreground without redial; expiry, transport failure, direct success, or stop cancels the grace safely, late confirmation bookkeeping preserves lease rotation for a retained live Relay, and losing probes or replacements close without affecting the winner.",
-      "oracle": "Inject deterministic relay close codes, missing and expired credentials, delayed credential reads, random bytes, fake timers, suspended timers, stale callbacks, and independently controlled direct clients. Require HOST_OFFLINE to replace any faster transport timer with one 5-15 second retry, require no retry before the selected delay, keep Relay presentation absent when no socket can open, clear it across lifecycle races, retain it through real dial cooldowns, retain one healthy Relay through 29,999 milliseconds of background time without a new dial, close it exactly once at 30 seconds or on a later foreground when the timer was suspended, reject a stale expiry after foreground, recover a retained Relay transport failure only after foreground, resume a lease rotation that came due during the grace, arm a lease whose confirmation persistence finishes during the grace, and leave healthy direct sessions unchanged. Establish Relay through the supervisor and require its active close plus 11 failed replacements to publish reconnect attempt 12 and a Relay-unreachable verdict, race all unique non-relay endpoints, select the first authenticated path, close every loser exactly once, and retain no retry after direct connectivity wins. Drive a supervisor-established Relay through four simulated hours of E2EE rejections and require the re-pair verdict, require it to survive a background/foreground cycle, require two rejections followed by acceptance to never latch it, and require a plain transport outage to still read Relay-unreachable.",
-      "commands": [
-        "pnpm --dir mobile exec vitest run --root .. mobile/src/transport/mobile-direct-endpoint-probe.test.ts mobile/src/transport/mobile-relay-background-grace.test.ts mobile/src/transport/mobile-relay-background-lifecycle.test.ts mobile/src/transport/mobile-relay-reconnect-controller.test.ts mobile/src/transport/mobile-endpoint-supervisor.test.ts mobile/src/transport/mobile-endpoint-supervisor-nudge.test.ts mobile/src/transport/mobile-relay-outage-escalation.test.ts mobile/src/transport/mobile-relay-pairing-rejection-escalation.test.ts mobile/src/transport/stable-logical-rpc-client.test.ts mobile/src/transport/mobile-relay-runtime-failover.test.ts mobile/src/transport/connection-health.test.ts",
-        "pnpm --dir mobile exec vitest run --root .. mobile/src/transport/mobile-direct-endpoint-probe.test.ts mobile/src/transport/mobile-relay-reconnect-controller.test.ts mobile/src/transport/mobile-endpoint-supervisor.test.ts mobile/src/transport/mobile-relay-outage-escalation.test.ts mobile/src/transport/mobile-relay-pairing-rejection-escalation.test.ts mobile/src/transport/stable-logical-rpc-client.test.ts mobile/src/transport/mobile-relay-runtime-failover.test.ts mobile/src/transport/connection-health.test.ts",
-        "pnpm exec vitest run --config config/vitest.config.ts src/shared/mobile-relay-close-codes.test.ts --reporter=dot"
-      ],
-      "testFiles": [
-        "mobile/src/transport/mobile-direct-endpoint-probe.test.ts",
-        "mobile/src/transport/mobile-relay-background-grace.test.ts",
-        "mobile/src/transport/mobile-relay-background-lifecycle.test.ts",
-        "mobile/src/transport/mobile-relay-reconnect-controller.test.ts",
-        "mobile/src/transport/mobile-endpoint-supervisor.test.ts",
-        "mobile/src/transport/mobile-endpoint-supervisor-nudge.test.ts",
-        "mobile/src/transport/mobile-relay-outage-escalation.test.ts",
-        "mobile/src/transport/mobile-relay-pairing-rejection-escalation.test.ts",
-        "mobile/src/transport/stable-logical-rpc-client.test.ts",
-        "mobile/src/transport/mobile-relay-runtime-failover.test.ts",
-        "mobile/src/transport/connection-health.test.ts",
-        "src/shared/mobile-relay-close-codes.test.ts"
-      ],
-      "assertionRefs": [
-        {
-          "file": "mobile/src/transport/mobile-direct-endpoint-probe.test.ts",
-          "assertions": [
-            "a reachable Tailscale endpoint authenticates without waiting for a stale primary LAN timeout",
-            "the stale direct candidate closes while the authenticated winner stays open"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/mobile-relay-background-grace.test.ts",
-          "assertions": [
-            "the grace expires exactly once at 30 seconds",
-            "foreground deadline checks enforce expiry when the OS suspended the timer",
-            "a stale expiry callback cannot close a foreground connection"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/mobile-relay-background-lifecycle.test.ts",
-          "assertions": [
-            "a quick background round trip reuses Relay without a new dial",
-            "Relay closes exactly once at grace expiry and recovers only after foreground",
-            "foreground enforces an overdue grace when the OS suspended its timer",
-            "a retained Relay transport failure suspends without a background redial and recovers on foreground",
-            "a healthy direct connection is unchanged by the Relay-only grace",
-            "a lease rotation that becomes due during the grace starts promptly on foreground",
-            "lease rotation remains armed when confirmation persistence finishes during the grace"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/mobile-relay-reconnect-controller.test.ts",
-          "assertions": [
-            "HOST_OFFLINE replaces a pending capacity retry with the bounded host-offline delay",
-            "direct connectivity cancels the pending relay retry"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/mobile-endpoint-supervisor.test.ts",
-          "assertions": [
-            "a foregrounded supervisor retries HOST_OFFLINE without an external lifecycle signal",
-            "a missing or expired credential never presents a Relay connection that cannot start",
-            "backgrounding during credential selection cannot publish a stale Relay recovery path",
-            "a genuine failed Relay dial remains pending through its retry cooldown"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/mobile-endpoint-supervisor-nudge.test.ts",
-          "assertions": [
-            "a replacement Relay that authenticates after backgrounding withdraws without replacing the retained session"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/mobile-relay-outage-escalation.test.ts",
-          "assertions": [
-            "a supervisor-established Relay close plus 11 failed replacements publish reconnect attempt 12",
-            "the existing connection classifier escalates the continuous outage to Can't connect via Relay"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/mobile-relay-pairing-rejection-escalation.test.ts",
-          "assertions": [
-            "a persistent E2EE rejection escalates to Pairing invalid — re-pair with your desktop",
-            "the re-pair verdict survives a background/foreground cycle",
-            "rejections inside the transient budget followed by acceptance never latch it",
-            "a plain transport outage still reads Can't connect via Relay"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/connection-health.test.ts",
-          "assertions": [
-            "a rejected pairing outranks a pending Relay recovery",
-            "a rejected pairing never overrides a live connection"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/stable-logical-rpc-client.test.ts",
-          "assertions": [
-            "supervisor Relay attempts overlay but never replace a larger active-session retry count",
-            "count-only changes notify connection-path subscribers and clearing recovery restores the physical count"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/mobile-relay-runtime-failover.test.ts",
-          "assertions": [
-            "a fresh credential starts Relay presentation with the controller's current count",
-            "missing or expired credentials never open a Relay socket"
-          ]
-        },
-        {
-          "file": "src/shared/mobile-relay-close-codes.test.ts",
-          "assertions": ["HOST_OFFLINE maps to self-healing full-jitter recovery"]
-        }
-      ],
-      "evidenceRuns": [
-        {
-          "date": "2026-08-26",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm --dir mobile exec vitest run --root .. mobile/src/transport/mobile-direct-endpoint-probe.test.ts mobile/src/transport/mobile-relay-background-grace.test.ts mobile/src/transport/mobile-relay-background-lifecycle.test.ts mobile/src/transport/mobile-relay-reconnect-controller.test.ts mobile/src/transport/mobile-endpoint-supervisor.test.ts mobile/src/transport/mobile-endpoint-supervisor-nudge.test.ts mobile/src/transport/mobile-relay-outage-escalation.test.ts mobile/src/transport/mobile-relay-pairing-rejection-escalation.test.ts mobile/src/transport/stable-logical-rpc-client.test.ts mobile/src/transport/mobile-relay-runtime-failover.test.ts mobile/src/transport/connection-health.test.ts",
-          "result": "passed",
-          "durationSeconds": 1.15,
-          "summary": "Eleven focused mobile transport files passed with 135 assertions, including 30-second Relay retention, supervisor-level timer-suspension recovery, mid-grace transport failure, late-persistence lease rotation, manual retry, and direct-path non-regression."
-        },
-        {
-          "date": "2026-08-18",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm --dir mobile exec vitest run --root .. mobile/src/transport/mobile-direct-endpoint-probe.test.ts mobile/src/transport/mobile-relay-reconnect-controller.test.ts mobile/src/transport/mobile-endpoint-supervisor.test.ts mobile/src/transport/mobile-relay-outage-escalation.test.ts mobile/src/transport/mobile-relay-pairing-rejection-escalation.test.ts mobile/src/transport/stable-logical-rpc-client.test.ts mobile/src/transport/mobile-relay-runtime-failover.test.ts mobile/src/transport/connection-health.test.ts",
-          "result": "passed",
-          "durationSeconds": 1.25,
-          "summary": "Eight focused mobile transport files passed with 109 assertions, including production-lifecycle outage escalation, persistent pairing-rejection escalation, and logical count publication."
-        },
-        {
-          "date": "2026-08-16",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/shared/mobile-relay-close-codes.test.ts --reporter=dot",
-          "result": "passed",
-          "durationSeconds": 0.17,
-          "summary": "The shared close-code contract passed with five assertions."
-        }
-      ],
-      "runtimeBudget": {
-        "p95Seconds": 5,
-        "scope": "focused shared and mobile transport unit tests"
-      },
-      "flakeHistory": {
-        "status": "unknown",
-        "evidence": "Two deterministic local runs exist; CI and soak history are not yet available."
-      },
-      "redGreenEvidence": {
-        "status": "complete",
-        "evidence": "On 2026-08-26, the unchanged immediate-teardown implementation failed the new supervisor oracle at the first 29,999-millisecond assertion because suspendActiveSession had already run once; the candidate retained Relay until the exact deadline and rejected stale or OS-suspended timer paths. The first grace candidate also failed the persistence-straddles-background oracle because only one Relay open occurred after the lease rotation deadline; scheduling from retained Relay liveness restores the required second open. Banking the pairing rejection after registerFailure's gated early return — the pre-fix placement — leaves the four-hour E2EE oracle on 'Connecting via Relay…' and reds 7 assertions while the 17 others stay green; moving it ahead of the gate turns them green. The pre-fix production-lifecycle oracle establishes Relay through the supervisor, then completes one active close plus 11 replacement failures while the public retry count remains 0; the candidate publishes 12 and reaches the existing Relay-unreachable verdict. The prior external-signal HOST_OFFLINE policy and serial direct probe also fail their respective retry and first-authenticated-endpoint timing oracles."
-      },
-      "performanceBudget": {
-        "required": true,
-        "evidence": "The background grace adds at most one one-shot timer and retains at most the already-active Relay splice for 30 seconds; it adds no polling, new dial, probe, listener, or wire API. A quick foreground performs zero Relay opens, while expiry closes once and opens no replacement until foreground. The deterministic outage asserts exactly one successful establishment plus 11 failed replacements at the escalation boundary. All configured direct candidates start in one turn, the first authenticated candidate wins after 100 ms, and every losing client is closed."
-      },
-      "promotionCriteria": [
-        "Collect 100 consecutive CI passes or 14 days of soak history.",
-        "Run paired iOS and Android recovery through production-like GFE HOST_OFFLINE responses.",
-        "Measure reconnect radio and battery impact for the 5-15 second foreground retry window."
-      ],
-      "knownGaps": [
-        "No physical iOS or Android device was exercised.",
-        "The deterministic transport seam does not measure production GFE, carrier NAT, DNS, TLS, or Cloud SQL latency.",
-        "React Native timer suspension means the client enforces an overdue deadline on foreground but cannot guarantee server-side splice release at exactly 30 seconds while JavaScript is frozen.",
-        "Background-to-foreground recovery remains covered by supervisor tests but lacks a physical sleep/wake run."
-      ],
-      "demotionRule": "Keep experimental or demote if focused tests flake, HOST_OFFLINE can park indefinitely, direct probes serialize configured endpoints, loser cleanup leaks clients, or physical-device radio cost exceeds the measured budget."
-    },
-    {
       "id": "mobile-transport.lifecycle-liveness",
       "title": "Wanted mobile hosts self-heal without false physical-session death",
       "maturity": "experimental",
@@ -4155,7 +3911,7 @@
       "invariant": "A provider-wanted host without a logical client retries every current-generation pre-client failure until success or explicit cancellation, while release, disconnect, forget, refresh, and stale async continuations preserve their distinct resurrection policies. Direct sessions probe after authenticated silence and terminate after three fair misses. Relay sessions emit no periodic idle or demand-driven probes, use rate-limited foreground probes, and terminate after two fair misses. Authenticated traffic, scheduler stalls, and replacement identities cannot manufacture death. Relay recovery must notify presentation independently of transport-state changes, must not inherit a failed direct path's Tailscale hint, and must retain long-outage escalation.",
       "oracle": "Inject rejected and never-settling catalog reads, missing profiles, synchronous construction failure, release, refresh, forget, revival, and stale completion under fake time. Require bounded 1s through 60s retry, exact current-generation publication, and no zero-owner or forgotten-client resurrection. Inject direct and relay authenticated text/binary traffic, silent probe windows, stalled clocks, replacement identities, and failed writes. Require direct three-miss tolerance; Relay zero idle and demand-driven liveness traffic, one foreground probe sequence, two fair 4s misses, a 10s voluntary rate limit, no old-session network-change probe, and delivery-unknown mutations without replay. Start and clear Relay recovery without changing transport state and require observers to rerender. Project five failed Tailscale attempts into a neutral Relay-specific verdict, then require twelve attempts to produce a Relay-specific unreachable verdict with no Tailscale hint.",
       "commands": [
-        "pnpm --dir mobile exec vitest run --root .. mobile/src/transport/client-context.test.ts mobile/src/transport/host-open-recovery.test.tsx mobile/src/transport/host-open-retry-scheduler.test.ts mobile/src/transport/rpc-session-liveness-watchdog.test.ts mobile/src/transport/rpc-session-liveness-integration.test.ts mobile/src/transport/mobile-relay-rpc-session.test.ts mobile/src/transport/mobile-relay-rpc-session-liveness.test.ts mobile/src/transport/mobile-endpoint-nudge-router.test.ts mobile/src/transport/mobile-relay-e2ee-link.test.ts mobile/src/transport/stable-logical-rpc-client.test.ts mobile/src/transport/connection-health.test.ts"
+        "pnpm --dir mobile exec vitest run --root .. mobile/src/transport/client-context.test.ts mobile/src/transport/host-open-recovery.test.tsx mobile/src/transport/host-open-retry-scheduler.test.ts mobile/src/transport/rpc-session-liveness-watchdog.test.ts mobile/src/transport/rpc-session-liveness-integration.test.ts mobile/src/transport/stable-logical-rpc-client.test.ts mobile/src/transport/connection-health.test.ts"
       ],
       "testFiles": [
         "mobile/src/transport/client-context.test.ts",
@@ -4163,10 +3919,6 @@
         "mobile/src/transport/host-open-retry-scheduler.test.ts",
         "mobile/src/transport/rpc-session-liveness-watchdog.test.ts",
         "mobile/src/transport/rpc-session-liveness-integration.test.ts",
-        "mobile/src/transport/mobile-relay-rpc-session.test.ts",
-        "mobile/src/transport/mobile-relay-rpc-session-liveness.test.ts",
-        "mobile/src/transport/mobile-endpoint-nudge-router.test.ts",
-        "mobile/src/transport/mobile-relay-e2ee-link.test.ts",
         "mobile/src/transport/stable-logical-rpc-client.test.ts",
         "mobile/src/transport/connection-health.test.ts"
       ],
@@ -4209,36 +3961,8 @@
           ]
         },
         {
-          "file": "mobile/src/transport/mobile-relay-rpc-session.test.ts",
-          "assertions": [
-            "written Relay requests retain delivery-unknown failures",
-            "resume confirmation and stream routing remain authenticated"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/mobile-relay-rpc-session-liveness.test.ts",
-          "assertions": [
-            "an idle Relay emits zero periodic traffic",
-            "RPCs and subscriptions after prolonged silence emit no liveness probe",
-            "foreground Relay liveness uses two fair 4-second misses and a 10-second sequence rate limit",
-            "network change does not probe the replaced Relay",
-            "a failed foreground probe write disconnects immediately"
-          ]
-        },
-        {
           "file": "mobile/src/transport/stable-logical-rpc-client.test.ts",
-          "assertions": [
-            "a delivery-unknown mutation is not replayed onto a replacement Relay",
-            "Relay recovery path changes publish and remain pending between failed dials",
-            "a connected path clears recovery state before any later disconnect"
-          ]
-        },
-        {
-          "file": "mobile/src/transport/connection-health.test.ts",
-          "assertions": [
-            "a Relay fallback pending over five failed Tailscale attempts remains neutral and omits the Tailscale hint",
-            "a prolonged Relay recovery escalates without reviving the Tailscale hint"
-          ]
+          "assertions": ["a delivery-unknown mutation is not replayed onto a replacement session"]
         }
       ],
       "evidenceRuns": [
@@ -4246,7 +3970,7 @@
           "date": "2026-08-16",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm --dir mobile exec vitest run --root .. mobile/src/transport/client-context.test.ts mobile/src/transport/host-open-recovery.test.tsx mobile/src/transport/host-open-retry-scheduler.test.ts mobile/src/transport/rpc-session-liveness-watchdog.test.ts mobile/src/transport/rpc-session-liveness-integration.test.ts mobile/src/transport/mobile-relay-rpc-session.test.ts mobile/src/transport/mobile-relay-rpc-session-liveness.test.ts mobile/src/transport/mobile-endpoint-nudge-router.test.ts mobile/src/transport/mobile-relay-e2ee-link.test.ts mobile/src/transport/stable-logical-rpc-client.test.ts mobile/src/transport/connection-health.test.ts",
+          "command": "pnpm --dir mobile exec vitest run --root .. mobile/src/transport/client-context.test.ts mobile/src/transport/host-open-recovery.test.tsx mobile/src/transport/host-open-retry-scheduler.test.ts mobile/src/transport/rpc-session-liveness-watchdog.test.ts mobile/src/transport/rpc-session-liveness-integration.test.ts mobile/src/transport/stable-logical-rpc-client.test.ts mobile/src/transport/connection-health.test.ts",
           "result": "passed",
           "durationSeconds": 0.77,
           "summary": "Eleven focused files passed 85 deterministic provider lifecycle, path presentation, direct/Relay liveness, traffic, and delivery-ambiguity tests."
@@ -19395,12 +19119,9 @@
       "invariant": "A different provider inheriting an active pane key cannot replace its child roster, main turn, prompt, resume identity, model or freshness, nor mutate the owning provider caches. Same-provider children still update. Hosts advertising process ownership retain an identified idle parent until positive exit or suspension, and unavailable reads preserve ownership. Older hosts retain the previous finished/stale replacement policy; distinct execution hosts/workspaces permit replacement. WSL local and relay transports retain the same owner.",
       "oracle": "Send a full Claude child roster, interleave Codex review lifecycle/tool/approval/completion hooks, and require identical snapshots plus zero publications. A later Claude child event must retain the original prompt and roster, and a real child completion must shrink it. After Claude Stop, keep its mobile transcript and saved resume identity while its identified process remains live or unverifiable; accept the first provider replacement after confirmed exit or suspension. Replay must admit records in order, retain the file on failed admission, and concurrent starts, stop during replay, or a second stop during a queued restart must not leave a listener. Pending owner probes cannot publish or accept an old request after stop, restart, or status disable/re-enable; interrupted replay stays durable.",
       "commands": [
-        "SKIP_BUILD=1 QUIRKY_BACKGROUND_LAUNCH=1 xvfb-run -a pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1 --repeat-each=3",
         "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/main/agent-hooks/server-http-owner-probe-lifecycle.test.ts --maxWorkers=2",
         "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts --maxWorkers=2",
-        "QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_E2E_RECORD_VIDEO=1 pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1 --repeat-each=3",
         "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts --maxWorkers=2",
-        "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1",
         "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/renderer/src/store/slices/agent-status-provider-session.test.ts --maxWorkers=2",
         "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts --maxWorkers=2",
         "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts --maxWorkers=2",
@@ -19413,7 +19134,6 @@
         "src/main/agent-hooks/server-start-failure-lifecycle.test.ts",
         "src/main/agent-hooks/server-idle-process-owner.test.ts",
         "tests/e2e/nested-agent-idle-owner.unit.test.ts",
-        "tests/e2e/nested-agent-idle-session-owner.spec.ts",
         "src/main/agent-hooks/server-status-listener-fanout.test.ts",
         "src/main/agent-hooks/terminal-handle-row-identity.test.ts",
         "src/main/agent-hooks/server-nested-agent-boundaries.test.ts",
@@ -19436,15 +19156,6 @@
         {
           "date": "2026-10-15",
           "runner": "local",
-          "platform": "linux",
-          "command": "SKIP_BUILD=1 QUIRKY_BACKGROUND_LAUNCH=1 xvfb-run -a pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1 --repeat-each=3",
-          "result": "passed",
-          "durationSeconds": 51.3,
-          "summary": "Three hidden Electron runs pass in an isolated Docker Ubuntu24 arm64 container on the final generation-guard build using the actual foreground PTY fixture. Native chat, paired mobile transcript, and Show terminal retain Claude identity. Original CI failure reproduced with the worker-PID fixture; corrected foreground fixture passes. Recording-enabled attempts timed out at fixture startup before test execution; attached video is from macOS."
-        },
-        {
-          "date": "2026-10-15",
-          "runner": "local",
           "platform": "macos",
           "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/wsl-guest/relay-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-nested-resume.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/wsl-guest/agent-hook-server.test.ts src/main/agent-hooks/server-http-owner-probe-lifecycle.test.ts src/wsl-guest/relay-http-owner-probe-lifecycle.test.ts --maxWorkers=2",
           "currentCommand": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/main/agent-hooks/server-http-owner-probe-lifecycle.test.ts --maxWorkers=2",
@@ -19456,29 +19167,11 @@
           "date": "2026-10-15",
           "runner": "local",
           "platform": "macos",
-          "command": "QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_E2E_RECORD_VIDEO=1 pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1 --repeat-each=3",
-          "result": "passed",
-          "durationSeconds": 52.2,
-          "summary": "Three recorded hidden Electron runs pass using an identified stand-in process in the actual foreground PTY. Claude native chat survives six nested Codex hook types, a paired mobile client reads the same transcript, and Show terminal returns without an error. Screenshots inspected and fresh proof attached. Controlled hooks/transcript; no live model turn."
-        },
-        {
-          "date": "2026-10-15",
-          "runner": "local",
-          "platform": "macos",
           "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/wsl-guest/relay-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-nested-resume.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
           "currentCommand": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts --maxWorkers=2",
           "result": "passed",
           "durationSeconds": 8.34,
           "summary": "187 tests across 22 files pass on the final follow-up, covering idle process ownership, stale suspension/resume/unavailable/exit, legacy hosts, relay cache isolation, saved resume records, concurrent startup and durable ordered spool replay."
-        },
-        {
-          "date": "2026-10-15",
-          "runner": "local",
-          "platform": "macos",
-          "command": "QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_E2E_RECORD_VIDEO=1 pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1 --repeat-each=3",
-          "result": "passed",
-          "durationSeconds": 32.1,
-          "summary": "Three hidden Electron runs pass. Actual native chat retains the foreground Claude reply after six nested Codex hooks; a mobile-scoped paired client reads that Claude transcript; Show terminal returns without the Codex verification error. Screenshots visually inspected and video attached to PR. Controlled hooks/transcripts with a real OS process identity; no model-backed turn or physical phone."
         },
         {
           "date": "2026-10-15",

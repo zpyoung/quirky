@@ -38,6 +38,30 @@ export function completeAgentTurn(
   })
 }
 
+/**
+ * The agent-status IPC handler writing a hook `working` row. `leadState: 'done'` is the row a
+ * finished lead turn leaves while its background children keep the pane working.
+ */
+export function reportAgentWorking(
+  store: AttentionStore,
+  target: PaneTarget,
+  options: { updatedAt: number; leadState?: 'working' | 'done' }
+): void {
+  const leadState = options.leadState ?? 'working'
+  store.getState().setAgentStatus(
+    target.paneKey,
+    {
+      state: 'working',
+      prompt: 'p',
+      agentType: 'claude',
+      mainAgent: { state: leadState, stateStartedAt: options.updatedAt }
+    },
+    'Claude',
+    { updatedAt: options.updatedAt, stateStartedAt: options.updatedAt },
+    { tabId: target.tabId, worktreeId: target.worktreeId }
+  )
+}
+
 /** A keydown in a pane: the window's capture-phase keydown, only a presence signal. */
 export function typeInPane(store: AttentionStore, _target: PaneTarget): void {
   screenOf(store).input()

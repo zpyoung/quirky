@@ -26,7 +26,7 @@ vi.mock('./workspace-options-sheet', () => ({ WorkspaceOptionsSheet: 'WorkspaceO
 vi.mock('./workspace-details-sheet', () => ({ WorkspaceDetailsSheet: 'WorkspaceDetailsSheet' }))
 
 import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
-import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import { FakeSession } from '../transport/rpc-session-test-fake'
 import type { Worktree } from '../worktree/workspace-list-types'
 import { INITIAL_MOBILE_VIEW } from '../worktree/workspace-view-settings'
 import { HostScreenOverlays } from './host-screen-overlays'
@@ -81,13 +81,6 @@ async function actionLabels(row: Partial<Worktree>): Promise<string[]> {
 describe('the workspace long-press sheet', () => {
   it("offers Sleep for the desktop's own workspace", async () => {
     expect(await actionLabels({})).toContain('Sleep')
-  })
-
-  it("does not offer Sleep for a server's workspace, which the desktop would sleep by its own id", async () => {
-    expect(await actionLabels({ worktreeId: 'runtime:vm-wt', hostId: 'runtime:vm' })).toEqual([
-      'Pin',
-      'Delete'
-    ])
   })
 
   it('marks Pin with the pin icon, and Unpin with the crossed-out one', async () => {

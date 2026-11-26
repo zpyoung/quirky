@@ -60,15 +60,6 @@ export function claudeBackgroundTaskDetails(
   return details
 }
 
-export function hasLiveClaudeBackgroundWork(tasks: Iterable<TrackedClaudeBackgroundTask>): boolean {
-  for (const task of tasks) {
-    if (task.backgrounded) {
-      return true
-    }
-  }
-  return false
-}
-
 function setBounded<K, V>(map: Map<K, V>, key: K, value: V): void {
   map.delete(key)
   map.set(key, value)

@@ -164,24 +164,24 @@ export const AgentStateDot = React.memo(function AgentStateDot({
     // Why: the dashboard lists many agents, so a check glyph scans well for
     // agent-reported completion and keeps 'done' visually distinct from
     // 'idle' and other dot states at a glance. The sidebar's StatusIndicator
-    // intentionally diverges (emerald dot + tooltip) — see file header.
+    // intentionally diverges (green dot + tooltip) — see file header.
     indicator = (
       <span
         className={cn('inline-flex shrink-0 items-center justify-center', box, className)}
         aria-label={agentStateLabel(state)}
       >
-        <CircleCheck className={cn('text-emerald-500', icon)} aria-hidden="true" />
+        <CircleCheck className={cn('text-agent-done', icon)} aria-hidden="true" />
       </span>
     )
   } else if (state === 'unverifiable' || state === 'unconfirmed') {
     // Why: a dashed ring reads as "incomplete information" rather than a state claim,
-    // and amber carries warning weight without borrowing 'done' green or 'working' yellow.
+    // and the question tone carries warning weight without borrowing 'done' green or 'working' blue.
     indicator = (
       <span
         className={cn('inline-flex shrink-0 items-center justify-center', box, className)}
         aria-label={agentStateLabel(state)}
       >
-        <CircleDashed className={cn('text-amber-500', icon)} aria-hidden="true" />
+        <CircleDashed className={cn('text-agent-question', icon)} aria-hidden="true" />
       </span>
     )
   } else if (state === 'permission' || state === 'waiting') {
@@ -204,11 +204,11 @@ export const AgentStateDot = React.memo(function AgentStateDot({
             'block rounded-full',
             inner,
             state === 'blocked' || state === 'failed'
-              ? 'bg-red-500'
+              ? 'bg-agent-failed'
               : // Why: a user's Stop is not news; muted, never the fault red or the finished green.
                 state === 'interrupted'
                 ? 'bg-muted-foreground'
-                : 'bg-neutral-500/40'
+                : 'bg-muted-foreground/40'
           )}
         />
       </span>

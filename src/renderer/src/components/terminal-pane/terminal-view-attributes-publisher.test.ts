@@ -33,10 +33,10 @@ describe('composeTerminalViewAttributes', () => {
     expect(attrs.background).toEqual([0x00, 0x00, 0x00])
     expect(attrs.cursor).toEqual([0xff, 0xff, 0xff])
     expect(attrs.ansi).toHaveLength(256)
-    // DEFAULT_ANSI_COLORS parity: named 16, color cube, greys.
-    expect(attrs.ansi[0]).toEqual([0x2e, 0x34, 0x36])
-    expect(attrs.ansi[1]).toEqual([0xcc, 0x00, 0x00])
-    expect(attrs.ansi[15]).toEqual([0xee, 0xee, 0xec])
+    // named 16 are Quirky Graphite Dark; the color cube and greys keep xterm's values.
+    expect(attrs.ansi[0]).toEqual([0x10, 0x11, 0x14])
+    expect(attrs.ansi[1]).toEqual([0xef, 0x6b, 0x73])
+    expect(attrs.ansi[15]).toEqual([0xec, 0xee, 0xf2])
     expect(attrs.ansi[16]).toEqual([0x00, 0x00, 0x00])
     expect(attrs.ansi[196]).toEqual([0xff, 0x00, 0x00])
     expect(attrs.ansi[232]).toEqual([8, 8, 8])
@@ -106,7 +106,7 @@ describe('composeTerminalViewAttributes', () => {
       'dark',
       cursorSettings
     )
-    expect(attrs.ansi[1]).toEqual([0xcc, 0x00, 0x00])
+    expect(attrs.ansi[1]).toEqual([0xef, 0x6b, 0x73])
     expect(attrs.foreground).toEqual([0xff, 0xff, 0xff])
   })
 })

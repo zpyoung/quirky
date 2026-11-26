@@ -1,0 +1,1269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock review</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #efefec;
+  --border: #d6d6d0;
+  --text: #1c1c1a;
+  --muted: #62625c;
+  --accent: #2f5fd0;
+  --accent-text: #ffffff;
+  --accent-soft: #e4ebfb;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d6;
+  --danger: #b3261e;
+  --ok: #1f7a3d;
+  --change: #c2410c;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615;
+    --surface: #1f1f1d;
+    --surface-2: #2a2a27;
+    --border: #3d3d38;
+    --text: #ececE8;
+    --muted: #a5a59d;
+    --accent: #7ba0ff;
+    --accent-text: #0d1424;
+    --accent-soft: #232c45;
+    --warn: #f0c36a;
+    --warn-soft: #3a2f14;
+    --danger: #ff8a80;
+    --ok: #6fd08c;
+    --change: #fb923c;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+button, select, textarea { font: inherit; color: inherit; }
+button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--surface-2); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+select { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+[hidden] { display: none !important; }
+
+.app { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.banner {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 12px;
+  font-weight: 600;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.chip {
+  display: inline-block;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); position: relative; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.status { color: var(--muted); font-size: 13px; margin-left: auto; min-height: 1.4em; }
+.status.error { color: var(--danger); }
+
+.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 272px minmax(0, 1fr); }
+.rail {
+  overflow: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 10px 10px 16px;
+}
+.rail h2 { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 14px 4px 6px; }
+.rail h2:first-child { margin-top: 2px; }
+.rail ul { list-style: none; margin: 0; padding: 0; }
+.screen-item { display: flex; align-items: center; gap: 4px; border-radius: 6px; }
+.screen-item.current { background: var(--accent-soft); }
+.screen-item > button.go {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+}
+.screen-item .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 9px; height: 9px; flex: none; border-radius: 50%; border: 2px solid var(--muted); align-self: center; }
+.dot.visited { background: var(--ok); border-color: var(--ok); }
+.count { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+.mark { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); padding-right: 6px; cursor: pointer; }
+.note { color: var(--muted); font-size: 12px; margin: 2px 8px 4px; }
+.skipped li { margin: 2px 8px; font-size: 12px; color: var(--muted); }
+.pin-row { border: 1px solid var(--border); border-radius: 8px; margin: 0 2px 6px; background: var(--surface); }
+.pin-row.selected { border-color: var(--accent); }
+.pin-row > button.head { width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 8px; display: block; }
+.pin-row .meta { color: var(--muted); font-size: 12px; }
+.badge { font-size: 11px; border-radius: 999px; padding: 0 7px; background: var(--surface-2); border: 1px solid var(--border); margin-left: 4px; white-space: nowrap; }
+.badge.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.badge.ok { color: var(--ok); }
+.thread { padding: 0 8px 8px; }
+.msg { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.agent { background: var(--accent-soft); }
+.msg .who { display: block; font-size: 11px; color: var(--muted); }
+.msg.last-reply { outline: 2px solid var(--ok); }
+
+.stage { position: relative; min-width: 0; min-height: 0; overflow: auto; display: flex; justify-content: center; padding: 12px; background: var(--surface-2); }
+.frame-box { position: relative; width: 100%; max-width: 100%; height: 100%; min-height: 360px; background: #fff; border-radius: 6px; box-shadow: 0 0 0 1px var(--border), 0 1px 4px rgba(0,0,0,0.12); }
+.frame-box.mobile { width: 390px; }
+.frame-box iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; border-radius: 6px; }
+.overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 6px; }
+.box { position: absolute; pointer-events: none; border-radius: 2px; }
+.box.hover { outline: 2px solid var(--accent); outline-offset: 0; background: rgba(47, 95, 208, 0.08); }
+.box.changed { outline: 2px dashed var(--change); outline-offset: 1px; }
+.box .tag { position: absolute; left: 0; top: -20px; background: var(--accent); color: var(--accent-text); font-size: 11px; line-height: 16px; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.box.changed .tag { background: var(--change); color: #fff; }
+.pin {
+  position: absolute;
+  pointer-events: auto;
+  width: 26px; height: 26px; padding: 0;
+  transform: translate(-50%, -50%);
+  border-radius: 50% 50% 50% 4px;
+  background: var(--accent); color: var(--accent-text); border: 2px solid #fff;
+  font-weight: 700; font-size: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.pin:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+.pin.resolved { background: var(--ok); color: #fff; }
+.pin.selected { outline: 3px solid var(--text); }
+.pop {
+  position: absolute;
+  pointer-events: auto;
+  width: min(300px, calc(100% - 16px));
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 10px;
+  z-index: 5;
+}
+.pop h3 { margin: 0 0 6px; font-size: 13px; }
+.pop textarea { width: 100%; min-height: 76px; resize: vertical; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+.pop .row { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; align-items: center; }
+.pop .err { color: var(--danger); font-size: 12px; margin-right: auto; }
+
+.verdict { background: var(--surface); border-top: 1px solid var(--border); padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.verdict .spacer { flex: 1; }
+.verdict .panel { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
+.verdict .panel textarea { width: 100%; min-height: 64px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+.verdict .panel .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.verdict .err { color: var(--danger); }
+.verdict .info { color: var(--muted); }
+
+@media (max-width: 760px) {
+  .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .rail { max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--border); }
+  .stage { padding: 6px; }
+  .frame-box.mobile { width: 390px; max-width: 100%; }
+  .status { margin-left: 0; flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="banner" id="banner" hidden></div>
+  <header class="bar" id="toolbar">
+    <span class="chip" id="version-chip"></span>
+    <label id="version-wrap" hidden>Version <select id="version-picker" aria-label="Mock version"></select></label>
+    <div class="seg" role="group" aria-label="Mode">
+      <button type="button" id="mode-interact" aria-pressed="true">Interact</button>
+      <button type="button" id="mode-comment" aria-pressed="false">Comment</button>
+    </div>
+    <div class="seg" role="group" aria-label="Viewport">
+      <button type="button" id="vp-desktop" aria-pressed="true">Desktop</button>
+      <button type="button" id="vp-mobile" aria-pressed="false">Mobile 390px</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="show-changes"> Show changes</label>
+    <div class="seg" role="group" aria-label="State" id="state-switch" hidden></div>
+    <span class="status" id="status" role="status" aria-live="polite"></span>
+  </header>
+  <div class="body">
+    <nav class="rail" id="rail" aria-label="Screens"></nav>
+    <main class="stage">
+      <div class="frame-box" id="frame-box">
+        <iframe id="mock-frame" title="Mock under review"></iframe>
+        <div class="overlay" id="overlay">
+          <div id="layer-changes"></div>
+          <div id="layer-hover"></div>
+          <div id="layer-pins"></div>
+          <div id="layer-pop"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <footer class="verdict" id="verdict" hidden></footer>
+</div>
+<script id="quirk-mock-boot" type="application/json">{"mode":"offline","version":1,"latest":1,"versions":[1],"revision":"714d2ef305a600a9","screens":{"ui_layer":true,"screens":[{"id":"workspace","title":"Workspace","purpose":"The main window: worktree sidebar with agent status, terminal tabs, status bar and the needs-you toast.","states":["dark","light"],"skipped_states":[{"state":"empty","reason":"a recolor adds no new states; each screen is shown in dark and light"}],"elements":[{"pin":"row-working","label":"Worktree row, working (blue, pulsing)","component":"src/renderer/src/components/sidebar + AgentStateDot"},{"pin":"row-needs","label":"Worktree row, needs you (amber)","component":"src/renderer/src/components/sidebar + AgentStateDot"},{"pin":"row-failing","label":"Worktree row, failing (red)","component":"src/renderer/src/components/sidebar + AgentStateDot"},{"pin":"row-done","label":"Worktree row, done (green)","component":"src/renderer/src/components/sidebar + AgentStateDot"},{"pin":"row-idle","label":"Worktree row, idle","component":"src/renderer/src/components/sidebar"},{"pin":"primary-btn","label":"Primary button (teal)","component":"src/renderer/src/components/ui/button.tsx"},{"pin":"tab-bar","label":"Tab bar, active tab underline","component":"src/renderer/src/components/tab-bar"},{"pin":"terminal","label":"Terminal with Quirky Graphite palette","component":"src/renderer/src/components/terminal-pane"},{"pin":"toast","label":"Needs-you toast","component":"src/renderer/src/components/ui/sonner.tsx"}]},{"id":"editor","title":"Editor & diff","purpose":"Monaco with the graphite syntax theme and a diff with v1 add/delete colors.","states":["dark","light"],"skipped_states":[],"elements":[{"pin":"editor-syntax","label":"Syntax colors","component":"src/renderer/src/components/editor/MonacoEditor.tsx"},{"pin":"editor-selection","label":"Selection (teal tint)","component":"src/renderer/src/components/editor/MonacoEditor.tsx"},{"pin":"diff-add","label":"Diff added line","component":"src/renderer/src/components/editor"},{"pin":"diff-del","label":"Diff deleted line","component":"src/renderer/src/components/editor"}]},{"id":"chat","title":"Chat","purpose":"Native chat: user bubble, assistant text, inline and block code, link, composer.","states":["dark","light"],"skipped_states":[],"elements":[{"pin":"chat-user","label":"User message","component":"src/renderer/src/components/native-chat"},{"pin":"chat-inline-code","label":"Inline code","component":"src/renderer/src/components/native-chat"},{"pin":"chat-code","label":"Code block","component":"src/renderer/src/components/native-chat"},{"pin":"chat-link","label":"Link (teal)","component":"src/renderer/src/components/native-chat"},{"pin":"composer","label":"Composer","component":"src/renderer/src/components/native-chat"},{"pin":"send-btn","label":"Send button","component":"src/renderer/src/components/ui/button.tsx"}]},{"id":"settings","title":"Settings: Appearance","purpose":"Theme mode, terminal theme defaults, palette preview, switch and focus ring.","states":["dark","light"],"skipped_states":[],"elements":[{"pin":"theme-toggle","label":"System / Dark / Light","component":"src/renderer/src/components/settings/AppearanceInterfaceSection.tsx"},{"pin":"terminal-theme","label":"Terminal theme picker","component":"src/renderer/src/components/settings/TerminalThemePicker.tsx"},{"pin":"ansi-swatches","label":"ANSI palette","component":"src/renderer/src/components/settings/TerminalThemePicker.tsx"},{"pin":"switch","label":"Switch (teal on)","component":"src/renderer/src/components/ui/switch.tsx"},{"pin":"focus-input","label":"Focus ring","component":"src/renderer/src/components/ui/input.tsx"}]},{"id":"trust","title":"Trust dialog","purpose":"Plugin consent dialog on the frozen security surface, now graphite.","states":["dark","light"],"skipped_states":[],"elements":[{"pin":"trust-dialog","label":"Security dialog surface","component":"src/renderer/src/components/ui/security-surface.tsx"},{"pin":"trust-allow","label":"Allow (primary)","component":"src/renderer/src/components/ui/button.tsx"},{"pin":"trust-cancel","label":"Don't allow","component":"src/renderer/src/components/ui/button.tsx"}]},{"id":"mobile","title":"Mobile worktrees","purpose":"Quirky Mobile worktree list, terminal and primary action in graphite.","states":["dark"],"skipped_states":[{"state":"light","reason":"mobile stays dark only (decided)"}],"elements":[{"pin":"mobile-row","label":"Worktree row","component":"mobile/src/worktree"},{"pin":"mobile-terminal","label":"Terminal","component":"mobile/src/terminal"},{"pin":"mobile-btn","label":"Primary button","component":"mobile/src/components"}]}]},"changed":[],"mock_html":"\u003c!doctype html>\u003chtml>\u003chead>\u003cmeta charset='utf-8'>\u003cmeta name='viewport' content='width=device-width,initial-scale=1'>\u003ctitle>Quirky graphite + teal mock\u003c/title>\u003cstyle>\n*{box-sizing:border-box}body{margin:0;font:13px -apple-system,BlinkMacSystemFont,sans-serif}\n.view{background:var(--rail);color:var(--text);min-height:560px;display:flex;flex-direction:column}\n.titlebar{display:flex;align-items:center;gap:14px;padding:6px 12px;background:var(--rail);border-bottom:1px solid var(--border);font-size:12px;flex-wrap:wrap}\n.brand{font-weight:600}.titlebar nav{display:flex;gap:4px;flex-wrap:wrap}\n.nav{color:var(--muted);text-decoration:none;padding:3px 8px;border-radius:6px}.nav:hover{background:var(--selected);color:var(--text)}\n.nav.on{color:var(--text);box-shadow:inset 0 -2px var(--accent)}\n.app{display:flex;flex:1;min-height:0}.rail{width:230px;background:var(--rail);border-right:1px solid var(--border);padding:8px}\n.rail-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}\n.sect{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}.pad{padding:10px 12px 4px}\n.wrow{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;margin-bottom:2px}\n.wrow.sel{background:var(--selected);box-shadow:inset 2px 0 var(--accent)}.wtext{flex:1;min-width:0}\n.sub{font-size:11px;color:var(--muted)}.sub.needs{color:var(--needs)}\n.count{font-size:11px;font-variant-numeric:tabular-nums;padding:0 6px;border-radius:8px}\n.count.needs{color:var(--needs);background:color-mix(in srgb,var(--needs) 16%,transparent)}\n.count.fail{color:var(--fail);background:color-mix(in srgb,var(--fail) 16%,transparent)}\n.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}\n.dot.working{background:var(--working);box-shadow:0 0 0 2px color-mix(in srgb,var(--working) 25%,transparent)}\n.dot.needs{background:var(--needs)}.dot.fail{background:var(--fail)}.dot.done{background:var(--done)}.dot.idle{background:var(--idle)}\n@keyframes qpulse{0%,100%{box-shadow:0 0 0 2px color-mix(in srgb,var(--working) 30%,transparent)}50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--working) 12%,transparent)}}\n.dot.pulse{animation:qpulse 1.6s ease-in-out infinite}\n@media (prefers-reduced-motion:reduce){.dot.pulse{animation:none}}\n.surface{flex:1;background:var(--surface);display:flex;flex-direction:column;position:relative;min-width:0}\n.single .surface{border-left:none}\n.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);padding:0 8px}\n.tab{background:none;border:0;color:var(--muted);font:inherit;padding:8px 10px;cursor:pointer}\n.tab.on{color:var(--text);box-shadow:inset 0 -2px var(--accent)}\n.pane{padding:10px 12px;flex:1}.term{font:12px ui-monospace,Menlo,monospace;line-height:1.6}\n.cursor{display:inline-block;width:7px;height:13px;background:var(--text);vertical-align:-2px}\n.crow{padding:5px 0;font:12px ui-monospace,Menlo,monospace}.m{display:inline-block;width:16px;font-weight:600}\n.m.add{color:var(--done)}.m.del{color:var(--fail)}.muted{color:var(--muted)}.small{font-size:11px}\n.statusbar{display:flex;gap:14px;align-items:center;border-top:1px solid var(--border);background:var(--rail);padding:4px 10px;font-size:11px;color:var(--muted)}\n.statusbar span{display:flex;align-items:center;gap:5px}.push{margin-left:auto}\n.toast{position:absolute;right:12px;bottom:36px;width:250px;background:var(--selected);border:1px solid var(--border);border-left:2px solid var(--needs);border-radius:10px;padding:10px;box-shadow:0 8px 24px var(--shadow);font-size:12px}\n.toast-actions{display:flex;gap:6px;justify-content:flex-end;margin-top:8px}\n.btn{font:inherit;font-size:12px;color:var(--text);background:transparent;border:1px solid var(--border);border-radius:7px;padding:5px 12px;cursor:pointer}\n.btn:hover{background:var(--selected)}.btn.sm{padding:2px 9px;font-size:11.5px}\n.btn.primary{background:var(--accent);color:var(--accentfg);border-color:var(--accent)}\n.btn.primary:hover{background:color-mix(in srgb,var(--accent) 88%,var(--text))}\n.btn:focus-visible,.tab:focus-visible,.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}\n.btn.block{width:100%;padding:9px}\n.code{background:var(--surface);font:12px ui-monospace,Menlo,monospace;line-height:1.65;padding:6px 0}\n.cl,.dl{display:flex;gap:12px;padding:0 12px}.gut{color:var(--muted);width:22px;text-align:right;flex:none;opacity:.8}\n.selline{background:color-mix(in srgb,var(--accent) 22%,transparent)}\n.diff{border-top:1px solid var(--border)}.dl.add{background:var(--addbg);color:var(--addfg)}.dl.del{background:var(--delbg);color:var(--delfg)}\n.kw{color:var(--kw)}.fn{color:var(--fn)}.st{color:var(--st)}.num{color:var(--num)}.cm{color:var(--cm);font-style:italic}.ty{color:var(--ty)}.const{color:var(--const)}.pu{color:var(--pu)}\n.chat{padding:16px;gap:12px;max-width:620px}.msg{line-height:1.55}\n.msg.user{align-self:flex-end;background:color-mix(in srgb,var(--text) 6%,var(--surface));border:1px solid var(--border);border-radius:10px;padding:8px 12px}\n.msg code{font:12px ui-monospace,Menlo,monospace;background:var(--codebg);border:1px solid var(--border);border-radius:4px;padding:0 4px}\n.msg a{color:var(--accent)}\n.cblock{margin:8px 0;border:1px solid var(--border);border-radius:8px;overflow:hidden}\n.chead{background:var(--codehead);font-size:11px;color:var(--muted);padding:4px 10px}\n.cblock pre{margin:0;background:var(--codebg);padding:8px 10px;font:12px ui-monospace,Menlo,monospace;white-space:pre-wrap}\n.composer{margin-top:auto;border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--surface)}\n.ph{color:var(--muted);margin-bottom:10px}.crow2{display:flex;gap:6px;align-items:center}\n.chip{font-size:11px;border:1px solid var(--border);border-radius:6px;padding:1px 7px;color:var(--muted)}\n.settings{padding:16px;max-width:560px;gap:2px}\n.frow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}\n.seg{display:flex;border:1px solid var(--border);border-radius:7px;overflow:hidden}\n.seg button{background:none;border:0;font:inherit;font-size:12px;color:var(--muted);padding:4px 10px;cursor:pointer}\n.seg button.on{background:var(--selected);color:var(--text);box-shadow:inset 0 -2px var(--accent)}\n.select{border:1px solid var(--border);border-radius:7px;padding:4px 10px;font-size:12px}\n.swatches{display:grid;grid-template-columns:repeat(8,14px);gap:3px}.sw{width:14px;height:14px;border-radius:3px;border:1px solid var(--border)}\n.switch{width:30px;height:18px;border-radius:9px;background:var(--border);position:relative;cursor:pointer}\n.switch span{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .12s}\n.switch.on{background:var(--accent)}.switch.on span{left:14px}\n.input{font:inherit;font-size:12px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:4px 8px}\n.input.focus,.input:focus{outline:2px solid var(--accent);outline-offset:2px}\n.reopen{margin:12px}.scrim{position:absolute;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center}\n.dialog{width:340px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;box-shadow:0 8px 24px var(--shadow)}\n.dtitle{font-weight:600;font-size:14px;margin-bottom:6px}.dialog ul{margin:8px 0;padding-left:18px;line-height:1.6}\n.dactions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}\n.phone{width:300px;margin:16px auto;background:var(--rail);border:1px solid var(--border);border-radius:28px;padding:18px 14px}\n.mtitle{font-weight:600;font-size:16px;margin-bottom:10px}\n.mrow{display:flex;gap:10px;align-items:center;background:var(--surface);border-radius:10px;padding:10px;margin-bottom:6px}\n.mterm{background:var(--surface);border-radius:10px;padding:10px;font:12px ui-monospace,Menlo,monospace;margin:10px 0}\n@media (max-width:600px){.rail{width:150px}.toast{width:200px}}\n\u003c/style>\u003c/head>\u003cbody>\u003csection data-screen='workspace'>\u003cdiv data-state='dark' class='view' style='--rail:#0c0d0f;--surface:#16171b;--selected:#22242b;--border:#24262c;--text:#eceef2;--muted:#7c828d;--accent:#5fd0d6;--accentfg:#0c0d0f;--working:#6fb3ff;--needs:#e5b454;--fail:#ef6b73;--done:#4cc38a;--idle:#7c828d;--codebg:#101114;--codehead:#1b1c21;--addbg:#3fb95024;--addfg:#a6f0b0;--delbg:#e5534b24;--delfg:#ffb3ad;--kw:#c79bff;--fn:#6fb3ff;--st:#6dd6b4;--num:#ff9d7a;--cm:#8a909b;--ty:#5fd0d6;--const:#d6b58c;--pu:#a0a6b1;--scrim:rgba(22,23,27,.88);--shadow:rgba(0,0,0,.55);--a0:#101114;--a1:#ef6b73;--a2:#4cc38a;--a3:#e5b454;--a4:#6fb3ff;--a5:#bd8ee8;--a6:#63c5cf;--a7:#c5c9d2;--a8:#7c828d;--a9:#ff8b93;--a10:#70dba5;--a11:#f5ce7e;--a12:#9fcbff;--a13:#d4acf4;--a14:#8ddce3;--a15:#eceef2'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav on'>Workspace\u003c/a>\u003ca href='#/editor' class='nav'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav'>Chat\u003c/a>\u003ca href='#/settings' class='nav'>Settings\u003c/a>\u003ca href='#/trust' class='nav'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='app'>\n  \u003caside class='rail'>\n    \u003cdiv class='rail-head'>\u003cspan class='sect'>Worktrees\u003c/span>\n      \u003cbutton class='btn primary sm' data-pin='primary-btn'>New\u003c/button>\u003c/div>\n    \u003cdiv class='wrow sel' data-pin='row-working'>\u003cspan class='dot working pulse'>\u003c/span>\u003cdiv class='wtext'>\u003cdiv>quirky-theme\u003c/div>\u003cdiv class='sub'>claude · editing main.css\u003c/div>\u003c/div>\u003c/div>\u003cdiv class='wrow' data-pin='row-needs'>\u003cspan class='dot needs'>\u003c/span>\u003cdiv class='wtext'>\u003cdiv>fix-ledger\u003c/div>\u003cdiv class='sub needs'>codex · needs you\u003c/div>\u003c/div>\u003cspan class='count needs'>1\u003c/span>\u003c/div>\u003cdiv class='wrow' data-pin='row-failing'>\u003cspan class='dot fail'>\u003c/span>\u003cdiv class='wtext'>\u003cdiv>mobile-sync\u003c/div>\u003cdiv class='sub'>tests failing · 3\u003c/div>\u003c/div>\u003cspan class='count fail'>3\u003c/span>\u003c/div>\u003cdiv class='wrow' data-pin='row-done'>\u003cspan class='dot done'>\u003c/span>\u003cdiv class='wtext'>\u003cdiv>docs-pass\u003c/div>\u003cdiv class='sub'>done · PR #734 ready\u003c/div>\u003c/div>\u003c/div>\u003cdiv class='wrow' data-pin='row-idle'>\u003cspan class='dot idle'>\u003c/span>\u003cdiv class='wtext'>\u003cdiv>main\u003c/div>\u003cdiv class='sub'>idle\u003c/div>\u003c/div>\u003c/div>\n  \u003c/aside>\n  \u003cmain class='surface'>\n    \u003cdiv class='tabs' data-pin='tab-bar'>\n      \u003cbutton class='tab on' data-tab='term'>claude\u003c/button>\n      \u003cbutton class='tab' data-tab='term'>zsh\u003c/button>\n      \u003cbutton class='tab' data-tab='changes'>Changes\u003c/button>\n    \u003c/div>\n    \u003cdiv class='pane term' data-pane='term' data-pin='terminal'>\u003cdiv>\u003cspan style='color:var(--a2)'>zpyoung\u003c/span> \u003cspan style='color:var(--a4)'>~/quirky-theme\u003c/span> \u003cspan style='color:var(--a5)'>(zpyoung/quirky-theme)\u003c/span> $ pnpm typecheck:web\u003c/div>\u003cdiv style='color:var(--a8)'>&gt; tsc --noEmit -p config/tsconfig.web.json\u003c/div>\u003cdiv>\u003cspan style='color:var(--a3)'>warn\u003c/span> 2 unused exports in settings/\u003c/div>\u003cdiv>\u003cspan style='color:var(--a1)'>error\u003c/span> TS2322 main.css.d.ts:12\u003c/div>\u003cdiv>\u003cspan style='color:var(--a2)'>✓\u003c/span> 1,204 files checked in \u003cspan style='color:var(--a6)'>8.4s\u003c/span>\u003c/div>\u003cdiv>$ \u003cspan class='cursor'>\u003c/span>\u003c/div>\u003c/div>\n    \u003cdiv class='pane changes' data-pane='changes' hidden>\n      \u003cdiv class='crow'>\u003cspan class='m add'>M\u003c/span> src/renderer/src/assets/main.css \u003cspan class='muted'>+142 −96\u003c/span>\u003c/div>\n      \u003cdiv class='crow'>\u003cspan class='m add'>M\u003c/span> src/shared/terminal-themes/defaults.ts \u003cspan class='muted'>+44\u003c/span>\u003c/div>\n      \u003cdiv class='crow'>\u003cspan class='m del'>D\u003c/span> docs/old-palette.md\u003c/div>\n    \u003c/div>\n    \u003cdiv class='statusbar'>\u003cspan>\u003cspan class='dot working'>\u003c/span> 1 working\u003c/span>\u003cspan>\u003cspan class='dot needs'>\u003c/span> 1 needs you\u003c/span>\u003cspan>\u003cspan class='dot fail'>\u003c/span> 1 failing\u003c/span>\u003cspan class='push'>main ↑2\u003c/span>\u003c/div>\n    \u003cdiv class='toast' data-pin='toast'>\u003cb>codex needs you\u003c/b>\u003cdiv class='muted'>fix-ledger · “Run the migration now?”\u003c/div>\n      \u003cdiv class='toast-actions'>\u003cbutton class='btn sm'>Later\u003c/button>\u003cbutton class='btn primary sm'>Open\u003c/button>\u003c/div>\u003c/div>\n  \u003c/main>\n\u003c/div>\u003c/div>\u003cdiv data-state='light' class='view' style='--rail:#eef0f3;--surface:#ffffff;--selected:#e7e9ef;--border:#e3e5ea;--text:#1b1d22;--muted:#80868f;--accent:#14808a;--accentfg:#ffffff;--working:#2f74c0;--needs:#c98a0b;--fail:#d6455d;--done:#1f9d63;--idle:#80868f;--codebg:#f6f7f9;--codehead:#eceef2;--addbg:#2da44e1f;--addfg:#116329;--delbg:#cf222e1a;--delfg:#82071e;--kw:#7f4fc9;--fn:#2a6cb5;--st:#1a7a5c;--num:#b4532f;--cm:#5c6570;--ty:#0f6f78;--const:#8f6a3a;--pu:#57606a;--scrim:rgba(255,255,255,.88);--shadow:rgba(27,29,34,.28);--a0:#1b1d22;--a1:#d6455d;--a2:#1f9d63;--a3:#a56e08;--a4:#2f74c0;--a5:#9656b8;--a6:#167f8b;--a7:#c5c9d2;--a8:#646b76;--a9:#b62d46;--a10:#167747;--a11:#855706;--a12:#215b9a;--a13:#784293;--a14:#106570;--a15:#f4f5f7'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav on'>Workspace\u003c/a>\u003ca href='#/editor' class='nav'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav'>Chat\u003c/a>\u003ca href='#/settings' class='nav'>Settings\u003c/a>\u003ca href='#/trust' class='nav'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='app'>\n  \u003caside class='rail'>\n    \u003cdiv class='rail-head'>\u003cspan class='sect'>Worktrees\u003c/span>\n      \u003cbutton class='btn primary sm' data-pin='primary-btn'>New\u003c/button>\u003c/div>\n    \u003cdiv class='wrow sel' data-pin='row-working'>\u003cspan class='dot working pulse'>\u003c/span>\u003cdiv class='wtext'>\u003cdiv>quirky-theme\u003c/div>\u003cdiv class='sub'>claude · editing main.css\u003c/div>\u003c/div>\u003c/div>\u003cdiv class='wrow' data-pin='row-needs'>\u003cspan class='dot needs'>\u003c/span>\u003cdiv class='wtext'>\u003cdiv>fix-ledger\u003c/div>\u003cdiv class='sub needs'>codex · needs you\u003c/div>\u003c/div>\u003cspan class='count needs'>1\u003c/span>\u003c/div>\u003cdiv class='wrow' data-pin='row-failing'>\u003cspan class='dot fail'>\u003c/span>\u003cdiv class='wtext'>\u003cdiv>mobile-sync\u003c/div>\u003cdiv class='sub'>tests failing · 3\u003c/div>\u003c/div>\u003cspan class='count fail'>3\u003c/span>\u003c/div>\u003cdiv class='wrow' data-pin='row-done'>\u003cspan class='dot done'>\u003c/span>\u003cdiv class='wtext'>\u003cdiv>docs-pass\u003c/div>\u003cdiv class='sub'>done · PR #734 ready\u003c/div>\u003c/div>\u003c/div>\u003cdiv class='wrow' data-pin='row-idle'>\u003cspan class='dot idle'>\u003c/span>\u003cdiv class='wtext'>\u003cdiv>main\u003c/div>\u003cdiv class='sub'>idle\u003c/div>\u003c/div>\u003c/div>\n  \u003c/aside>\n  \u003cmain class='surface'>\n    \u003cdiv class='tabs' data-pin='tab-bar'>\n      \u003cbutton class='tab on' data-tab='term'>claude\u003c/button>\n      \u003cbutton class='tab' data-tab='term'>zsh\u003c/button>\n      \u003cbutton class='tab' data-tab='changes'>Changes\u003c/button>\n    \u003c/div>\n    \u003cdiv class='pane term' data-pane='term' data-pin='terminal'>\u003cdiv>\u003cspan style='color:var(--a2)'>zpyoung\u003c/span> \u003cspan style='color:var(--a4)'>~/quirky-theme\u003c/span> \u003cspan style='color:var(--a5)'>(zpyoung/quirky-theme)\u003c/span> $ pnpm typecheck:web\u003c/div>\u003cdiv style='color:var(--a8)'>&gt; tsc --noEmit -p config/tsconfig.web.json\u003c/div>\u003cdiv>\u003cspan style='color:var(--a3)'>warn\u003c/span> 2 unused exports in settings/\u003c/div>\u003cdiv>\u003cspan style='color:var(--a1)'>error\u003c/span> TS2322 main.css.d.ts:12\u003c/div>\u003cdiv>\u003cspan style='color:var(--a2)'>✓\u003c/span> 1,204 files checked in \u003cspan style='color:var(--a6)'>8.4s\u003c/span>\u003c/div>\u003cdiv>$ \u003cspan class='cursor'>\u003c/span>\u003c/div>\u003c/div>\n    \u003cdiv class='pane changes' data-pane='changes' hidden>\n      \u003cdiv class='crow'>\u003cspan class='m add'>M\u003c/span> src/renderer/src/assets/main.css \u003cspan class='muted'>+142 −96\u003c/span>\u003c/div>\n      \u003cdiv class='crow'>\u003cspan class='m add'>M\u003c/span> src/shared/terminal-themes/defaults.ts \u003cspan class='muted'>+44\u003c/span>\u003c/div>\n      \u003cdiv class='crow'>\u003cspan class='m del'>D\u003c/span> docs/old-palette.md\u003c/div>\n    \u003c/div>\n    \u003cdiv class='statusbar'>\u003cspan>\u003cspan class='dot working'>\u003c/span> 1 working\u003c/span>\u003cspan>\u003cspan class='dot needs'>\u003c/span> 1 needs you\u003c/span>\u003cspan>\u003cspan class='dot fail'>\u003c/span> 1 failing\u003c/span>\u003cspan class='push'>main ↑2\u003c/span>\u003c/div>\n    \u003cdiv class='toast' data-pin='toast'>\u003cb>codex needs you\u003c/b>\u003cdiv class='muted'>fix-ledger · “Run the migration now?”\u003c/div>\n      \u003cdiv class='toast-actions'>\u003cbutton class='btn sm'>Later\u003c/button>\u003cbutton class='btn primary sm'>Open\u003c/button>\u003c/div>\u003c/div>\n  \u003c/main>\n\u003c/div>\u003c/div>\u003c/section>\u003csection data-screen='editor'>\u003cdiv data-state='dark' class='view' style='--rail:#0c0d0f;--surface:#16171b;--selected:#22242b;--border:#24262c;--text:#eceef2;--muted:#7c828d;--accent:#5fd0d6;--accentfg:#0c0d0f;--working:#6fb3ff;--needs:#e5b454;--fail:#ef6b73;--done:#4cc38a;--idle:#7c828d;--codebg:#101114;--codehead:#1b1c21;--addbg:#3fb95024;--addfg:#a6f0b0;--delbg:#e5534b24;--delfg:#ffb3ad;--kw:#c79bff;--fn:#6fb3ff;--st:#6dd6b4;--num:#ff9d7a;--cm:#8a909b;--ty:#5fd0d6;--const:#d6b58c;--pu:#a0a6b1;--scrim:rgba(22,23,27,.88);--shadow:rgba(0,0,0,.55);--a0:#101114;--a1:#ef6b73;--a2:#4cc38a;--a3:#e5b454;--a4:#6fb3ff;--a5:#bd8ee8;--a6:#63c5cf;--a7:#c5c9d2;--a8:#7c828d;--a9:#ff8b93;--a10:#70dba5;--a11:#f5ce7e;--a12:#9fcbff;--a13:#d4acf4;--a14:#8ddce3;--a15:#eceef2'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav'>Workspace\u003c/a>\u003ca href='#/editor' class='nav on'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav'>Chat\u003c/a>\u003ca href='#/settings' class='nav'>Settings\u003c/a>\u003ca href='#/trust' class='nav'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='app single'>\n  \u003cmain class='surface'>\n    \u003cdiv class='tabs'>\u003cbutton class='tab on'>window-background.ts\u003c/button>\u003cbutton class='tab'>main.css\u003c/button>\u003c/div>\n    \u003cdiv class='code' data-pin='editor-syntax'>\u003cdiv class='cl'>\u003cspan class='gut'>1\u003c/span>\u003cspan>\u003cspan class='kw'>import\u003c/span> \u003cspan class='pu'>{\u003c/span> nativeTheme \u003cspan class='pu'>}\u003c/span> \u003cspan class='kw'>from\u003c/span> \u003cspan class='st'>'electron'\u003c/span>\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>2\u003c/span>\u003cspan>&nbsp;\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>3\u003c/span>\u003cspan>\u003cspan class='cm'>// keeps the first frame graphite\u003c/span>\u003c/span>\u003c/div>\u003cdiv class='cl selline' data-pin='editor-selection'>\u003cspan class='gut'>4\u003c/span>\u003cspan>\u003cspan class='kw'>export function\u003c/span> \u003cspan class='fn'>windowBackground\u003c/span>\u003cspan class='pu'>(\u003c/span>mode\u003cspan class='pu'>:\u003c/span> \u003cspan class='ty'>ResolvedMode\u003c/span>\u003cspan class='pu'>):\u003c/span> \u003cspan class='ty'>string\u003c/span> \u003cspan class='pu'>{\u003c/span>\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>5\u003c/span>\u003cspan>  \u003cspan class='kw'>return\u003c/span> mode \u003cspan class='pu'>===\u003c/span> \u003cspan class='st'>'dark'\u003c/span> \u003cspan class='pu'>?\u003c/span> \u003cspan class='const'>RAIL_DARK\u003c/span> \u003cspan class='pu'>:\u003c/span> \u003cspan class='const'>RAIL_LIGHT\u003c/span>\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>6\u003c/span>\u003cspan>\u003cspan class='pu'>}\u003c/span>\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>7\u003c/span>\u003cspan>&nbsp;\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>8\u003c/span>\u003cspan>\u003cspan class='kw'>const\u003c/span> fadeMs \u003cspan class='pu'>=\u003c/span> \u003cspan class='num'>120\u003c/span>\u003c/span>\u003c/div>\u003c/div>\n    \u003cdiv class='sect pad'>Diff · main.css\u003c/div>\n    \u003cdiv class='code diff'>\u003cdiv class='dl ctx'>\u003cspan class='gut'>12\u003c/span>\u003cspan>  --sidebar: #171717;\u003c/span>\u003c/div>\u003cdiv class='dl del' data-pin='diff-del'>\u003cspan class='gut'>13\u003c/span>\u003cspan>-  --primary: #e5e5e5;\u003c/span>\u003c/div>\u003cdiv class='dl add' data-pin='diff-add'>\u003cspan class='gut'>13\u003c/span>\u003cspan>+  --primary: #5fd0d6;\u003c/span>\u003c/div>\u003cdiv class='dl del'>\u003cspan class='gut'>14\u003c/span>\u003cspan>-  --background: #0a0a0a;\u003c/span>\u003c/div>\u003cdiv class='dl add'>\u003cspan class='gut'>14\u003c/span>\u003cspan>+  --background: #16171b;\u003c/span>\u003c/div>\u003cdiv class='dl ctx'>\u003cspan class='gut'>15\u003c/span>\u003cspan>  --radius: 0.625rem;\u003c/span>\u003c/div>\u003c/div>\n  \u003c/main>\n\u003c/div>\u003c/div>\u003cdiv data-state='light' class='view' style='--rail:#eef0f3;--surface:#ffffff;--selected:#e7e9ef;--border:#e3e5ea;--text:#1b1d22;--muted:#80868f;--accent:#14808a;--accentfg:#ffffff;--working:#2f74c0;--needs:#c98a0b;--fail:#d6455d;--done:#1f9d63;--idle:#80868f;--codebg:#f6f7f9;--codehead:#eceef2;--addbg:#2da44e1f;--addfg:#116329;--delbg:#cf222e1a;--delfg:#82071e;--kw:#7f4fc9;--fn:#2a6cb5;--st:#1a7a5c;--num:#b4532f;--cm:#5c6570;--ty:#0f6f78;--const:#8f6a3a;--pu:#57606a;--scrim:rgba(255,255,255,.88);--shadow:rgba(27,29,34,.28);--a0:#1b1d22;--a1:#d6455d;--a2:#1f9d63;--a3:#a56e08;--a4:#2f74c0;--a5:#9656b8;--a6:#167f8b;--a7:#c5c9d2;--a8:#646b76;--a9:#b62d46;--a10:#167747;--a11:#855706;--a12:#215b9a;--a13:#784293;--a14:#106570;--a15:#f4f5f7'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav'>Workspace\u003c/a>\u003ca href='#/editor' class='nav on'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav'>Chat\u003c/a>\u003ca href='#/settings' class='nav'>Settings\u003c/a>\u003ca href='#/trust' class='nav'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='app single'>\n  \u003cmain class='surface'>\n    \u003cdiv class='tabs'>\u003cbutton class='tab on'>window-background.ts\u003c/button>\u003cbutton class='tab'>main.css\u003c/button>\u003c/div>\n    \u003cdiv class='code' data-pin='editor-syntax'>\u003cdiv class='cl'>\u003cspan class='gut'>1\u003c/span>\u003cspan>\u003cspan class='kw'>import\u003c/span> \u003cspan class='pu'>{\u003c/span> nativeTheme \u003cspan class='pu'>}\u003c/span> \u003cspan class='kw'>from\u003c/span> \u003cspan class='st'>'electron'\u003c/span>\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>2\u003c/span>\u003cspan>&nbsp;\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>3\u003c/span>\u003cspan>\u003cspan class='cm'>// keeps the first frame graphite\u003c/span>\u003c/span>\u003c/div>\u003cdiv class='cl selline' data-pin='editor-selection'>\u003cspan class='gut'>4\u003c/span>\u003cspan>\u003cspan class='kw'>export function\u003c/span> \u003cspan class='fn'>windowBackground\u003c/span>\u003cspan class='pu'>(\u003c/span>mode\u003cspan class='pu'>:\u003c/span> \u003cspan class='ty'>ResolvedMode\u003c/span>\u003cspan class='pu'>):\u003c/span> \u003cspan class='ty'>string\u003c/span> \u003cspan class='pu'>{\u003c/span>\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>5\u003c/span>\u003cspan>  \u003cspan class='kw'>return\u003c/span> mode \u003cspan class='pu'>===\u003c/span> \u003cspan class='st'>'dark'\u003c/span> \u003cspan class='pu'>?\u003c/span> \u003cspan class='const'>RAIL_DARK\u003c/span> \u003cspan class='pu'>:\u003c/span> \u003cspan class='const'>RAIL_LIGHT\u003c/span>\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>6\u003c/span>\u003cspan>\u003cspan class='pu'>}\u003c/span>\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>7\u003c/span>\u003cspan>&nbsp;\u003c/span>\u003c/div>\u003cdiv class='cl'>\u003cspan class='gut'>8\u003c/span>\u003cspan>\u003cspan class='kw'>const\u003c/span> fadeMs \u003cspan class='pu'>=\u003c/span> \u003cspan class='num'>120\u003c/span>\u003c/span>\u003c/div>\u003c/div>\n    \u003cdiv class='sect pad'>Diff · main.css\u003c/div>\n    \u003cdiv class='code diff'>\u003cdiv class='dl ctx'>\u003cspan class='gut'>12\u003c/span>\u003cspan>  --sidebar: #171717;\u003c/span>\u003c/div>\u003cdiv class='dl del' data-pin='diff-del'>\u003cspan class='gut'>13\u003c/span>\u003cspan>-  --primary: #e5e5e5;\u003c/span>\u003c/div>\u003cdiv class='dl add' data-pin='diff-add'>\u003cspan class='gut'>13\u003c/span>\u003cspan>+  --primary: #5fd0d6;\u003c/span>\u003c/div>\u003cdiv class='dl del'>\u003cspan class='gut'>14\u003c/span>\u003cspan>-  --background: #0a0a0a;\u003c/span>\u003c/div>\u003cdiv class='dl add'>\u003cspan class='gut'>14\u003c/span>\u003cspan>+  --background: #16171b;\u003c/span>\u003c/div>\u003cdiv class='dl ctx'>\u003cspan class='gut'>15\u003c/span>\u003cspan>  --radius: 0.625rem;\u003c/span>\u003c/div>\u003c/div>\n  \u003c/main>\n\u003c/div>\u003c/div>\u003c/section>\u003csection data-screen='chat'>\u003cdiv data-state='dark' class='view' style='--rail:#0c0d0f;--surface:#16171b;--selected:#22242b;--border:#24262c;--text:#eceef2;--muted:#7c828d;--accent:#5fd0d6;--accentfg:#0c0d0f;--working:#6fb3ff;--needs:#e5b454;--fail:#ef6b73;--done:#4cc38a;--idle:#7c828d;--codebg:#101114;--codehead:#1b1c21;--addbg:#3fb95024;--addfg:#a6f0b0;--delbg:#e5534b24;--delfg:#ffb3ad;--kw:#c79bff;--fn:#6fb3ff;--st:#6dd6b4;--num:#ff9d7a;--cm:#8a909b;--ty:#5fd0d6;--const:#d6b58c;--pu:#a0a6b1;--scrim:rgba(22,23,27,.88);--shadow:rgba(0,0,0,.55);--a0:#101114;--a1:#ef6b73;--a2:#4cc38a;--a3:#e5b454;--a4:#6fb3ff;--a5:#bd8ee8;--a6:#63c5cf;--a7:#c5c9d2;--a8:#7c828d;--a9:#ff8b93;--a10:#70dba5;--a11:#f5ce7e;--a12:#9fcbff;--a13:#d4acf4;--a14:#8ddce3;--a15:#eceef2'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav'>Workspace\u003c/a>\u003ca href='#/editor' class='nav'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav on'>Chat\u003c/a>\u003ca href='#/settings' class='nav'>Settings\u003c/a>\u003ca href='#/trust' class='nav'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='app single'>\n  \u003cmain class='surface chat'>\n    \u003cdiv class='msg user' data-pin='chat-user'>Make the terminal match the new graphite theme.\u003c/div>\n    \u003cdiv class='msg bot'>I added \u003ccode data-pin='chat-inline-code'>Quirky Graphite Dark\u003c/code> to the catalog and made it the default. ANSI blue is now v1 blue, and teal stays the accent.\n      \u003cdiv class='cblock' data-pin='chat-code'>\u003cdiv class='chead'>ts · defaults.ts\u003c/div>\n        \u003cpre>\u003cspan class='kw'>export const\u003c/span> \u003cspan class='const'>DEFAULT_TERMINAL_THEME_DARK\u003c/span> \u003cspan class='pu'>=\u003c/span> \u003cspan class='st'>'Quirky Graphite Dark'\u003c/span>\u003c/pre>\u003c/div>\n      See \u003ca href='#/settings' data-pin='chat-link'>Settings › Appearance\u003c/a> to pick another one.\u003c/div>\n    \u003cdiv class='composer' data-pin='composer'>\n      \u003cdiv class='ph'>Ask claude…\u003c/div>\n      \u003cdiv class='crow2'>\u003cspan class='chip'>Fable 5.2\u003c/span>\u003cspan class='chip'>plan\u003c/span>\u003cbutton class='btn primary sm push' data-pin='send-btn'>Send\u003c/button>\u003c/div>\n    \u003c/div>\n  \u003c/main>\n\u003c/div>\u003c/div>\u003cdiv data-state='light' class='view' style='--rail:#eef0f3;--surface:#ffffff;--selected:#e7e9ef;--border:#e3e5ea;--text:#1b1d22;--muted:#80868f;--accent:#14808a;--accentfg:#ffffff;--working:#2f74c0;--needs:#c98a0b;--fail:#d6455d;--done:#1f9d63;--idle:#80868f;--codebg:#f6f7f9;--codehead:#eceef2;--addbg:#2da44e1f;--addfg:#116329;--delbg:#cf222e1a;--delfg:#82071e;--kw:#7f4fc9;--fn:#2a6cb5;--st:#1a7a5c;--num:#b4532f;--cm:#5c6570;--ty:#0f6f78;--const:#8f6a3a;--pu:#57606a;--scrim:rgba(255,255,255,.88);--shadow:rgba(27,29,34,.28);--a0:#1b1d22;--a1:#d6455d;--a2:#1f9d63;--a3:#a56e08;--a4:#2f74c0;--a5:#9656b8;--a6:#167f8b;--a7:#c5c9d2;--a8:#646b76;--a9:#b62d46;--a10:#167747;--a11:#855706;--a12:#215b9a;--a13:#784293;--a14:#106570;--a15:#f4f5f7'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav'>Workspace\u003c/a>\u003ca href='#/editor' class='nav'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav on'>Chat\u003c/a>\u003ca href='#/settings' class='nav'>Settings\u003c/a>\u003ca href='#/trust' class='nav'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='app single'>\n  \u003cmain class='surface chat'>\n    \u003cdiv class='msg user' data-pin='chat-user'>Make the terminal match the new graphite theme.\u003c/div>\n    \u003cdiv class='msg bot'>I added \u003ccode data-pin='chat-inline-code'>Quirky Graphite Dark\u003c/code> to the catalog and made it the default. ANSI blue is now v1 blue, and teal stays the accent.\n      \u003cdiv class='cblock' data-pin='chat-code'>\u003cdiv class='chead'>ts · defaults.ts\u003c/div>\n        \u003cpre>\u003cspan class='kw'>export const\u003c/span> \u003cspan class='const'>DEFAULT_TERMINAL_THEME_DARK\u003c/span> \u003cspan class='pu'>=\u003c/span> \u003cspan class='st'>'Quirky Graphite Dark'\u003c/span>\u003c/pre>\u003c/div>\n      See \u003ca href='#/settings' data-pin='chat-link'>Settings › Appearance\u003c/a> to pick another one.\u003c/div>\n    \u003cdiv class='composer' data-pin='composer'>\n      \u003cdiv class='ph'>Ask claude…\u003c/div>\n      \u003cdiv class='crow2'>\u003cspan class='chip'>Fable 5.2\u003c/span>\u003cspan class='chip'>plan\u003c/span>\u003cbutton class='btn primary sm push' data-pin='send-btn'>Send\u003c/button>\u003c/div>\n    \u003c/div>\n  \u003c/main>\n\u003c/div>\u003c/div>\u003c/section>\u003csection data-screen='settings'>\u003cdiv data-state='dark' class='view' style='--rail:#0c0d0f;--surface:#16171b;--selected:#22242b;--border:#24262c;--text:#eceef2;--muted:#7c828d;--accent:#5fd0d6;--accentfg:#0c0d0f;--working:#6fb3ff;--needs:#e5b454;--fail:#ef6b73;--done:#4cc38a;--idle:#7c828d;--codebg:#101114;--codehead:#1b1c21;--addbg:#3fb95024;--addfg:#a6f0b0;--delbg:#e5534b24;--delfg:#ffb3ad;--kw:#c79bff;--fn:#6fb3ff;--st:#6dd6b4;--num:#ff9d7a;--cm:#8a909b;--ty:#5fd0d6;--const:#d6b58c;--pu:#a0a6b1;--scrim:rgba(22,23,27,.88);--shadow:rgba(0,0,0,.55);--a0:#101114;--a1:#ef6b73;--a2:#4cc38a;--a3:#e5b454;--a4:#6fb3ff;--a5:#bd8ee8;--a6:#63c5cf;--a7:#c5c9d2;--a8:#7c828d;--a9:#ff8b93;--a10:#70dba5;--a11:#f5ce7e;--a12:#9fcbff;--a13:#d4acf4;--a14:#8ddce3;--a15:#eceef2'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav'>Workspace\u003c/a>\u003ca href='#/editor' class='nav'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav'>Chat\u003c/a>\u003ca href='#/settings' class='nav on'>Settings\u003c/a>\u003ca href='#/trust' class='nav'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='app single'>\n  \u003cmain class='surface settings'>\n    \u003cdiv class='sect'>Appearance\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Theme\u003c/span>\n      \u003cspan class='seg' data-pin='theme-toggle'>\u003cbutton class='on'>System\u003c/button>\u003cbutton>Dark\u003c/button>\u003cbutton>Light\u003c/button>\u003c/span>\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Terminal theme (dark)\u003c/span>\u003cspan class='select' data-pin='terminal-theme'>Quirky Graphite Dark ▾\u003c/span>\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Terminal theme (light)\u003c/span>\u003cspan class='select'>Quirky Graphite Light ▾\u003c/span>\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Palette\u003c/span>\u003cspan class='swatches' data-pin='ansi-swatches'>\u003cspan class='sw' style='background:var(--a0)'>\u003c/span>\u003cspan class='sw' style='background:var(--a1)'>\u003c/span>\u003cspan class='sw' style='background:var(--a2)'>\u003c/span>\u003cspan class='sw' style='background:var(--a3)'>\u003c/span>\u003cspan class='sw' style='background:var(--a4)'>\u003c/span>\u003cspan class='sw' style='background:var(--a5)'>\u003c/span>\u003cspan class='sw' style='background:var(--a6)'>\u003c/span>\u003cspan class='sw' style='background:var(--a7)'>\u003c/span>\u003cspan class='sw' style='background:var(--a8)'>\u003c/span>\u003cspan class='sw' style='background:var(--a9)'>\u003c/span>\u003cspan class='sw' style='background:var(--a10)'>\u003c/span>\u003cspan class='sw' style='background:var(--a11)'>\u003c/span>\u003cspan class='sw' style='background:var(--a12)'>\u003c/span>\u003cspan class='sw' style='background:var(--a13)'>\u003c/span>\u003cspan class='sw' style='background:var(--a14)'>\u003c/span>\u003cspan class='sw' style='background:var(--a15)'>\u003c/span>\u003c/span>\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Separate light terminal theme\u003c/span>\u003cspan class='switch on' data-pin='switch'>\u003cspan>\u003c/span>\u003c/span>\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Search settings\u003c/span>\u003cinput class='input focus' data-pin='focus-input' value='appearance'>\u003c/div>\n  \u003c/main>\n\u003c/div>\u003c/div>\u003cdiv data-state='light' class='view' style='--rail:#eef0f3;--surface:#ffffff;--selected:#e7e9ef;--border:#e3e5ea;--text:#1b1d22;--muted:#80868f;--accent:#14808a;--accentfg:#ffffff;--working:#2f74c0;--needs:#c98a0b;--fail:#d6455d;--done:#1f9d63;--idle:#80868f;--codebg:#f6f7f9;--codehead:#eceef2;--addbg:#2da44e1f;--addfg:#116329;--delbg:#cf222e1a;--delfg:#82071e;--kw:#7f4fc9;--fn:#2a6cb5;--st:#1a7a5c;--num:#b4532f;--cm:#5c6570;--ty:#0f6f78;--const:#8f6a3a;--pu:#57606a;--scrim:rgba(255,255,255,.88);--shadow:rgba(27,29,34,.28);--a0:#1b1d22;--a1:#d6455d;--a2:#1f9d63;--a3:#a56e08;--a4:#2f74c0;--a5:#9656b8;--a6:#167f8b;--a7:#c5c9d2;--a8:#646b76;--a9:#b62d46;--a10:#167747;--a11:#855706;--a12:#215b9a;--a13:#784293;--a14:#106570;--a15:#f4f5f7'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav'>Workspace\u003c/a>\u003ca href='#/editor' class='nav'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav'>Chat\u003c/a>\u003ca href='#/settings' class='nav on'>Settings\u003c/a>\u003ca href='#/trust' class='nav'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='app single'>\n  \u003cmain class='surface settings'>\n    \u003cdiv class='sect'>Appearance\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Theme\u003c/span>\n      \u003cspan class='seg' data-pin='theme-toggle'>\u003cbutton class='on'>System\u003c/button>\u003cbutton>Dark\u003c/button>\u003cbutton>Light\u003c/button>\u003c/span>\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Terminal theme (dark)\u003c/span>\u003cspan class='select' data-pin='terminal-theme'>Quirky Graphite Dark ▾\u003c/span>\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Terminal theme (light)\u003c/span>\u003cspan class='select'>Quirky Graphite Light ▾\u003c/span>\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Palette\u003c/span>\u003cspan class='swatches' data-pin='ansi-swatches'>\u003cspan class='sw' style='background:var(--a0)'>\u003c/span>\u003cspan class='sw' style='background:var(--a1)'>\u003c/span>\u003cspan class='sw' style='background:var(--a2)'>\u003c/span>\u003cspan class='sw' style='background:var(--a3)'>\u003c/span>\u003cspan class='sw' style='background:var(--a4)'>\u003c/span>\u003cspan class='sw' style='background:var(--a5)'>\u003c/span>\u003cspan class='sw' style='background:var(--a6)'>\u003c/span>\u003cspan class='sw' style='background:var(--a7)'>\u003c/span>\u003cspan class='sw' style='background:var(--a8)'>\u003c/span>\u003cspan class='sw' style='background:var(--a9)'>\u003c/span>\u003cspan class='sw' style='background:var(--a10)'>\u003c/span>\u003cspan class='sw' style='background:var(--a11)'>\u003c/span>\u003cspan class='sw' style='background:var(--a12)'>\u003c/span>\u003cspan class='sw' style='background:var(--a13)'>\u003c/span>\u003cspan class='sw' style='background:var(--a14)'>\u003c/span>\u003cspan class='sw' style='background:var(--a15)'>\u003c/span>\u003c/span>\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Separate light terminal theme\u003c/span>\u003cspan class='switch on' data-pin='switch'>\u003cspan>\u003c/span>\u003c/span>\u003c/div>\n    \u003cdiv class='frow'>\u003cspan>Search settings\u003c/span>\u003cinput class='input focus' data-pin='focus-input' value='appearance'>\u003c/div>\n  \u003c/main>\n\u003c/div>\u003c/div>\u003c/section>\u003csection data-screen='trust'>\u003cdiv data-state='dark' class='view' style='--rail:#0c0d0f;--surface:#16171b;--selected:#22242b;--border:#24262c;--text:#eceef2;--muted:#7c828d;--accent:#5fd0d6;--accentfg:#0c0d0f;--working:#6fb3ff;--needs:#e5b454;--fail:#ef6b73;--done:#4cc38a;--idle:#7c828d;--codebg:#101114;--codehead:#1b1c21;--addbg:#3fb95024;--addfg:#a6f0b0;--delbg:#e5534b24;--delfg:#ffb3ad;--kw:#c79bff;--fn:#6fb3ff;--st:#6dd6b4;--num:#ff9d7a;--cm:#8a909b;--ty:#5fd0d6;--const:#d6b58c;--pu:#a0a6b1;--scrim:rgba(22,23,27,.88);--shadow:rgba(0,0,0,.55);--a0:#101114;--a1:#ef6b73;--a2:#4cc38a;--a3:#e5b454;--a4:#6fb3ff;--a5:#bd8ee8;--a6:#63c5cf;--a7:#c5c9d2;--a8:#7c828d;--a9:#ff8b93;--a10:#70dba5;--a11:#f5ce7e;--a12:#9fcbff;--a13:#d4acf4;--a14:#8ddce3;--a15:#eceef2'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav'>Workspace\u003c/a>\u003ca href='#/editor' class='nav'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav'>Chat\u003c/a>\u003ca href='#/settings' class='nav'>Settings\u003c/a>\u003ca href='#/trust' class='nav on'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='app single'>\n  \u003cmain class='surface'>\n    \u003cdiv class='code' style='opacity:.5'>\u003cdiv class='cl'>\u003cspan class='gut'>1\u003c/span>\u003cspan>…\u003c/span>\u003c/div>\u003c/div>\n    \u003cbutton class='btn sm reopen'>Show the dialog again\u003c/button>\n    \u003cdiv class='scrim'>\n      \u003cdiv class='dialog' data-pin='trust-dialog'>\n        \u003cdiv class='dtitle'>Allow “pr-bot” to run commands?\u003c/div>\n        \u003cdiv class='muted'>This plugin asks for:\u003c/div>\n        \u003cul>\u003cli>Run shell commands in \u003cb>quirky-theme\u003c/b>\u003c/li>\u003cli>Read GitHub pull requests\u003c/li>\u003c/ul>\n        \u003cdiv class='muted small'>Plugins can't restyle this dialog.\u003c/div>\n        \u003cdiv class='dactions'>\u003cbutton class='btn' data-pin='trust-cancel'>Don't allow\u003c/button>\u003cbutton class='btn primary' data-pin='trust-allow'>Allow\u003c/button>\u003c/div>\n      \u003c/div>\n    \u003c/div>\n  \u003c/main>\n\u003c/div>\u003c/div>\u003cdiv data-state='light' class='view' style='--rail:#eef0f3;--surface:#ffffff;--selected:#e7e9ef;--border:#e3e5ea;--text:#1b1d22;--muted:#80868f;--accent:#14808a;--accentfg:#ffffff;--working:#2f74c0;--needs:#c98a0b;--fail:#d6455d;--done:#1f9d63;--idle:#80868f;--codebg:#f6f7f9;--codehead:#eceef2;--addbg:#2da44e1f;--addfg:#116329;--delbg:#cf222e1a;--delfg:#82071e;--kw:#7f4fc9;--fn:#2a6cb5;--st:#1a7a5c;--num:#b4532f;--cm:#5c6570;--ty:#0f6f78;--const:#8f6a3a;--pu:#57606a;--scrim:rgba(255,255,255,.88);--shadow:rgba(27,29,34,.28);--a0:#1b1d22;--a1:#d6455d;--a2:#1f9d63;--a3:#a56e08;--a4:#2f74c0;--a5:#9656b8;--a6:#167f8b;--a7:#c5c9d2;--a8:#646b76;--a9:#b62d46;--a10:#167747;--a11:#855706;--a12:#215b9a;--a13:#784293;--a14:#106570;--a15:#f4f5f7'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav'>Workspace\u003c/a>\u003ca href='#/editor' class='nav'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav'>Chat\u003c/a>\u003ca href='#/settings' class='nav'>Settings\u003c/a>\u003ca href='#/trust' class='nav on'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='app single'>\n  \u003cmain class='surface'>\n    \u003cdiv class='code' style='opacity:.5'>\u003cdiv class='cl'>\u003cspan class='gut'>1\u003c/span>\u003cspan>…\u003c/span>\u003c/div>\u003c/div>\n    \u003cbutton class='btn sm reopen'>Show the dialog again\u003c/button>\n    \u003cdiv class='scrim'>\n      \u003cdiv class='dialog' data-pin='trust-dialog'>\n        \u003cdiv class='dtitle'>Allow “pr-bot” to run commands?\u003c/div>\n        \u003cdiv class='muted'>This plugin asks for:\u003c/div>\n        \u003cul>\u003cli>Run shell commands in \u003cb>quirky-theme\u003c/b>\u003c/li>\u003cli>Read GitHub pull requests\u003c/li>\u003c/ul>\n        \u003cdiv class='muted small'>Plugins can't restyle this dialog.\u003c/div>\n        \u003cdiv class='dactions'>\u003cbutton class='btn' data-pin='trust-cancel'>Don't allow\u003c/button>\u003cbutton class='btn primary' data-pin='trust-allow'>Allow\u003c/button>\u003c/div>\n      \u003c/div>\n    \u003c/div>\n  \u003c/main>\n\u003c/div>\u003c/div>\u003c/section>\u003csection data-screen='mobile'>\u003cdiv data-state='dark' class='view' style='--rail:#0c0d0f;--surface:#16171b;--selected:#22242b;--border:#24262c;--text:#eceef2;--muted:#7c828d;--accent:#5fd0d6;--accentfg:#0c0d0f;--working:#6fb3ff;--needs:#e5b454;--fail:#ef6b73;--done:#4cc38a;--idle:#7c828d;--codebg:#101114;--codehead:#1b1c21;--addbg:#3fb95024;--addfg:#a6f0b0;--delbg:#e5534b24;--delfg:#ffb3ad;--kw:#c79bff;--fn:#6fb3ff;--st:#6dd6b4;--num:#ff9d7a;--cm:#8a909b;--ty:#5fd0d6;--const:#d6b58c;--pu:#a0a6b1;--scrim:rgba(22,23,27,.88);--shadow:rgba(0,0,0,.55);--a0:#101114;--a1:#ef6b73;--a2:#4cc38a;--a3:#e5b454;--a4:#6fb3ff;--a5:#bd8ee8;--a6:#63c5cf;--a7:#c5c9d2;--a8:#7c828d;--a9:#ff8b93;--a10:#70dba5;--a11:#f5ce7e;--a12:#9fcbff;--a13:#d4acf4;--a14:#8ddce3;--a15:#eceef2'>\u003cdiv class='titlebar'>\u003cspan class='brand'>Quirky\u003c/span>\u003cnav>\u003ca href='#/workspace' class='nav'>Workspace\u003c/a>\u003ca href='#/editor' class='nav'>Editor & diff\u003c/a>\u003ca href='#/chat' class='nav'>Chat\u003c/a>\u003ca href='#/settings' class='nav'>Settings\u003c/a>\u003ca href='#/trust' class='nav'>Trust dialog\u003c/a>\u003ca href='#/mobile' class='nav on'>Mobile\u003c/a>\u003c/nav>\u003c/div>\n\u003cdiv class='phone'>\n  \u003cdiv class='mtitle'>Worktrees\u003c/div>\u003cdiv class='mrow' data-pin='mobile-row'>\u003cspan class='dot working pulse'>\u003c/span>quirky-theme\u003c/div>\u003cdiv class='mrow'>\u003cspan class='dot needs'>\u003c/span>fix-ledger\u003c/div>\u003cdiv class='mrow'>\u003cspan class='dot fail'>\u003c/span>mobile-sync\u003c/div>\u003cdiv class='mrow'>\u003cspan class='dot done'>\u003c/span>docs-pass\u003c/div>\n  \u003cdiv class='mterm' data-pin='mobile-terminal'>\u003cspan style='color:var(--a2)'>✓\u003c/span> 1,204 files checked\u003cbr>$ \u003cspan class='cursor'>\u003c/span>\u003c/div>\n  \u003cbutton class='btn primary block' data-pin='mobile-btn'>New chat\u003c/button>\n\u003c/div>\u003c/div>\u003c/section>\u003cscript>\ndocument.addEventListener('click',e=>{\n  const tab=e.target.closest('.tab[data-tab]');\n  if(tab){const root=tab.closest('.surface');root.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t===tab));\n    root.querySelectorAll('[data-pane]').forEach(p=>p.hidden=p.dataset.pane!==tab.dataset.tab);}\n  const seg=e.target.closest('.seg button');\n  if(seg){seg.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===seg));}\n  const sw=e.target.closest('.switch');if(sw)sw.classList.toggle('on');\n  if(e.target.closest('[data-pin=trust-cancel],[data-pin=trust-allow]')){e.target.closest('.scrim').hidden=true;}\n  if(e.target.closest('.reopen')){e.target.closest('.surface').querySelector('.scrim').hidden=false;}\n});\n\u003c/script>\u003c/body>\u003c/html>"}</script>
+<script>/**
+ * Pure logic for the mock review harness. Loaded two ways: inlined as a classic script in
+ * mock-harness.html (exposes `QuirkMockCore`) and `require`d by app/scripts/check-harness.ts.
+ * No DOM access, no network, so every rule here is testable from Node.
+ */
+(function (root) {
+  'use strict'
+
+  var PIN_ID = /^mock:v([1-9][0-9]{0,3})\/([a-z0-9-]{1,40})\/([a-z0-9-]{1,40})\/([a-z0-9][a-z0-9._-]{0,79})\/x([0-9]{1,3})-y([0-9]{1,3})$/
+
+  function clampPct(n) {
+    var v = Math.round(Number(n))
+    if (!isFinite(v)) return 0
+    return Math.max(0, Math.min(100, v))
+  }
+
+  /** Parses a pin block id into its parts, or returns null for anything that is not exactly a pin id. */
+  function parsePinId(id) {
+    if (typeof id !== 'string') return null
+    var m = PIN_ID.exec(id)
+    if (!m) return null
+    var x = Number(m[5])
+    var y = Number(m[6])
+    if (x > 100 || y > 100) return null
+    return { version: Number(m[1]), screen: m[2], state: m[3], pin: m[4], x: x, y: y }
+  }
+
+  /** Builds a pin block id; offsets are rounded and clamped to 0-100, anything else invalid throws. */
+  function formatPinId(p) {
+    var id = 'mock:v' + p.version + '/' + p.screen + '/' + p.state + '/' + p.pin + '/x' + clampPct(p.x) + '-y' + clampPct(p.y)
+    if (!parsePinId(id)) throw new Error('invalid pin id parts: ' + id)
+    return id
+  }
+
+  /**
+   * Decides how a pin is shown while `viewed` is on screen.
+   *   draw        its own version: drawn at the element plus offset
+   *   reanchored  older version and the element key still exists: drawn there with a "from vN" badge
+   *   orphaned    older version and the key is gone: listed, never drawn on another element
+   *   hidden      newer than the version viewed (or than the latest)
+   * `keys` is the set (or array) of data-pin keys present in the pin's screen and state in the viewed version.
+   */
+  function placePin(pin, viewed, latest, keys) {
+    if (pin.version > viewed || pin.version > latest) return 'hidden'
+    if (pin.version === viewed) return 'draw'
+    var present = keys instanceof Set ? keys.has(pin.pin) : Array.isArray(keys) && keys.indexOf(pin.pin) !== -1
+    return present ? 'reanchored' : 'orphaned'
+  }
+
+  /**
+   * Placement of a pin from the viewed version's own screen inventory. A pin of an older version whose
+   * screen or state the viewed version no longer lists is orphaned. When the screen and state exist,
+   * `keysFor(screen, state)` returns the data-pin keys rendered there (array or Set), or null when that
+   * screen is not rendered right now, which leaves the pin `unknown`: neither orphaned nor drawn.
+   */
+  function classifyPin(pin, viewed, latest, doc, keysFor) {
+    if (pin.version > viewed || pin.version > latest) return 'hidden'
+    if (pin.version === viewed) return 'draw'
+    var screen = screenList(doc).filter(function (s) { return s.id === pin.screen })[0]
+    if (!screen || !Array.isArray(screen.states) || screen.states.indexOf(pin.state) === -1) return 'orphaned'
+    var keys = keysFor(pin.screen, pin.state)
+    if (keys === null || keys === undefined) return 'unknown'
+    return placePin(pin, viewed, latest, keys)
+  }
+
+  /**
+   * The data-pin keys a pin's screen and state offers for classification, as a Set, or null for "cannot
+   * tell yet". `keys` is the array of keys found in the viewed document, or null when no element for the
+   * screen exists there. A missing screen element is only evidence of absence once the viewed document
+   * has loaded and the pin's screen is the one on show; before that, or for another screen, it is unknown.
+   */
+  function viewedKeys(loaded, currentScreen, screenId, keys) {
+    if (keys !== null && keys !== undefined) return new Set(keys)
+    return loaded && currentScreen === screenId ? new Set() : null
+  }
+
+  /**
+   * The elements of a screen that carry data-pin for `state`: the screen element itself (when it has a
+   * data-pin) followed by its descendants. `descendants` is every `[data-pin]` node inside `scr`.
+   */
+  function pinNodes(scr, state, descendants) {
+    var all = [scr].concat(Array.prototype.slice.call(descendants))
+    return all.filter(function (p) {
+      if (p.getAttribute('data-pin') === null) return false
+      var st = p.closest('[data-state]')
+      if (!st || st === scr || !scr.contains(st)) return true
+      return !state || st.getAttribute('data-state') === state
+    })
+  }
+
+  function screenList(doc) {
+    if (Array.isArray(doc)) return doc
+    return doc && Array.isArray(doc.screens) ? doc.screens : []
+  }
+
+  function isKnownScreen(doc, id) {
+    return screenList(doc).some(function (s) { return s.id === id })
+  }
+
+  /** Inventory screen ids not yet visited, in inventory order. */
+  function unvisitedScreens(doc, visited) {
+    var seen = visited instanceof Set ? visited : new Set(visited || [])
+    return screenList(doc)
+      .map(function (s) { return s.id })
+      .filter(function (id) { return !seen.has(id) })
+  }
+
+  /** Elements with no repo component while the repo has a UI layer. */
+  function deriveGaps(doc) {
+    if (!doc || doc.ui_layer !== true) return []
+    var gaps = []
+    screenList(doc).forEach(function (s) {
+      ;(s.elements || []).forEach(function (e) {
+        if (e.component === null) gaps.push({ screen: s.id, pin: e.pin, label: e.label })
+      })
+    })
+    return gaps
+  }
+
+  /** Screen id named by `#/<id>`; an empty hash is the first screen, an unknown id is returned as is. */
+  function currentScreenId(hash, doc) {
+    var h = String(hash || '').replace(/^#/, '').replace(/^\//, '')
+    var id = h.split(/[/?]/)[0]
+    try {
+      id = decodeURIComponent(id)
+    } catch (e) {
+      // keep the raw text
+    }
+    if (id) return id
+    var screens = screenList(doc)
+    return screens.length ? screens[0].id : null
+  }
+
+  var RAW_TEXT = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1 }
+
+  /**
+   * Inserts <base href="about:srcdoc"> as the first child of the mock's real <head>. Comments, raw-text
+   * elements (script, style, ...) and quoted attribute values are skipped, so `<head>` text inside them is
+   * never mistaken for the head. With no head before the body, one is created right after <html>, else
+   * after the doctype, else at the start.
+   */
+  function withBase(html) {
+    var base = '<base href="about:srcdoc">'
+    var len = html.length
+    var i = 0
+    var doctypeEnd = 0
+    var htmlEnd = -1
+    var sawTag = false
+    while (i < len) {
+      var lt = html.indexOf('<', i)
+      if (lt === -1) break
+      var next = html.charAt(lt + 1)
+      if (html.substr(lt, 4) === '<!--') {
+        var close = html.indexOf('-->', lt + 2)
+        i = close === -1 ? len : close + 3
+        continue
+      }
+      if (next === '!' || next === '?' || next === '/') {
+        var gt = html.indexOf('>', lt + 2)
+        if (next === '!' && !sawTag && gt !== -1 && /^<!doctype/i.test(html.substr(lt, 9))) doctypeEnd = gt + 1
+        i = gt === -1 ? len : gt + 1
+        continue
+      }
+      if (!/[a-zA-Z]/.test(next)) {
+        i = lt + 1
+        continue
+      }
+      var j = lt + 1
+      while (j < len && !/[\s/>]/.test(html.charAt(j))) j += 1
+      var name = html.slice(lt + 1, j).toLowerCase()
+      while (j < len && html.charAt(j) !== '>') {
+        if (html.charAt(j) === '=') {
+          j += 1
+          while (j < len && /\s/.test(html.charAt(j))) j += 1
+          var q = html.charAt(j)
+          if (q === '"' || q === "'") {
+            var endQuote = html.indexOf(q, j + 1)
+            j = endQuote === -1 ? len : endQuote + 1
+          }
+          continue
+        }
+        j += 1
+      }
+      var tagEnd = j < len ? j + 1 : len
+      sawTag = true
+      if (name === 'head') return html.slice(0, tagEnd) + base + html.slice(tagEnd)
+      if (name === 'body' || name === 'frameset') break
+      if (name === 'html' && htmlEnd === -1) htmlEnd = tagEnd
+      i = tagEnd
+      if (RAW_TEXT[name] === 1) {
+        var closer = new RegExp('</' + name + '(?=[\\s/>])', 'ig')
+        closer.lastIndex = tagEnd
+        var found = closer.exec(html)
+        i = found ? found.index : len
+      }
+    }
+    var pos = htmlEnd !== -1 ? htmlEnd : doctypeEnd
+    return html.slice(0, pos) + '<head>' + base + '</head>' + html.slice(pos)
+  }
+
+  /**
+   * Whether the version registered under `boot.version` was replaced after this page was served. Only
+   * app mode compares, and only when both sides carry a revision.
+   */
+  function isStale(boot, snap) {
+    if (!boot || boot.mode !== 'app' || !snap || !snap.mocks || !snap.mocks.revisions) return false
+    var current = snap.mocks.revisions[String(boot.version)]
+    return typeof boot.revision === 'string' && typeof current === 'string' && current !== boot.revision
+  }
+
+  /** Whether comment mode and the verdict bar are allowed for this boot and snapshot. */
+  function canReview(boot, snap) {
+    if (!boot || boot.mode !== 'app' || !snap || !snap.step) return false
+    if (isStale(boot, snap)) return false
+    if (snap.step_state !== 'open') return false
+    if (snap.step.kind !== 'mock-review' || snap.step.version !== boot.version) return false
+    return !!snap.mocks && snap.mocks.latest === boot.version
+  }
+
+  /** Integer percentage offset of a point inside a box, clamped to 0-100. */
+  function offsetPct(rect, clientX, clientY) {
+    if (!rect.width || !rect.height) return { x: 0, y: 0 }
+    return {
+      x: clampPct(((clientX - rect.left) / rect.width) * 100),
+      y: clampPct(((clientY - rect.top) / rect.height) * 100),
+    }
+  }
+
+  function lastAgentMessage(thread) {
+    var msgs = (thread && thread.messages) || []
+    for (var i = msgs.length - 1; i >= 0; i -= 1) if (msgs[i].from === 'agent') return msgs[i]
+    return null
+  }
+
+  var api = {
+    parsePinId: parsePinId,
+    formatPinId: formatPinId,
+    placePin: placePin,
+    classifyPin: classifyPin,
+    viewedKeys: viewedKeys,
+    pinNodes: pinNodes,
+    isStale: isStale,
+    isKnownScreen: isKnownScreen,
+    unvisitedScreens: unvisitedScreens,
+    deriveGaps: deriveGaps,
+    currentScreenId: currentScreenId,
+    withBase: withBase,
+    canReview: canReview,
+    offsetPct: offsetPct,
+    lastAgentMessage: lastAgentMessage,
+  }
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api
+  else root.QuirkMockCore = api
+})(typeof globalThis !== 'undefined' ? globalThis : this)
+</script>
+<script>
+(function () {
+  'use strict'
+  var Core = window.QuirkMockCore
+  var bootNode = document.querySelector('script[type="application/json"]')
+  var boot = null
+  try { boot = JSON.parse(bootNode.textContent) } catch (e) { boot = null }
+  var $ = function (id) { return document.getElementById(id) }
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag)
+    Object.keys(attrs || {}).forEach(function (k) {
+      var v = attrs[k]
+      if (v === null || v === undefined || v === false) return
+      if (k === 'class') n.className = v
+      else if (k === 'text') n.textContent = v
+      else if (k.slice(0, 2) === 'on') n.addEventListener(k.slice(2), v)
+      else n.setAttribute(k, v === true ? '' : v)
+    })
+    ;(kids || []).forEach(function (c) {
+      if (c === null || c === undefined || c === false) return
+      n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c)
+    })
+    return n
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild) }
+
+  if (!boot || !boot.screens) {
+    document.body.insertBefore(el('p', { text: 'This page needs a mock to review. It was opened without one.', style: 'padding:16px' }), document.body.firstChild)
+    return
+  }
+
+  var appMode = boot.mode === 'app' && !!boot.token
+  var screens = boot.screens.screens || []
+  var uiLayer = boot.screens.ui_layer === true
+  var changed = new Set(boot.changed || [])
+  var gaps = Core.deriveGaps(boot.screens)
+  var frame = $('mock-frame')
+  var frameBox = $('frame-box')
+
+  var S = {
+    mode: 'interact',
+    viewport: 'desktop',
+    showChanges: false,
+    screenId: Core.currentScreenId('', boot.screens),
+    states: {},
+    visited: new Set(),
+    marks: new Set(),
+    snap: null,
+    paused: false,
+    openThread: null,
+    note: null,
+    panel: null,
+    changesText: '',
+    submitting: false,
+    verdictError: '',
+    notice: '',
+    noticeError: false,
+  }
+  var inner = null
+  var hoverEl = null
+  var dotPos = {}
+  var noticeTimer = null
+  var frameTick = 0
+
+  var visitedKey = 'quirk-mock-visited-v' + boot.version
+  try {
+    var saved = JSON.parse(sessionStorage.getItem(visitedKey) || '[]')
+    if (Array.isArray(saved)) saved.forEach(function (id) { S.visited.add(id) })
+  } catch (e) { /* storage can be unavailable; visited then lives for this page only */ }
+  function saveVisited() {
+    try { sessionStorage.setItem(visitedKey, JSON.stringify(Array.from(S.visited))) } catch (e) { /* see above */ }
+  }
+
+  // ---- derived values -------------------------------------------------------
+  function screenById(id) {
+    for (var i = 0; i < screens.length; i += 1) if (screens[i].id === id) return screens[i]
+    return null
+  }
+  function currentState() {
+    var s = screenById(S.screenId)
+    if (!s || !s.states || !s.states.length) return null
+    return S.states[s.id] || s.states[0]
+  }
+  function latestVersion() {
+    return S.snap && S.snap.mocks && S.snap.mocks.latest ? S.snap.mocks.latest : boot.latest
+  }
+  function versionList() {
+    var v = S.snap && S.snap.mocks && S.snap.mocks.versions ? S.snap.mocks.versions : boot.versions
+    return v && v.length ? v : [boot.version]
+  }
+  function canReview() { return Core.canReview(boot, S.snap) }
+  function staleVersion() { return Core.isStale(boot, S.snap) }
+  function readOnlyVersion() { return appMode && S.snap !== null && boot.version !== latestVersion() }
+
+  // ---- inner document lookups (attribute compares avoid selector escaping) ----
+  function findAttr(nodes, attr, value) {
+    for (var i = 0; i < nodes.length; i += 1) if (nodes[i].getAttribute(attr) === value) return nodes[i]
+    return null
+  }
+  function screenEl(id) {
+    return inner ? findAttr(inner.doc.querySelectorAll('[data-screen]'), 'data-screen', id) : null
+  }
+  function stateEls(scr) {
+    return Array.prototype.filter.call(scr.querySelectorAll('[data-state]'), function (e) { return e.closest('[data-screen]') === scr })
+  }
+  /** Elements keyed with data-pin in a screen and state, or null when the screen is not in the DOM. */
+  function pinEls(screenId, state) {
+    var scr = screenEl(screenId)
+    if (!scr) return null
+    var states = stateEls(scr)
+    if (states.length && state && !findAttr(states, 'data-state', state)) return []
+    return Core.pinNodes(scr, state, scr.querySelectorAll('[data-pin]'))
+  }
+  function visibleBox(node) {
+    var r = node.getBoundingClientRect()
+    return r.width > 0 || r.height > 0 ? r : null
+  }
+  function inventoryLabel(key) {
+    var s = screenById(S.screenId)
+    var elements = (s && s.elements) || []
+    for (var i = 0; i < elements.length; i += 1) {
+      if (elements[i].pin !== key) continue
+      if (uiLayer) return elements[i].component === null ? 'gap' : elements[i].component
+      return elements[i].label
+    }
+    return ''
+  }
+
+  // ---- pins -----------------------------------------------------------------
+  /** Every thread that is a pin, with its placement relative to the version on screen. */
+  function pinThreads() {
+    var out = []
+    var threads = (S.snap && S.snap.threads) || []
+    var n = 0
+    threads.forEach(function (t) {
+      var pin = Core.parsePinId(t.block_id)
+      if (!pin) return
+      n += 1
+      var placement = Core.classifyPin(pin, boot.version, latestVersion(), boot.screens, function (screenId, state) {
+        var els = pinEls(screenId, state)
+        return Core.viewedKeys(!!inner, S.screenId, screenId, els === null ? null : els.map(function (e) { return e.getAttribute('data-pin') }))
+      })
+      out.push({ n: n, thread: t, pin: pin, placement: placement })
+    })
+    return out.filter(function (p) { return p.placement !== 'hidden' })
+  }
+
+  function renderOverlay() {
+    var changesLayer = $('layer-changes')
+    var pinsLayer = $('layer-pins')
+    clear(changesLayer)
+    clear(pinsLayer)
+    dotPos = {}
+    if (!inner) return
+    if (S.showChanges) {
+      Array.prototype.forEach.call(inner.doc.querySelectorAll('[data-pin]'), function (node) {
+        if (!changed.has(node.getAttribute('data-pin'))) return
+        var r = visibleBox(node)
+        if (!r) return
+        changesLayer.appendChild(el('div', { class: 'box changed', style: 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px' }, [el('span', { class: 'tag', text: 'changed' })]))
+      })
+    }
+    if (appMode) {
+      var state = currentState()
+      pinThreads().forEach(function (p) {
+        if (p.placement !== 'draw' && p.placement !== 'reanchored') return
+        if (p.pin.screen !== S.screenId || (state && p.pin.state !== state)) return
+        var els = pinEls(p.pin.screen, p.pin.state) || []
+        var target = null
+        for (var i = 0; i < els.length; i += 1) {
+          if (els[i].getAttribute('data-pin') === p.pin.pin && visibleBox(els[i])) { target = els[i]; break }
+        }
+        if (!target) return
+        var r = target.getBoundingClientRect()
+        var left = r.left + (p.pin.x / 100) * r.width
+        var top = r.top + (p.pin.y / 100) * r.height
+        dotPos[p.thread.id] = { left: left, top: top }
+        var cls = 'pin' + (p.thread.resolution ? ' resolved' : '') + (S.openThread === p.thread.id ? ' selected' : '')
+        pinsLayer.appendChild(el('button', {
+          type: 'button',
+          class: cls,
+          style: 'left:' + left + 'px;top:' + top + 'px',
+          'aria-label': 'Pin ' + p.n + (p.thread.resolution ? ' (resolved)' : ''),
+          onclick: function (ev) { ev.stopPropagation(); selectThread(p.thread.id, false) },
+          text: String(p.n),
+        }))
+      })
+    }
+    renderThreadPop()
+  }
+
+  function messageNode(m, isLastReply) {
+    return el('div', { class: 'msg ' + (m.from === 'agent' ? 'agent' : 'user') + (isLastReply ? ' last-reply' : '') }, [
+      el('span', { class: 'who', text: m.from === 'agent' ? 'Agent' : 'You' }),
+      el('span', { text: String(m.text) }),
+    ])
+  }
+  function threadBody(p) {
+    var reply = Core.lastAgentMessage(p.thread)
+    var wrap = el('div', { class: 'thread' })
+    if (p.thread.resolution) {
+      wrap.appendChild(el('div', { class: 'meta', text: 'Resolved' + (typeof p.thread.resolution === 'string' ? ': ' + p.thread.resolution : '') }))
+      if (reply) wrap.appendChild(messageNode(reply, true))
+      var rest = p.thread.messages.filter(function (m) { return m !== reply })
+      rest.forEach(function (m) { wrap.appendChild(messageNode(m, false)) })
+    } else {
+      p.thread.messages.forEach(function (m) { wrap.appendChild(messageNode(m, false)) })
+    }
+    return wrap
+  }
+
+  function renderThreadPop() {
+    var layer = $('layer-pop')
+    layer.querySelectorAll('.pop.thread-pop').forEach(function (n) { n.parentNode.removeChild(n) })
+    if (!S.openThread || !dotPos[S.openThread]) return
+    var p = pinThreads().filter(function (x) { return x.thread.id === S.openThread })[0]
+    if (!p) return
+    var at = dotPos[S.openThread]
+    var boxW = frameBox.clientWidth
+    var left = Math.max(8, Math.min(at.left, boxW - 308))
+    var pop = el('div', { class: 'pop thread-pop', style: 'left:' + left + 'px;top:' + (at.top + 16) + 'px' }, [
+      el('h3', { text: 'Pin ' + p.n + ' on ' + p.pin.pin }),
+      el('div', { class: 'meta', text: p.placement === 'reanchored' ? 'Placed in v' + p.pin.version + ', shown on the same element here' : 'v' + p.pin.version }),
+      threadBody(p),
+      el('div', { class: 'row' }, [el('button', { type: 'button', text: 'Close', onclick: function () { S.openThread = null; renderOverlay(); renderRail() } })]),
+    ])
+    layer.appendChild(pop)
+  }
+
+  var noteShown = null
+  var noteUi = null
+  var NOTE_CLOSED_REASON = 'This review is no longer open for comments. Your text is kept so you can copy it.'
+
+  function syncNoteGate() {
+    if (!noteUi) return
+    var open = canReview()
+    noteUi.send.disabled = !open || noteUi.busy
+    if (!open) noteUi.err.textContent = NOTE_CLOSED_REASON
+    else if (noteUi.err.textContent === NOTE_CLOSED_REASON) noteUi.err.textContent = ''
+  }
+
+  function renderNote() {
+    var layer = $('layer-pop')
+    if (S.note && S.note === noteShown && layer.querySelector('.pop.note-pop')) { syncNoteGate(); return }
+    noteUi = null
+    layer.querySelectorAll('.pop.note-pop').forEach(function (n) { n.parentNode.removeChild(n) })
+    noteShown = S.note
+    if (!S.note) return
+    var note = S.note
+    var boxW = frameBox.clientWidth
+    var left = Math.max(8, Math.min(note.x, boxW - 308))
+    var area = el('textarea', { 'aria-label': 'Comment', placeholder: 'What should change here?' })
+    var err = el('span', { class: 'err' })
+    var send = el('button', { type: 'button', class: 'primary', text: 'Send' })
+    var cancel = el('button', { type: 'button', text: 'Cancel', onclick: function () { S.note = null; renderNote() } })
+    var ui = { send: send, err: err, busy: false }
+    send.addEventListener('click', function () {
+      if (!canReview()) { syncNoteGate(); return }
+      var text = area.value.trim()
+      if (!text) { err.textContent = 'Write a comment first.'; return }
+      ui.busy = true
+      send.disabled = true
+      cancel.disabled = true
+      err.textContent = ''
+      postEvent('comment', { block_id: note.blockId, text: text }, {}).then(function (result) {
+        ui.busy = false
+        if (result === 'ok') {
+          S.note = null
+          renderNote()
+          setNotice('Comment sent.', false)
+          pollNow()
+        } else {
+          cancel.disabled = false
+          err.textContent = 'Could not send. Try again.'
+          syncNoteGate()
+        }
+      })
+    })
+    var pop = el('div', { class: 'pop note-pop', style: 'left:' + left + 'px;top:' + (note.y + 10) + 'px', role: 'dialog', 'aria-label': 'New comment' }, [
+      el('h3', { text: 'Comment on ' + note.label }),
+      area,
+      el('div', { class: 'row' }, [err, cancel, send]),
+    ])
+    layer.appendChild(pop)
+    noteUi = ui
+    syncNoteGate()
+    area.focus()
+  }
+
+  function selectThread(id, navigate) {
+    S.openThread = S.openThread === id && !navigate ? null : id
+    var p = pinThreads().filter(function (x) { return x.thread.id === id })[0]
+    if (navigate && p && inner && p.placement !== 'orphaned') {
+      var s = screenById(p.pin.screen)
+      if (s && s.states.indexOf(p.pin.state) !== -1) S.states[s.id] = p.pin.state
+      if (p.pin.screen !== S.screenId) {
+        goToScreen(p.pin.screen)
+        S.openThread = id
+      }
+    }
+    renderAll()
+  }
+
+  // ---- hover and click in the mock -----------------------------------------
+  function commentAllowed() { return S.mode === 'comment' && canReview() }
+
+  function onInnerMove(ev) {
+    if (!commentAllowed()) return clearHover()
+    var node = ev.target && ev.target.closest ? ev.target.closest('[data-pin]') : null
+    if (node === hoverEl) return
+    hoverEl = node
+    paintHover()
+  }
+  function clearHover() {
+    if (!hoverEl) return
+    hoverEl = null
+    paintHover()
+  }
+  function paintHover() {
+    var layer = $('layer-hover')
+    clear(layer)
+    if (!hoverEl || !hoverEl.isConnected) return
+    var r = visibleBox(hoverEl)
+    if (!r) return
+    var label = inventoryLabel(hoverEl.getAttribute('data-pin'))
+    layer.appendChild(el('div', { class: 'box hover', style: 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px' }, [label ? el('span', { class: 'tag', text: label }) : null]))
+  }
+  function onInnerClick(ev) {
+    if (!commentAllowed()) return
+    ev.preventDefault()
+    ev.stopPropagation()
+    var node = ev.target && ev.target.closest ? ev.target.closest('[data-pin]') : null
+    if (!node) {
+      setNotice('This element has no pin key, so it cannot take a comment. Hover to see which elements can.', true)
+      return
+    }
+    var state = currentState()
+    if (!screenById(S.screenId) || !state) {
+      setNotice('Open a screen from the rail first. Comments need a screen and state from the inventory.', true)
+      return
+    }
+    var r = node.getBoundingClientRect()
+    var off = Core.offsetPct(r, ev.clientX, ev.clientY)
+    var blockId
+    try {
+      blockId = Core.formatPinId({ version: boot.version, screen: S.screenId, state: state, pin: node.getAttribute('data-pin'), x: off.x, y: off.y })
+    } catch (e) {
+      setNotice('This element\'s pin key is not valid, so it cannot take a comment.', true)
+      return
+    }
+    S.openThread = null
+    S.note = { blockId: blockId, x: ev.clientX, y: ev.clientY, label: inventoryLabel(node.getAttribute('data-pin')) || node.getAttribute('data-pin') }
+    renderOverlay()
+    renderNote()
+  }
+
+  // ---- inner frame wiring ---------------------------------------------------
+  function applyStates() {
+    var scr = screenEl(S.screenId)
+    if (!scr) return
+    var cur = currentState()
+    stateEls(scr).forEach(function (node) {
+      var hide = node.getAttribute('data-state') !== cur
+      if (node.hidden !== hide) node.hidden = hide
+    })
+  }
+  function refreshFrame() {
+    frameTick = 0
+    if (!inner) return
+    applyStates()
+    renderOverlay()
+    paintHover()
+    renderRail()
+  }
+  function scheduleRefresh() {
+    if (frameTick) return
+    frameTick = requestAnimationFrame(refreshFrame)
+  }
+  function onInnerHash() {
+    if (!inner) return
+    var nextId = Core.currentScreenId(inner.win.location.hash, boot.screens)
+    var moved = nextId !== S.screenId
+    S.screenId = nextId
+    if (Core.isKnownScreen(boot.screens, S.screenId) && !S.visited.has(S.screenId)) {
+      S.visited.add(S.screenId)
+      saveVisited()
+    }
+    if (moved) {
+      S.note = null
+      S.openThread = null
+    }
+    hoverEl = null
+    renderAll()
+  }
+  function goToScreen(id) {
+    if (!inner) return
+    inner.win.location.hash = '#/' + id
+    onInnerHash()
+  }
+  function attach() {
+    var win = frame.contentWindow
+    var doc = null
+    try { doc = frame.contentDocument } catch (e) { doc = null }
+    if (!doc || !doc.documentElement) {
+      inner = null
+      setNotice('The mock document could not be read, so review tools are unavailable.', true)
+      return
+    }
+    inner = { win: win, doc: doc }
+    var style = doc.createElement('style')
+    style.textContent = '[hidden]{display:none !important}'
+    ;(doc.head || doc.documentElement).appendChild(style)
+    win.addEventListener('hashchange', onInnerHash)
+    win.addEventListener('resize', scheduleRefresh)
+    doc.addEventListener('scroll', scheduleRefresh, true)
+    doc.addEventListener('click', onInnerClick, true)
+    doc.addEventListener('mousemove', onInnerMove, true)
+    doc.documentElement.addEventListener('mouseleave', clearHover)
+    if (win.MutationObserver && doc.body) new win.MutationObserver(scheduleRefresh).observe(doc.body, { childList: true, subtree: true })
+    onInnerHash()
+  }
+
+  // ---- rail -----------------------------------------------------------------
+  function pinCountFor(list, id) {
+    return list.filter(function (p) { return p.pin.screen === id }).length
+  }
+  function renderRail() {
+    var rail = $('rail')
+    var list = appMode ? pinThreads() : []
+    var reviewing = canReview()
+    clear(rail)
+    rail.appendChild(el('h2', { text: 'Screens' }))
+    var ul = el('ul')
+    screens.forEach(function (s) {
+      var seen = S.visited.has(s.id)
+      var count = pinCountFor(list, s.id)
+      var item = el('li', { class: 'screen-item' + (s.id === S.screenId ? ' current' : '') }, [
+        el('button', { type: 'button', class: 'go', 'aria-current': s.id === S.screenId ? 'page' : null, onclick: function () { goToScreen(s.id) } }, [
+          el('span', { class: 'dot' + (seen ? ' visited' : ''), title: seen ? 'Visited' : 'Not visited' }),
+          el('span', { class: 'title', text: s.title }),
+          el('span', { class: 'count', text: (seen ? 'visited' : 'not visited') + (appMode ? ', ' + count + (count === 1 ? ' pin' : ' pins') : '') }),
+        ]),
+      ])
+      if (reviewing) {
+        var box = el('input', { type: 'checkbox', 'aria-label': 'Mark ' + s.title + ' as reviewed' })
+        box.checked = S.marks.has(s.id)
+        box.addEventListener('change', function () { if (box.checked) S.marks.add(s.id); else S.marks.delete(s.id) })
+        item.appendChild(el('label', { class: 'mark', title: 'Mark this screen as reviewed' }, [box, 'ok']))
+      }
+      ul.appendChild(item)
+    })
+    rail.appendChild(ul)
+
+    var cur = screenById(S.screenId)
+    if (!cur && S.screenId) {
+      rail.appendChild(el('p', { class: 'note' }, [el('span', { class: 'chip warn', text: 'Screen "' + S.screenId + '" is not in the inventory' })]))
+    }
+    if (cur && cur.skipped_states && cur.skipped_states.length) {
+      rail.appendChild(el('h2', { text: 'Skipped states here' }))
+      rail.appendChild(el('ul', { class: 'skipped' }, cur.skipped_states.map(function (k) { return el('li', { text: k.state + ': ' + k.reason }) })))
+    }
+    var gapsHere = gaps.filter(function (g) { return g.screen === S.screenId })
+    if (gapsHere.length) {
+      rail.appendChild(el('h2', { text: 'Gaps on this screen' }))
+      rail.appendChild(el('ul', { class: 'skipped' }, gapsHere.map(function (g) { return el('li', { text: g.label + ': no matching component' }) })))
+    }
+
+    if (appMode && list.length) {
+      var orphaned = list.filter(function (p) { return p.placement === 'orphaned' })
+      var placed = list.filter(function (p) { return p.placement !== 'orphaned' })
+      if (placed.length) {
+        rail.appendChild(el('h2', { text: 'Pins' }))
+        placed.forEach(function (p) { rail.appendChild(pinRow(p)) })
+      }
+      if (orphaned.length) {
+        rail.appendChild(el('h2', { text: 'Orphaned pins' }))
+        orphaned.forEach(function (p) { rail.appendChild(pinRow(p)) })
+      }
+    }
+  }
+  function pinRow(p) {
+    var open = S.openThread === p.thread.id
+    var first = p.thread.messages[0]
+    var badges = []
+    if (p.thread.resolution) badges.push(el('span', { class: 'badge ok', text: 'resolved' }))
+    if (p.placement === 'reanchored') badges.push(el('span', { class: 'badge', text: 'from v' + p.pin.version }))
+    if (p.placement === 'orphaned') badges.push(el('span', { class: 'badge warn', text: 'element removed in v' + boot.version }))
+    var screen = screenById(p.pin.screen)
+    var head = el('button', { type: 'button', class: 'head', 'aria-expanded': open ? 'true' : 'false', onclick: function () { selectThread(p.thread.id, true) } }, [
+      el('strong', { text: 'Pin ' + p.n }),
+      ' ',
+      el('span', { class: 'meta', text: (screen ? screen.title : p.pin.screen) + ' / ' + p.pin.state + ' / ' + p.pin.pin }),
+      ...badges,
+      el('div', { text: first ? String(first.text).slice(0, 90) : '' }),
+    ])
+    var row = el('div', { class: 'pin-row' + (open ? ' selected' : '') }, [head])
+    var reply = p.thread.resolution ? Core.lastAgentMessage(p.thread) : null
+    if (open) row.appendChild(threadBody(p))
+    else if (reply) row.appendChild(el('div', { class: 'thread' }, [messageNode(reply, true)]))
+    return row
+  }
+
+  // ---- toolbar, banner, verdict bar ----------------------------------------
+  function setNotice(text, isError) {
+    S.notice = text
+    S.noticeError = !!isError
+    clearTimeout(noticeTimer)
+    renderStatus()
+    if (text) noticeTimer = setTimeout(function () { S.notice = ''; renderStatus() }, 6000)
+  }
+  function renderStatus() {
+    var node = $('status')
+    var text = S.paused ? 'Lost contact with the companion, retrying' : S.notice
+    node.textContent = text
+    node.className = 'status' + (S.paused || S.noticeError ? ' error' : '')
+  }
+  function pressed(id, on) { $(id).setAttribute('aria-pressed', on ? 'true' : 'false') }
+
+  function renderToolbar() {
+    $('version-chip').textContent = 'Mock v' + boot.version + (!appMode || boot.version === latestVersion() ? '' : ' (not latest)')
+    var wrap = $('version-wrap')
+    var picker = $('version-picker')
+    if (appMode) {
+      wrap.hidden = false
+      clear(picker)
+      var latest = latestVersion()
+      versionList().forEach(function (v) {
+        var o = el('option', { value: String(v), text: 'v' + v + (v === latest ? ' (latest)' : '') })
+        if (v === boot.version) o.selected = true
+        picker.appendChild(o)
+      })
+    }
+    var reviewing = canReview()
+    if (!reviewing && S.mode === 'comment') { S.mode = 'interact'; clearHover() }
+    pressed('mode-interact', S.mode === 'interact')
+    pressed('mode-comment', S.mode === 'comment')
+    var cm = $('mode-comment')
+    cm.hidden = !appMode
+    cm.disabled = !reviewing
+    cm.title = reviewing ? 'Click an element to pin a comment' : (readOnlyVersion() ? 'Only the latest version takes comments' : 'Comments are open while a review is waiting on you')
+    pressed('vp-desktop', S.viewport === 'desktop')
+    pressed('vp-mobile', S.viewport === 'mobile')
+    frameBox.className = 'frame-box' + (S.viewport === 'mobile' ? ' mobile' : '')
+    var sw = $('state-switch')
+    clear(sw)
+    var s = screenById(S.screenId)
+    if (s && s.states && s.states.length > 1) {
+      sw.hidden = false
+      s.states.forEach(function (st) {
+        sw.appendChild(el('button', { type: 'button', 'aria-pressed': currentState() === st ? 'true' : 'false', onclick: function () { S.states[s.id] = st; S.note = null; renderAll() }, text: st }))
+      })
+    } else sw.hidden = true
+    renderStatus()
+  }
+
+  function renderBanner() {
+    var b = $('banner')
+    clear(b)
+    if (!appMode) {
+      b.hidden = false
+      b.appendChild(el('span', { text: 'Mock v' + boot.version + ' · not the product' }))
+    } else if (staleVersion()) {
+      b.hidden = false
+      b.appendChild(el('span', { role: 'alert', text: 'This version was updated \u2014 reload to review it' }))
+      b.appendChild(el('button', { type: 'button', text: 'Reload', onclick: function () { window.location.reload() } }))
+    } else if (readOnlyVersion()) {
+      b.hidden = false
+      var latest = latestVersion()
+      b.appendChild(el('span', { text: 'v' + boot.version + ' is read-only. New comments go on v' + latest + '.' }))
+      b.appendChild(el('button', { type: 'button', text: 'Go to v' + latest, onclick: function () { goToVersion(latest) } }))
+    } else b.hidden = true
+  }
+  function goToVersion(v) {
+    window.location.href = '/_quirk/mock/' + encodeURIComponent(String(v)) + '?t=' + encodeURIComponent(boot.token)
+  }
+
+  var verdictSig = ''
+  function renderVerdict() {
+    var bar = $('verdict')
+    if (!appMode) { bar.hidden = true; return }
+    var reviewing = canReview()
+    var unvisited = Core.unvisitedScreens(boot.screens, S.visited)
+    var sig = JSON.stringify([reviewing, S.panel, S.submitting, S.verdictError, unvisited])
+    if (sig === verdictSig) return
+    verdictSig = sig
+    var typing = document.activeElement && bar.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA'
+      ? { start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd }
+      : null
+    clear(bar)
+    if (!reviewing) {
+      bar.hidden = true
+      return
+    }
+    bar.hidden = false
+    bar.appendChild(el('strong', { text: 'Your verdict' }))
+    var busy = S.submitting
+    bar.appendChild(el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Looks right', onclick: onLooksRight }))
+    bar.appendChild(el('button', { type: 'button', disabled: busy, text: 'Needs changes', onclick: function () { S.panel = 'changes'; S.verdictError = ''; renderVerdict() } }))
+    bar.appendChild(el('span', { class: 'spacer' }))
+    bar.appendChild(el('button', { type: 'button', disabled: busy, text: 'Skip review', onclick: function () { submitVerdict('skip', null) } }))
+    if (S.verdictError) bar.appendChild(el('span', { class: 'err', role: 'alert', text: S.verdictError }))
+    if (S.panel === 'confirm') {
+      var names = unvisited.map(function (id) { var s = screenById(id); return s ? s.title : id })
+      bar.appendChild(el('div', { class: 'panel' }, [
+        el('div', { text: 'You have not opened ' + names.join(', ') + '. Sign off anyway?' }),
+        el('div', { class: 'row' }, [
+          el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Confirm: looks right', onclick: function () { submitVerdict('looks-right', null) } }),
+          el('button', { type: 'button', disabled: busy, text: 'Keep reviewing', onclick: function () { S.panel = null; renderVerdict() } }),
+        ]),
+      ]))
+    }
+    if (S.panel === 'changes') {
+      var area = el('textarea', { 'aria-label': 'Overall comment (optional)', placeholder: 'Overall comment (optional)' })
+      area.value = S.changesText
+      area.addEventListener('input', function () { S.changesText = area.value })
+      if (typing) {
+        queueMicrotask(function () {
+          area.focus()
+          area.setSelectionRange(typing.start, typing.end)
+        })
+      }
+      bar.appendChild(el('div', { class: 'panel' }, [
+        area,
+        el('div', { class: 'row' }, [
+          el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Send: needs changes', onclick: function () { submitVerdict('needs-changes', S.changesText.trim()) } }),
+          el('button', { type: 'button', disabled: busy, text: 'Cancel', onclick: function () { S.panel = null; renderVerdict() } }),
+        ]),
+      ]))
+    }
+  }
+  function onLooksRight() {
+    S.verdictError = ''
+    if (Core.unvisitedScreens(boot.screens, S.visited).length) { S.panel = 'confirm'; renderVerdict() } else submitVerdict('looks-right', null)
+  }
+  function submitVerdict(verdict, comment) {
+    if (S.submitting || !canReview()) return
+    var ids = screens.map(function (s) { return s.id })
+    var payload = {
+      verdict: verdict,
+      visited: ids.filter(function (id) { return S.visited.has(id) }),
+      marks: ids.filter(function (id) { return S.marks.has(id) }),
+    }
+    if (comment) payload.comment = comment
+    S.submitting = true
+    S.verdictError = ''
+    renderVerdict()
+    var step = S.snap.step
+    postEvent('submit', payload, { nonce: step.nonce, step: step.id }).then(function (result) {
+      S.submitting = false
+      if (result === 'ok') {
+        S.panel = null
+        setNotice('Verdict sent.', false)
+      } else if (result === 'superseded') {
+        S.panel = null
+        S.verdictError = 'That review was replaced by a newer one. Refreshing.'
+      } else S.verdictError = 'Could not send the verdict. Try again.'
+      renderVerdict()
+      pollNow()
+    })
+  }
+
+  function renderAll() {
+    renderToolbar()
+    renderBanner()
+    applyStates()
+    renderRail()
+    renderOverlay()
+    renderNote()
+    paintHover()
+    renderVerdict()
+  }
+
+  // ---- companion transport (same-origin app endpoints only) ------------------
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID()
+    return 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)
+  }
+  /** Posts one event, retrying network errors with the same client_id so the server can dedupe. */
+  function postEvent(type, payload, scope) {
+    var body = { client_id: uuid(), type: type, payload: payload }
+    if (scope.nonce) body.nonce = scope.nonce
+    if (scope.step) body.step = scope.step
+    var text = JSON.stringify(body)
+    function attempt(n) {
+      return fetch('/_quirk/app/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Quirk-Token': boot.token },
+        body: text,
+      }).then(function (r) {
+        if (r.status === 409) return 'superseded'
+        return r.ok ? 'ok' : 'error'
+      }, function () {
+        if (n >= 3) return 'error'
+        return new Promise(function (resolve) { setTimeout(resolve, 200 * (n + 1)) }).then(function () { return attempt(n + 1) })
+      })
+    }
+    return attempt(0)
+  }
+
+  var rev = ''
+  var failures = 0
+  var inflight = false
+  var pollTimer = null
+  function pollDelay() {
+    return failures < 3 ? 1000 : Math.min(5000, 1000 * Math.pow(2, failures - 2))
+  }
+  function poll() {
+    if (inflight) return
+    inflight = true
+    fetch('/_quirk/app/snapshot?rev=' + encodeURIComponent(rev), { cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 200) {
+          return r.json().then(function (snap) {
+            rev = String(snap.rev)
+            S.snap = snap
+            renderAll()
+          })
+        }
+        if (r.status !== 204) throw new Error('snapshot ' + r.status)
+        return null
+      })
+      .then(function () {
+        var recovered = failures > 0
+        failures = 0
+        if (S.paused || recovered) { S.paused = false; renderStatus() }
+      })
+      .catch(function () {
+        failures += 1
+        if (failures >= 3 && !S.paused) { S.paused = true; renderStatus() }
+      })
+      .then(function () {
+        inflight = false
+        clearTimeout(pollTimer)
+        pollTimer = setTimeout(poll, pollDelay())
+      })
+  }
+  function pollNow() {
+    if (!appMode) return
+    clearTimeout(pollTimer)
+    poll()
+  }
+
+  // ---- controls ------------------------------------------------------------
+  $('mode-interact').addEventListener('click', function () { S.mode = 'interact'; clearHover(); renderToolbar() })
+  $('mode-comment').addEventListener('click', function () { if (canReview()) { S.mode = 'comment'; renderToolbar() } })
+  $('vp-desktop').addEventListener('click', function () { S.viewport = 'desktop'; renderToolbar(); scheduleRefresh() })
+  $('vp-mobile').addEventListener('click', function () { S.viewport = 'mobile'; renderToolbar(); scheduleRefresh() })
+  $('show-changes').addEventListener('change', function (ev) {
+    S.showChanges = ev.target.checked
+    if (S.showChanges && !changed.size) setNotice('Nothing was recorded as changed in this version.', false)
+    renderOverlay()
+  })
+  $('version-picker').addEventListener('change', function (ev) {
+    var v = Number(ev.target.value)
+    if (v !== boot.version) goToVersion(v)
+  })
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && (S.note || S.openThread)) { S.note = null; S.openThread = null; renderNote(); renderOverlay(); renderRail() }
+  })
+  window.addEventListener('resize', scheduleRefresh)
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') pollNow() })
+
+  frame.addEventListener('load', attach)
+  frame.srcdoc = Core.withBase(String(boot.mock_html || ''))
+  renderAll()
+  if (appMode) poll()
+})()
+</script>
+</body>
+</html>

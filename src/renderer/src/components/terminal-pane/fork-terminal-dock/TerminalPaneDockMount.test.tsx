@@ -29,42 +29,18 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
   TooltipContent: ({ children }: { children: ReactNode }) => <div>{children}</div>
 }))
-vi.mock('../../native-chat/NativeChatSessionOptionPickers', () => ({
-  NativeChatSessionOptionPickers: () => <div data-testid="session-option-pickers" />
-}))
-const composerScreenReaders = vi.hoisted(() => [] as (() => string | null)[])
 vi.mock('./TerminalDockComposer', async () => {
   const React = await import('react')
   return {
-    TerminalDockComposer: ({
-      ref,
-      readTerminalScreen
-    }: {
-      ref?: Ref<unknown>
-      readTerminalScreen?: () => string | null
-    }) => {
-      if (readTerminalScreen) {
-        composerScreenReaders.push(readTerminalScreen)
-      }
+    TerminalDockComposer: ({ ref }: { ref?: Ref<unknown> }) => {
       const textareaRef = React.useRef<HTMLTextAreaElement>(null)
       React.useImperativeHandle(ref, () => ({
-        focus: () => {
-          textareaRef.current?.focus()
-          return true
-        },
-        insertTypedText: () => false,
-        handlePasteEvent: () => {},
-        pasteFromClipboard: () => {}
+        focus: () => textareaRef.current?.focus()
       }))
       return <textarea ref={textareaRef} />
     }
   }
 })
-vi.mock('../../native-chat/native-chat-runtime-send', () => ({
-  sendNativeChatMessage: vi.fn(() => ({ cancel: vi.fn(), settleAfterMs: 0 })),
-  sendNativeChatMessageWithImageAttachments: vi.fn(),
-  submitNativeChatPrompt: vi.fn()
-}))
 
 import {
   REMOTE_CONPTY_UNVERIFIED_DATASET_KEY,
@@ -73,7 +49,6 @@ import {
 } from './TerminalPaneDockMount'
 
 afterEach(() => {
-  composerScreenReaders.length = 0
   cleanup()
   // makeFakePane's container (and any manually appended focus targets) are plain DOM
   // nodes outside React's tree, so RTL's cleanup() never removes them on its own.
@@ -112,7 +87,6 @@ const baseProps = {
   gutterRows: DEFAULT_GUTTER_ROWS,
   targetPtyId: 'pty-1',
   disabledReason: null,
-  readTerminalScreen: () => null,
   onCommitGutterRows: vi.fn(),
   passthroughActive: false
 }
@@ -129,33 +103,6 @@ describe('TerminalPaneDockMount', () => {
     render(<TerminalPaneDockMount {...baseProps} pane={pane} docked={true} />)
     const dockSlot = pane.container.querySelector('.pane-dock-slot') as HTMLElement
     expect(dockSlot.querySelector('[data-terminal-dock]')).not.toBeNull()
-  })
-
-  it('keeps one screen reader while the host hands down fresh pane views', () => {
-    // getPanes() rebuilds a pane's public view per render, so the host's reader is a new
-    // closure every time. The composer memoizes its session-option surface on that
-    // identity, and each rebuild re-reads the agent frame over what the user just picked.
-    const pane = makeFakePane()
-    const { rerender } = render(
-      <TerminalPaneDockMount
-        {...baseProps}
-        pane={pane}
-        docked={true}
-        readTerminalScreen={() => 'first'}
-      />
-    )
-    rerender(
-      <TerminalPaneDockMount
-        {...baseProps}
-        pane={{ ...pane }}
-        docked={true}
-        readTerminalScreen={() => 'second'}
-      />
-    )
-
-    expect(new Set(composerScreenReaders).size).toBe(1)
-    // Stable identity, still reading through to the pane view the host rendered last.
-    expect(composerScreenReaders[0]?.()).toBe('second')
   })
 
   it('owns slot geometry and reports the effective auto-undock surface', () => {

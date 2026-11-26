@@ -39,7 +39,6 @@ import {
   updateHostDescriptor,
   updateHostNameAndEndpoint
 } from './host-store'
-import { resetMobileRelayHostOverlayStoreForTests } from './mobile-relay-host-overlay-store'
 import { StoredHostProfileSchema, type StoredHostProfile } from './types'
 
 const HOSTS_STORAGE_KEY = 'quirky:hosts'
@@ -66,7 +65,6 @@ describe('host name identity', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetHostStoreForTests()
-    resetMobileRelayHostOverlayStoreForTests()
     storedHostsRaw = JSON.stringify([GENERATED_HOST, TYPED_HOST])
     asyncStorageMock.getItem.mockImplementation(async (key: string) =>
       key === HOSTS_STORAGE_KEY ? storedHostsRaw : null

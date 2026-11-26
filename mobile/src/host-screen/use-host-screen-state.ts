@@ -9,7 +9,6 @@ import { INITIAL_MOBILE_VIEW, type MobileViewState } from '../worktree/workspace
 import type { Worktree } from '../worktree/workspace-list-sections'
 import type { ServedProjectSections } from '../worktree/project-sections-operations'
 import type { SectionRepo } from '../worktree/workspace-list-types'
-import { NO_SERVER_WORKSPACES, type ServerWorkspaces } from '../worktree/server-workspaces'
 import type { ProjectGroup } from '../../../src/shared/project-group-types'
 
 export function useHostScreenState(hostId: string | undefined, action: string | undefined) {
@@ -67,10 +66,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     new Map()
   )
   const [hostPlatform, setHostPlatform] = useState<NodeJS.Platform | null>(null)
-  // The desktop's servers and their rows, listed through the desktop (mobileRelay.hosts.*).
-  const [serverWorkspaces, setServerWorkspaces] = useState<ServerWorkspaces>(NO_SERVER_WORKSPACES)
-  // Why its own banner state: a tap on a server that needs an update says so until dismissed.
-  const [serverNotice, setServerNotice] = useState<string | null>(null)
   const [showWorkspaceOptions, setShowWorkspaceOptions] = useState(false)
   const [actionTarget, setActionTarget] = useState<Worktree | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null)
@@ -113,8 +108,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     repoMetadataFetchedAtRef,
     routeActionState,
     search,
-    serverNotice,
-    serverWorkspaces,
     setActionTarget,
     setCatalogError,
     setConfirmDelete,
@@ -135,8 +128,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setDesktopRepos,
     setRouteActionState,
     setSearch,
-    setServerNotice,
-    setServerWorkspaces,
     setShowWorkspaceOptions,
     setShowPinnedInGroups,
     setShowSearch,

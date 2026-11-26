@@ -1,9 +1,0 @@
-{
-  "components": {
-    "native-chat": {
-      "composer": {
-        "sendMayNotHaveCompleted": "Send may not have completed. Check the terminal before retrying."
-      }
-    }
-  }
-}

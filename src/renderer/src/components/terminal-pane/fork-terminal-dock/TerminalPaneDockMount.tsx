@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom'
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
 import type { AgentType } from '../../../../../shared/agent-status-types'
-import type { AgentComposerHandle } from '../../native-chat/fork-agent-composer/agent-composer-types'
+import type { ComposerHandle } from '../../chat/composer/composer-types'
 import { TerminalDock, terminalDockGutterHeightPx } from './TerminalDock'
 import { applyTerminalDockGeometryChange } from './terminal-pane-dock-geometry'
 import { beginTerminalDockGutterDrag } from './terminal-pane-dock-gutter-drag'
@@ -45,7 +45,6 @@ export type TerminalPaneDockMountProps = {
   gutterRows: number
   targetPtyId: string | null
   disabledReason: string | null
-  readTerminalScreen: () => string | null
   onInitialize?: () => void
   onCommitGutterRows: (rows: number) => void
   onEffectiveMountedChange?: (mounted: boolean) => void
@@ -58,7 +57,7 @@ export type TerminalPaneDockMountProps = {
  *  and agent eligibility, so reaching here at all means the feature is live for this pane. */
 export function TerminalPaneDockMount(props: TerminalPaneDockMountProps): React.JSX.Element | null {
   const { pane, docked, passthroughActive, onEffectiveMountedChange } = props
-  const dockRef = useRef<AgentComposerHandle>(null)
+  const dockRef = useRef<ComposerHandle>(null)
   const cancelGutterDragRef = useRef<(() => void) | null>(null)
   const [liveGutterRows, setLiveGutterRows] = useState<number | null>(null)
   // Why: the auto-undock hysteresis needs the pane's own available height, not the
@@ -82,14 +81,6 @@ export function TerminalPaneDockMount(props: TerminalPaneDockMountProps): React.
     },
     [dockContainer, pane]
   )
-
-  // Why: getPanes() hands out a fresh pane view per render, so the host's reader
-  // closes over a new pane every time. The composer memoizes its whole session-option
-  // surface on this identity, and rebuilding that surface re-reads the agent frame —
-  // pinning the option pills to whatever the frame last painted.
-  const readTerminalScreenRef = useRef(props.readTerminalScreen)
-  readTerminalScreenRef.current = props.readTerminalScreen
-  const readTerminalScreen = useCallback(() => readTerminalScreenRef.current(), [])
 
   useEffect(
     () => () => {
@@ -257,8 +248,6 @@ export function TerminalPaneDockMount(props: TerminalPaneDockMountProps): React.
       onMountedChange={handleMountedChange}
       onGutterPointerDown={handleGutterPointerDown}
       gutterDragActive={liveGutterRows !== null}
-      readTerminalScreen={readTerminalScreen}
-      isLocalConptyBelowWrapMarkers={terminalPaneUsesConptyBelowWrapMarkers(pane)}
       passthroughActive={props.passthroughActive}
     />,
     dockContainer

@@ -10,8 +10,6 @@ export type AgentSessionCapabilities = {
   rewind: boolean
   /** Compact the conversation's context on request: offers the `/compact` command. */
   compact: boolean
-  /** A goal the user can set and change on the thread. */
-  threadGoal: boolean
   /** Turns report how much of the context window they used. */
   contextUsage: boolean
   /** Prompts may carry images. */
@@ -26,4 +24,6 @@ export type AgentSessionCapabilities = {
    * WHEN it asks, so only what it asks about is covered, never a sandbox.
    */
   approvalEnforcement: 'provider' | 'quirky'
+  /** The agent has a plan mode that proposes a plan for approval before it edits. Absent means no. */
+  planMode?: boolean
 }

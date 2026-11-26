@@ -1,7 +1,7 @@
 export type RgbaColor = { r: number; g: number; b: number; a: number }
 
 const APP_SURFACE_COLORS: Record<'dark' | 'light', RgbaColor> = {
-  dark: { r: 10, g: 10, b: 10, a: 1 },
+  dark: { r: 22, g: 23, b: 27, a: 1 },
   light: { r: 255, g: 255, b: 255, a: 1 }
 }
 

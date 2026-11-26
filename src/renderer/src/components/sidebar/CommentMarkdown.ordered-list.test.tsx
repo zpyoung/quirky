@@ -2,7 +2,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MessageRow } from '@/components/native-chat/NativeChatMessageRow'
 import CommentMarkdown from './CommentMarkdown'
 
 afterEach(cleanup)
@@ -64,26 +63,4 @@ describe.each(['compact', 'document'] as const)('%s markdown ordered lists', (va
     expect(screen.getByRole('list').tagName).toBe('UL')
     expect(screen.getByRole('list')).not.toHaveAttribute('start')
   })
-})
-
-it.each(['user', 'assistant'] as const)('preserves the start in a %s chat message', (role) => {
-  render(
-    <MessageRow
-      message={{
-        id: 'ordered-list-message',
-        role,
-        timestamp: null,
-        source: 'transcript',
-        blocks: [{ type: 'text', text: '3. Third\n4. Fourth' }]
-      }}
-      expandSignal={false}
-      onScrollMessageToTop={vi.fn()}
-    />
-  )
-
-  expect(screen.getByRole('list')).toHaveAttribute('start', '3')
-  expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-    'Third',
-    'Fourth'
-  ])
 })

@@ -37,7 +37,6 @@ import { claudeTurnOpenedBySendEcho, type ClaudeTurnSource } from './claude-turn
 import type { ClaudeOpenTurn } from './claude-open-turn'
 import type { ClaudeAuthenticationFailures } from './claude-authentication-failures'
 import type { ClaudeUsageLimits } from './claude-usage-limits'
-import type { ClaudeThreadGoal } from './claude-thread-goal'
 
 export type ClaudeMessageJournalContext = {
   sink: StructuredAgentSessionEventSink
@@ -57,7 +56,6 @@ export type ClaudeMessageJournalContext = {
   turn: ClaudeOpenTurn
   authenticationFailures: ClaudeAuthenticationFailures
   usageLimits: ClaudeUsageLimits
-  threadGoal: ClaudeThreadGoal
 }
 
 export function journalClaudeMessage(
@@ -95,7 +93,6 @@ export function journalClaudeMessage(
       : envelope.parentToolUseId
   const stamp = ctx.corrections.stampFor(producerRef)
   const outputEnvelope = claudeOutputEnvelope(envelope)
-  ctx.threadGoal.observe(message)
   const source: ClaudeTurnSource = {
     sessionId: envelope.sessionId,
     uuid: envelope.uuid,
@@ -126,11 +123,7 @@ export function journalClaudeMessage(
   }
   const usageLimit = ctx.usageLimits.assistant(message, ctx.turn)
   const body =
-    ctx.authenticationFailures.assistant(message) ??
-    usageLimit ??
-    ctx.threadGoal.report(message, claudeMessageIdentity(envelope), observedAt) ??
-    messageBody ??
-    ordinaryFailure
+    ctx.authenticationFailures.assistant(message) ?? usageLimit ?? messageBody ?? ordinaryFailure
   const terminalIdentity = terminal && ctx.turn.identity && usageLimit ? ctx.turn.identity : null
   const identity =
     (body && envelope.role === 'assistant'

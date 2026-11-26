@@ -1,0 +1,619 @@
+/* streamdown's Tailwind utilities are never loaded, so every visible style comes from this file and the app tokens in main.css */
+
+.qmd {
+  --shiki-foreground: var(--chat-code-foreground);
+  --shiki-background: transparent;
+  --shiki-token-keyword: var(--hljs-keyword);
+  --shiki-token-function: var(--hljs-function);
+  --shiki-token-string: var(--hljs-string);
+  --shiki-token-string-expression: var(--hljs-string);
+  --shiki-token-number: var(--hljs-number);
+  --shiki-token-constant: var(--hljs-literal);
+  --shiki-token-comment: var(--hljs-comment);
+  --shiki-token-type: var(--hljs-type);
+  --shiki-token-punctuation: var(--chat-code-foreground);
+  --shiki-token-parameter: var(--hljs-params);
+  --shiki-token-link: var(--hljs-function);
+  --shiki-token-inserted: var(--chat-diff-added);
+  --shiki-token-deleted: var(--chat-diff-removed);
+  --shiki-token-changed: var(--hljs-number);
+  --qmd-mono: var(--chat-code-font-family, var(--font-mono));
+  color: var(--chat-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.qmd [data-qmd-body] > * {
+  margin: 0 0 calc(var(--spacing) * 2);
+}
+
+.qmd [data-qmd-body] > :first-child {
+  margin-top: 0;
+}
+
+.qmd [data-qmd-body] > :last-child {
+  margin-bottom: 0;
+}
+
+.qmd :is([data-streamdown='strong'], [data-streamdown^='heading-']) {
+  color: var(--chat-foreground-strong);
+}
+
+.qmd [data-streamdown='strong'] {
+  font-weight: 600;
+}
+
+.qmd [data-streamdown^='heading-'] {
+  font-size: var(--text-sm);
+  font-weight: 650;
+  line-height: 1.3;
+  margin: calc(var(--spacing) * 3) 0 calc(var(--spacing) * 1);
+}
+
+.qmd [data-streamdown='heading-1'] {
+  color: var(--chat-foreground-strong);
+  font-size: calc(var(--text-sm) * 1.286);
+}
+
+.qmd [data-streamdown='heading-2'] {
+  color: var(--chat-foreground-strong);
+  font-size: calc(var(--text-sm) * 1.17);
+}
+
+.qmd [data-streamdown='heading-4'],
+.qmd [data-streamdown='heading-5'],
+.qmd [data-streamdown='heading-6'] {
+  color: var(--chat-foreground-faint);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.qmd [data-streamdown='link'] {
+  border-bottom: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  color: var(--chat-foreground-strong);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.qmd [data-streamdown='link']:hover {
+  border-bottom-color: currentColor;
+}
+
+.qmd [data-streamdown='inline-code'] {
+  background: var(--code-accent-surface);
+  border-radius: var(--radius-sm);
+  color: var(--code-accent);
+  font-family: var(--qmd-mono);
+  font-size: var(--text-chat-code);
+  padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1);
+}
+
+.qmd mark {
+  background: color-mix(in srgb, var(--status-warning) 25%, transparent);
+  border-radius: calc(var(--spacing) * 1);
+  color: inherit;
+  padding: 0 calc(var(--spacing) * 0.5);
+}
+
+.qmd kbd {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-bottom-width: calc(var(--spacing) * 0.5);
+  border-radius: calc(var(--spacing) * 1);
+  font-family: var(--qmd-mono);
+  font-size: var(--text-2xs);
+  padding: 0 calc(var(--spacing) * 1);
+}
+
+.qmd [data-streamdown='horizontal-rule'] {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.qmd [data-streamdown='blockquote'] {
+  border-left: calc(var(--spacing) * 0.5) solid var(--border);
+  color: var(--chat-foreground-faint);
+  margin-left: 0;
+  padding-left: calc(var(--spacing) * 3);
+}
+
+.qmd [data-streamdown='unordered-list'],
+.qmd [data-streamdown='ordered-list'] {
+  padding-left: 1.4em;
+}
+
+.qmd [data-streamdown='unordered-list'] {
+  list-style: disc;
+}
+
+.qmd [data-streamdown='ordered-list'] {
+  list-style: decimal;
+}
+
+.qmd [data-streamdown='list-item'] {
+  padding: calc(var(--spacing) * 0.5) 0;
+}
+
+.qmd [data-streamdown='list-item']::marker {
+  color: var(--chat-foreground-faint);
+}
+
+.qmd [data-streamdown='list-item'] > p {
+  margin: 0;
+}
+
+.qmd [data-streamdown='list-item']:has(> input[type='checkbox']) {
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.qmd [data-streamdown='list-item']:has(> input[type='checkbox']:checked) {
+  color: var(--chat-foreground-faint);
+  text-decoration: line-through;
+}
+
+.qmd input[type='checkbox'] {
+  appearance: none;
+  border: 1px solid var(--chat-foreground-faint);
+  border-radius: calc(var(--spacing) * 1);
+  display: inline-grid;
+  height: 1em;
+  margin: 0 calc(var(--spacing) * 1.5) 0 0;
+  place-content: center;
+  vertical-align: -0.15em;
+  width: 1em;
+}
+
+.qmd input[type='checkbox']:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.qmd input[type='checkbox']:checked::after {
+  border: solid var(--primary-foreground);
+  border-width: 0 calc(var(--spacing) * 0.5) calc(var(--spacing) * 0.5) 0;
+  content: '';
+  height: 0.5em;
+  transform: translateY(-0.05em) rotate(45deg);
+  width: 0.28em;
+}
+
+.qmd [data-streamdown='table-wrapper'] {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.qmd [data-streamdown='table-wrapper'] > div {
+  overflow-x: auto;
+}
+
+.qmd [data-streamdown='table'] {
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  width: 100%;
+}
+
+.qmd [data-streamdown='table-header-cell'] {
+  background: var(--muted);
+  font-weight: 600;
+  padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.qmd [data-streamdown='table-cell'] {
+  border-top: 1px solid var(--border);
+  padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+  white-space: nowrap;
+}
+
+.qmd [data-streamdown='table-row']:nth-child(even) > [data-streamdown='table-cell'] {
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+
+.qmd-alert {
+  --qmd-alert: var(--callout-note);
+  background: color-mix(in srgb, var(--qmd-alert) 9%, transparent);
+  border-left: calc(var(--spacing) * 1) solid var(--qmd-alert);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
+}
+
+.qmd-alert[data-alert='tip'] {
+  --qmd-alert: var(--status-success);
+}
+
+.qmd-alert[data-alert='important'] {
+  --qmd-alert: var(--callout-important);
+}
+
+.qmd-alert[data-alert='warning'] {
+  --qmd-alert: var(--status-warning);
+}
+
+.qmd-alert[data-alert='caution'] {
+  --qmd-alert: var(--destructive);
+}
+
+.qmd-alert-label {
+  align-items: center;
+  color: color-mix(in srgb, var(--qmd-alert) 70%, var(--chat-foreground));
+  display: flex;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  gap: calc(var(--spacing) * 1);
+}
+
+.qmd-alert-body > * {
+  margin: 0 0 calc(var(--spacing) * 1);
+}
+
+.qmd-alert-body > :last-child {
+  margin-bottom: 0;
+}
+
+.qmd-code {
+  background: var(--chat-code-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.qmd-code-header {
+  align-items: center;
+  background: color-mix(in srgb, var(--chat-code-foreground) 4%, transparent);
+  border-bottom: 1px solid var(--border);
+  color: var(--chat-foreground-faint);
+  display: flex;
+  font-family: var(--qmd-mono);
+  font-size: var(--text-2xs);
+  justify-content: space-between;
+  padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.5) calc(var(--spacing) * 0.5)
+    calc(var(--spacing) * 3);
+}
+
+.qmd-code-actions {
+  display: inline-flex;
+  gap: calc(var(--spacing) * 1);
+}
+
+/* Buttons come from the Button primitive; these only fit them to the code header. */
+.qmd [data-qmd-button] {
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--text-2xs);
+}
+
+.qmd [data-qmd-button][aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.qmd summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.qmd-code-body {
+  font-size: var(--text-chat-code);
+  position: relative;
+}
+
+.qmd-code pre {
+  counter-reset: qmd-line;
+  font-family: var(--qmd-mono);
+  line-height: 1.6;
+  margin: 0;
+  overflow-x: auto;
+  padding: calc(var(--spacing) * 1.5) 0;
+}
+
+.qmd-code code {
+  font: inherit;
+}
+
+.qmd-line {
+  counter-increment: qmd-line;
+  display: block;
+  padding: 0 calc(var(--spacing) * 3);
+  white-space: pre;
+}
+
+.qmd-code[data-numbered] .qmd-line::before {
+  color: var(--chat-foreground-faint);
+  content: counter(qmd-line);
+  display: inline-block;
+  margin-right: calc(var(--spacing) * 3);
+  text-align: right;
+  user-select: none;
+  width: 2.2em;
+}
+
+.qmd-line[data-diff='add'] {
+  background: color-mix(in srgb, var(--chat-diff-added) 12%, transparent);
+  color: var(--chat-diff-added);
+}
+
+.qmd-line[data-diff='del'] {
+  background: color-mix(in srgb, var(--chat-diff-removed) 12%, transparent);
+  color: var(--chat-diff-removed);
+}
+
+.qmd-code[data-highlighted] .qmd-line > span {
+  animation: qmd-colour-in 0.25s ease-out;
+}
+
+.qmd-code[data-collapsed] .qmd-code-body {
+  max-height: calc(20 * 1.6em + calc(var(--spacing) * 3));
+  overflow: hidden;
+}
+
+.qmd-code-fade {
+  background: linear-gradient(transparent, var(--chat-code-surface));
+  bottom: 0;
+  height: 3em;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+.qmd [data-qmd-toggle] {
+  background: color-mix(in srgb, var(--chat-code-foreground) 4%, transparent);
+  border-radius: 0;
+  border-top: 1px solid var(--border);
+  color: var(--chat-foreground-faint);
+  display: flex;
+  font-size: var(--text-xs);
+  width: 100%;
+}
+
+.qmd-figure-body {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  padding: calc(var(--spacing) * 3);
+}
+
+.qmd-figure-body svg {
+  max-width: 100%;
+}
+
+.qmd-source {
+  color: var(--chat-foreground);
+  display: block;
+  font-family: var(--qmd-mono);
+  font-size: var(--text-chat-code);
+  margin: 0;
+  overflow-x: auto;
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  white-space: pre;
+}
+
+.qmd-json {
+  font-family: var(--qmd-mono);
+  font-size: var(--text-chat-code);
+  line-height: 1.6;
+  padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
+}
+
+.qmd-json details {
+  margin-left: 1.2em;
+}
+
+.qmd-json > details {
+  margin-left: 0;
+}
+
+.qmd-json summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.qmd-json summary::-webkit-details-marker {
+  display: none;
+}
+
+.qmd-json summary::before {
+  color: var(--chat-foreground-faint);
+  content: '\25B8  ';
+}
+
+.qmd-json details[open] > summary::before {
+  content: '\25BE  ';
+}
+
+.qmd-json-row {
+  margin-left: 1.2em;
+}
+
+.qmd-json-key {
+  color: var(--hljs-function);
+}
+
+.qmd-json-string {
+  color: var(--hljs-string);
+}
+
+.qmd-json-number {
+  color: var(--hljs-number);
+}
+
+.qmd-json-boolean,
+.qmd-json-null {
+  color: var(--hljs-literal);
+}
+
+.qmd-chart {
+  font-size: var(--text-xs);
+}
+
+.qmd-chart-label {
+  fill: var(--chat-foreground);
+}
+
+.qmd-chart-value {
+  fill: var(--chat-foreground-faint);
+}
+
+.qmd-chart-axis {
+  stroke: var(--border);
+}
+
+.qmd-chart-line {
+  stroke: var(--chart-3);
+  stroke-width: 2;
+}
+
+.qmd-chart-dot {
+  fill: var(--chart-3);
+}
+
+.qmd-chart-hue-0 {
+  fill: var(--chart-3);
+}
+
+.qmd-chart-hue-1 {
+  fill: var(--chart-2);
+}
+
+.qmd-chart-hue-2 {
+  fill: var(--chart-3);
+}
+
+.qmd-chart-hue-3 {
+  fill: var(--chart-4);
+}
+
+.qmd-chart-hue-4 {
+  fill: var(--chart-5);
+}
+
+.qmd-error {
+  border: 1px dashed color-mix(in srgb, var(--destructive) 55%, transparent);
+  border-radius: var(--radius-md);
+  display: block;
+  margin: 0 0 calc(var(--spacing) * 2);
+  overflow: hidden;
+}
+
+.qmd-error-message {
+  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+  color: color-mix(in srgb, var(--destructive) 70%, var(--chat-foreground));
+  display: block;
+  font-size: var(--text-xs);
+  padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+}
+
+.qmd .qmd-chip {
+  color: var(--code-accent);
+  cursor: pointer;
+  font-family: var(--qmd-mono);
+  vertical-align: baseline;
+}
+
+.qmd-figure {
+  margin: 0 0 calc(var(--spacing) * 2);
+  max-width: 24rem;
+}
+
+.qmd-figure img {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: block;
+  max-width: 100%;
+}
+
+.qmd-figure figcaption {
+  color: var(--chat-foreground-faint);
+  font-size: var(--text-2xs);
+  margin-top: calc(var(--spacing) * 1);
+}
+
+.qmd-p {
+  margin: 0 0 calc(var(--spacing) * 2);
+}
+
+.qmd details:not(.qmd-json-node) {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 calc(var(--spacing) * 3);
+}
+
+.qmd details:not(.qmd-json-node)[open] {
+  padding-bottom: calc(var(--spacing) * 1.5);
+}
+
+.qmd details:not(.qmd-json-node) > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: calc(var(--spacing) * 1.5) 0;
+}
+
+.qmd details:not(.qmd-json-node) > summary::marker {
+  color: var(--chat-foreground-faint);
+}
+
+.qmd section[data-footnotes] {
+  border-top: 1px solid var(--border);
+  color: var(--chat-foreground-faint);
+  font-size: var(--text-xs);
+  margin-top: calc(var(--spacing) * 3);
+  padding-top: calc(var(--spacing) * 1.5);
+}
+
+.qmd section[data-footnotes] > h2 {
+  border: 0;
+  height: 0;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 0;
+}
+
+.qmd sup > [data-streamdown='link'] {
+  border: 0;
+  font-size: var(--text-2xs);
+  padding: 0 calc(var(--spacing) * 0.5);
+}
+
+.qmd .katex-display {
+  display: block;
+  margin: 0 0 calc(var(--spacing) * 2);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.qmd-caret {
+  animation: qmd-blink 1s steps(1) infinite;
+  color: var(--chat-foreground-faint);
+}
+
+@keyframes qmd-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes qmd-colour-in {
+  from {
+    opacity: 0.55;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qmd-caret,
+  .qmd-code[data-highlighted] .qmd-line > span {
+    animation: none;
+  }
+}

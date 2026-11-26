@@ -25,7 +25,7 @@ export function richMarkdownEditorStyle(): string {
       --border: ${colors.borderSubtle};
       --primary: ${colors.textPrimary};
       --primary-foreground: ${colors.bgBase};
-      --accent-link: ${colors.accentBlue};
+      --accent-link: ${colors.accent};
       --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       --font-sans: Geist, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }

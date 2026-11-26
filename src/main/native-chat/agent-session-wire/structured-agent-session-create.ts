@@ -28,6 +28,7 @@ import {
 import { performSend } from './structured-agent-session-turns'
 import { observedReceipt } from './structured-agent-session-operation-settlement'
 import { attachStructuredAgentSession } from './structured-agent-session-attach-orchestration'
+import type { JournalReplacementItem } from '../agent-session-journal/journal-epoch-replacement'
 import { readAgentSessionHydrationPage } from './agent-session-history-page'
 import { resolveAgentSessionReplayOutcome } from './structured-agent-session-replay-outcome'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
@@ -39,6 +40,8 @@ export type StructuredAgentSessionCreateOptions = {
   catalogModels?: Parameters<typeof reserveRequestFor>[0]['models']
   /** Called after the durable create, before delivery can start the agent. */
   publishTab?: () => Promise<void>
+  /** Rows the new journal starts with, ahead of any adopted history. */
+  openingItems?: readonly JournalReplacementItem[]
 }
 
 /** Founds a chat and its opening message; only the delivery loop acquires the agent. */
@@ -189,7 +192,9 @@ async function foundConversation(
         params,
         { journal: session.journal, unconfirmedClientMessageIds: [] },
         candidate.record,
-        prepared.items,
+        options.openingItems?.length
+          ? [...options.openingItems, ...(prepared.items ?? [])]
+          : prepared.items,
         { uncommittedCreate: true }
       )
       const first = options.firstMessage

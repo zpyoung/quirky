@@ -31,6 +31,11 @@ export const FLAG_HELP_TEXT: Record<string, string> = {
   'include-visual-layouts': '--include-visual-layouts Include tab and pane topology in JSON output',
   interrupt: '--interrupt            Send as an interrupt-style input when supported',
   id: '--id <id>             Identifier for a target item or permission',
+  spec: '--spec <@file|json>   View spec: a JSON file (@path) or inline JSON',
+  html: '--html <file>         Show an HTML file as the view',
+  mermaid: '--mermaid <file>     Show a Mermaid diagram file as the view',
+  patch: '--patch <@file|json>  View patch: {"ops":[...]} from a file (@path) or inline',
+  placement: '--placement inline|pane  Where the view opens: in the chat or in a pane',
   issue: '--issue <number|null>  Linked GitHub issue number',
   'gitlab-issue':
     '--gitlab-issue <number|url|null> Linked GitLab issue number or URL; null clears on set',

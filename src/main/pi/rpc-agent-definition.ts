@@ -7,7 +7,6 @@ export const PI_RPC_AGENT: DirectoryAccountAgentDefinition = {
   capabilities: {
     rewind: false,
     compact: true,
-    threadGoal: false,
     contextUsage: true,
     imagePrompts: true,
     steering: 'inject',

@@ -20,7 +20,6 @@ describe('ACP agents in the runtime registrations', () => {
       capabilities: {
         rewind: false,
         compact: true,
-        threadGoal: false,
         contextUsage: true,
         imagePrompts: false,
         steering: 'queue',

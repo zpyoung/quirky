@@ -45,7 +45,7 @@ function MobileNativeChatPermissionImpl({
   return (
     <View testID="native-chat-approval-card" style={styles.card}>
       <View style={styles.header}>
-        <ShieldQuestion size={16} color={colors.accentBlue} strokeWidth={2} />
+        <ShieldQuestion size={16} color={colors.accent} strokeWidth={2} />
         <Text
           testID="native-chat-approval-title"
           style={styles.title}
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.button
   },
   optionPrimary: {
-    backgroundColor: colors.accentBlue
+    backgroundColor: colors.accent
   },
   optionSecondary: {
     backgroundColor: colors.bgRaised,

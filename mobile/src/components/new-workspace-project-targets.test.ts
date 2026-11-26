@@ -23,7 +23,7 @@ describe('new workspace project targets', () => {
     ])
 
     expect(options).toHaveLength(1)
-    expect(options[0]).toMatchObject({ label: 'quirky', detail: 'stablyai/orca' })
+    expect(options[0]).toMatchObject({ label: 'quirky', detail: 'stablyai/quirky' })
   })
 
   it('shows the provider slug recovered from canonical git identity', () => {
@@ -33,14 +33,14 @@ describe('new workspace project targets', () => {
         displayName: 'quirky',
         path: '/src/quirky',
         gitRemoteIdentity: {
-          canonicalKey: 'github.com/stablyai/orca',
+          canonicalKey: 'github.com/stablyai/quirky',
           remoteName: 'origin',
-          remoteUrl: 'git@github.com:stablyai/orca.git'
+          remoteUrl: 'git@github.com:stablyai/quirky.git'
         }
       }
     ])
 
-    expect(options[0]).toMatchObject({ label: 'quirky', detail: 'stablyai/orca' })
+    expect(options[0]).toMatchObject({ label: 'quirky', detail: 'stablyai/quirky' })
   })
 
   it('labels local, SSH, and paired runtime targets as the host list names them', () => {

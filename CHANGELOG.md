@@ -1,16 +1,49 @@
 ---
 last_released_commit: 98b5867f0bd06ac1ea7b9cd22c43fc8ef15dda73
-upstream_synced: v1.4.237
 ---
 
 # Changelog
 
-Changes owned by the [`zpyoung/orca`](https://github.com/zpyoung/orca) fork. Upstream changes
-inherited from [`stablyai/orca`](https://github.com/stablyai/orca) are recorded as a single sync
-line per release, and detailed in each GitHub release's generated notes.
+Changes to Quirky, an independent app. The entries below predate Quirky's own versioning: they
+come from [`zpyoung/orca`](https://github.com/zpyoung/orca), the personal build Quirky's code grew
+out of, and their sync lines refer to the [`stablyai/orca`](https://github.com/stablyai/orca)
+releases that build followed.
 
 This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). It is maintained by the
 `release` skill — see `.claude/skills/release/SKILL.md`.
+
+## [2.0.0-rc.0] - 2026-11-26
+
+First release of Quirky 2, which continues on the Orca codebase as an independent, macOS-only app.
+The v1 line is archived at the `quirky-v1-final` tag.
+
+### Added
+
+- A native chat view built on the agent-session engine.
+- Import your Orca Dev setup (repos, worktrees, automations, hooks) on first launch, before
+  onboarding. Re-running the import reports only projects it hasn't brought over yet.
+- A new graphite and teal theme.
+- An upstream review skill.
+
+### Changed
+
+- Quirky is now macOS only, and release builds are signed, notarized, and auto-update from this repo.
+- The app, CLI, and bundled skills are renamed from Orca to Quirky. The four skills whose names
+  clashed with Orca's (`computer-use`, `jira-tickets`, `linear-tickets`, `orchestration`) now carry a
+  Quirky prefix, so both apps can be installed side by side.
+- Quirky Mobile no longer points at Orca's store listing or servers.
+
+### Fixed
+
+- First launch no longer replaces Orca Dev's Claude and Codex agent hooks.
+- Settings search no longer surfaces removed WSL and relay settings.
+- Bash prompt marks (OSC 133) no longer emit a duplicate command-start marker on Ubuntu 26.04.
+
+### Removed
+
+- Windows, Linux, and WSL support.
+- The hosted relay and the Stably-hosted services.
+- Bitbucket, Gitea, and Azure DevOps integrations.
 
 ## [1.4.238-rc.0.zy02] - 2026-10-22
 

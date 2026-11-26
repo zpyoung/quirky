@@ -39,7 +39,7 @@ vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/test/user-data') },
   BrowserWindow: { getAllWindows: browserWindowGetAllWindowsMock },
   ipcMain: { handle: handleMock, on: onMock },
-  nativeTheme: { themeSource: 'system' }
+  nativeTheme: { themeSource: 'system', shouldUseDarkColors: false }
 }))
 
 vi.mock('../ghostty/index', () => ({
@@ -634,6 +634,28 @@ describe('registerSettingsHandlers', () => {
       { mobilePairingCustomAddress: null },
       { notifyListeners: true, originWebContentsId: 1 }
     )
+  })
+
+  it('repaints every live window background when the theme preference changes', async () => {
+    const liveSetBackground = vi.fn()
+    const destroyedSetBackground = vi.fn()
+    browserWindowGetAllWindowsMock.mockReturnValue([
+      { isDestroyed: () => false, setBackgroundColor: liveSetBackground },
+      { isDestroyed: () => true, setBackgroundColor: destroyedSetBackground }
+    ])
+    store.getSettings.mockReturnValue({ theme: 'light' })
+    store.updateSettings.mockReturnValue({ theme: 'dark' })
+    registerSettingsHandlers(store as never)
+
+    const handler = handleMock.mock.calls.find((call) => call[0] === 'settings:set')?.[1] as (
+      _event: unknown,
+      args: unknown
+    ) => Promise<unknown>
+
+    await handler(settingsInvokeEvent, { theme: 'dark' })
+
+    expect(liveSetBackground).toHaveBeenCalledWith('#0c0d0f')
+    expect(destroyedSetBackground).not.toHaveBeenCalled()
   })
 
   it('normalizes custom terminal themes from renderer settings IPC', async () => {

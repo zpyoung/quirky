@@ -16,7 +16,7 @@ function host(id: string, name: string, endpoint: string): HostProfile {
 }
 
 const desk = host('desk', 'Desk', 'ws://192.168.1.2:6768')
-const laptop = host('laptop', 'Laptop', 'wss://relay.example.com/mobile')
+const laptop = host('laptop', 'Laptop', 'wss://laptop.example.com/mobile')
 const server = host('server', 'Server', 'wss://ssh.example.com/mobile')
 
 describe('useConnectedHostPicker', () => {

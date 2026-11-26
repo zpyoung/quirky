@@ -103,25 +103,6 @@ describe('a write pressed again', () => {
     expect(new Set(host.ids).size).toBe(3)
   })
 
-  it('sets a goal again after it was cleared, when the first set lost its answer', async () => {
-    let goal: string | null = null
-    const host = ledgerHost((_method, params) => {
-      goal = params.change?.kind === 'set' ? params.change.objective : null
-      return { ok: true, value: { change: params.change?.kind } }
-    })
-    const { current } = render()
-    const set = { change: { kind: 'set', objective: 'Ship the parser' } }
-
-    host.loseNextAnswer()
-    for (const fields of [set, { change: { kind: 'clear' } }, set]) {
-      await act(async () => {
-        await current.mutate('agentSession.threadGoal', 'agentSession.threadGoal', fields)
-      })
-    }
-
-    expect(goal).toBe('Ship the parser')
-  })
-
   it('says nothing when the same answer is clicked again after its reply was lost', async () => {
     const resolution = { state: 'resolved', selectedOptionId: 'allow' }
     // A host that already resolved the prompt that way answers with the resolution it holds.

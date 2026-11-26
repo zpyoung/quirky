@@ -17,7 +17,6 @@ import { TerminalAgentSessionForkDialog } from './TerminalAgentSessionForkDialog
 import { SessionRestoredBannerPortals } from './SessionRestoredBannerPortals'
 import { handleInternalTerminalFileDrop } from './terminal-drop-handler'
 import { TerminalQuickCommandEditorDialog } from './TerminalQuickCommandEditorDialog'
-import { TerminalPaneNativeChatPortal } from './TerminalPaneNativeChatPortal'
 import { TerminalPaneSleepingPortals } from './TerminalPaneSleepingPortals'
 import {
   TerminalPaneCodexRestartPortals,
@@ -42,7 +41,6 @@ export function TerminalPaneSurface({
     activePane,
     activePaneCanContinueInNewSession,
     activePaneCanResumeInChat,
-    activePaneIsChatLeaf,
     activatePaneTitleInteraction,
     agentSessionContinuation,
     agentSessionFork,
@@ -50,17 +48,15 @@ export function TerminalPaneSurface({
     closeTerminalLinkActions,
     contextMenu,
     contextMenuCanContinueInNewSession,
-    contextMenuCanToggleChat,
-    contextMenuIsChatView,
+    contextMenuCanResumeInChat,
     cwd,
     daemonActions,
     dismissTerminalError,
     expectedLayoutLeafIdsAttr,
     expandedPaneId,
-    effectiveChatViewMode,
     handleCancelClose,
     handleConfirmClose,
-    handleContextMenuToggleNativeChat,
+    handleContextMenuResumeInChat,
     handlePrimarySelectionAuxClick,
     handlePrimarySelectionMiddleMouseDown,
     handleRemoveTitle,
@@ -69,7 +65,6 @@ export function TerminalPaneSurface({
     handleRenameSubmit,
     handleRequestClosePane,
     handleStartRename,
-    handleToggleNativeChat,
     hiddenStartupStyle,
     isActive,
     isTabPinned,
@@ -136,7 +131,6 @@ export function TerminalPaneSurface({
         ref={setContainerRef}
         className="absolute inset-0 min-h-0 min-w-0"
         data-terminal-tab-id={tabId}
-        data-terminal-chat-view={effectiveChatViewMode && activePaneIsChatLeaf ? 'true' : undefined}
         data-terminal-layout-leaf-ids={expectedLayoutLeafIdsAttr}
         data-pane-title-surface={titleUsesLightSurface ? 'light' : 'dark'}
         style={terminalContainerStyle}
@@ -248,7 +242,6 @@ export function TerminalPaneSurface({
         panes={managerRef.current?.getPanes() ?? []}
         paneIds={sessionRestoredBannerPaneIds}
       />
-      <TerminalPaneNativeChatPortal controller={controller} />
       {dockMounts}
       {loopRail}
       <TerminalContextMenu
@@ -276,9 +269,8 @@ export function TerminalPaneSurface({
         canContinueAgentSessionInNewSession={contextMenuCanContinueInNewSession}
         onContinueAgentSessionInNewSession={contextMenu.onContinueAgentSessionInNewSession}
         onForkAgentSession={() => void contextMenu.onForkAgentSession()}
-        canToggleNativeChat={contextMenuCanToggleChat}
-        isNativeChatView={contextMenuIsChatView}
-        onToggleNativeChat={handleContextMenuToggleNativeChat}
+        canResumeInChat={contextMenuCanResumeInChat}
+        onResumeInChat={handleContextMenuResumeInChat}
         onCopyAgentSessionContext={() => void contextMenu.onCopyAgentSessionContext()}
         quickCommandHosts={visibleQuickCommandHosts}
         quickCommandHostLoadFailed={quickCommandHostLoadFailed}
@@ -349,8 +341,6 @@ export function TerminalPaneSurface({
         hiddenStartupStyle={hiddenStartupStyle}
         managerRef={managerRef}
         paneTransportsRef={paneTransportsRef}
-        canShowTerminal={activePaneIsChatLeaf}
-        onShowTerminal={handleToggleNativeChat}
         canResumeInNewNativeChat={activePaneCanResumeInChat}
         canContinueAgentSessionInNewSession={activePaneCanContinueInNewSession}
         onContinueAgentSessionInNewSession={(pane) =>

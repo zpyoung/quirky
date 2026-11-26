@@ -181,7 +181,7 @@ export const mobileTasksWorkspaceReviewStyles = StyleSheet.create({
     borderColor: colors.statusRed
   },
   pipelineStatusActive: {
-    borderColor: colors.accentBlue
+    borderColor: colors.accent
   },
   pipelineStatusText: {
     fontSize: 10,

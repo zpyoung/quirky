@@ -251,7 +251,7 @@ export function MobileAccountsScreen() {
             </View>
             <View style={styles.rowTrailing}>
               {activeAccountId === null ? (
-                <Check size={16} color={colors.accentBlue} />
+                <Check size={16} color={colors.accent} />
               ) : busyAccountId === `${provider}:default` ? (
                 <ActivityIndicator size="small" color={colors.textSecondary} />
               ) : null}
@@ -310,7 +310,7 @@ export function MobileAccountsScreen() {
                   </View>
                   <View style={styles.rowTrailing}>
                     {isActive ? (
-                      <Check size={16} color={colors.accentBlue} />
+                      <Check size={16} color={colors.accent} />
                     ) : busyAccountId === account.id ? (
                       <ActivityIndicator size="small" color={colors.textSecondary} />
                     ) : null}

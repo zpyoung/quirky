@@ -183,7 +183,7 @@ export const ROOT_HELP_TEXT_SECONDARY = [
   '  $ quirky repo list',
   '  $ quirky worktree create --name agent-task --agent codex --prompt "hi"',
   '  $ quirky worktree create --repo name:quirky --name cli-test-1 --issue 273',
-  '  $ quirky worktree create --repo name:quirky --name linear-task --linear-issue https://linear.app/stably/issue/STA-335/test-issue',
+  '  $ quirky worktree create --repo name:quirky --name linear-task --linear-issue https://linear.app/acme/issue/ENG-335/test-issue',
   '  $ quirky worktree create --name linear-task --linear-issue STA-335',
   '  $ quirky worktree show --worktree branch:Jinwoo-H/cli',
   '  $ quirky worktree current',

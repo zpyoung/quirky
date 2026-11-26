@@ -58,7 +58,6 @@ export type { RpcSuccess } from '../transport/types'
 export { useHostClient } from '../transport/host-client-hooks'
 export {
   useLastConnectedAt,
-  useRelayRecoveryStatus,
   useReconnectAttempt
 } from '../transport/client-context-connection-metrics'
 export { classifyConnection } from '../transport/connection-health'

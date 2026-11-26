@@ -4,11 +4,6 @@
   "family": "aiVault.resume-launch",
   "namedDeltas": [],
   "values": {
-    "0bce25f5646d": {
-      "name": "session.tabs.createTerminal#1",
-      "ordinal": 2,
-      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"session.tabs.createTerminal\",\"params\":{\"worktree\":\"id:workspace-1\",\"env\":{\"QUIRKY_RESUME\":\"1\"},\"envToDelete\":[\"CODEX_HOME\"],\"launchAgent\":\"codex\",\"clientMutationId\":\"resume-mutation-1\",\"activate\":false,\"select\":true,\"navigation\":\"caller\"}}"
-    },
     "478ad4afe83e": {
       "status": "rejected",
       "startedAt": 0,
@@ -23,7 +18,7 @@
       "failure": "The host sent a reply this app could not read (session.tabs.createTerminal)",
       "launched": "unlaunched"
     },
-    "8de69c55b96f": {
+    "8c5c2c94b95a": {
       "name": "session.tabs.createTerminal#1",
       "ordinal": 1,
       "args": [
@@ -67,6 +62,11 @@
           }
         }
       }
+    },
+    "aed61586aede": {
+      "name": "session.tabs.createTerminal#1",
+      "ordinal": 2,
+      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"session.tabs.createTerminal\",\"params\":{\"worktree\":\"id:workspace-1\",\"env\":{\"QUIRKY_RESUME\":\"1\"},\"envToDelete\":[\"CODEX_HOME\"],\"launchAgent\":\"codex\",\"clientMutationId\":\"resume-mutation-1\",\"activate\":false,\"select\":true,\"navigation\":\"caller\"}}"
     }
   },
   "recording": {
@@ -75,8 +75,8 @@
       {
         "id": "invalid-tab",
         "observation": {
-          "sender": ["8de69c55b96f"],
-          "payloads": ["0bce25f5646d"],
+          "sender": ["8c5c2c94b95a"],
+          "payloads": ["aed61586aede"],
           "settlements": {
             "full": "478ad4afe83e"
           },

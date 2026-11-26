@@ -125,8 +125,8 @@ describe('pluginMarketplaceSchema', () => {
 
 describe('marketplace provenance contracts', () => {
   it.each([
-    ['stablyai.quirky-skills', true, true],
-    ['stablyai.skills', true, false],
+    ['zpyoung.quirky-skills', true, true],
+    ['zpyoung.skills', true, false],
     ['community.quirky-skills', true, false],
     ['community.skills', false, false],
     ['invalid', false, false]
@@ -136,27 +136,27 @@ describe('marketplace provenance contracts', () => {
   })
 
   it.each([
-    'https://github.com/stablyai/orca-skills.git',
-    'ssh://git@github.com/stablyai/orca-skills.git',
-    'git@github.com:stablyai/orca-skills.git'
+    'https://github.com/zpyoung/quirky-skills.git',
+    'ssh://git@github.com/zpyoung/quirky-skills.git',
+    'git@github.com:zpyoung/quirky-skills.git'
   ])('accepts official organization source %s', (source) => {
     expect(isOfficialOrganizationGitSource(source)).toBe(true)
   })
 
   it('does not trust lookalike organizations or hosts', () => {
-    expect(isOfficialOrganizationGitSource('https://github.com/stablyai-fakes/quirky-skills')).toBe(
+    expect(isOfficialOrganizationGitSource('https://github.com/zpyoung-fakes/quirky-skills')).toBe(
       false
     )
-    expect(isOfficialOrganizationGitSource('https://gitlab.com/stablyai/orca-skills')).toBe(false)
+    expect(isOfficialOrganizationGitSource('https://gitlab.com/zpyoung/quirky-skills')).toBe(false)
   })
 
   it('recognizes only the canonical official marketplace repository', () => {
     expect(
       isOfficialMarketplaceGitSource(
-        `git@github.com:stablyai/${OFFICIAL_MARKETPLACE_REPOSITORY}.git`
+        `git@github.com:zpyoung/${OFFICIAL_MARKETPLACE_REPOSITORY}.git`
       )
     ).toBe(true)
-    expect(isOfficialMarketplaceGitSource('git@github.com:stablyai/plugins.git')).toBe(false)
+    expect(isOfficialMarketplaceGitSource('git@github.com:zpyoung/plugins.git')).toBe(false)
   })
 
   it('parses nested repository paths without confusing the repository name', () => {

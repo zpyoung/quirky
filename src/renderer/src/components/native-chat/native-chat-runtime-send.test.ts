@@ -26,11 +26,11 @@ import {
   NATIVE_CHAT_IMAGE_ATTACHMENT_SETTLE_MS
 } from './native-chat-runtime-send'
 import type { NativeChatResolvedTarget } from './native-chat-composer-target'
-import { NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT } from './fork-agent-composer/native-chat-runtime-clear'
+import { NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT } from './pty-send/native-chat-runtime-clear'
 import {
   NATIVE_CHAT_SUBMIT_OBSERVATION_MAX_READS,
   NATIVE_CHAT_SUBMIT_OBSERVATION_POLL_MS
-} from './fork-agent-composer/native-chat-send-outcome'
+} from './pty-send/native-chat-send-outcome'
 import {
   buildNativeChatImagePasteBytes,
   buildNativeChatPasteBytes,

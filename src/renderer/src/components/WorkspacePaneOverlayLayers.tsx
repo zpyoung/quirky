@@ -21,8 +21,7 @@ export function WorkspacePaneOverlayLayers({
   backgroundMountTabIds,
   activationDeferredMountTabIds,
   mountRetainedBrowserOverlay,
-  mountEmulatorOverlay,
-  ownsNativeChatToggleShortcut = true
+  mountEmulatorOverlay
 }: {
   worktreeId: string
   worktreePath: string
@@ -35,8 +34,7 @@ export function WorkspacePaneOverlayLayers({
   activationDeferredMountTabIds: ReadonlySet<string> | null
   mountRetainedBrowserOverlay: boolean
   mountEmulatorOverlay: boolean
-  /** False for overlay hosts (the floating panel): the active workspace's listener already owns
-   *  the chord, and two live listeners would both toggle. */
+  /** No longer read: the chat view toggle it gated is gone. Callers outside this task still pass it. */
   ownsNativeChatToggleShortcut?: boolean
 }): React.JSX.Element {
   return (
@@ -51,7 +49,6 @@ export function WorkspacePaneOverlayLayers({
         activityTerminalPortals={activityTerminalPortals}
         backgroundMountTabIds={backgroundMountTabIds}
         activationDeferredMountTabIds={activationDeferredMountTabIds}
-        ownsNativeChatToggleShortcut={ownsNativeChatToggleShortcut}
       />
       <RetainedBrowserPaneOverlayLayer
         worktreeId={worktreeId}

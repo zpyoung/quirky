@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { MobileRelayRpcStreams } from './mobile-relay-rpc-streams'
 import { RpcClientStreamRegistry } from './rpc-client-stream-registry'
 import { READY_STREAM_RELEASE_METHODS } from './rpc-client-server-subscription'
 import type { RpcSuccess } from './types'
@@ -53,32 +52,13 @@ function directTransport() {
   }
 }
 
-function relayTransport() {
-  const sent: SentFrame[] = []
-  let id = 0
-  const streams = new MobileRelayRpcStreams({
-    nextId: () => `relay-${++id}`,
-    sendFrame: (frame) => {
-      sent.push(frame)
-      return true
-    },
-    waitForConnected: async () => {}
-  })
-  return {
-    sent,
-    subscribe: (method: string) => streams.subscribe(method, null, () => {}),
-    reply: (response: RpcSuccess) => streams.handleResponse(response)
-  }
-}
-
 function releases(sent: SentFrame[], method: string): unknown[] {
   return sent.filter((frame) => frame.method === method).map((frame) => frame.params)
 }
 
-describe.each([
-  ['direct', directTransport],
-  ['relay', relayTransport]
-])('%s transport releases the accounts stream', (_name, transport) => {
+describe('direct transport releases the accounts stream', () => {
+  const transport = directTransport
+
   it('sends accounts.unsubscribe with the ready id on dispose', async () => {
     const wire = transport()
     const dispose = wire.subscribe('accounts.subscribe')
@@ -107,31 +87,30 @@ describe.each([
   })
 })
 
-// Iterates the mapping itself, so a method added to it is held to the same release on both routes.
-describe.each(
-  [...READY_STREAM_RELEASE_METHODS].flatMap(([method, release]) => [
-    ['direct', method, release, directTransport] as const,
-    ['relay', method, release, relayTransport] as const
-  ])
-)('%s transport releases %s through the ready id', (_name, method, release, transport) => {
-  it('releases once after ready, and once when the dispose beat the ready', async () => {
-    const afterReady = transport()
-    const disposeAfterReady = afterReady.subscribe(method)
-    await Promise.resolve()
-    afterReady.reply(readyReply(afterReady.sent[0]!.id, 'host-id-1'))
-    disposeAfterReady()
+// Iterates the mapping itself, so a method added to it is held to the same release.
+describe.each([...READY_STREAM_RELEASE_METHODS])(
+  'direct transport releases %s through the ready id',
+  (method, release) => {
+    const transport = directTransport
+    it('releases once after ready, and once when the dispose beat the ready', async () => {
+      const afterReady = transport()
+      const disposeAfterReady = afterReady.subscribe(method)
+      await Promise.resolve()
+      afterReady.reply(readyReply(afterReady.sent[0]!.id, 'host-id-1'))
+      disposeAfterReady()
 
-    const beforeReady = transport()
-    const disposeBeforeReady = beforeReady.subscribe(method)
-    await Promise.resolve()
-    disposeBeforeReady()
-    beforeReady.reply(readyReply(beforeReady.sent[0]!.id, 'host-id-2'))
+      const beforeReady = transport()
+      const disposeBeforeReady = beforeReady.subscribe(method)
+      await Promise.resolve()
+      disposeBeforeReady()
+      beforeReady.reply(readyReply(beforeReady.sent[0]!.id, 'host-id-2'))
 
-    expect(afterReady.sent.slice(1)).toEqual([
-      expect.objectContaining({ method: release, params: { subscriptionId: 'host-id-1' } })
-    ])
-    expect(beforeReady.sent.slice(1)).toEqual([
-      expect.objectContaining({ method: release, params: { subscriptionId: 'host-id-2' } })
-    ])
-  })
-})
+      expect(afterReady.sent.slice(1)).toEqual([
+        expect.objectContaining({ method: release, params: { subscriptionId: 'host-id-1' } })
+      ])
+      expect(beforeReady.sent.slice(1)).toEqual([
+        expect.objectContaining({ method: release, params: { subscriptionId: 'host-id-2' } })
+      ])
+    })
+  }
+)

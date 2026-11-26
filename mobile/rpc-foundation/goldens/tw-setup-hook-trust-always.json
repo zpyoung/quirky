@@ -7,7 +7,12 @@
     "229c35d1a4ba": {
       "trust": "unapproved"
     },
-    "b6a1b1ed0a08": {
+    "84243c40f87d": {
+      "name": "ui.set#1",
+      "ordinal": 2,
+      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"trustedQuirkyHooks\":{\"repo-1\":{\"all\":{\"approvedAt\":1767225600000}}}}}"
+    },
+    "9d76f37567fe": {
       "name": "ui.set#1",
       "ordinal": 1,
       "args": [
@@ -48,11 +53,6 @@
         }
       }
     },
-    "f35a1e7f7cdb": {
-      "name": "ui.set#1",
-      "ordinal": 2,
-      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"trustedQuirkyHooks\":{\"repo-1\":{\"all\":{\"approvedAt\":1767225600000}}}}}"
-    },
     "f3b516f62081": {
       "status": "rejected",
       "startedAt": 0,
@@ -70,8 +70,8 @@
       {
         "id": "refused-empty-message",
         "observation": {
-          "sender": ["b6a1b1ed0a08"],
-          "payloads": ["f35a1e7f7cdb"],
+          "sender": ["9d76f37567fe"],
+          "payloads": ["84243c40f87d"],
           "settlements": {
             "approve": "f3b516f62081"
           },

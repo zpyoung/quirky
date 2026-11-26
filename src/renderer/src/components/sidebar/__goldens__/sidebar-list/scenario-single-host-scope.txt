@@ -186,7 +186,7 @@ PENDING key=pending:creation-1 creation=creation-1 repo=api
 HEADER key=pinned collapseKey=pinned:host:ssh:gpu-vm label="Pinned" count=2 tone="text-foreground" icon=Pin hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same]} ids=[quirky-ssh::/w/remote-x,shared::/w/same]
 ITEM rowKey=pinned:ssh:gpu-vm|quirky-ssh::/w/remote-x depth=0 groupDepth=0 children=0 placement=pinned owning=project:p-quirky
 ITEM rowKey=pinned:ssh:gpu-vm|shared::/w/same depth=0 groupDepth=0 lastChild=true children=0 placement=pinned owning=project:repo:shared
-HEADER key=workspace-status:in-progress collapseKey=workspace-status:in-progress:host:ssh:gpu-vm label="In progress" count=2 tone="text-[#d4a300]" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/quirky-ssh]
+HEADER key=workspace-status:in-progress collapseKey=workspace-status:in-progress:host:ssh:gpu-vm label="In progress" count=2 tone="text-workspace-status-progress" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/quirky-ssh]
 ITEM rowKey=workspace-status:in-progress:|quirky-ssh::/quirky-ssh depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
 renderedKeys: 8
@@ -199,7 +199,7 @@ cmd ids unmounted: quirky-ssh::/w/remote-x shared::/w/same quirky-ssh::/quirky-s
 visible: quirky-ssh::/w/remote-x shared::/w/same quirky-ssh::/quirky-ssh
 PENDING key=pending:creation-1 creation=creation-1 repo=api
 HEADER key=pinned collapseKey=pinned:host:ssh:gpu-vm label="Pinned" count=2 tone="text-foreground" icon=Pin hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same]} ids=[quirky-ssh::/w/remote-x,shared::/w/same]
-HEADER key=workspace-status:in-progress collapseKey=workspace-status:in-progress:host:ssh:gpu-vm label="In progress" count=2 tone="text-[#d4a300]" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/quirky-ssh]
+HEADER key=workspace-status:in-progress collapseKey=workspace-status:in-progress:host:ssh:gpu-vm label="In progress" count=2 tone="text-workspace-status-progress" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/quirky-ssh]
 ITEM rowKey=workspace-status:in-progress:|quirky-ssh::/quirky-ssh depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
 -- rows before host sections --
@@ -207,7 +207,7 @@ PENDING key=pending:creation-1 creation=creation-1 repo=api
 HEADER key=pinned label="Pinned" count=2 tone="text-foreground" icon=Pin hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same]} ids=[quirky-ssh::/w/remote-x,shared::/w/same]
 ITEM rowKey=pinned:ssh:gpu-vm|quirky-ssh::/w/remote-x depth=0 groupDepth=0 children=0 placement=pinned owning=project:p-quirky
 ITEM rowKey=pinned:ssh:gpu-vm|shared::/w/same depth=0 groupDepth=0 lastChild=true children=0 placement=pinned owning=project:repo:shared
-HEADER key=workspace-status:in-progress label="In progress" count=2 tone="text-[#d4a300]" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/quirky-ssh]
+HEADER key=workspace-status:in-progress label="In progress" count=2 tone="text-workspace-status-progress" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/quirky-ssh]
 ITEM rowKey=workspace-status:in-progress:|quirky-ssh::/quirky-ssh depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
 SECTION pinned: pinned:ssh:gpu-vm|quirky-ssh::/w/remote-x pinned:ssh:gpu-vm|shared::/w/same
@@ -223,7 +223,7 @@ PENDING key=pending:creation-1 creation=creation-1 repo=api
 HEADER key=pinned collapseKey=pinned:host:ssh:gpu-vm label="Pinned" count=2 tone="text-foreground" icon=Pin hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same]} ids=[quirky-ssh::/w/remote-x,shared::/w/same]
 ITEM rowKey=pinned:ssh:gpu-vm|quirky-ssh::/w/remote-x depth=0 groupDepth=0 children=0 placement=pinned owning=project:p-quirky
 ITEM rowKey=pinned:ssh:gpu-vm|shared::/w/same depth=0 groupDepth=0 lastChild=true children=0 placement=pinned owning=project:repo:shared
-HEADER key=workspace-status:in-progress collapseKey=workspace-status:in-progress:host:ssh:gpu-vm label="In progress" count=4 tone="text-[#d4a300]" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:4} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]
+HEADER key=workspace-status:in-progress collapseKey=workspace-status:in-progress:host:ssh:gpu-vm label="In progress" count=4 tone="text-workspace-status-progress" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:4} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]
 ITEM rowKey=workspace-status:in-progress:ssh:gpu-vm|quirky-ssh::/w/remote-x depth=0 groupDepth=0 children=0 placement=natural owning=project:p-quirky
 ITEM rowKey=workspace-status:in-progress:ssh:gpu-vm|shared::/w/same depth=0 groupDepth=0 children=0 placement=natural owning=project:repo:shared
 ITEM rowKey=workspace-status:in-progress:|quirky-ssh::/quirky-ssh depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
@@ -240,7 +240,7 @@ cmd ids unmounted: quirky-ssh::/w/remote-x shared::/w/same quirky-ssh::/quirky-s
 visible: quirky-ssh::/w/remote-x shared::/w/same quirky-ssh::/quirky-ssh
 PENDING key=pending:creation-1 creation=creation-1 repo=api
 HEADER key=pinned collapseKey=pinned:host:ssh:gpu-vm label="Pinned" count=2 tone="text-foreground" icon=Pin hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same]} ids=[quirky-ssh::/w/remote-x,shared::/w/same]
-HEADER key=workspace-status:in-progress collapseKey=workspace-status:in-progress:host:ssh:gpu-vm label="In progress" count=4 tone="text-[#d4a300]" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:4} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]
+HEADER key=workspace-status:in-progress collapseKey=workspace-status:in-progress:host:ssh:gpu-vm label="In progress" count=4 tone="text-workspace-status-progress" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:4} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]
 ITEM rowKey=workspace-status:in-progress:ssh:gpu-vm|quirky-ssh::/w/remote-x depth=0 groupDepth=0 children=0 placement=natural owning=project:p-quirky
 ITEM rowKey=workspace-status:in-progress:ssh:gpu-vm|shared::/w/same depth=0 groupDepth=0 children=0 placement=natural owning=project:repo:shared
 ITEM rowKey=workspace-status:in-progress:|quirky-ssh::/quirky-ssh depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
@@ -250,7 +250,7 @@ PENDING key=pending:creation-1 creation=creation-1 repo=api
 HEADER key=pinned label="Pinned" count=2 tone="text-foreground" icon=Pin hostCounts={ssh:gpu-vm:2} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same]} ids=[quirky-ssh::/w/remote-x,shared::/w/same]
 ITEM rowKey=pinned:ssh:gpu-vm|quirky-ssh::/w/remote-x depth=0 groupDepth=0 children=0 placement=pinned owning=project:p-quirky
 ITEM rowKey=pinned:ssh:gpu-vm|shared::/w/same depth=0 groupDepth=0 lastChild=true children=0 placement=pinned owning=project:repo:shared
-HEADER key=workspace-status:in-progress label="In progress" count=4 tone="text-[#d4a300]" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:4} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]
+HEADER key=workspace-status:in-progress label="In progress" count=4 tone="text-workspace-status-progress" icon=ConductorProgressIcon hostCounts={ssh:gpu-vm:4} hostIds={ssh:gpu-vm:[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]} ids=[quirky-ssh::/w/remote-x,shared::/w/same,quirky-ssh::/quirky-ssh]
 ITEM rowKey=workspace-status:in-progress:ssh:gpu-vm|quirky-ssh::/w/remote-x depth=0 groupDepth=0 children=0 placement=natural owning=project:p-quirky
 ITEM rowKey=workspace-status:in-progress:ssh:gpu-vm|shared::/w/same depth=0 groupDepth=0 children=0 placement=natural owning=project:repo:shared
 ITEM rowKey=workspace-status:in-progress:|quirky-ssh::/quirky-ssh depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky

@@ -101,7 +101,7 @@ export function LinkRoutingPreferenceDialogProvider({
     void requestPreference({
       openLinksInAppDefault: previewDefault === 'quirky',
       preview: true,
-      url: 'https://github.com/stablyai/orca/pull/1234'
+      url: 'https://github.com/zpyoung/quirky/pull/1234'
     })
   }, [requestPreference])
 

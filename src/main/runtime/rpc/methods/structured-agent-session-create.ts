@@ -42,6 +42,8 @@ export type PreparedStructuredAgentSessionCreate = {
   catalogModels?: StructuredAgentSessionCreateOptions['catalogModels']
   /** Null when the caller supplied its own location; only a resolved worktree publishes a tab. */
   tab: { workspaceId: string; agent: StructuredAgentId } | null
+  /** Rows the new chat's journal starts with, ahead of any adopted history. */
+  openingItems?: StructuredAgentSessionCreateOptions['openingItems']
   /** Absent for older clients and provider-dependent in-process callers. */
   atRest?: { firstMessage?: StructuredAgentSessionFirstMessage }
 }
@@ -201,6 +203,7 @@ export async function commitStructuredAgentSessionCreate(args: {
   if (prepared.atRest) {
     return prepared.host.create(args.caller, prepared.attachParams, {
       ...prepared.atRest,
+      ...(prepared.openingItems ? { openingItems: prepared.openingItems } : {}),
       ...(prepared.catalogModels ? { catalogModels: prepared.catalogModels } : {}),
       ...(prepared.hostLaunchDirectory
         ? { hostLaunchDirectory: prepared.hostLaunchDirectory }

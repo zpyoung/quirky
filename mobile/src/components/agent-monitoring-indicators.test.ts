@@ -5,8 +5,6 @@ import { AgentSpinner } from './AgentSpinner'
 import { AgentStateDot } from './AgentStateDot'
 import { colors } from '../theme/mobile-theme'
 
-const DESKTOP_WORKING_COLOR = '#eab308'
-
 type MonitoringTestRenderer = {
   readonly root: {
     findByType(type: string): { props: Record<string, unknown> }
@@ -57,7 +55,7 @@ describe('mobile monitoring indicators', () => {
     })
 
     expect(renderer?.root.findByType('Activity').props).toMatchObject({
-      color: DESKTOP_WORKING_COLOR,
+      color: colors.statusBlue,
       size: 10
     })
     expect(animationTiming).not.toHaveBeenCalled()
@@ -72,7 +70,7 @@ describe('mobile monitoring indicators', () => {
     })
 
     expect(renderer?.root.findByType('Activity').props).toMatchObject({
-      color: DESKTOP_WORKING_COLOR,
+      color: colors.statusBlue,
       size: 12
     })
     expect(animationTiming).not.toHaveBeenCalled()
@@ -110,7 +108,10 @@ describe('mobile monitoring indicators', () => {
   it.each([
     // A user's Stop is not news: muted, never the fault red a failure draws.
     ['interrupted', colors.textMuted],
-    ['failed', '#ef4444']
+    ['failed', colors.statusRed],
+    // Waiting on you reads amber, the one colour that means a person is needed.
+    ['waiting', colors.statusAmber],
+    ['done', colors.statusGreen]
   ] as const)('draws %s with its own dot colour', async (state, color) => {
     await act(async () => {
       renderer = create(createElement(AgentStateDot, { state }))

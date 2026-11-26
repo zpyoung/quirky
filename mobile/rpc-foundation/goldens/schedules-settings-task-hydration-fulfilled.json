@@ -189,6 +189,21 @@
         "$rpc": "null"
       }
     },
+    "245a8d520d12": {
+      "name": "jiraConnection",
+      "ordinal": 53,
+      "value": {
+        "connected": false,
+        "credentialError": {
+          "$rpc": "null"
+        },
+        "selection": {
+          "$rpc": "null"
+        },
+        "sites": [],
+        "unavailableReason": "Update Quirky desktop to browse Jira on mobile."
+      }
+    },
     "26acd98edfd2": {
       "name": "ui.get#1",
       "ordinal": 45,
@@ -239,11 +254,6 @@
       "value": {
         "$rpc": "null"
       }
-    },
-    "2db932a72b8a": {
-      "name": "trustedQuirkyHooks",
-      "ordinal": 54,
-      "value": {}
     },
     "2f9b87c56373": {
       "name": "selectedLinearWorkspaceId",
@@ -443,6 +453,13 @@
         "recent": []
       }
     },
+    "5a6d4bcc38e1": {
+      "name": "projectRepoNotInQuirky",
+      "ordinal": 27,
+      "value": {
+        "$rpc": "null"
+      }
+    },
     "60729092583d": {
       "name": "settings.get#1",
       "ordinal": 44,
@@ -534,21 +551,6 @@
       "ordinal": 64,
       "value": "items"
     },
-    "74a4b5de64ed": {
-      "name": "jiraConnection",
-      "ordinal": 53,
-      "value": {
-        "connected": false,
-        "credentialError": {
-          "$rpc": "null"
-        },
-        "selection": {
-          "$rpc": "null"
-        },
-        "sites": [],
-        "unavailableReason": "Update Quirky desktop to browse Jira on mobile."
-      }
-    },
     "76b7c2cf6fb0": {
       "name": "settings.get#1",
       "ordinal": 44,
@@ -629,13 +631,6 @@
       "value": {
         "client": "logical-client",
         "kind": "unknown"
-      }
-    },
-    "7d8029e889cf": {
-      "name": "projectRepoNotInQuirky",
-      "ordinal": 27,
-      "value": {
-        "$rpc": "null"
       }
     },
     "807d44ed3aa2": {
@@ -901,6 +896,11 @@
       "name": "appliedQuery",
       "ordinal": 72,
       "value": "is:issue is:open"
+    },
+    "a6e3fa569e72": {
+      "name": "trustedQuirkyHooks",
+      "ordinal": 54,
+      "value": {}
     },
     "ace3d3315687": {
       "name": "showGitLabFilterPicker",
@@ -1457,7 +1457,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1524,7 +1524,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1539,7 +1539,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1613,7 +1613,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1680,7 +1680,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1695,7 +1695,7 @@
             "3d60f87d082e",
             "294741680522",
             "b789d794a9ca",
-            "2db932a72b8a",
+            "a6e3fa569e72",
             "f54965c37b48",
             "8b6f54f81646",
             "c82c2272344f",
@@ -1769,7 +1769,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1838,7 +1838,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1908,7 +1908,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -1977,7 +1977,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -2047,7 +2047,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -2116,7 +2116,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -2186,7 +2186,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -2200,7 +2200,7 @@
             "da3527bc5f58",
             "3d60f87d082e",
             "294741680522",
-            "74a4b5de64ed",
+            "245a8d520d12",
             "84136627171d",
             "4a9fd3b5e80c"
           ]
@@ -2257,7 +2257,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -2271,7 +2271,7 @@
             "da3527bc5f58",
             "3d60f87d082e",
             "294741680522",
-            "74a4b5de64ed",
+            "245a8d520d12",
             "09d2988c4ec5",
             "4a9fd3b5e80c"
           ]
@@ -2328,7 +2328,7 @@
             "b7c96dd7bb6a",
             "f3dafd073b87",
             "1f75fb0d92bd",
-            "7d8029e889cf",
+            "5a6d4bcc38e1",
             "52b5f68c6d97",
             "16e4f4209bcf",
             "917e8342c71e",
@@ -2342,7 +2342,7 @@
             "da3527bc5f58",
             "3d60f87d082e",
             "294741680522",
-            "74a4b5de64ed",
+            "245a8d520d12",
             "0d947d3b7089",
             "4a9fd3b5e80c"
           ]

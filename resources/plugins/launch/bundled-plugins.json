@@ -2,9 +2,9 @@
   "version": 1,
   "plugins": [
     {
-      "pluginKey": "stablyai.quirky-navigation-shortcuts",
-      "path": "stablyai.quirky-navigation-shortcuts",
-      "contentHash": "086a57081a5e4835e2b4faf25314e4240b68cddf2e60b9a747fa160b51b54c6e"
+      "pluginKey": "zpyoung.quirky-navigation-shortcuts",
+      "path": "zpyoung.quirky-navigation-shortcuts",
+      "contentHash": "7c815cf343877231555ed6384a8eca2bebdf1625a09e901f199562ae8c501bd1"
     }
   ]
 }

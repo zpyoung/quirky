@@ -36,7 +36,6 @@ type RestingFacts = Pick<Partial<AgentSessionRecord>, 'options'> & {
 
 function restingJournal(items: AgentJournalItemBody[] = [], wroteBeforeOpen = false) {
   return {
-    threadGoal: () => null,
     visitItems: (visit: (itemId: string, sequence: number, body: AgentJournalItemBody) => void) =>
       items.forEach((body, index) => visit(`item-${index}`, index + 1, body)),
     wroteBeforeOpen: () => wroteBeforeOpen,

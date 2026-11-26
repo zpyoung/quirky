@@ -69,7 +69,32 @@ export const WORK_METHODS = [
     method: 'agentSession.queuedMessageDelete',
     params: { envelope: envelope(), messageId: 'queued-1' }
   },
+  {
+    method: 'agentSession.queuedMessageMove',
+    params: { envelope: envelope(), messageId: 'queued-1', toIndex: 0 }
+  },
   { method: 'agentSession.queuedMessagesResume', params: { envelope: envelope() } },
+  { method: 'agentSession.fork', params: { envelope: envelope() } },
+  {
+    method: 'agentSession.view.open',
+    params: {
+      envelope: envelope(),
+      spec: { title: 't', root: { type: 'markdown', props: { text: 'x' } } }
+    }
+  },
+  {
+    method: 'agentSession.view.update',
+    params: {
+      envelope: envelope(),
+      viewId: 'view-1',
+      spec: { title: 't', root: { type: 'markdown', props: { text: 'x' } } }
+    }
+  },
+  {
+    method: 'agentSession.view.patch',
+    params: { envelope: envelope(), viewId: 'view-1', patch: { ops: [] } }
+  },
+  { method: 'agentSession.view.close', params: { envelope: envelope(), viewId: 'view-1' } },
   {
     method: 'agentSession.rewind',
     params: { envelope: envelope(), itemId: 'chosen', expectedEpoch: 'epoch' }
@@ -86,16 +111,17 @@ export const WORK_METHODS = [
     method: 'agentSession.setOption',
     params: { envelope: envelope(), key: 'model', value: 'gpt-live' }
   },
-  {
-    method: 'agentSession.threadGoal',
-    params: { envelope: envelope(), change: { kind: 'clear' } }
-  },
   { method: 'agentSession.handoffStatus', params: { sessionId: SESSION } },
   { method: 'agentSession.options', params: { sessionId: SESSION } },
   { method: 'agentSession.modelCatalog', params: { agent: 'codex', sessionId: SESSION } },
   { method: 'agentSession.history', params: { sessionId: SESSION, direction: 'tail' } },
   { method: 'agentSession.conversationOutline', params: { sessionId: SESSION } },
   { method: 'agentSession.item', params: { sessionId: SESSION, itemId: 'item-1' } },
+  {
+    method: 'agentSession.turnDiff',
+    params: { sessionId: SESSION, turnId: 'turn-1', path: 'src/a.ts' }
+  },
+  { method: 'agentSession.view.get', params: { sessionId: SESSION, viewId: 'view-1' } },
   { method: 'agentSession.subscribe', params: { sessionId: SESSION } },
   { method: 'agentSession.hold', params: { sessionId: SESSION, holderId: 'surface-1' } },
   { method: 'agentSession.reveal', params: { sessionId: SESSION } },

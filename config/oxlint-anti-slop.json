@@ -128,6 +128,20 @@
         "anti-slop/no-shape-in-symbol-names": "off"
       }
     },
+    // The view-spec `sketch` node persists its drawn elements under the JSON field `shapes`
+    // (SketchProps, the catalog entry, and the tests that build specs): the domain term, and
+    // renaming the key would break specs already stored in chat.
+    {
+      "files": [
+        "**/src/shared/view-spec/view-spec-types.ts",
+        "**/src/shared/view-spec/view-spec-catalog-visual-components.ts",
+        "**/src/shared/view-spec/view-spec-validation.test.ts",
+        "**/src/shared/view-spec/view-spec-visual-kinds.test.ts"
+      ],
+      "rules": {
+        "anti-slop/no-shape-in-symbol-names": "off"
+      }
+    },
     // lucide exports the icon component as `Shapes`, and the matching REPO_LUCIDE_ICONS key
     // is the persisted icon name shared by the desktop picker and mobile.
     {

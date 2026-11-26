@@ -20,7 +20,7 @@ import {
 } from '../native-chat-runtime-send'
 import type { NativeChatResolvedTarget } from '../native-chat-composer-target'
 import { buildNativeChatPasteBytes, NATIVE_CHAT_SUBMIT } from '../native-chat-send'
-import { NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT } from '../fork-agent-composer/native-chat-runtime-clear'
+import { NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT } from '../pty-send/native-chat-runtime-clear'
 import {
   _resetTerminalInputQuarantineForTests,
   armTerminalInputQuarantine

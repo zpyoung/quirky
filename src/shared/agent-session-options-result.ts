@@ -1,4 +1,4 @@
-import type { AgentJournalCursor, AgentJournalThreadGoal } from './agent-session-journal-types'
+import type { AgentJournalCursor } from './agent-session-journal-types'
 import type { AgentSessionConversationCommand } from './agent-session-conversation-command'
 import type { AgentSessionContextUsage } from './agent-session-context-usage'
 import type { AgentSessionRewindSupport } from './agent-session-rewind'
@@ -13,14 +13,6 @@ import type {
 export type AgentSessionOptionsResult = {
   rewind?: AgentSessionRewindSupport
   conversationCommands?: readonly AgentSessionConversationCommand[]
-  /** Present only where this session can change its goal, so a host without
-   *  `agentSession.threadGoal` never offers the controls. `current` is the
-   *  latest goal the whole journal records, for a client whose loaded page
-   *  starts after it. */
-  threadGoal?: { current: AgentJournalThreadGoal | null; contextFloor?: AgentJournalCursor }
-  /** The goal a session's journal records where only the agent's own `/goal` command changes it.
-   *  Separate from `threadGoal`, so a client that predates it never offers host controls. */
-  reportedThreadGoal?: { current: AgentJournalThreadGoal; contextFloor?: AgentJournalCursor }
   /** Present only where this session writes context facts to its turn rows.
    *  `current` is the newest of each part the whole journal records, for a
    *  client whose loaded page starts after the row that carries it. */

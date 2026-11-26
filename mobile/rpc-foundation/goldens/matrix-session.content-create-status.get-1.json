@@ -85,13 +85,6 @@
         "message": "Unknown method"
       }
     },
-    "32afb7dc375d": {
-      "name": "toast",
-      "ordinal": 3,
-      "value": {
-        "message": "Remote file changes require a newer Quirky server. Update the HUB and try again."
-      }
-    },
     "37185d7089db": {
       "createError": "The host sent a reply this app could not read (status.get)",
       "creatingBrowser": false,
@@ -183,16 +176,15 @@
       "ordinal": 8,
       "json": "{\"id\":\"frame-4\",\"deviceToken\":\"recording-device\",\"method\":\"files.open\",\"params\":{\"worktree\":\"id:workspace-1\",\"relativePath\":\"untitled.md\"}}"
     },
-    "6371ca02b18e": {
-      "createError": "outer refused",
-      "creatingBrowser": false,
-      "creatingMarkdown": false,
-      "pendingBrowserFocusPageId": {
-        "$rpc": "null"
+    "5aacd5526275": {
+      "name": "toast",
+      "ordinal": 3,
+      "value": {
+        "message": "Remote file changes require a newer Quirky server. Update the HUB and try again."
       }
     },
-    "7799ca596f0c": {
-      "createError": "Remote file changes require a newer Quirky server. Update the HUB and try again.",
+    "6371ca02b18e": {
+      "createError": "outer refused",
       "creatingBrowser": false,
       "creatingMarkdown": false,
       "pendingBrowserFocusPageId": {
@@ -531,6 +523,14 @@
         "$rpc": "undefined"
       }
     },
+    "ebb9ec7a9733": {
+      "createError": "Remote file changes require a newer Quirky server. Update the HUB and try again.",
+      "creatingBrowser": false,
+      "creatingMarkdown": false,
+      "pendingBrowserFocusPageId": {
+        "$rpc": "null"
+      }
+    },
     "f1279bf9f173": {
       "name": "files.createFile#1",
       "ordinal": 6,
@@ -656,8 +656,8 @@
           "settlements": {
             "markdown": "eb79a9b3682a"
           },
-          "state": "7799ca596f0c",
-          "effects": ["32afb7dc375d"]
+          "state": "ebb9ec7a9733",
+          "effects": ["5aacd5526275"]
         }
       },
       {
@@ -668,8 +668,8 @@
           "settlements": {
             "markdown": "eb79a9b3682a"
           },
-          "state": "7799ca596f0c",
-          "effects": ["32afb7dc375d"]
+          "state": "ebb9ec7a9733",
+          "effects": ["5aacd5526275"]
         }
       },
       {
@@ -680,8 +680,8 @@
           "settlements": {
             "markdown": "eb79a9b3682a"
           },
-          "state": "7799ca596f0c",
-          "effects": ["32afb7dc375d"]
+          "state": "ebb9ec7a9733",
+          "effects": ["5aacd5526275"]
         }
       },
       {

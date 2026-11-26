@@ -9,8 +9,8 @@ import { colors } from '../theme/mobile-theme'
 import { statusDotColor } from './StatusDot'
 
 describe('statusDotColor', () => {
-  it('keeps Relay progress amber when the raw state is disconnected', () => {
-    expect(statusDotColor('disconnected', { kind: 'normal', label: 'Connecting via Relay…' })).toBe(
+  it('keeps in-flight progress amber when the raw state is disconnected', () => {
+    expect(statusDotColor('disconnected', { kind: 'normal', label: 'Connecting…' })).toBe(
       colors.statusAmber
     )
   })

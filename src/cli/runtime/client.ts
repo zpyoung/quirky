@@ -168,7 +168,12 @@ export class RuntimeClient {
           compatibilityInvocationId:
             orchestrationRequestId ?? this.orchestrationCompatibility.compatibilityInvocationId
         }
-      : {}
+      : method.startsWith('agentSession.view.')
+        ? {
+            orchestrationCompatibilityEvidence:
+              this.orchestrationCompatibility.orchestrationCompatibilityEvidence
+          }
+        : {}
     const envelope = {
       orchestrationCapability: options?.orchestrationCapability,
       orchestrationContractVersion: method.startsWith('orchestration.')
