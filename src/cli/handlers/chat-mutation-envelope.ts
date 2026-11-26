@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { RuntimeClient } from '../runtime/client'
 import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime/types'
+import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
 import { readCallerHintFromEnv } from '../../shared/public-rpc/caller-hint'
 import {
   ChatHistoryResultSchema,
@@ -78,6 +79,138 @@ export async function readCheckpoint(
   }
   const fence = parsed.data.page.fence ?? parsed.data.fence
   return { fence: fence !== undefined && fence > 0 ? fence : null, epoch: parsed.data.page.epoch }
+}
+
+type ChatHistoryItem = z.infer<typeof ChatHistoryResultSchema>['page']['items'][number]
+
+const TURN_LOOKUP_PAGE_SIZE = 50
+
+async function readTailItems(client: ChatClient, sessionId: string): Promise<ChatHistoryItem[]> {
+  const response = await client.call<unknown>(
+    'agentSession.history',
+    { sessionId, direction: 'tail', limit: TURN_LOOKUP_PAGE_SIZE },
+    publicCallOptions()
+  )
+  const parsed = ChatHistoryResultSchema.safeParse(response.result)
+  return parsed.success ? parsed.data.page.items : []
+}
+
+function turnRecord(item: ChatHistoryItem) {
+  const { body } = item
+  const record = body.kind === 'turn' ? body : body.turnLifecycle
+  return record?.turnId === undefined
+    ? null
+    : { itemId: item.itemId, turnId: record.turnId, userItemId: record.userItemId }
+}
+
+/** The ids of the turns the newest journal rows record; a session with no turn yet has none. */
+export async function readRecentTurnIds(
+  client: ChatClient,
+  sessionId: string
+): Promise<Set<string>> {
+  const ids = new Set<string>()
+  for (const item of await readTailItems(client, sessionId)) {
+    const record = turnRecord(item)
+    if (record) {
+      ids.add(record.turnId)
+    }
+  }
+  return ids
+}
+
+/**
+ * The turn that answers a message, from the journal rows: the turn record that names the message
+ * as its opener, or the turn the message row is scoped to (a steer joins the running turn). Null
+ * until the host has opened that turn.
+ */
+function turnIdOfMessage(
+  items: readonly ChatHistoryItem[],
+  clientMessageId: string
+): string | null {
+  const messageKey = agentJournalSubmissionKey(clientMessageId)
+  const records = items.flatMap((item) => turnRecord(item) ?? [])
+  const opened = records.find((record) => record.userItemId === messageKey)
+  if (opened) {
+    return opened.turnId
+  }
+  const scope = items.find((item) => item.itemId === messageKey)?.turnScope
+  return scope?.kind === 'turn'
+    ? (records.find((record) => record.itemId === scope.turnItemId)?.turnId ?? null)
+    : null
+}
+
+/**
+ * Polls the journal until the turn that answers `clientMessageId` exists, `budgetMs` elapses or
+ * `stopped` reports true. The host accepts a send before it opens the turn, so the send result
+ * cannot carry the turn id. Null when none appeared: a read that fails counts as not yet, because
+ * the message is already accepted and must not be sent again.
+ */
+export async function awaitMessageTurnId(
+  client: ChatClient,
+  sessionId: string,
+  clientMessageId: string,
+  options: { budgetMs: number; intervalMs: number; stopped?: () => boolean }
+): Promise<string | null> {
+  const deadline = Date.now() + options.budgetMs
+  for (;;) {
+    const turnId = await readTailItems(client, sessionId).then(
+      (items) => turnIdOfMessage(items, clientMessageId),
+      () => null
+    )
+    if (
+      turnId !== null ||
+      options.stopped?.() === true ||
+      Date.now() + options.intervalMs > deadline
+    ) {
+      return turnId
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, options.intervalMs))
+  }
+}
+
+/**
+ * Decides which turn events belong to one send. A turn it opened is matched by id once the journal
+ * names it; until then any turn that was not already in the journal before the send may be it, so
+ * a fast turn cannot finish unmatched. A refused send settles under its own message key.
+ */
+export function createSendTurnTracker(
+  client: ChatClient,
+  sessionId: string,
+  options: { priorTurnIds: ReadonlySet<string>; budgetMs: number; intervalMs: number }
+) {
+  const turnIds = new Set<string>()
+  let turnId: string | null = null
+  let finished = false
+  return {
+    get turnId() {
+      return turnId
+    },
+    /** True when an event naming `eventTurnId` settles this send; an event naming none always does. */
+    accepts(eventTurnId: string | undefined): boolean {
+      return (
+        eventTurnId === undefined ||
+        turnIds.has(eventTurnId) ||
+        (turnId === null && !options.priorTurnIds.has(eventTurnId))
+      )
+    },
+    /** Starts looking for the turn of the accepted message; stops at `finish`. */
+    accepted(clientMessageId: string): void {
+      turnIds.add(agentJournalSubmissionKey(clientMessageId))
+      void awaitMessageTurnId(client, sessionId, clientMessageId, {
+        budgetMs: options.budgetMs,
+        intervalMs: options.intervalMs,
+        stopped: () => finished
+      }).then((found) => {
+        if (found !== null) {
+          turnId = found
+          turnIds.add(found)
+        }
+      })
+    },
+    finish(): void {
+      finished = true
+    }
+  }
 }
 
 const REFUSAL_CODE_TO_ERROR: Readonly<Record<string, string>> = {
