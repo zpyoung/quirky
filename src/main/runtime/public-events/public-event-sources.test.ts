@@ -11,7 +11,10 @@ const WINDOW_CONTENTS = { id: 'main-window' }
 type IpcListener = (event: IpcMainEvent, payload: unknown) => void
 
 type ClientListener = (event: RuntimeClientEvent) => void
-type ClientListenerOptions = { consumesTerminalSideEffects?: boolean }
+type ClientListenerOptions = {
+  consumesTerminalSideEffects?: boolean
+  observesTerminalSideEffects?: boolean
+}
 
 function install(
   options: {
@@ -54,13 +57,33 @@ function install(
     const replay = bus.since(0, ['ui', 'workspace'])
     return Array.isArray(replay) ? replay : []
   }
+  const sideEffectConsumers = (): number =>
+    [...clientListeners].filter(({ options: o }) => o?.consumesTerminalSideEffects !== false).length
+  // mirrors the runtime: batches exist only while a consumer has the scanners running, and only
+  // consumers and observers receive them
   const emitClientEvent = (event: RuntimeClientEvent): void => {
-    for (const { listener } of clientListeners) {
+    const isBatch = event.type === 'terminalSideEffects'
+    if (isBatch && sideEffectConsumers() === 0) {
+      return
+    }
+    for (const { listener, options: o } of clientListeners) {
+      if (
+        isBatch &&
+        o?.consumesTerminalSideEffects === false &&
+        o.observesTerminalSideEffects !== true
+      ) {
+        continue
+      }
       listener(event)
     }
   }
-  const sideEffectConsumers = (): number =>
-    [...clientListeners].filter(({ options: o }) => o?.consumesTerminalSideEffects !== false).length
+  const addScannerConsumer = (): (() => void) => {
+    const entry = { listener: () => {} }
+    clientListeners.add(entry)
+    return () => {
+      clientListeners.delete(entry)
+    }
+  }
   const sideEffects = (
     facts: TerminalSideEffectFact[],
     extra: { replay?: true; paneKey?: string; worktreeId?: string } = {}
@@ -71,10 +94,14 @@ function install(
     })
   const reportTabs = (
     tabs: Record<string, { id: string; type: string }[]>,
-    sender: unknown = WINDOW_CONTENTS
+    sender: unknown = WINDOW_CONTENTS,
+    baseline?: true
   ): void => {
     // SAFETY: only `sender` is read from the event.
-    ipcListeners.get(UI_TABS_CHANGED_CHANNEL)?.({ sender } as unknown as IpcMainEvent, { tabs })
+    ipcListeners.get(UI_TABS_CHANGED_CHANNEL)?.({ sender } as unknown as IpcMainEvent, {
+      tabs,
+      ...(baseline ? { baseline } : {})
+    })
   }
   return {
     bus,
@@ -83,6 +110,7 @@ function install(
     sideEffects,
     sideEffectConsumers,
     emitClientEvent,
+    addScannerConsumer,
     reportTabs,
     ipcListeners
   }
@@ -167,14 +195,36 @@ describe('public event sources', () => {
       stopAgain()
     })
 
-    it('does not publish terminal.idle once the last subscriber is gone', () => {
-      const { bus, sideEffects, events } = install({ withSubscriber: false })
-
+    it('keeps buffering terminal.idle for replay after the last subscriber is gone while scanners run', () => {
+      const { bus, sideEffects, addScannerConsumer } = install({ withSubscriber: false })
       const stop = bus.subscribe(() => {})
+      const cursor = bus.latestSeq()
       stop()
+      // a desktop window keeps the scanners running without any events subscriber
+      addScannerConsumer()
+
       sideEffects([{ kind: 'agent-idle', title: 'Done' }])
 
-      expect(events()).toEqual([])
+      expect(bus.since(cursor, ['workspace'])).toMatchObject([
+        { type: 'terminal.idle', data: { worktreeId: 'wt-1' } }
+      ])
+    })
+
+    it('produces no idle facts for a headless runtime with no window and no subscribers, by design', () => {
+      const { bus, sideEffects, sideEffectConsumers } = install({ withSubscriber: false })
+
+      sideEffects([{ kind: 'agent-idle', title: 'Done' }])
+
+      expect(sideEffectConsumers()).toBe(0)
+      expect(bus.latestSeq()).toBe(0)
+    })
+
+    it('publishes an idle batch once when the observer and the scanner hold are both attached', () => {
+      const { sideEffects, events } = install()
+
+      sideEffects([{ kind: 'agent-idle', title: 'Done' }])
+
+      expect(events().filter((event) => event.type === 'terminal.idle')).toHaveLength(1)
     })
 
     it('is released when the sources are detached', () => {
@@ -225,13 +275,71 @@ describe('public event sources', () => {
       ])
     })
 
-    it('does not announce the tabs of a workspace first seen after the baseline', () => {
+    it('opens every tab of a workspace that first appears after the baseline', () => {
       const { reportTabs, events } = install()
 
       reportTabs({ 'wt-1': [terminal('a')] })
-      reportTabs({ 'wt-1': [terminal('a')], 'wt-2': [terminal('x'), terminal('y')] })
+      reportTabs({ 'wt-1': [terminal('a')], 'wt-2': [terminal('x'), { id: 'y', type: 'browser' }] })
 
-      expect(events()).toEqual([])
+      expect(events()).toMatchObject([
+        {
+          topic: 'ui',
+          type: 'tab.opened',
+          data: { worktreeId: 'wt-2', tabId: 'x', tabType: 'terminal' }
+        },
+        {
+          topic: 'ui',
+          type: 'tab.opened',
+          data: { worktreeId: 'wt-2', tabId: 'y', tabType: 'browser' }
+        }
+      ])
+    })
+
+    it('closes every tab of a workspace that disappears from a report', () => {
+      const { reportTabs, events } = install()
+
+      reportTabs({ 'wt-1': [terminal('a')], 'wt-2': [terminal('x'), terminal('y')] })
+      reportTabs({ 'wt-1': [terminal('a')] })
+
+      expect(events()).toMatchObject([
+        {
+          topic: 'ui',
+          type: 'tab.closed',
+          data: { worktreeId: 'wt-2', tabId: 'x', tabType: 'terminal' }
+        },
+        {
+          topic: 'ui',
+          type: 'tab.closed',
+          data: { worktreeId: 'wt-2', tabId: 'y', tabType: 'terminal' }
+        }
+      ])
+    })
+
+    it('treats a workspace that reappears as new', () => {
+      const { reportTabs, events } = install()
+
+      reportTabs({ 'wt-1': [terminal('a')] })
+      reportTabs({})
+      reportTabs({ 'wt-1': [terminal('a')] })
+
+      expect(events().map((event) => event.type)).toEqual(['tab.closed', 'tab.opened'])
+    })
+
+    it('re-seeds silently when a reloaded renderer sends a baseline report', () => {
+      const { reportTabs, events } = install()
+
+      reportTabs({ 'wt-1': [terminal('a')] }, undefined, true)
+      reportTabs({ 'wt-1': [terminal('a'), terminal('b')] })
+      expect(events()).toHaveLength(1)
+
+      reportTabs({ 'wt-1': [terminal('a')], 'wt-2': [terminal('x')] }, undefined, true)
+      expect(events()).toHaveLength(1)
+
+      reportTabs({ 'wt-1': [terminal('a')], 'wt-2': [terminal('x'), terminal('z')] })
+      expect(events()).toMatchObject([
+        { type: 'tab.opened', data: { tabId: 'b' } },
+        { type: 'tab.opened', data: { worktreeId: 'wt-2', tabId: 'z' } }
+      ])
     })
 
     it('publishes nothing when the tab list is unchanged', () => {
