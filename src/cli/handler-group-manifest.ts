@@ -3,6 +3,9 @@ import { BROWSER_HANDLER_GROUPS } from './browser-handler-groups'
 import { JIRA_HANDLER_GROUP } from './jira-handler-group'
 import { LINEAR_HANDLER_GROUP } from './linear-handler-group'
 import { REFERENCE_HANDLER_GROUP } from './reference-handler-group'
+import { ADMIN_HANDLER_GROUPS } from './handlers/admin-group'
+import { CHAT_HANDLER_GROUPS } from './handlers/chat-group'
+import { GENERATED_COMMANDS } from './specs'
 
 export type HandlerGroup = {
   name: string
@@ -315,5 +318,28 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
     name: 'search',
     keys: ['search'],
     load: async () => (await import('./handlers/search.js')).SEARCH_HANDLERS
+  },
+  {
+    name: 'schema',
+    keys: ['schema'],
+    load: async () => (await import('./public-cli/schema-command.js')).SCHEMA_HANDLERS
+  },
+  {
+    name: 'rpc',
+    keys: ['rpc', 'rpc list'],
+    load: async () => (await import('./public-cli/rpc-command.js')).RPC_HANDLERS
+  },
+  {
+    name: 'events',
+    keys: ['events'],
+    load: async () => (await import('./handlers/events.js')).EVENTS_HANDLERS
+  },
+  ...CHAT_HANDLER_GROUPS,
+  ...ADMIN_HANDLER_GROUPS,
+  // after every hand-written group, so a hand-written command is never shadowed
+  {
+    name: 'generated',
+    keys: Object.keys(GENERATED_COMMANDS.handlers),
+    load: async () => GENERATED_COMMANDS.handlers
   }
 ]

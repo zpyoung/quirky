@@ -3,7 +3,15 @@ import {
   matchAutomationOwnerConflict,
   stripAutomationOwnerConflictCode
 } from '../shared/automation-owner-conflict'
+import {
+  normalizeErrorCode,
+  requiresNext,
+  type NextStep,
+  type StableErrorCode
+} from '../shared/public-rpc/error-contract'
 import { automationOwnerConflictRecovery } from './automation-owner-conflict-recovery'
+import { rawCliErrorCode } from './public-cli/exit-codes'
+import { quoteCliCommandArgument } from './shell-command-quote'
 import { worktreeSelectorRecovery } from './worktree-selector-recovery'
 import { selectorAmbiguityRecovery } from './selector-ambiguity-recovery'
 import type { RuntimeRpcFailure } from './runtime-client'
@@ -11,6 +19,8 @@ import { RuntimeClientError, RuntimeRpcFailureError } from './runtime/types'
 
 export type CliErrorContext = {
   commandPath?: readonly string[]
+  /** The invocation's argv, used to spell the `--yes` re-run for a confirmation prompt. */
+  rawArgs?: readonly string[]
   /** The `--worktree` value this invocation sent; the runtime's error never echoes it. */
   worktreeSelector?: string
   /** The `--repo` value this invocation sent, for the same reason. */
@@ -63,7 +73,14 @@ function errorCode(error: unknown): string | undefined {
   return error instanceof RuntimeClientError ? error.code : undefined
 }
 
+/** The human message plus `Next: <command>  (<why>)` lines for follow-ups the runtime or contract names. */
 export function formatCliError(error: unknown, context: CliErrorContext = {}): string {
+  const message = formatCliErrorMessage(error, context)
+  const next = textNextSteps(error)
+  return next.length === 0 ? message : `${message}\n${next.map(formatNextStep).join('\n')}`
+}
+
+function formatCliErrorMessage(error: unknown, context: CliErrorContext): string {
   const message = error instanceof Error ? error.message : String(error)
   const selector = contextRecovery(errorCode(error), context)
   if (selector) {
@@ -119,31 +136,24 @@ function hasOrchestrationRequestId(data: unknown): boolean {
 export function reportCliError(error: unknown, json: boolean, context: CliErrorContext = {}): void {
   const selector = contextRecovery(errorCode(error), context)
   if (json) {
+    let response: RuntimeRpcFailure
     if (error instanceof RuntimeRpcFailureError) {
-      const response = withAutomationOwnerConflictRecovery(error.response)
-      console.log(
-        JSON.stringify(
-          selector
-            ? {
-                ...response,
-                error: {
-                  ...response.error,
-                  data: mergeContextRecovery(response.error.data, selector)
-                }
-              }
-            : response,
-          null,
-          2
-        )
-      )
+      const recovered = withAutomationOwnerConflictRecovery(error.response)
+      response = selector
+        ? {
+            ...recovered,
+            error: {
+              ...recovered.error,
+              data: mergeContextRecovery(recovered.error.data, selector)
+            }
+          }
+        : recovered
     } else {
-      const response: RuntimeRpcFailure = {
+      response = {
         id: 'local',
         ok: false,
         error: {
-          code:
-            matchAutomationOwnerConflict(error) ??
-            (error instanceof RuntimeClientError ? error.code : 'runtime_error'),
+          code: rawCliErrorCode(error),
           message: stripAutomationOwnerConflictCode(
             error instanceof Error ? error.message : String(error)
           ),
@@ -153,10 +163,130 @@ export function reportCliError(error: unknown, json: boolean, context: CliErrorC
           runtimeId: null
         }
       }
-      console.log(JSON.stringify(response, null, 2))
     }
+    console.log(JSON.stringify(withStableErrorContract(response, context), null, 2))
   } else {
     console.error(formatCliError(error, context))
+  }
+}
+
+const RUNTIME_PREDATES_PUBLIC_CLI: NextStep = {
+  command: 'quirky status',
+  why: 'runtime predates public-cli.v1; update it'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function nextStepsSentIn(data: unknown): NextStep[] {
+  if (!isRecord(data) || !Array.isArray(data.next)) {
+    return []
+  }
+  return data.next.flatMap((entry: unknown): NextStep[] =>
+    isRecord(entry) && typeof entry.command === 'string' && entry.command.length > 0
+      ? [{ command: entry.command, why: typeof entry.why === 'string' ? entry.why : '' }]
+      : []
+  )
+}
+
+function formatNextStep(step: NextStep): string {
+  return step.why ? `Next: ${step.command}  (${step.why})` : `Next: ${step.command}`
+}
+
+function confirmCommand(context: CliErrorContext): string | null {
+  const args = context.rawArgs ?? context.commandPath
+  if (!args || args.length === 0) {
+    return null
+  }
+  const spelled = args.map(quoteCliCommandArgument).join(' ')
+  return args.includes('--yes') ? `quirky ${spelled}` : `quirky ${spelled} --yes`
+}
+
+/** Generic follow-ups for a stable code whose error carried none, so an agent always has a next move. */
+function genericNextSteps(
+  normalized: { code: StableErrorCode; reason: string },
+  context: CliErrorContext
+): NextStep[] {
+  const command = context.commandPath?.join(' ')
+  const schemaStep: NextStep = {
+    command: command ? `quirky schema ${command}` : 'quirky schema',
+    why: 'check the command and its inputs'
+  }
+  switch (normalized.code) {
+    case 'unavailable':
+      return [
+        normalized.reason === 'capability_missing'
+          ? RUNTIME_PREDATES_PUBLIC_CLI
+          : { command: 'quirky status', why: 'check that Quirky is running and what it supports' }
+      ]
+    case 'invalid_argument':
+      return command ? [schemaStep] : []
+    case 'not_found':
+      return [schemaStep]
+    case 'needs_confirmation': {
+      const confirm = confirmCommand(context)
+      return [confirm ? { command: confirm, why: 'run again with --yes to confirm' } : schemaStep]
+    }
+    case 'conflict':
+      return [{ command: 'quirky status', why: 'state changed; check it, then retry' }]
+    default:
+      return []
+  }
+}
+
+/** Text mode shows what the runtime sent, plus the compat hint for a runtime that lacks the method. */
+function textNextSteps(error: unknown): NextStep[] {
+  const sent = nextStepsSentIn(errorData(error))
+  if (sent.length > 0) {
+    return sent
+  }
+  const normalized = normalizeErrorCode(rawCliErrorCode(error))
+  return normalized.code === 'unavailable' && normalized.reason === 'capability_missing'
+    ? [RUNTIME_PREDATES_PUBLIC_CLI]
+    : []
+}
+
+/**
+ * Rewrites a failure into the public error contract: the stable code in `error.code`, the specific
+ * cause in `error.data.reason`, and `error.data.next` always present where the contract requires it.
+ */
+function withStableErrorContract(
+  response: RuntimeRpcFailure,
+  context: CliErrorContext
+): RuntimeRpcFailure {
+  const normalized = normalizeErrorCode(response.error.code)
+  const sent = response.error.data
+  const base: Record<string, unknown> = isRecord(sent)
+    ? sent
+    : sent === undefined
+      ? {}
+      : { detail: sent }
+  const reason =
+    typeof base.reason === 'string'
+      ? base.reason
+      : normalized.reason !== normalized.code
+        ? normalized.reason
+        : undefined
+  const sentNext = nextStepsSentIn(base)
+  const next =
+    sentNext.length > 0
+      ? sentNext
+      : requiresNext(normalized.code) || normalized.code === 'invalid_argument'
+        ? genericNextSteps(normalized, context)
+        : []
+  const data = {
+    ...base,
+    ...(reason === undefined ? {} : { reason }),
+    ...(next.length === 0 ? {} : { next })
+  }
+  return {
+    ...response,
+    error: {
+      code: normalized.code,
+      message: response.error.message,
+      ...(Object.keys(data).length === 0 ? {} : { data })
+    }
   }
 }
 

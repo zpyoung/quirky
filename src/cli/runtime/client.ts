@@ -13,6 +13,8 @@ import { launchQuirkyApp } from './launch'
 import { getDefaultUserDataPath, readMetadata } from './metadata'
 import { getCliStatus, projectRemoteAppStatus } from './status'
 import { sendRequest } from './transport'
+import { sendStreamingRequest } from './streaming-transport'
+import type { CallerHint } from '../../shared/public-rpc/caller-hint'
 import { RuntimeClientError, RuntimeRpcFailureError, type RuntimeRpcSuccess } from './types'
 import {
   attachDurableMutationRecovery,
@@ -93,6 +95,10 @@ export class RuntimeClient {
       timeoutMs?: number
       legacyTerminalPrompt?: true
       terminalPromptPreflight?: { runtimeId: string | null }
+      /** Opts into the public-CLI server contract: preview-then-confirm gating and attribution. */
+      publicContract?: true
+      confirm?: boolean
+      caller?: CallerHint
     } & RuntimeOrchestrationEnvelope
   ): Promise<RuntimeRpcSuccess<TResult>> {
     const effectiveTimeoutMs = options?.timeoutMs ?? this.resolveMethodTimeoutMs(method, params)
@@ -177,7 +183,12 @@ export class RuntimeClient {
         params,
         effectiveTimeoutMs,
         envelope,
-        expectedRuntimeSource
+        expectedRuntimeSource,
+        {
+          publicContract: options?.publicContract ? 1 : undefined,
+          confirm: options?.confirm,
+          caller: options?.caller
+        }
       )
     } catch (error) {
       throw recover(error, metadata.runtimeId ?? null)
@@ -186,6 +197,44 @@ export class RuntimeClient {
       throw recover(new RuntimeRpcFailureError(response), metadata.runtimeId ?? null)
     }
     return response
+  }
+
+  /**
+   * Opens a streaming method and delivers each frame's result to `onFrame` until the server ends the
+   * stream or `signal` aborts. Unlike `call`, no per-request timeout applies; `timeoutMs` is an
+   * optional wall-clock budget for the whole stream and rejects with `timeout` when it elapses.
+   */
+  async stream(
+    method: string,
+    params: unknown,
+    onFrame: (result: unknown) => void,
+    options?: {
+      timeoutMs?: number
+      signal?: AbortSignal
+      publicContract?: true
+      caller?: CallerHint
+    }
+  ): Promise<void> {
+    if (this.remote) {
+      const transport = await loadWebSocketTransport()
+      await transport.streamWebSocketRequest(this.remote, method, params, onFrame, {
+        startTimeoutMs: this.requestTimeoutMs,
+        timeoutMs: options?.timeoutMs,
+        signal: options?.signal
+      })
+      return
+    }
+    const metadata = readMetadata(this.userDataPath)
+    const expectedRuntimeSource = await this.runtimeSourceFence.check(metadata, method)
+    await sendStreamingRequest(metadata, method, params, onFrame, {
+      signal: options?.signal,
+      timeoutMs: options?.timeoutMs,
+      publicRequest: {
+        publicContract: options?.publicContract ? 1 : undefined,
+        caller: options?.caller
+      },
+      expectedRuntimeSource
+    })
   }
 
   // Why: centralises the per-method timeout policy. Long-poll inner waiter
