@@ -293,6 +293,8 @@ export function createWebUiApi(): NonNullable<Partial<PreloadApi>['ui']> {
     onRequestUiState: () => noopUnsubscribe,
     replyUiState: () => {},
     notifyUiFocusChanged: () => {},
+    // Why: activity entries are pushed over desktop IPC; a paired web client has no such channel.
+    onActivityRecorded: () => noopUnsubscribe,
     // Why: a paired web client has no OS sleep signal; occlusion-driven visibilitychange already covers wake recovery.
     onSystemResumed: () => noopUnsubscribe,
     syncTrafficLights: () => {},

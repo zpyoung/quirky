@@ -423,7 +423,23 @@
       "customPermissions": "Custom arguments",
       "replaceWithPermissionMode": "Replace with {{mode}}",
       "expandAgentSettings": "Expand agent settings",
-      "collapseAgentSettings": "Collapse agent settings"
+      "collapseAgentSettings": "Collapse agent settings",
+      "approvals": {
+        "workspaceDelete": "Workspace deletion",
+        "workspaceDeleteDescription": "Removing a workspace and its worktree.",
+        "fileOverwriteDelete": "File overwrite or deletion",
+        "fileOverwriteDeleteDescription": "Replacing or removing files in a workspace.",
+        "chatDiscardRewind": "Chat discard or rewind",
+        "chatDiscardRewindDescription": "Discarding a chat or rewinding it to an earlier turn.",
+        "permissionAnswers": "Permission answers",
+        "permissionAnswersDescription": "Answering permission requests from other agents.",
+        "securitySettings": "Security-relevant settings",
+        "securitySettingsDescription": "Changing settings that widen what agents are allowed to do.",
+        "title": "Approvals",
+        "agentMayConfirm": "Agent may confirm",
+        "askMe": "Ask me",
+        "description": "Choose which actions an agent can confirm on its own and which need your answer first."
+      }
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",
@@ -19036,6 +19052,24 @@
       "stepDownload": "Download",
       "stepUnpack": "Unpack",
       "stepCheck": "Check"
+    },
+    "activity": {
+      "agentApiTrail": {
+        "empty": "No agent actions yet",
+        "emptyDescription": "Changes that agents and scripts make through the Quirky API appear here.",
+        "title": "Agent activity",
+        "workspaceFilter": "Filter by workspace",
+        "allWorkspaces": "All workspaces",
+        "inWorkspace": "in {{workspace}}"
+      }
+    },
+    "tabBar": {
+      "agentTouchMarker": {
+        "label": "Opened or focused by {{caller}}"
+      }
+    },
+    "globalAskPrompt": {
+      "label": "Request waiting for your answer"
     }
   },
   "dashboardPopout": {

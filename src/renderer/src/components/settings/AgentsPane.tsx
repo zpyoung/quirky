@@ -1,6 +1,7 @@
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { useAppStore } from '@/store'
+import { AgentApprovalsSetting } from './AgentApprovalsSetting'
 import { AgentAwakeSetting } from './AgentAwakeSetting'
 import { AgentCacheTimerSection } from './AgentCacheTimerSection'
 import { AgentRuntimeSetting } from './AgentRuntimeSetting'
@@ -69,6 +70,7 @@ export function AgentsPane({
         hostScope={hostScope}
         renderPermissions={renderAgentPermissions}
       />
+      <AgentApprovalsSetting settings={settings} updateSettings={updateSettings} />
       <section className="space-y-8">
         <SettingsSubsectionHeader title={getLocalExecutionHostLabel()} />
         <AgentRuntimeSetting

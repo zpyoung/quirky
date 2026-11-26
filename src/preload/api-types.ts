@@ -25,6 +25,7 @@ import type {
 import type { AiVaultApi } from './api/ai-vault-api'
 import type { AppApi, E2EApi, PlatformApi } from './api/app-api'
 import type { UiActionBridgeApi } from './api/ui-action-bridge'
+import type { AgentActivityBridgeApi } from './api/agent-activity-bridge'
 import type { AutomationsApi } from './api/automation-api'
 import type { BrowserApi } from './api/browser-api'
 import type { CliApi } from './api/cli-install-api'
@@ -158,7 +159,7 @@ export type PreloadApi = {
   nativeChat: NativeChatApi
   fs: FilesystemApi['fs']
   git: Merged<GitInspectionApi & GitOperationApi>
-  ui: Merged<UiCommandEventApi & UiWindowApi & UiActionBridgeApi>
+  ui: Merged<UiCommandEventApi & UiWindowApi & UiActionBridgeApi & AgentActivityBridgeApi>
   runtime: RuntimeApi['runtime']
   runtimeEnvironments: RuntimeApi['runtimeEnvironments']
   rateLimits: RateLimitsApi
