@@ -27,7 +27,8 @@ const askRegistryEventSchema = z.looseObject({
   spec: z.unknown().optional(),
   partial: z.record(z.string(), askPartialDraftSchema).optional(),
   result: z.looseObject({ summary: z.string(), skipped: z.array(z.string()) }).optional(),
-  worktreeId: z.string().nullable().optional()
+  worktreeId: z.string().nullable().optional(),
+  createdAt: z.string().optional()
 })
 
 export type AskStreamEvent = z.infer<typeof askRegistryEventSchema>

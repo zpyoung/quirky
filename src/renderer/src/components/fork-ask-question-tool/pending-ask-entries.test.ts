@@ -63,4 +63,27 @@ describe('buildPendingAskEntries', () => {
     )
     expect(entries.map((entry) => entry.paneClosed)).toEqual([true, true])
   })
+
+  it('finds a tab in another worktree when the ask names a different one', () => {
+    const entries = buildPendingAskEntries(
+      state({
+        pendingAsksByPaneKey: {
+          [makePaneKey('tab-1', LEAF)]: [{ ...card('a'), worktreeId: 'wt-2' }]
+        }
+      })
+    )
+    expect(entries[0]).toMatchObject({ worktreeId: 'wt-1', paneClosed: false })
+  })
+
+  it('does not call a pane closed while its worktree tabs have not loaded', () => {
+    const entries = buildPendingAskEntries(
+      state({
+        tabsByWorktree: {},
+        pendingAsksByPaneKey: {
+          [makePaneKey('tab-1', LEAF)]: [{ ...card('a'), worktreeId: 'wt-1' }]
+        }
+      })
+    )
+    expect(entries[0].paneClosed).toBe(false)
+  })
 })

@@ -97,7 +97,7 @@ describe('buildAskSubmission', () => {
 })
 
 describe('ask drafts', () => {
-  it('seeds drafts from the host partial and falls back to spec defaults', () => {
+  it('seeds drafts from the host partial only, never from spec defaults', () => {
     const spec: AskSpec = {
       questions: [
         { id: 'n', type: 'number', question: 'N?', default: 3 },
@@ -105,7 +105,7 @@ describe('ask drafts', () => {
       ]
     }
     const seeded = initialAskDrafts(spec, { c: { confirm: false } })
-    expect(seeded.n?.text).toBe('3')
+    expect(seeded.n?.text).toBe('')
     expect(seeded.c?.confirm).toBe(false)
   })
 

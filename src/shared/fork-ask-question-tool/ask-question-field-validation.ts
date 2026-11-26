@@ -26,7 +26,7 @@ const TOKEN_QUALIFIERS =
   '(access|auth|authentication|bearer|refresh|api|session|personal\\s+access|id|oauth|jwt|github|gitlab|npm|slack|service|deploy|bot|csrf|login)'
 const QUESTION_TEXT_CREDENTIAL_PATTERN = new RegExp(
   [
-    '\\b(password|passphrase|credentials?|private\\s?key|secret\\s?key|api\\s?key)\\b',
+    '\\b(passwords?|passphrases?|credentials?|private\\s?keys?|secret\\s?keys?|api\\s?keys?)\\b',
     `\\b${TOKEN_QUALIFIERS}\\s+tokens?\\b`,
     '\\b(client|app|application|shared|webhook|oauth|aws|api)\\s+secrets?\\b',
     '\\bsecret\\s+(value|access)\\b',

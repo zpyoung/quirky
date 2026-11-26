@@ -53,7 +53,7 @@ export const ASK_HANDLERS: Record<string, CommandHandler> = {
     const stopCancelOnInterrupt = cancelAskOnInterrupt(client, registerOutcome.askId)
     let envelope: AskEnvelope
     try {
-      envelope = await waitAskChunkWithRetry(client, registerOutcome.askId, chunkMs)
+      envelope = await waitAskChunkWithRetry(client, registerOutcome.askId, chunkMs, true)
     } finally {
       stopCancelOnInterrupt()
     }

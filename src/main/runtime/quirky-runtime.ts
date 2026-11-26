@@ -173,8 +173,17 @@ class QuirkyRuntimeService extends QuirkyRuntimeSidebarBase {
     return askServicesFor(this, () => Boolean(this.getAvailableAuthoritativeWindow()))
   }
 
-  protected override onPaneProcessEnded(paneKey: string): void {
-    this.getAskServices().resolvePaneClosed(paneKey)
+  protected override onPaneProcessEnded(paneKey: string, exitedHandle: string): void {
+    // a late exit from a replaced terminal must not resolve the new process's ask
+    const currentHandle = this.getTerminalHandleForPaneKey(paneKey)
+    if (currentHandle && currentHandle !== exitedHandle) {
+      return
+    }
+    try {
+      this.getAskServices().resolvePaneClosed(paneKey)
+    } catch (error) {
+      console.error('[ask] resolving the closed pane asks failed:', error)
+    }
   }
 
   private structuredAgentAvailability?: ReturnType<typeof installStructuredAgentAvailability>

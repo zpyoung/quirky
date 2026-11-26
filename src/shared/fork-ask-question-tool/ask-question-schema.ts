@@ -94,6 +94,8 @@ export type AskRegistryEvent = {
   partial?: AskPartial
   result?: AskRegistryResult
   worktreeId?: string | null
+  /** When the ask registered; orders a pane's queue independently of event arrival. */
+  createdAt?: string
 }
 
 /** `ask.subscribe`'s frame union; `type` is the discriminator (tech.md § Data models). */

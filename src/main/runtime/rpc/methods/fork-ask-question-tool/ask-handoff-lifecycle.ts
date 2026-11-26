@@ -170,7 +170,8 @@ function commitHandoffTerminal(
     paneKey: row.pane_key,
     status,
     result,
-    worktreeId: row.worktree_id
+    worktreeId: row.worktree_id,
+    createdAt: row.created_at
   })
   runtime.getAskServices().registry.releaseCommittedExternally(askId)
   closeHandoffQuestion(runtime, row)
@@ -414,6 +415,7 @@ export function updatePartialHandoff(
     status: 'registered',
     spec,
     partial: filtered,
-    worktreeId: updated.worktree_id
+    worktreeId: updated.worktree_id,
+    createdAt: updated.created_at
   })
 }

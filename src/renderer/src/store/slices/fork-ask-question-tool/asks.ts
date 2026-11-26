@@ -18,6 +18,7 @@ export type AskCardModel = {
   askId: string
   paneKey: string | null
   worktreeId?: string | null
+  createdAt?: string
   status: AskStatus
   spec: AskSpec | null
   partial: AskPartial
@@ -81,6 +82,7 @@ function mergeAskCard(previous: AskCardModel | undefined, event: AskRegistryEven
     askId: event.askId,
     paneKey: event.paneKey,
     worktreeId: event.worktreeId ?? previous?.worktreeId ?? null,
+    createdAt: event.createdAt ?? previous?.createdAt,
     status: event.status,
     spec: event.spec ?? previous?.spec ?? null,
     partial: event.partial ?? previous?.partial ?? {},
@@ -88,13 +90,21 @@ function mergeAskCard(previous: AskCardModel | undefined, event: AskRegistryEven
   }
 }
 
-/** Updates a pane's array in place by askId, or appends — new asks queue behind the head. */
+/** Updates a pane's array in place by askId, or inserts by registration time (arrival order without one). */
 function upsertCard(bucket: AskCardModel[], event: AskRegistryEvent): AskCardModel[] {
   const index = bucket.findIndex((card) => card.askId === event.askId)
   const card = mergeAskCard(index === -1 ? undefined : bucket[index], event)
-  return index === -1
-    ? [...bucket, card]
-    : bucket.map((existing, i) => (i === index ? card : existing))
+  if (index === -1) {
+    // a resumed stream can deliver a queued ask before the head, so registration time decides the slot
+    const createdAt = card.createdAt
+    const later = createdAt
+      ? bucket.findIndex((existing) => existing.createdAt && existing.createdAt > createdAt)
+      : -1
+    return later === -1
+      ? [...bucket, card]
+      : [...bucket.slice(0, later), card, ...bucket.slice(later)]
+  }
+  return bucket.map((existing, i) => (i === index ? card : existing))
 }
 
 /**

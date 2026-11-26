@@ -413,6 +413,34 @@ describe('AskRegistry', () => {
       expect(events).toEqual([`${first.askId}:declined`, `${second.askId}:registered`])
     })
 
+    it('replaces an untouched restored ask when a new ask registers on the same pane', async () => {
+      const original = new AskRegistry(db)
+      const old = await original.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+
+      const restarted = new AskRegistry(db)
+      const fresh = await restarted.register(textSpec(), paneOrigin('pane:1'), {
+        requestId: 'req_2'
+      })
+
+      expect(db.getAsk(old.askId)?.status).toBe('unavailable')
+      expect(db.getAsk(fresh.askId)?.status).toBe('registered')
+      const events: string[] = []
+      restarted.onAskChanged((event) => events.push(`${event.askId}:${event.status}`))
+      restarted.cancel(fresh.askId, 'user')
+      expect(events).toEqual([`${fresh.askId}:declined`])
+    })
+
+    it('keeps a restored ask that has had a waiter', async () => {
+      const original = new AskRegistry(db)
+      const old = await original.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_1' })
+
+      const restarted = new AskRegistry(db)
+      await restarted.waitChunk(old.askId, 0, new AbortController().signal)
+      await restarted.register(textSpec(), paneOrigin('pane:1'), { requestId: 'req_2' })
+
+      expect(db.getAsk(old.askId)?.status).toBe('registered')
+    })
+
     it('resolves an expired pending ask on construction without any waiter', async () => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))

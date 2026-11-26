@@ -53,7 +53,8 @@ export function registryEventFromRow(row: AskRow, epoch: string): AskRegistryEve
     askId: row.ask_id,
     paneKey: row.pane_key,
     status: row.status,
-    worktreeId: row.worktree_id
+    worktreeId: row.worktree_id,
+    createdAt: row.created_at
   }
   if (isTerminalAskStatus(row.status)) {
     return { ...base, result: resultFromRow(row) }

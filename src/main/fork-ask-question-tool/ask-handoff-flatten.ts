@@ -96,6 +96,7 @@ function matchReplyLines(spec: AskSpec, reply: string): Map<string, string> {
   const ids = new Set(spec.questions.map((question) => question.id))
   const byId = new Map<string, string>()
   const byPosition = new Map<number, string>()
+  const typeById = new Map(spec.questions.map((question) => [question.id, question.type]))
   let appendTo: { set: (text: string) => void; text: string } | null = null
   for (const rawLine of reply.split('\n')) {
     const line = rawLine.trim()
@@ -104,11 +105,14 @@ function matchReplyLines(spec: AskSpec, reply: string): Map<string, string> {
     const text = separatorIndex === -1 ? '' : line.slice(separatorIndex + 1).trim()
     if (ids.has(key)) {
       byId.set(key, text)
-      appendTo = { set: (next) => byId.set(key, next), text }
+      appendTo = typeById.get(key) === 'text' ? { set: (next) => byId.set(key, next), text } : null
     } else if (/^\d+$/.test(key)) {
       const position = Number(key)
       byPosition.set(position, text)
-      appendTo = { set: (next) => byPosition.set(position, next), text }
+      appendTo =
+        spec.questions[position - 1]?.type === 'text'
+          ? { set: (next) => byPosition.set(position, next), text }
+          : null
     } else if (appendTo && line.length > 0) {
       appendTo.text = `${appendTo.text}\n${line}`
       appendTo.set(appendTo.text)

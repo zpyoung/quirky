@@ -197,6 +197,17 @@ describe('mapCoordinatorReply', () => {
     })
   })
 
+  it('ignores trailing lines for a non-text question', () => {
+    const spec = specOf({
+      id: 'db',
+      type: 'select',
+      question: 'DB?',
+      options: [{ value: 'postgres', label: 'Postgres' }]
+    })
+    const result = mapCoordinatorReply(spec, '1: postgres\nThanks!')
+    expect(result.answers.db).toMatchObject({ value: 'postgres', source: 'option' })
+  })
+
   it('appends continuation lines without an id prefix to the previous answer', () => {
     const spec = specOf(
       { id: 'why', type: 'text', question: 'Why?' },

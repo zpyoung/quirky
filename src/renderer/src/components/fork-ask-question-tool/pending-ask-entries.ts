@@ -32,9 +32,10 @@ function findTab(
   tabId: string,
   preferredWorktreeId: string | null | undefined
 ): { worktreeId: string; title: string } | null {
-  const search = preferredWorktreeId
-    ? [[preferredWorktreeId, state.tabsByWorktree[preferredWorktreeId]] as const]
-    : Object.entries(state.tabsByWorktree ?? {})
+  const preferred = preferredWorktreeId
+    ? ([[preferredWorktreeId, state.tabsByWorktree?.[preferredWorktreeId]]] as const)
+    : []
+  const search = [...preferred, ...Object.entries(state.tabsByWorktree ?? {})]
   for (const [worktreeId, tabs] of search) {
     const tab = tabs?.find((candidate) => candidate.id === tabId)
     if (tab) {
@@ -42,6 +43,15 @@ function findTab(
     }
   }
   return null
+}
+
+/** Tabs are known for the ask's worktree (or, without one, for any worktree), so a missing tab means gone rather than not loaded yet. */
+function tabsAreLoaded(
+  state: PendingAskEntriesState,
+  worktreeId: string | null | undefined
+): boolean {
+  const byWorktree = state.tabsByWorktree ?? {}
+  return worktreeId ? byWorktree[worktreeId] !== undefined : Object.keys(byWorktree).length > 0
 }
 
 /** Every unanswered ask across all panes, in registration order, with where it lives. */
@@ -71,7 +81,8 @@ export function buildPendingAskEntries(state: PendingAskEntriesState): PendingAs
         leafId: parsed?.leafId ?? null,
         tabTitle: tab?.title ?? null,
         question: card.spec?.questions[0]?.question ?? null,
-        paneClosed: tab === null || leafGone
+        paneClosed:
+          leafGone || (tab === null && (parsed === null || tabsAreLoaded(state, card.worktreeId)))
       })
     }
   }

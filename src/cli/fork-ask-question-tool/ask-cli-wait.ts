@@ -28,13 +28,17 @@ function pauseBeforeRetry(error: unknown): number | null {
  * Blocks on `ask.wait` for one chunk and resolves to the envelope, or to a resumable `pending`
  * envelope once the chunk budget is spent. A host that sheds the wait as busy, or drops the
  * transport (an app restart), is retried inside that budget, because the ask is durable and a
- * restarted host resumes it. Only a server-returned failure that retrying cannot fix throws.
+ * restarted host resumes it. That patience applies only once the runtime has answered at least
+ * once (`hasContactedRuntime` for a caller that already registered); a runtime that never answered
+ * keeps the short transport retry and then throws, so "Quirky is not running" still surfaces.
  */
 export async function waitAskChunkWithRetry(
   client: RuntimeClient,
   askId: string,
-  chunkMs: number | undefined
+  chunkMs: number | undefined,
+  hasContactedRuntime = false
 ): Promise<AskEnvelope> {
+  let contacted = hasContactedRuntime
   const deadline = Date.now() + (chunkMs ?? ASK_DEFAULT_CHUNK_MS)
   let attemptChunkMs = chunkMs
   for (;;) {
@@ -48,6 +52,12 @@ export async function waitAskChunkWithRetry(
       )
       return response.result
     } catch (error) {
+      if (error instanceof RuntimeRpcFailureError) {
+        contacted = true
+      }
+      if (!contacted && isRetryableTransportError(error)) {
+        throw error
+      }
       const pause = pauseBeforeRetry(error)
       if (pause === null) {
         throw error

@@ -15,8 +15,10 @@ export type MobileAsk = {
   spec: AskSpec
   partial: AskPartial
   result: { summary: string; skipped: string[] } | null
-  /** First-seen order; a pane's current ask is its earliest-registered live one. */
+  /** First-seen order; breaks ties and orders asks from a host that sends no `createdAt`. */
   arrival: number
+  /** Registration time from the host; a pane's current ask is its earliest-registered live one. */
+  createdAt: string | null
 }
 
 export type AskResumeCursor = { seq: number; epoch: string }
@@ -66,8 +68,16 @@ function askFromEvent(
     spec,
     partial: event.partial ?? previous?.partial ?? {},
     result: event.result ?? previous?.result ?? null,
-    arrival: previous?.arrival ?? arrival
+    arrival: previous?.arrival ?? arrival,
+    createdAt: event.createdAt ?? previous?.createdAt ?? null
   }
+}
+
+function registeredBefore(a: MobileAsk, b: MobileAsk): boolean {
+  if (a.createdAt !== null && b.createdAt !== null && a.createdAt !== b.createdAt) {
+    return a.createdAt < b.createdAt
+  }
+  return a.arrival < b.arrival
 }
 
 function pruneTerminalAsks(asks: Map<string, MobileAsk>): void {
@@ -153,7 +163,7 @@ export function currentLiveAsksForWorktree(
       continue
     }
     const held = earliestByPane.get(ask.paneKey)
-    if (!held || ask.arrival < held.arrival) {
+    if (!held || registeredBefore(ask, held)) {
       earliestByPane.set(ask.paneKey, ask)
     }
   }

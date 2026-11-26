@@ -44,6 +44,8 @@ type LiveAsk = {
   paneKey: string | null
   spec: AskSpec
   surfaced: boolean
+  /** Re-adopted from a previous run and not touched by any waiter since; its asker may be dead. */
+  restored: boolean
   timeoutTimer: ReturnType<typeof setTimeout> | null
   livenessGraceTimer: ReturnType<typeof setTimeout> | null
   waiters: Set<(envelope: AskEnvelope) => void>
@@ -106,11 +108,16 @@ export class AskRegistry {
       return { askId: row.ask_id }
     }
 
+    if (origin.paneKey !== null) {
+      this.replaceUntouchedRestoredAsks(origin.paneKey)
+    }
+
     const live: LiveAsk = {
       askId: row.ask_id,
       paneKey: row.pane_key,
       spec,
       surfaced: row.pane_key === null,
+      restored: false,
       timeoutTimer: null,
       livenessGraceTimer: null,
       waiters: new Set()
@@ -129,7 +136,8 @@ export class AskRegistry {
         paneKey: live.paneKey,
         status: 'registered',
         spec,
-        worktreeId: row.worktree_id
+        worktreeId: row.worktree_id,
+        createdAt: row.created_at
       })
     }
     return { askId: live.askId }
@@ -205,7 +213,8 @@ export class AskRegistry {
       status: 'registered',
       spec: live.spec,
       partial: filtered,
-      worktreeId: row.worktree_id
+      worktreeId: row.worktree_id,
+      createdAt: row.created_at
     })
   }
 
@@ -300,8 +309,23 @@ export class AskRegistry {
         continue
       }
       const live = this.liveFromRow(row)
+      live.restored = true
       if (live.paneKey !== null) {
         live.surfaced = this.paneQueue.enqueue(live.paneKey, live.askId)
+      }
+    }
+  }
+
+  // a quit kills PTYs without exit events, so a restored ask on a pane key the new agent now
+  // reuses would otherwise sit at the head and hide the new agent's ask
+  private replaceUntouchedRestoredAsks(paneKey: string): void {
+    for (const askId of this.paneQueue.all(paneKey)) {
+      const restored = this.live.get(askId)
+      if (restored?.restored) {
+        this.commitUnavailable(
+          restored,
+          'replaced by a newer ask from the same pane after a restart'
+        )
       }
     }
   }
@@ -312,6 +336,7 @@ export class AskRegistry {
       paneKey: row.pane_key,
       spec: JSON.parse(row.spec_json) as AskSpec,
       surfaced: true,
+      restored: false,
       timeoutTimer: null,
       livenessGraceTimer: null,
       waiters: new Set()
@@ -338,6 +363,7 @@ export class AskRegistry {
   private loadLive(askId: string): LiveAsk | undefined {
     const cached = this.live.get(askId)
     if (cached) {
+      cached.restored = false
       return cached
     }
     const row = this.db.getAsk(askId)
@@ -400,7 +426,8 @@ export class AskRegistry {
       paneKey: row.pane_key,
       status,
       result,
-      worktreeId: row.worktree_id
+      worktreeId: row.worktree_id,
+      createdAt: row.created_at
     })
     for (const release of live.waiters) {
       release(envelope)
@@ -430,7 +457,8 @@ export class AskRegistry {
       paneKey: next.paneKey,
       status: 'registered',
       spec: next.spec,
-      worktreeId: nextRow.worktree_id
+      worktreeId: nextRow.worktree_id,
+      createdAt: nextRow.created_at
     })
   }
 

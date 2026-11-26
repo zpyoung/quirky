@@ -420,8 +420,34 @@ describe('quirky ask wait', () => {
     )
   })
 
-  it('keeps retrying across transport loss until the chunk budget is spent, then prints pending', async () => {
-    callMock.mockRejectedValue(new RuntimeClientError('runtime_unavailable', 'connection reset'))
+  it('throws the transport failure when the runtime never answered, after the short retry', async () => {
+    const failure = new RuntimeClientError('runtime_unavailable', 'connection reset')
+    callMock.mockRejectedValue(failure)
+
+    vi.useFakeTimers()
+    try {
+      const assertion = expect(
+        ASK_HANDLERS['ask wait'](ctx([['id', 'ask_host_gone']]))
+      ).rejects.toBe(failure)
+      await Promise.all([assertion, vi.runAllTimersAsync()])
+
+      expect(callMock).toHaveBeenCalledTimes(ASK_CLI_TRANSPORT_RETRY_ATTEMPTS)
+      expect(console.log).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps retrying transport loss until the chunk budget is spent once the runtime has answered', async () => {
+    callMock
+      .mockRejectedValueOnce(
+        new RuntimeRpcFailureError({
+          id: 'req_wait',
+          ok: false,
+          error: { code: 'runtime_busy', message: 'busy' }
+        })
+      )
+      .mockRejectedValue(new RuntimeClientError('runtime_unavailable', 'connection reset'))
 
     vi.useFakeTimers()
     try {
@@ -435,8 +461,7 @@ describe('quirky ask wait', () => {
       ).resolves.toBeUndefined()
       await Promise.all([assertion, vi.runAllTimersAsync()])
 
-      expect(callMock.mock.calls.every(([method]) => method === 'ask.wait')).toBe(true)
-      expect(callMock.mock.calls.length).toBeGreaterThan(ASK_CLI_TRANSPORT_RETRY_ATTEMPTS)
+      expect(callMock.mock.calls.length).toBeGreaterThan(1 + ASK_CLI_TRANSPORT_RETRY_ATTEMPTS)
       expect(console.log).toHaveBeenCalledWith(
         JSON.stringify({
           status: 'pending',

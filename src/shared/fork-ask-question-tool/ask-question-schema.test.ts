@@ -290,6 +290,16 @@ describe('validateAskSpec — credential refusal', () => {
     expect(validateAskSpec(specOf(textQuestion({ question }))).ok).toBe(true)
   })
 
+  it.each([
+    'Which passwords do we use?',
+    'Are the passphrases rotated?',
+    'Where are the API keys?',
+    'Share the private keys',
+    'List the secret keys'
+  ])('rejects plural credential question text: %s', (question) => {
+    expect(validateAskSpec(specOf(textQuestion({ question }))).ok).toBe(false)
+  })
+
   it.each(["What's your GitHub token?", 'Paste the bearer token', 'What is the client secret?'])(
     'rejects credential question text: %s',
     (question) => {

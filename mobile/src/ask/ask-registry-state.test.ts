@@ -59,6 +59,21 @@ describe('ask registry state', () => {
     expect(settledAsksForWorktree(state, 'wt-1')[0]?.result?.summary).toBe('Name: Ada')
   })
 
+  it('keeps the earliest-registered ask current even when its event arrives second', () => {
+    const state = apply(
+      EMPTY_ASK_REGISTRY_STATE,
+      {
+        type: 'event',
+        event: event({ askId: 'a2', seq: 5, createdAt: '2026-01-01T00:00:02.000Z' })
+      },
+      {
+        type: 'event',
+        event: event({ askId: 'a1', seq: 6, createdAt: '2026-01-01T00:00:01.000Z' })
+      }
+    )
+    expect(currentLiveAsksForWorktree(state, 'wt-1').map((ask) => ask.askId)).toEqual(['a1'])
+  })
+
   it('ignores handoff asks and asks with no worktree', () => {
     const state = apply(
       EMPTY_ASK_REGISTRY_STATE,

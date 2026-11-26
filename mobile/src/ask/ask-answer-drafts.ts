@@ -34,27 +34,8 @@ type FieldOutcome =
 
 const REQUIRED_MESSAGE = 'This question is required.'
 
-function specDefaultDraft(question: AskQuestion): AskQuestionDraft {
-  const draft: AskQuestionDraft = { selected: [], freeText: '', text: '', confirm: null }
-  switch (question.type) {
-    case 'select':
-      draft.selected = question.default === undefined ? [] : [question.default]
-      break
-    case 'multiselect':
-      draft.selected = question.default ?? []
-      break
-    case 'text':
-    case 'date':
-      draft.text = question.default ?? ''
-      break
-    case 'number':
-      draft.text = question.default === undefined ? '' : String(question.default)
-      break
-    case 'confirm':
-      draft.confirm = question.default ?? null
-      break
-  }
-  return draft
+function emptyDraft(): AskQuestionDraft {
+  return { selected: [], freeText: '', text: '', confirm: null }
 }
 
 function draftFromPartial(partial: AskPartialQuestionDraft): AskQuestionDraft {
@@ -66,12 +47,12 @@ function draftFromPartial(partial: AskPartialQuestionDraft): AskQuestionDraft {
   }
 }
 
-/** Drafts for every question, seeded from what the host already holds (a draft typed on desktop) and spec defaults. */
+/** Drafts for every question, seeded only from what the host already holds; spec defaults apply on timeout, never on submit. */
 export function initialAskDrafts(spec: AskSpec, partial: AskPartial): AskDrafts {
   const drafts: AskDrafts = {}
   for (const question of spec.questions) {
     const held = partial[question.id]
-    drafts[question.id] = held ? draftFromPartial(held) : specDefaultDraft(question)
+    drafts[question.id] = held ? draftFromPartial(held) : emptyDraft()
   }
   return drafts
 }
@@ -212,7 +193,7 @@ export function buildAskSubmission(spec: AskSpec, drafts: AskDrafts): AskSubmiss
   const skipped: string[] = []
   const errors: Record<string, string> = {}
   for (const question of spec.questions) {
-    const draft = drafts[question.id] ?? specDefaultDraft(question)
+    const draft = drafts[question.id] ?? emptyDraft()
     const outcome = resolveField(question, draft)
     if (outcome.kind === 'answer') {
       rawAnswers[question.id] = outcome.answer
