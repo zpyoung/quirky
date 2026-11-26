@@ -33,6 +33,7 @@ import { LoopCreateInputSchema } from '../fork-loops/loop-types'
 import { HostAccountLaunchEnvParams } from '../host-account-launch-env'
 import { MobileWebBundleChunkParamsSchema } from '../mobile-web-bundle/bundle-rpc-contract'
 import { pluginConsentRequestSchema } from '../plugins/plugin-consent-request'
+import { NotificationDismissParams } from '../public-rpc/public-methods/admin'
 import { EventsSubscribeParams, EventsUnsubscribeParams } from '../public-rpc/public-methods/events'
 import { UiListActionsParams, UiRunActionParams } from '../public-rpc/public-methods/ui'
 import { QuirkydMigrationBlobChunkRequestSchema } from '../quirkyd-migration/quirkyd-migration-blob-transfer'
@@ -1135,6 +1136,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'nativeChat.subscribe': NativeChatSession,
   'nativeChat.unsubscribe': NativeChatUnsubscribe,
   'network.browserTunnel': BrowserNetworkTunnelAttachParams,
+  'notifications.dismiss': NotificationDismissParams,
   'notifications.getMissedSince': NotificationGetMissedSinceParams,
   'notifications.registerPush': NotificationRegisterPushParams,
   'notifications.subscribe': NotificationsSubscribeParams,
