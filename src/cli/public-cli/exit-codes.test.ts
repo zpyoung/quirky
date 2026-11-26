@@ -43,6 +43,14 @@ describe('exitCodeFor', () => {
     expect(exitCodeFor(failure('selector_not_found'))).toBe(3)
   })
 
+  it('reads the code from an error-like object of another class', () => {
+    class ForeignClientError extends Error {
+      readonly code = 'invalid_argument'
+    }
+    expect(exitCodeFor(new ForeignClientError('bad flag'))).toBe(2)
+    expect(exitCodeFor({ response: { error: { code: 'invalid_argument' } } })).toBe(2)
+  })
+
   it('exits 1 for an error that is not a client error', () => {
     expect(exitCodeFor(new Error('plain'))).toBe(1)
     expect(exitCodeFor('a string')).toBe(1)
