@@ -1,6 +1,11 @@
 import type { CommandSpec } from '../args'
 import { GLOBAL_FLAGS } from '../args'
 
+const TAB_TYPE_NOTES = [
+  'Without --type, or with --type browser, this acts on browser tabs only. Any other --type works on that type of tab (terminal, editor, markdown, chat) or on every type (all), across every workspace unless --worktree is given.',
+  'For non-browser types --page and the tab id from `quirky tab list --type all` are the same thing; tab create opens browser tabs only.'
+]
+
 export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['browser', 'identity', 'get'],
@@ -174,33 +179,42 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['tab', 'list'],
     summary: 'List open browser tabs',
-    usage: 'quirky tab list [--worktree <selector|all>] [--show-profile] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'show-profile']
+    usage:
+      'quirky tab list [--type <all|terminal|editor|markdown|chat|browser>] [--worktree <selector|all>] [--show-profile] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'show-profile', 'type'],
+    notes: TAB_TYPE_NOTES
   },
   {
     path: ['tab', 'show'],
     summary: 'Show one browser tab by page id',
-    usage: 'quirky tab show --page <id> [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'page', 'worktree']
+    usage:
+      'quirky tab show --page <id> [--type <all|terminal|editor|markdown|chat|browser>] [--worktree <selector>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'page', 'worktree', 'type'],
+    notes: TAB_TYPE_NOTES
   },
   {
     path: ['tab', 'current'],
     summary: 'Show the current browser tab',
-    usage: 'quirky tab current [--worktree <selector|all>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'worktree']
+    usage:
+      'quirky tab current [--type <all|terminal|editor|markdown|chat|browser>] [--worktree <selector|all>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'type'],
+    notes: TAB_TYPE_NOTES
   },
   {
     path: ['tab', 'switch'],
     summary: 'Switch the active browser tab',
     usage:
-      'quirky tab switch (--index <n> | --page <id>) [--worktree <selector>] [--focus] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'index', 'page', 'worktree', 'focus']
+      'quirky tab switch (--index <n> | --page <id>) [--type <all|terminal|editor|markdown|chat|browser>] [--worktree <selector>] [--focus] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'index', 'page', 'worktree', 'focus', 'type'],
+    notes: TAB_TYPE_NOTES
   },
   {
     path: ['tab', 'create'],
     summary: 'Create a new browser tab in the current worktree',
-    usage: 'quirky tab create [--url <url>] [--worktree <selector>] [--profile <id>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'url', 'worktree', 'profile']
+    usage:
+      'quirky tab create [--url <url>] [--type <browser>] [--worktree <selector>] [--profile <id>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'url', 'worktree', 'profile', 'type'],
+    notes: TAB_TYPE_NOTES
   },
   {
     path: ['tab', 'profile', 'list'],
@@ -249,8 +263,46 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
     path: ['tab', 'close'],
     destructive: true,
     summary: 'Close a browser tab',
-    usage: 'quirky tab close [--index <n>] [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'index', 'worktree']
+    usage:
+      'quirky tab close [--index <n>] [--page <id>] [--type <all|terminal|editor|markdown|chat|browser>] [--worktree <selector>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'index', 'worktree', 'type'],
+    notes: TAB_TYPE_NOTES
+  },
+  {
+    path: ['tab', 'focus'],
+    summary: 'Make a tab the active tab of its group, whatever its type',
+    usage:
+      'quirky tab focus <id> [--type <all|terminal|editor|markdown|chat|browser>] [--worktree <selector>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'type', 'worktree'],
+    positionalArgs: ['id'],
+    notes: ['Get tab ids from `quirky tab list --type all`.']
+  },
+  {
+    path: ['tab', 'move'],
+    summary: 'Move a tab to another tab group',
+    usage:
+      'quirky tab move <id> --to-group <group-id> [--index <n>] [--type <all|terminal|editor|markdown|chat|browser>] [--worktree <selector>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'to-group', 'index', 'type', 'worktree'],
+    positionalArgs: ['id'],
+    notes: [
+      'Group ids appear as groupId in `quirky tab list --type all --json`. --index places the tab at that position in the group.'
+    ]
+  },
+  {
+    path: ['tab', 'pin'],
+    summary: 'Pin a tab',
+    usage:
+      'quirky tab pin <id> [--type <all|terminal|editor|markdown|chat|browser>] [--worktree <selector>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'type', 'worktree'],
+    positionalArgs: ['id']
+  },
+  {
+    path: ['tab', 'unpin'],
+    summary: 'Unpin a pinned tab',
+    usage:
+      'quirky tab unpin <id> [--type <all|terminal|editor|markdown|chat|browser>] [--worktree <selector>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'id', 'type', 'worktree'],
+    positionalArgs: ['id']
   },
   {
     path: ['exec'],
