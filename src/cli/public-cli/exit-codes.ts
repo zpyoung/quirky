@@ -2,27 +2,25 @@ import { matchAutomationOwnerConflict } from '../../shared/automation-owner-conf
 import { EXIT_CODE, normalizeErrorCode } from '../../shared/public-rpc/error-contract'
 
 // duck-typed so a client error from a mocked or duplicated runtime-client module still counts
-function stringProperty(value: unknown, key: string): string | undefined {
-  if (value === null || typeof value !== 'object') {
-    return undefined
+function codeOf(value: unknown): string | undefined {
+  if (typeof value === 'object' && value !== null && 'code' in value) {
+    return typeof value.code === 'string' ? value.code : undefined
   }
-  const property: unknown = Reflect.get(value, key)
-  return typeof property === 'string' ? property : undefined
+  return undefined
 }
 
 function carriedErrorCode(error: unknown): string | undefined {
-  const direct = stringProperty(error, 'code')
+  const direct = codeOf(error)
   if (direct !== undefined) {
     return direct
   }
-  if (error === null || typeof error !== 'object') {
-    return undefined
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = error.response
+    if (typeof response === 'object' && response !== null && 'error' in response) {
+      return codeOf(response.error)
+    }
   }
-  const response: unknown = Reflect.get(error, 'response')
-  if (response === null || typeof response !== 'object') {
-    return undefined
-  }
-  return stringProperty(Reflect.get(response, 'error'), 'code')
+  return undefined
 }
 
 /** The code an error carries before normalization; anything that carries no code is `runtime_error`. */
