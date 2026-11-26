@@ -9,6 +9,8 @@ export type ActivityEntry = {
   method: string
   summary: string
   workspaceId?: string
+  /** The tab the call touched, when the call names or returns one. */
+  tabId?: string
   at: number
 }
 
@@ -45,7 +47,8 @@ export class ActivityTrailStore {
       data: {
         method: entry.method,
         summary: entry.summary,
-        ...(entry.workspaceId === undefined ? {} : { worktreeId: entry.workspaceId })
+        ...(entry.workspaceId === undefined ? {} : { worktreeId: entry.workspaceId }),
+        ...(entry.tabId === undefined ? {} : { tabId: entry.tabId })
       }
     })
     const window = this.deps.getWindow()

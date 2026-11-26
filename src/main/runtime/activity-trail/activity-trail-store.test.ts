@@ -78,6 +78,26 @@ describe('ActivityTrailStore', () => {
     expect(JSON.stringify(bus.since(0, ['activity']))).not.toContain('worktreeId')
   })
 
+  it('carries the touched tab id through the event, the window push and the list', () => {
+    const { window, send } = fakeWindow()
+    const { bus, store } = createStore(window)
+    const recorded = entry({ workspaceId: 'wt-1', tabId: 'tab-7' })
+
+    store.record(recorded)
+
+    expect(bus.since(0, ['activity'])).toMatchObject([{ data: { tabId: 'tab-7' } }])
+    expect(send).toHaveBeenCalledWith(ACTIVITY_RECORDED_CHANNEL, recorded)
+    expect(store.list()[0].tabId).toBe('tab-7')
+  })
+
+  it('leaves tabId out of the event when the call touched no tab', () => {
+    const { bus, store } = createStore()
+
+    store.record(entry())
+
+    expect(JSON.stringify(bus.since(0, ['activity']))).not.toContain('tabId')
+  })
+
   it('pushes the entry to the authoritative window', () => {
     const { window, send } = fakeWindow()
     const { store } = createStore(window)

@@ -141,14 +141,47 @@ function worktreeIdOf(params: unknown, caller: AttributedCaller): string | undef
   return caller.worktreeId
 }
 
+const TAB_ID_PARAM_METHODS: ReadonlySet<string> = new Set([
+  'session.tabs.activate',
+  'session.tabs.close',
+  'session.tabs.setTabProps',
+  'session.tabs.move'
+])
+const TAB_ID_RESULT_METHODS: ReadonlySet<string> = new Set([
+  'ui.runAction',
+  'session.tabs.createTerminal'
+])
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function recordField(value: unknown, key: string): unknown {
+  return typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined
+}
+
+/** The tab a call touched: named by the params for tab mutations, by the result for creations. */
+function touchedTabIdOf(method: string, params: unknown, result: unknown): string | undefined {
+  if (TAB_ID_PARAM_METHODS.has(method)) {
+    return nonEmptyString(recordField(params, 'tabId'))
+  }
+  if (TAB_ID_RESULT_METHODS.has(method)) {
+    return (
+      nonEmptyString(recordField(result, 'tabId')) ??
+      nonEmptyString(recordField(recordField(result, 'tab'), 'id'))
+    )
+  }
+  return undefined
+}
+
 function bindPublicCall(
   method: RpcMethod | RpcStreamingMethod,
   publicCaller: AttributedCaller,
-  onSuccess: (() => void) | null
+  onSuccess: ((result: unknown) => void) | null
 ): RpcMethod | RpcStreamingMethod {
-  const settle = (): void => {
+  const settle = (result: unknown): void => {
     try {
-      onSuccess?.()
+      onSuccess?.(result)
     } catch (error) {
       console.error('[public-contract] recording the call failed', error)
     }
@@ -158,7 +191,7 @@ function bindPublicCall(
       ...method,
       handler: async (params, ctx, emit) => {
         await method.handler(params, { ...ctx, publicCaller }, emit)
-        settle()
+        settle(undefined)
       }
     }
   }
@@ -166,7 +199,7 @@ function bindPublicCall(
     ...method,
     handler: async (params, ctx) => {
       const result = await method.handler(params, { ...ctx, publicCaller })
-      settle()
+      settle(result)
       return result
     }
   }
@@ -241,14 +274,17 @@ async function admitPublicCall<M extends RpcMethod | RpcStreamingMethod>(
 
   const recordsActivity = spec?.effect === 'mutate' || (destructive !== undefined && confirmed)
   const onSuccess = recordsActivity
-    ? (): void =>
+    ? (result: unknown): void => {
+        const tabId = touchedTabIdOf(request.method, params, result)
         runtime.activityTrail.record({
           caller: publicCaller,
           method: request.method,
           summary,
           ...(worktreeId ? { workspaceId: worktreeId } : {}),
+          ...(tabId ? { tabId } : {}),
           at: Date.now()
         })
+      }
     : null
   // SAFETY: bindPublicCall keeps the unary or streaming shape of the method it is given.
   return bindPublicCall(method, publicCaller, onSuccess) as M
