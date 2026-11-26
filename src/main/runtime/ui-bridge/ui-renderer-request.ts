@@ -1,26 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { ipcMain, type BrowserWindow } from 'electron'
+import { PublicRpcError } from '../rpc/public-rpc-error'
 import { UiStateSnapshotSchema, type UiStateSnapshot } from '../../../shared/public-rpc/ui-state'
 
 export const UI_RENDERER_REQUEST_TIMEOUT_MS = 10_000
-
-export type UiBridgeErrorCode = 'invalid_argument' | 'no_ui' | 'not_applicable' | 'renderer_timeout'
-
-/**
- * A refusal from the UI bridge. `message` is the stable code, which is what the RPC layer passes
- * through; `data.reason` carries the human detail for callers that read it.
- */
-export class UiBridgeError extends Error {
-  readonly code: UiBridgeErrorCode
-  readonly data: { reason: string }
-
-  constructor(code: UiBridgeErrorCode, reason: string) {
-    super(code)
-    this.name = 'UiBridgeError'
-    this.code = code
-    this.data = { reason }
-  }
-}
 
 export type RendererActionRequest = {
   actionId: string
@@ -39,7 +22,15 @@ function requestFromRenderer<TReply extends { requestId: string }>(
   return new Promise<TReply>((resolve, reject) => {
     const timer = setTimeout(() => {
       ipcMain.removeListener(channels.reply, handler)
-      reject(new UiBridgeError('renderer_timeout', 'the app window did not answer in time'))
+      reject(
+        new PublicRpcError(
+          'timeout',
+          'renderer_timeout',
+          [{ command: 'quirky ui state', why: 'check the window is responsive' }],
+          undefined,
+          'the app window did not answer in time'
+        )
+      )
     }, UI_RENDERER_REQUEST_TIMEOUT_MS)
 
     const handler = (event: Electron.IpcMainEvent, reply: TReply): void => {
