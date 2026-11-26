@@ -119,8 +119,42 @@ describe('matching chat surfaces with opposite app schemes', () => {
     const chat = createChat('dark', 'light')
     expect(chat.dataset.nativeChatScheme).toBe('dark')
     const styles = getComputedStyle(chat)
-    expect(styles.getPropertyValue('--chat-canvas')).toContain('#000000')
-    expect(styles.getPropertyValue('--chat-source-foreground')).toBe('#fafafa')
+    expect(styles.getPropertyValue('--chat-canvas')).toContain('#0c0d0f')
+    expect(styles.getPropertyValue('--chat-source-foreground')).toBe('#eceef2')
+  })
+})
+
+describe('chat code surfaces', () => {
+  it('uses the shared code background until a terminal palette drives the chat', () => {
+    document.documentElement.classList.add('dark')
+    const sheet = document.createElement('style')
+    sheet.textContent = paletteCss
+    document.head.append(sheet)
+    const chat = document.createElement('div')
+    chat.className = 'native-chat-appearance'
+    document.body.append(chat)
+    const styles = getComputedStyle(chat)
+    expect(styles.getPropertyValue('--chat-code-surface')).toBe('#101114')
+    expect(styles.getPropertyValue('--chat-inline-code-surface')).toBe('#101114')
+
+    chat.dataset.nativeChatScheme = 'dark'
+    const matched = getComputedStyle(chat)
+    expect(matched.getPropertyValue('--chat-code-surface')).toContain('color-mix')
+    expect(matched.getPropertyValue('--chat-code-surface')).not.toContain('#101114')
+    expect(matched.getPropertyValue('--chat-inline-code-surface')).toContain('color-mix')
+  })
+
+  it.each([
+    ['dark', '#a6f0b0', '#ffb3ad'],
+    ['light', '#116329', '#82071e']
+  ] as const)('takes the %s diff text colours from tokens', (scheme, added, removed) => {
+    const sheet = document.createElement('style')
+    sheet.textContent = paletteCss
+    document.head.append(sheet)
+    document.documentElement.classList.toggle('dark', scheme === 'dark')
+    const styles = getComputedStyle(document.documentElement)
+    expect(styles.getPropertyValue('--chat-diff-added')).toBe(added)
+    expect(styles.getPropertyValue('--chat-diff-removed')).toBe(removed)
   })
 })
 

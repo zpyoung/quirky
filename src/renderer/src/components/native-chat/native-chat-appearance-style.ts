@@ -109,8 +109,8 @@ export function nativeChatAppearanceStyle(
       systemPrefersDark
     )
     const hasThemeColors = Boolean(colors.background && colors.foreground)
-    const background = hasThemeColors ? colors.background : '#000000'
-    const foreground = hasThemeColors ? colors.foreground : '#fafafa'
+    const background = hasThemeColors ? colors.background : '#0c0d0f'
+    const foreground = hasThemeColors ? colors.foreground : '#eceef2'
     light = isTerminalBackgroundLight(background)
     style.colorScheme = light ? 'light' : 'dark'
     // Ghost controls inherit a color, so remapping the token alone leaves the app's color in place.

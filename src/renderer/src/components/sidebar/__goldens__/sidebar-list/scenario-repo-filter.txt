@@ -212,14 +212,14 @@ ITEM rowKey=pinned:|quirky::/w/feat-a depth=0 groupDepth=0 lastChild=true childr
 ITEM rowKey=pinned:|quirky::/w/feat-b depth=1 groupDepth=0 children=1 lineageKey=lineage:quirky::/w/feat-b placement=pinned owning=project:p-quirky parent=pinned:|quirky::/w/feat-a
 ITEM rowKey=pinned:|quirky::/w/feat-c depth=2 groupDepth=0 lastChild=true children=0 placement=pinned owning=project:p-quirky parent=pinned:|quirky::/w/feat-b
 ITEM rowKey=pinned:|lab::/w/gitlab-mr depth=1 groupDepth=0 lastChild=true children=0 showProject=true placement=pinned owning=project:repo:lab parent=pinned:|quirky::/w/feat-a
-HEADER key=workspace-status:in-progress label="In progress" count=4 tone="text-[#d4a300]" icon=ConductorProgressIcon hostCounts={local:3 ssh:gpu-vm:1} hostIds={local:[quirky::/quirky,lab::/lab] ssh:gpu-vm:[]} ids=[quirky::/quirky,lab::/lab]
+HEADER key=workspace-status:in-progress label="In progress" count=4 tone="text-workspace-status-progress" icon=ConductorProgressIcon hostCounts={local:3 ssh:gpu-vm:1} hostIds={local:[quirky::/quirky,lab::/lab] ssh:gpu-vm:[]} ids=[quirky::/quirky,lab::/lab]
 ITEM rowKey=workspace-status:in-progress:|quirky::/quirky depth=0 groupDepth=0 children=0 placement=natural owning=project:p-quirky
 ITEM rowKey=workspace-status:in-progress:|lab::/lab depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:repo:lab
 FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
-HEADER key=workspace-status:in-review label="In review" count=1 tone="text-[#16a34a]" icon=ConductorReviewIcon hostCounts={local:1} hostIds={local:[]} ids=[]
+HEADER key=workspace-status:in-review label="In review" count=1 tone="text-workspace-status-review" icon=ConductorReviewIcon hostCounts={local:1} hostIds={local:[]} ids=[]
 FOLDER key=folder-workspace:local|folder:fw-review projectGroup=pg-folders depth=0 groupDepth=0
-HEADER key=workspace-status:completed label="Done" count=1 tone="text-[#c7a594]" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
+HEADER key=workspace-status:completed label="Done" count=1 tone="text-workspace-status-done" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
 ITEM rowKey=workspace-status:completed:|quirky::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
 SECTION workspace-status:in-review: -
 renderedKeys: 18
@@ -232,13 +232,13 @@ cmd ids unmounted: quirky::/w/feat-a quirky::/w/feat-b quirky::/w/feat-c lab::/w
 visible: quirky::/w/feat-a quirky::/w/feat-b lab::/w/gitlab-mr quirky::/quirky quirky::/w/Zeta quirky::/w/feat-c lab::/lab
 PENDING key=pending:creation-1 creation=creation-1 repo=api
 HEADER key=pinned label="Pinned" count=4 tone="text-foreground" icon=Pin hostCounts={local:4} hostIds={local:[quirky::/w/feat-a,quirky::/w/feat-b,lab::/w/gitlab-mr,quirky::/w/feat-c]} ids=[quirky::/w/feat-a,quirky::/w/feat-b,lab::/w/gitlab-mr,quirky::/w/feat-c]
-HEADER key=workspace-status:in-progress label="In progress" count=4 tone="text-[#d4a300]" icon=ConductorProgressIcon hostCounts={local:3 ssh:gpu-vm:1} hostIds={local:[quirky::/quirky,lab::/lab] ssh:gpu-vm:[]} ids=[quirky::/quirky,lab::/lab]
+HEADER key=workspace-status:in-progress label="In progress" count=4 tone="text-workspace-status-progress" icon=ConductorProgressIcon hostCounts={local:3 ssh:gpu-vm:1} hostIds={local:[quirky::/quirky,lab::/lab] ssh:gpu-vm:[]} ids=[quirky::/quirky,lab::/lab]
 ITEM rowKey=workspace-status:in-progress:|quirky::/quirky depth=0 groupDepth=0 children=0 placement=natural owning=project:p-quirky
 ITEM rowKey=workspace-status:in-progress:|lab::/lab depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:repo:lab
 FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
-HEADER key=workspace-status:in-review label="In review" count=1 tone="text-[#16a34a]" icon=ConductorReviewIcon hostCounts={local:1} hostIds={local:[]} ids=[]
-HEADER key=workspace-status:completed label="Done" count=1 tone="text-[#c7a594]" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
+HEADER key=workspace-status:in-review label="In review" count=1 tone="text-workspace-status-review" icon=ConductorReviewIcon hostCounts={local:1} hostIds={local:[]} ids=[]
+HEADER key=workspace-status:completed label="Done" count=1 tone="text-workspace-status-done" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
 ITEM rowKey=workspace-status:completed:|quirky::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
 SECTION pinned: pinned:|quirky::/w/feat-a pinned:|quirky::/w/feat-b pinned:|quirky::/w/feat-c pinned:|lab::/w/gitlab-mr
 SECTION workspace-status:in-review: -
@@ -256,7 +256,7 @@ ITEM rowKey=pinned:|quirky::/w/feat-a depth=0 groupDepth=0 lastChild=true childr
 ITEM rowKey=pinned:|quirky::/w/feat-b depth=1 groupDepth=0 children=1 lineageKey=lineage:quirky::/w/feat-b placement=pinned owning=project:p-quirky parent=pinned:|quirky::/w/feat-a
 ITEM rowKey=pinned:|quirky::/w/feat-c depth=2 groupDepth=0 lastChild=true children=0 placement=pinned owning=project:p-quirky parent=pinned:|quirky::/w/feat-b
 ITEM rowKey=pinned:|lab::/w/gitlab-mr depth=1 groupDepth=0 lastChild=true children=0 showProject=true placement=pinned owning=project:repo:lab parent=pinned:|quirky::/w/feat-a
-HEADER key=workspace-status:in-progress label="In progress" count=7 tone="text-[#d4a300]" icon=ConductorProgressIcon hostCounts={local:6 ssh:gpu-vm:1} hostIds={local:[quirky::/w/feat-a,lab::/w/gitlab-mr,quirky::/quirky,quirky::/w/feat-c,lab::/lab] ssh:gpu-vm:[]} ids=[quirky::/w/feat-a,lab::/w/gitlab-mr,quirky::/quirky,quirky::/w/feat-c,lab::/lab]
+HEADER key=workspace-status:in-progress label="In progress" count=7 tone="text-workspace-status-progress" icon=ConductorProgressIcon hostCounts={local:6 ssh:gpu-vm:1} hostIds={local:[quirky::/w/feat-a,lab::/w/gitlab-mr,quirky::/quirky,quirky::/w/feat-c,lab::/lab] ssh:gpu-vm:[]} ids=[quirky::/w/feat-a,lab::/w/gitlab-mr,quirky::/quirky,quirky::/w/feat-c,lab::/lab]
 ITEM rowKey=workspace-status:in-progress:|quirky::/w/feat-a depth=0 groupDepth=0 children=1 lineageKey=lineage:quirky::/w/feat-a placement=natural owning=project:p-quirky
 ITEM rowKey=workspace-status:in-progress:|lab::/w/gitlab-mr depth=1 groupDepth=0 lastChild=true children=0 showProject=true placement=natural owning=project:repo:lab parent=workspace-status:in-progress:|quirky::/w/feat-a
 ITEM rowKey=workspace-status:in-progress:|quirky::/quirky depth=0 groupDepth=0 children=0 placement=natural owning=project:p-quirky
@@ -264,10 +264,10 @@ ITEM rowKey=workspace-status:in-progress:|quirky::/w/feat-c depth=0 groupDepth=0
 ITEM rowKey=workspace-status:in-progress:|lab::/lab depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:repo:lab
 FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
-HEADER key=workspace-status:in-review label="In review" count=2 tone="text-[#16a34a]" icon=ConductorReviewIcon hostCounts={local:2} hostIds={local:[quirky::/w/feat-b]} ids=[quirky::/w/feat-b]
+HEADER key=workspace-status:in-review label="In review" count=2 tone="text-workspace-status-review" icon=ConductorReviewIcon hostCounts={local:2} hostIds={local:[quirky::/w/feat-b]} ids=[quirky::/w/feat-b]
 ITEM rowKey=workspace-status:in-review:|quirky::/w/feat-b depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
 FOLDER key=folder-workspace:local|folder:fw-review projectGroup=pg-folders depth=0 groupDepth=0
-HEADER key=workspace-status:completed label="Done" count=1 tone="text-[#c7a594]" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
+HEADER key=workspace-status:completed label="Done" count=1 tone="text-workspace-status-done" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
 ITEM rowKey=workspace-status:completed:|quirky::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
 PREFERRED |quirky::/w/feat-a -> workspace-status:in-progress:|quirky::/w/feat-a
 PREFERRED |quirky::/w/feat-b -> workspace-status:in-review:|quirky::/w/feat-b
@@ -283,15 +283,15 @@ cmd ids unmounted: quirky::/w/feat-a lab::/w/gitlab-mr quirky::/quirky quirky::/
 visible: quirky::/w/feat-a quirky::/w/feat-b lab::/w/gitlab-mr quirky::/quirky quirky::/w/Zeta quirky::/w/feat-c lab::/lab
 PENDING key=pending:creation-1 creation=creation-1 repo=api
 HEADER key=pinned label="Pinned" count=4 tone="text-foreground" icon=Pin hostCounts={local:4} hostIds={local:[quirky::/w/feat-a,quirky::/w/feat-b,lab::/w/gitlab-mr,quirky::/w/feat-c]} ids=[quirky::/w/feat-a,quirky::/w/feat-b,lab::/w/gitlab-mr,quirky::/w/feat-c]
-HEADER key=workspace-status:in-progress label="In progress" count=7 tone="text-[#d4a300]" icon=ConductorProgressIcon hostCounts={local:6 ssh:gpu-vm:1} hostIds={local:[quirky::/w/feat-a,lab::/w/gitlab-mr,quirky::/quirky,quirky::/w/feat-c,lab::/lab] ssh:gpu-vm:[]} ids=[quirky::/w/feat-a,lab::/w/gitlab-mr,quirky::/quirky,quirky::/w/feat-c,lab::/lab]
+HEADER key=workspace-status:in-progress label="In progress" count=7 tone="text-workspace-status-progress" icon=ConductorProgressIcon hostCounts={local:6 ssh:gpu-vm:1} hostIds={local:[quirky::/w/feat-a,lab::/w/gitlab-mr,quirky::/quirky,quirky::/w/feat-c,lab::/lab] ssh:gpu-vm:[]} ids=[quirky::/w/feat-a,lab::/w/gitlab-mr,quirky::/quirky,quirky::/w/feat-c,lab::/lab]
 ITEM rowKey=workspace-status:in-progress:|quirky::/w/feat-a depth=0 groupDepth=0 children=1 lineageKey=lineage:quirky::/w/feat-a lineageCollapsed=true placement=natural owning=project:p-quirky
 ITEM rowKey=workspace-status:in-progress:|quirky::/quirky depth=0 groupDepth=0 children=0 placement=natural owning=project:p-quirky
 ITEM rowKey=workspace-status:in-progress:|quirky::/w/feat-c depth=0 groupDepth=0 children=0 placement=natural owning=project:p-quirky
 ITEM rowKey=workspace-status:in-progress:|lab::/lab depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:repo:lab
 FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
-HEADER key=workspace-status:in-review label="In review" count=2 tone="text-[#16a34a]" icon=ConductorReviewIcon hostCounts={local:2} hostIds={local:[quirky::/w/feat-b]} ids=[quirky::/w/feat-b]
-HEADER key=workspace-status:completed label="Done" count=1 tone="text-[#c7a594]" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
+HEADER key=workspace-status:in-review label="In review" count=2 tone="text-workspace-status-review" icon=ConductorReviewIcon hostCounts={local:2} hostIds={local:[quirky::/w/feat-b]} ids=[quirky::/w/feat-b]
+HEADER key=workspace-status:completed label="Done" count=1 tone="text-workspace-status-done" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
 ITEM rowKey=workspace-status:completed:|quirky::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
 SECTION pinned: pinned:|quirky::/w/feat-a pinned:|quirky::/w/feat-b pinned:|quirky::/w/feat-c pinned:|lab::/w/gitlab-mr
 SECTION workspace-status:in-progress: workspace-status:in-progress:|quirky::/w/feat-a workspace-status:in-progress:|lab::/w/gitlab-mr workspace-status:in-progress:|quirky::/quirky workspace-status:in-progress:|quirky::/w/feat-c workspace-status:in-progress:|lab::/lab
@@ -320,7 +320,7 @@ ITEM rowKey=pr:in-progress:|lab::/lab depth=0 groupDepth=0 lastChild=true childr
 FOLDER key=folder-workspace:local|folder:fw-review projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
-HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-300" icon=CircleX hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
+HEADER key=pr:closed label="Closed" count=1 tone="text-muted-foreground" icon=CircleX hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
 ITEM rowKey=pr:closed:|quirky::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
 renderedKeys: 17
 placeholders: -
@@ -338,7 +338,7 @@ ITEM rowKey=pr:in-progress:|lab::/lab depth=0 groupDepth=0 lastChild=true childr
 FOLDER key=folder-workspace:local|folder:fw-review projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
-HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-300" icon=CircleX hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
+HEADER key=pr:closed label="Closed" count=1 tone="text-muted-foreground" icon=CircleX hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
 SECTION pinned: pinned:|quirky::/w/feat-a pinned:|quirky::/w/feat-b pinned:|quirky::/w/feat-c pinned:|lab::/w/gitlab-mr
 SECTION pr:closed: pr:closed:|quirky::/w/Zeta
 renderedKeys: 12
@@ -367,7 +367,7 @@ ITEM rowKey=pr:in-progress:|lab::/lab depth=0 groupDepth=0 lastChild=true childr
 FOLDER key=folder-workspace:local|folder:fw-review projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
-HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-300" icon=CircleX hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
+HEADER key=pr:closed label="Closed" count=1 tone="text-muted-foreground" icon=CircleX hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
 ITEM rowKey=pr:closed:|quirky::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 placement=natural owning=project:p-quirky
 PREFERRED |quirky::/w/feat-a -> pr:in-review:|quirky::/w/feat-a
 PREFERRED |quirky::/w/feat-b -> pr:done:|quirky::/w/feat-b
@@ -394,7 +394,7 @@ ITEM rowKey=pr:in-progress:|lab::/lab depth=0 groupDepth=0 lastChild=true childr
 FOLDER key=folder-workspace:local|folder:fw-review projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=0 groupDepth=0
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
-HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-300" icon=CircleX hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
+HEADER key=pr:closed label="Closed" count=1 tone="text-muted-foreground" icon=CircleX hostCounts={local:1} hostIds={local:[quirky::/w/Zeta]} ids=[quirky::/w/Zeta]
 SECTION pinned: pinned:|quirky::/w/feat-a pinned:|quirky::/w/feat-b pinned:|quirky::/w/feat-c pinned:|lab::/w/gitlab-mr
 SECTION pr:in-review: pr:in-review:|quirky::/w/feat-a
 SECTION pr:closed: pr:closed:|quirky::/w/Zeta

@@ -1,6 +1,56 @@
 import type { TerminalThemeMap } from './types'
 
 export const DEFAULT_TERMINAL_THEMES: TerminalThemeMap = {
+  'Quirky Graphite Dark': {
+    background: '#16171b',
+    foreground: '#eceef2',
+    cursor: '#eceef2',
+    cursorAccent: '#16171b',
+    selectionBackground: '#5fd0d640',
+    selectionForeground: '#eceef2',
+    black: '#101114',
+    red: '#ef6b73',
+    green: '#4cc38a',
+    yellow: '#e5b454',
+    blue: '#6fb3ff',
+    magenta: '#bd8ee8',
+    cyan: '#63c5cf',
+    white: '#c5c9d2',
+    brightBlack: '#7c828d',
+    brightRed: '#ff8b93',
+    brightGreen: '#70dba5',
+    brightYellow: '#f5ce7e',
+    brightBlue: '#9fcbff',
+    brightMagenta: '#d4acf4',
+    brightCyan: '#8ddce3',
+    brightWhite: '#eceef2'
+  },
+
+  'Quirky Graphite Light': {
+    background: '#ffffff',
+    foreground: '#1b1d22',
+    cursor: '#1b1d22',
+    cursorAccent: '#ffffff',
+    selectionBackground: '#14808a30',
+    selectionForeground: '#1b1d22',
+    black: '#1b1d22',
+    red: '#d6455d',
+    green: '#1f9d63',
+    yellow: '#a56e08',
+    blue: '#2f74c0',
+    magenta: '#9656b8',
+    cyan: '#167f8b',
+    white: '#c5c9d2',
+    brightBlack: '#646b76',
+    brightRed: '#b62d46',
+    brightGreen: '#167747',
+    brightYellow: '#855706',
+    brightBlue: '#215b9a',
+    brightMagenta: '#784293',
+    brightCyan: '#106570',
+    brightWhite: '#f4f5f7'
+  },
+
   // Most colors come from Ghostty. Quirky raises dark selection contrast because Ghostty's
   // original #3e4451 blends into Codex-style gray instruction blocks.
   'Ghostty Default Style Dark': {

@@ -23,7 +23,7 @@ export const smartWorkspaceSourceDrawerStyles = StyleSheet.create({
   done: {
     fontSize: typography.bodySize,
     fontWeight: '600',
-    color: colors.accentBlue
+    color: colors.accent
   },
   results: {
     flex: 1,

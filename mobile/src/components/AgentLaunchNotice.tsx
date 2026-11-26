@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     fontSize: typography.metaSize
   },
   copyText: {
-    color: colors.accentBlue,
+    color: colors.accent,
     fontSize: typography.metaSize,
     fontWeight: '600'
   }

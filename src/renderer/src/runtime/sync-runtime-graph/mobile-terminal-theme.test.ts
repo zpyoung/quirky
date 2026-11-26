@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AppState } from '@/store/types'
+import { DEFAULT_TERMINAL_THEME_DARK, DEFAULT_TERMINAL_THEME_LIGHT } from '@/lib/terminal-theme'
 import { resolveMobileTerminalTheme } from './mobile-terminal-theme'
 
 function stateWith(settings: Record<string, unknown> | null): AppState {
@@ -7,8 +8,8 @@ function stateWith(settings: Record<string, unknown> | null): AppState {
 }
 
 const BASE = {
-  terminalThemeDark: 'Ghostty Default Style Dark',
-  terminalThemeLight: 'Builtin Tango Light',
+  terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
+  terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT,
   terminalUseSeparateLightTheme: true,
   theme: 'dark'
 }

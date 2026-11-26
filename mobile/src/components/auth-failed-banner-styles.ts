@@ -23,7 +23,7 @@ export const authFailedBannerStyles = StyleSheet.create({
     paddingVertical: spacing.xs
   },
   actionText: {
-    color: colors.accentBlue,
+    color: colors.accent,
     fontSize: 13,
     fontWeight: '600'
   },

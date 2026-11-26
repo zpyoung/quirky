@@ -40,17 +40,17 @@
   --mp-qr-large-size: 184px;
   --mp-pairing-qr-image-size: 164px;
   --mp-pairing-qr-frame-size: calc(var(--mp-pairing-qr-image-size) + 20px);
-  --m-bg-base: #111111;
-  --m-bg-panel: #1a1a1a;
-  --m-bg-raised: #242424;
-  --m-border: #2a2a2a;
-  --m-text-primary: #e0e0e0;
-  --m-text-secondary: #888888;
-  --m-text-muted: #555555;
-  --m-accent-blue: #3b82f6;
-  --m-status-green: #22c55e;
-  --m-status-amber: #f59e0b;
-  --m-status-red: #ef4444;
+  --m-bg-base: #0c0d0f;
+  --m-bg-panel: #16171b;
+  --m-bg-raised: #22242b;
+  --m-border: #24262c;
+  --m-text-primary: #eceef2;
+  --m-text-secondary: #a0a6b1;
+  --m-text-muted: #8a909b;
+  --m-accent: #5fd0d6;
+  --m-status-green: #4cc38a;
+  --m-status-amber: #e5b454;
+  --m-status-red: #ef6b73;
   --m-mono: 'Menlo', 'SF Mono', monospace;
 
   position: relative;
@@ -1893,7 +1893,7 @@
 }
 
 .mobile-page-root .mp-session-tab.is-active {
-  border-bottom-color: var(--m-accent-blue);
+  border-bottom-color: var(--m-accent);
   color: var(--m-text-primary);
 }
 

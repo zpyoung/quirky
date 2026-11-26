@@ -19,6 +19,7 @@ import { sanitizeNetworkSettings } from './network-settings-sanitization'
 import { normalizeAppIconId } from '../../shared/app-icon'
 import { normalizeUiLanguage } from '../../shared/ui-language'
 import { applyAppIcon } from '../app-icon'
+import { repaintAllWindowBackgrounds } from '../window/window-background'
 import { normalizeTerminalCustomThemes } from '../../shared/terminal-custom-themes'
 import { normalizeDesktopTerminalScrollbackRows } from '../../shared/terminal-scrollback-policy'
 import { normalizeTerminalLineHeight } from '../../shared/terminal-line-height-settings'
@@ -180,6 +181,7 @@ export function registerSettingsHandlers(
     }
     if (args.theme) {
       nativeTheme.themeSource = args.theme
+      repaintAllWindowBackgrounds(args.theme)
     }
     // Why: capture the pre-update value so we only emit when the value
     // actually changes. The settings UI sometimes re-saves the same value

@@ -143,6 +143,8 @@ export type GlobalSettings = GlobalSettingsBase & {
   terminalUseSeparateLightTheme: boolean
   terminalThemeLight: string
   terminalDividerColorLight: string
+  /** One-shot guard for moving inherited terminal theme and divider defaults to Quirky Graphite. */
+  terminalGraphiteDefaultsMigrated?: boolean
   terminalInactivePaneOpacity: number
   terminalActivePaneOpacity: number
   terminalPaneOpacityTransitionMs: number

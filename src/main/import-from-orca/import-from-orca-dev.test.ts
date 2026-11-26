@@ -13,6 +13,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { SecretStore } from '../../shared/secret-store'
 import { setSecretStore, _resetSecretStoreForTests } from '../../shared/secret-store'
 import type { ImportStore } from './apply'
@@ -141,7 +142,10 @@ function automationInput(name: string) {
 }
 
 /** Builds Orca Dev's data folder with the repo's own persistence code. */
-function buildSource(fixture: Fixture, options: { withSecrets?: boolean } = {}) {
+function buildSource(
+  fixture: Fixture,
+  options: { withSecrets?: boolean; settings?: Partial<GlobalSettings> } = {}
+) {
   const profileDir = join(fixture.sourceRoot, 'profiles', 'local-default')
   writeFileSync(
     join(fixture.sourceRoot, 'orca-profile-index.json'),
@@ -173,7 +177,8 @@ function buildSource(fixture: Fixture, options: { withSecrets?: boolean } = {}) 
         lastAuthenticatedAt: 1
       }
     ],
-    ...(options.withSecrets ? { opencodeSessionCookie: COOKIE } : {})
+    ...(options.withSecrets ? { opencodeSessionCookie: COOKIE } : {}),
+    ...options.settings
   })
   store.flushOrThrow()
   store.freezeWrites()
@@ -485,6 +490,30 @@ describe('importFromOrcaDev', () => {
       'acc1'
     ])
     expect(store.getSettings().workspaceDir).toBe(join(fixture.homeDir, 'quirky', 'workspaces'))
+    store.freezeWrites()
+  })
+
+  it('never brings back Orca terminal defaults, but keeps a theme the owner chose', async () => {
+    const fixture = makeFixture()
+    buildSource(fixture, {
+      settings: {
+        terminalThemeDark: 'Ghostty Default Style Dark',
+        terminalThemeLight: 'GitHub Light',
+        terminalDividerColorDark: '#3f3f46',
+        terminalDividerColorLight: '#d4d4d8'
+      }
+    })
+    const store = openStore(join(fixture.quirkyDir, 'profile'), 'local-default')
+
+    const report = await runImport(fixture, store, 'first-run')
+
+    expect(report.ok).toBe(true)
+    expect(store.getSettings()).toMatchObject({
+      terminalThemeDark: 'Quirky Graphite Dark',
+      terminalThemeLight: 'GitHub Light',
+      terminalDividerColorDark: '#24262c',
+      terminalDividerColorLight: '#e3e5ea'
+    })
     store.freezeWrites()
   })
 

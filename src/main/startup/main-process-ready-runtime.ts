@@ -35,6 +35,7 @@ import { refreshInstalledOpenCodeStatusPlugins } from '../opencode/opencode-stat
 import { pruneDesktopQuirkydArtifactCache } from '../quirkyd/quirkyd-artifact-cache-retention'
 import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { repairDuplicatePtyPanesOnStart } from '../runtime/moved-pane-owner-rekey'
+import { repaintAllWindowBackgrounds } from '../window/window-background'
 
 // Headless serve never opens a window, so the sweep still has to run off a timer there.
 const WORKTREE_TRASH_SWEEP_FALLBACK_MS = 15_000
@@ -100,6 +101,12 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
     })
   }, WORKTREE_TRASH_SWEEP_FALLBACK_MS)
   nativeTheme.themeSource = store.getSettings().theme ?? 'system'
+  nativeTheme.on('updated', () => {
+    const theme = store.getSettings().theme ?? 'system'
+    if (theme === 'system') {
+      repaintAllWindowBackgrounds(theme)
+    }
+  })
   // Why here, after PATH hydration: the first Codex launch usually finds Codex's hook hash ready,
   // and launches find the reconcile in flight before CLI detection ends.
   startCodexHooks({

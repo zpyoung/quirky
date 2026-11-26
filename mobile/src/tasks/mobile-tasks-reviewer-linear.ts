@@ -118,20 +118,20 @@ export function getLinearIssueGroup(
     return {
       key: `assignee:${issue.assignee?.id ?? issue.assignee?.displayName ?? 'unassigned'}`,
       label: issue.assignee?.displayName ?? 'Unassigned',
-      color: colors.accentBlue
+      color: colors.accent
     }
   }
   if (groupBy === 'priority') {
     return {
       key: `priority:${issue.priority}`,
       label: getLinearPriorityLabel(issue.priority),
-      color: issue.priority === 1 ? colors.statusRed : colors.accentBlue
+      color: issue.priority === 1 ? colors.statusRed : colors.accent
     }
   }
   if (groupBy === 'team') {
     return { key: `team:${issue.team.id}`, label: issue.team.name, color: issue.state.color }
   }
-  return { key: 'all', label: 'Issues', color: colors.accentBlue }
+  return { key: 'all', label: 'Issues', color: colors.accent }
 }
 
 export function groupLinearIssues(
@@ -155,7 +155,7 @@ function groupOrderedLinearIssues(
   groupBy: LinearGroupBy
 ): LinearIssueSection[] {
   if (groupBy === 'none') {
-    return [{ key: 'all', label: 'Issues', color: colors.accentBlue, issues: sorted }]
+    return [{ key: 'all', label: 'Issues', color: colors.accent, issues: sorted }]
   }
   const sections = new Map<
     string,

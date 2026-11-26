@@ -111,7 +111,7 @@ export function MobileNativeChatQuestion({
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <CircleHelp size={15} color={colors.accentBlue} strokeWidth={2.2} />
+        <CircleHelp size={15} color={colors.accent} strokeWidth={2.2} />
         <Text style={styles.question}>{question.question}</Text>
         <MobileNativeChatCardHeaderAction
           prompt={question.prompt}
@@ -184,7 +184,7 @@ export function MobileNativeChatQuestion({
               (hasOptions ? 'Or type a reply…' : 'Type your reply…')
             }
             placeholderTextColor={colors.textMuted}
-            selectionColor={colors.accentBlue}
+            selectionColor={colors.accent}
             onSubmitEditing={submitFreeText}
             returnKeyType="send"
             // A declared input (Pi's `input`) is one line unless it asks for more, as on desktop.
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle
   },
   optionSelected: {
-    borderColor: colors.accentBlue
+    borderColor: colors.accent
   },
   optionBody: {
     flex: 1,
@@ -276,15 +276,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   checkboxOn: {
-    backgroundColor: colors.accentBlue,
-    borderColor: colors.accentBlue
+    backgroundColor: colors.accent,
+    borderColor: colors.accent
   },
   submit: {
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.button,
-    backgroundColor: colors.accentBlue
+    backgroundColor: colors.accent
   },
   submitDisabled: {
     backgroundColor: colors.bgRaised

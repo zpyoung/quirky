@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import { isBackgroundLaunch, showWindowWithoutStealingFocus } from './foreground-activation-policy'
 import { installPrivilegedWindowNavigationPolicy } from './privileged-window-navigation'
+import { resolveWindowBackground } from './window-background'
 import { sendToTrustedUIRenderer } from '../ipc/ui'
 import type { Store } from '../persistence'
 import { stepUIZoomLevel, type UIZoomDirection } from '../../shared/ui-zoom-level'
@@ -49,7 +50,10 @@ export function createOrFocusWorkspaceSpaceWindow(store: Store): BrowserWindow {
     title: 'Quirky Space Beta',
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff',
+    backgroundColor: resolveWindowBackground(
+      store.getSettings().theme,
+      nativeTheme.shouldUseDarkColors
+    ),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,

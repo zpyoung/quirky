@@ -21,6 +21,7 @@ import { installMonacoDiffEditorDisposalGuard } from './monaco-diff-editor-dispo
 import { installMonacoPeekReferencesPreviewOptions } from './monaco-peek-preview-options'
 import { installMonacoContextMenuPaste } from '@/components/editor/install-monaco-context-menu-paste'
 import { runMonacoSetupSteps } from './monaco-setup-steps'
+import { defineGraphiteMonacoThemes } from './monaco-graphite-theme'
 
 globalThis.MonacoEnvironment = {
   getWorker(_workerId, label) {
@@ -96,6 +97,8 @@ runMonacoSetupSteps([
   // works like Cmd+V (which already works via native events).
   ['context-menu paste', () => installMonacoContextMenuPaste(monaco)]
 ])
+
+defineGraphiteMonacoThemes(monaco)
 
 // Configure Monaco to use the locally bundled editor instead of CDN
 loader.config({ monaco })

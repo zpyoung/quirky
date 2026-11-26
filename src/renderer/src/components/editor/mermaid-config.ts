@@ -6,7 +6,8 @@ export type MermaidThemeColors = {
   primary: string
   secondary: string
   tertiary: string
-  border: string
+  line: string
+  pie: readonly [string, string, string, string, string, string, string, string]
 }
 
 export function getMermaidConfig(
@@ -19,12 +20,12 @@ export function getMermaidConfig(
     securityLevel: 'strict',
     suppressErrorRendering: true,
     // The legacy dark theme removes color from flowcharts.
-    theme: isDark ? (colors ? 'base' : 'dark') : 'default',
+    theme: colors ? 'base' : isDark ? 'dark' : 'default',
     darkMode: isDark,
-    ...(isDark && colors
+    ...(colors
       ? {
           themeVariables: {
-            darkMode: true,
+            darkMode: isDark,
             background: colors.background,
             primaryColor: colors.primary,
             secondaryColor: colors.secondary,
@@ -32,18 +33,32 @@ export function getMermaidConfig(
             primaryTextColor: colors.foreground,
             secondaryTextColor: colors.foreground,
             tertiaryTextColor: colors.foreground,
-            primaryBorderColor: colors.border,
-            secondaryBorderColor: colors.border,
-            tertiaryBorderColor: colors.border,
-            lineColor: colors.foreground,
+            primaryBorderColor: colors.line,
+            secondaryBorderColor: colors.line,
+            tertiaryBorderColor: colors.line,
+            lineColor: colors.line,
             textColor: colors.foreground,
             edgeLabelBackground: colors.background,
             // Base defaults to light Gantt surfaces even when darkMode is enabled.
             altSectionBkgColor: colors.background,
             excludeBkgColor: colors.background,
             doneTaskBkgColor: colors.background,
-            doneTaskBorderColor: colors.border,
-            activeTaskBkgColor: colors.secondary
+            doneTaskBorderColor: colors.line,
+            activeTaskBkgColor: colors.secondary,
+            pie1: colors.pie[0],
+            pie2: colors.pie[1],
+            pie3: colors.pie[2],
+            pie4: colors.pie[3],
+            pie5: colors.pie[4],
+            pie6: colors.pie[5],
+            pie7: colors.pie[6],
+            pie8: colors.pie[7],
+            // slots 9-12 repeat chart 2-5 so no slice 6+ falls back to mermaid's pale defaults
+            pie9: colors.pie[1],
+            pie10: colors.pie[2],
+            pie11: colors.pie[3],
+            pie12: colors.pie[4],
+            pieSectionTextColor: '#ffffff'
           }
         }
       : {}),

@@ -27,7 +27,7 @@ vi.mock('lucide-react-native', () => ({
   Workflow: 'Workflow'
 }))
 vi.mock('../components/AgentStateDot', () => ({
-  AGENT_WORKING_COLOR: '#eab308',
+  AGENT_WORKING_COLOR: '#6fb3ff',
   AgentStateDot: 'AgentStateDot'
 }))
 vi.mock('../hooks/use-now', () => ({ useNow: () => NOW }))

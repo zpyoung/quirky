@@ -107,11 +107,11 @@ export const mobileOnboardingStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.button,
-    backgroundColor: colors.surfaceBright,
+    backgroundColor: colors.accent,
     paddingVertical: spacing.sm
   },
   primaryButtonText: {
-    color: colors.bgBase,
+    color: colors.onAccent,
     fontSize: typography.bodySize,
     fontWeight: '600'
   },

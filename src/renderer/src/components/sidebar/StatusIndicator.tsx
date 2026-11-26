@@ -67,7 +67,7 @@ const StatusIndicator = React.memo(function StatusIndicator({
         className={cn('inline-flex h-3 w-3 shrink-0 items-center justify-center', className)}
         {...rest}
       >
-        <span className="block size-1.5 rounded-full bg-red-500" />
+        <span className="block size-1.5 rounded-full bg-agent-failed" />
       </span>
     )
   } else if (status === 'interrupted') {
@@ -110,10 +110,10 @@ const StatusIndicator = React.memo(function StatusIndicator({
             'block size-2 rounded-full',
             status === 'done' || status === 'active'
               ? // Green dot for both hook-reported 'done' and the heuristic
-                // 'active' (terminal open, quiet). Working uses a yellow
-                // ring above; 'inactive' stays grey.
-                'bg-emerald-500'
-              : 'bg-neutral-500/40'
+                // 'active' (terminal open, quiet). Working uses the pulsing
+                // blue dot above; 'inactive' stays grey.
+                'bg-agent-done'
+              : 'bg-muted-foreground/40'
           )}
         />
       </span>

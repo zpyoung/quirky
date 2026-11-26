@@ -33,7 +33,7 @@ function renderDotClassNames(status: Status): string[] {
 }
 
 describe('StatusIndicator', () => {
-  it('renders working as a yellow spinner ring', () => {
+  it('renders working as the pulsing blue dot', () => {
     const markup = renderMarkup('working')
 
     // The spinner's own classes and animation contract belong to AgentWorkingSpinner.test.tsx;
@@ -60,28 +60,36 @@ describe('StatusIndicator', () => {
     expect(markup).not.toContain('data-agent-spinner')
   })
 
-  it('renders active as full emerald dot', () => {
+  it('renders active as full green dot', () => {
     const classNames = renderDotClassNames('active')
 
-    expect(classNames).toContain('bg-emerald-500')
+    expect(classNames).toContain('bg-agent-done')
   })
 
-  it('renders done as an emerald dot', () => {
+  it('renders done as a green dot', () => {
     const classNames = renderDotClassNames('done')
 
-    expect(classNames).toContain('bg-emerald-500')
+    expect(classNames).toContain('bg-agent-done')
+    expect(classNames).not.toContain('bg-emerald-500')
+  })
+
+  it('renders inactive as the quiet muted dot', () => {
+    const classNames = renderDotClassNames('inactive')
+
+    expect(classNames).toContain('bg-muted-foreground/40')
+    expect(classNames).not.toContain('bg-neutral-500/40')
   })
 
   it("renders a user's Stop muted, distinct from done and from a failure", () => {
     const classNames = renderDotClassNames('interrupted')
 
     expect(classNames).toContain('bg-muted-foreground')
-    expect(classNames).not.toContain('bg-emerald-500')
-    expect(classNames).not.toContain('bg-red-500')
+    expect(classNames).not.toContain('bg-agent-done')
+    expect(classNames).not.toContain('bg-agent-failed')
   })
 
   it('renders failed as a red dot', () => {
-    expect(renderDotClassNames('failed')).toContain('bg-red-500')
+    expect(renderDotClassNames('failed')).toContain('bg-agent-failed')
   })
 
   it.each([

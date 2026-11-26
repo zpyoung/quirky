@@ -72,7 +72,7 @@ export function taskRepositoryMeta(
   return {
     key: item.source.team.id,
     label: item.source.team.name,
-    color: item.source.state.color || colors.accentBlue
+    color: item.source.state.color || colors.accent
   }
 }
 

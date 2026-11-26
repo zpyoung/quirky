@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  DEFAULT_TERMINAL_DIVIDER_DARK,
   DEFAULT_TERMINAL_THEME_DARK,
   DEFAULT_TERMINAL_THEME_LIGHT,
   getAvailableTerminalThemeOptions,
@@ -62,10 +63,10 @@ describe('resolveEffectiveTerminalAppearance', () => {
       {
         theme: 'system',
         terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
-        terminalDividerColorDark: '#3f3f46',
+        terminalDividerColorDark: '#24262c',
         terminalUseSeparateLightTheme: true,
         terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT,
-        terminalDividerColorLight: '#d4d4d8'
+        terminalDividerColorLight: '#e3e5ea'
       },
       false
     )
@@ -79,10 +80,10 @@ describe('resolveEffectiveTerminalAppearance', () => {
       {
         theme: 'system',
         terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
-        terminalDividerColorDark: '#3f3f46',
+        terminalDividerColorDark: '#24262c',
         terminalUseSeparateLightTheme: true,
         terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT,
-        terminalDividerColorLight: '#d4d4d8'
+        terminalDividerColorLight: '#e3e5ea'
       },
       true
     )
@@ -96,10 +97,10 @@ describe('resolveEffectiveTerminalAppearance', () => {
       {
         theme: 'light',
         terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
-        terminalDividerColorDark: '#3f3f46',
+        terminalDividerColorDark: '#24262c',
         terminalUseSeparateLightTheme: false,
         terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT,
-        terminalDividerColorLight: '#d4d4d8'
+        terminalDividerColorLight: '#e3e5ea'
       },
       false
     )
@@ -113,10 +114,10 @@ describe('resolveEffectiveTerminalAppearance', () => {
       {
         theme: 'light',
         terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
-        terminalDividerColorDark: '#3f3f46',
+        terminalDividerColorDark: '#24262c',
         terminalUseSeparateLightTheme: true,
         terminalThemeLight: '',
-        terminalDividerColorLight: '#d4d4d8'
+        terminalDividerColorLight: '#e3e5ea'
       },
       false
     )
@@ -129,10 +130,10 @@ describe('resolveEffectiveTerminalAppearance', () => {
       {
         theme: 'light',
         terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
-        terminalDividerColorDark: '#3f3f46',
+        terminalDividerColorDark: '#24262c',
         terminalUseSeparateLightTheme: true,
         terminalThemeLight: 'Invalid Theme Name',
-        terminalDividerColorLight: '#d4d4d8'
+        terminalDividerColorLight: '#e3e5ea'
       },
       false
     )
@@ -146,10 +147,10 @@ describe('resolveEffectiveTerminalAppearance', () => {
       {
         theme: 'dark',
         terminalThemeDark: 'custom:warp:tokyo-night',
-        terminalDividerColorDark: '#3f3f46',
+        terminalDividerColorDark: '#24262c',
         terminalUseSeparateLightTheme: true,
         terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT,
-        terminalDividerColorLight: '#d4d4d8',
+        terminalDividerColorLight: '#e3e5ea',
         terminalCustomThemes: [
           {
             id: 'warp:tokyo-night',
@@ -177,10 +178,10 @@ describe('resolveEffectiveTerminalAppearance', () => {
       {
         theme: 'dark',
         terminalThemeDark: 'custom:warp:missing',
-        terminalDividerColorDark: '#3f3f46',
+        terminalDividerColorDark: '#24262c',
         terminalUseSeparateLightTheme: true,
         terminalThemeLight: DEFAULT_TERMINAL_THEME_LIGHT,
-        terminalDividerColorLight: '#d4d4d8',
+        terminalDividerColorLight: '#e3e5ea',
         terminalCustomThemes: []
       },
       true
@@ -195,10 +196,10 @@ describe('resolveEffectiveTerminalAppearance', () => {
       {
         theme: 'light',
         terminalThemeDark: DEFAULT_TERMINAL_THEME_DARK,
-        terminalDividerColorDark: '#3f3f46',
+        terminalDividerColorDark: '#24262c',
         terminalUseSeparateLightTheme: true,
         terminalThemeLight: 'custom:warp:missing',
-        terminalDividerColorLight: '#d4d4d8',
+        terminalDividerColorLight: '#e3e5ea',
         terminalCustomThemes: []
       },
       false
@@ -238,11 +239,11 @@ describe('resolveEffectiveTerminalAppearance', () => {
   })
 })
 
-describe('default dark terminal theme selection contrast', () => {
+describe('Ghostty Default Style Dark selection contrast', () => {
   it('keeps selection distinct from instruction blocks while preserving readable selected text', () => {
-    const theme = getBuiltinTheme(DEFAULT_TERMINAL_THEME_DARK)
+    const theme = getBuiltinTheme('Ghostty Default Style Dark')
 
-    expect(theme, `${DEFAULT_TERMINAL_THEME_DARK} should exist`).not.toBeNull()
+    expect(theme, 'Ghostty Default Style Dark should exist').not.toBeNull()
 
     const selectionBackground = theme?.selectionBackground
     const selectionForeground = theme?.selectionForeground
@@ -250,7 +251,7 @@ describe('default dark terminal theme selection contrast', () => {
     expect(selectionBackground, 'selectionBackground should be defined').toBeDefined()
     expect(selectionForeground, 'selectionForeground should be defined').toBeDefined()
     if (!selectionBackground || !selectionForeground) {
-      throw new Error(`${DEFAULT_TERMINAL_THEME_DARK} is missing selection colors`)
+      throw new Error('Ghostty Default Style Dark is missing selection colors')
     }
 
     expect(contrastRatio(selectionBackground, INSTRUCTION_BLOCK_BACKGROUND)).toBeGreaterThanOrEqual(
@@ -260,22 +261,79 @@ describe('default dark terminal theme selection contrast', () => {
   })
 })
 
-describe('default light terminal theme ANSI contrast', () => {
+describe('Builtin Tango Light ANSI contrast', () => {
   it('keeps CLI body/header ANSI colors readable on the terminal background', () => {
-    const theme = getBuiltinTheme(DEFAULT_TERMINAL_THEME_LIGHT)
+    const theme = getBuiltinTheme('Builtin Tango Light')
 
-    expect(theme, `${DEFAULT_TERMINAL_THEME_LIGHT} should exist`).not.toBeNull()
+    expect(theme, 'Builtin Tango Light should exist').not.toBeNull()
     if (!theme?.background) {
-      throw new Error(`${DEFAULT_TERMINAL_THEME_LIGHT} is missing a background color`)
+      throw new Error('Builtin Tango Light is missing a background color')
     }
 
     for (const key of ['cyan', 'white', 'brightCyan', 'brightWhite'] as const) {
       const color = theme[key]
-      expect(color, `${DEFAULT_TERMINAL_THEME_LIGHT}.${key} should be defined`).toBeDefined()
+      expect(color, `Builtin Tango Light.${key} should be defined`).toBeDefined()
+      if (!color) {
+        throw new Error(`Builtin Tango Light.${key} is missing`)
+      }
+      expect(contrastRatio(color, theme.background)).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+})
+
+describe('default terminal themes', () => {
+  it('are Quirky Graphite, with dividers that match the graphite border tokens', () => {
+    expect(DEFAULT_TERMINAL_THEME_DARK).toBe('Quirky Graphite Dark')
+    expect(DEFAULT_TERMINAL_THEME_LIGHT).toBe('Quirky Graphite Light')
+    expect(DEFAULT_TERMINAL_DIVIDER_DARK).toBe('#24262c')
+  })
+
+  it('keep selected text readable over the selection tint on an instruction block', () => {
+    const theme = getBuiltinTheme(DEFAULT_TERMINAL_THEME_DARK)
+    const tint = theme?.selectionBackground
+    const foreground = theme?.selectionForeground
+    if (!tint || !foreground) {
+      throw new Error(`${DEFAULT_TERMINAL_THEME_DARK} is missing selection colors`)
+    }
+    const alpha = Number.parseInt(tint.slice(7, 9), 16) / 255
+    const tintRgb = parseHexColor(tint.slice(0, 7))
+    const blockRgb = parseHexColor(INSTRUCTION_BLOCK_BACKGROUND)
+    if (!tintRgb || !blockRgb) {
+      throw new Error('selection colors should parse')
+    }
+    const blended = tintRgb
+      .map((channel, index) => Math.round(channel * alpha + blockRgb[index] * (1 - alpha)))
+      .reduce((hex, channel) => hex + channel.toString(16).padStart(2, '0'), '#')
+
+    expect(contrastRatio(foreground, blended)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('keep the light default readable: text 4.5:1 and every chromatic ANSI 3:1 on white', () => {
+    const theme = getBuiltinTheme(DEFAULT_TERMINAL_THEME_LIGHT)
+    if (!theme?.background || !theme.foreground) {
+      throw new Error(`${DEFAULT_TERMINAL_THEME_LIGHT} is missing base colors`)
+    }
+
+    expect(contrastRatio(theme.foreground, theme.background)).toBeGreaterThanOrEqual(4.5)
+    for (const key of [
+      'red',
+      'green',
+      'yellow',
+      'blue',
+      'magenta',
+      'cyan',
+      'brightRed',
+      'brightGreen',
+      'brightYellow',
+      'brightBlue',
+      'brightMagenta',
+      'brightCyan'
+    ] as const) {
+      const color = theme[key]
       if (!color) {
         throw new Error(`${DEFAULT_TERMINAL_THEME_LIGHT}.${key} is missing`)
       }
-      expect(contrastRatio(color, theme.background)).toBeGreaterThanOrEqual(4.5)
+      expect(contrastRatio(color, theme.background), key).toBeGreaterThanOrEqual(3)
     }
   })
 })
@@ -323,13 +381,13 @@ describe('resolveOpaqueTerminalBackground', () => {
     expect(resolveOpaqueTerminalBackground('#18181b')).toBe('rgb(24 24 27)')
     expect(
       resolveOpaqueTerminalBackground('rgba(255, 255, 255, 0.1)', { appSurface: 'dark' })
-    ).toBe('rgb(35 35 35)')
+    ).toBe('rgb(45 46 50)')
     expect(
       resolveOpaqueTerminalBackground('#ffffff', {
         backgroundOpacity: 0.1,
         appSurface: 'dark'
       })
-    ).toBe('rgb(35 35 35)')
+    ).toBe('rgb(45 46 50)')
   })
 
   it('returns null for unknown color values', () => {

@@ -42,7 +42,7 @@ vi.mock('lucide-react-native', () => ({
 
 vi.mock('../components/ActionSheetModal', () => ({ ActionSheetModal: 'ActionSheetModal' }))
 vi.mock('../components/AgentStateDot', () => ({
-  AGENT_WORKING_COLOR: '#eab308',
+  AGENT_WORKING_COLOR: '#6fb3ff',
   AgentStateDot: 'AgentStateDot'
 }))
 vi.mock('../hooks/use-now', () => ({ useNow: () => 100_000 }))

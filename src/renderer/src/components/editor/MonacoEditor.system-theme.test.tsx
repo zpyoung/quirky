@@ -118,17 +118,17 @@ describe('MonacoEditor system theme', () => {
     const media = installMatchMedia(false)
     renderEditor()
 
-    expect(editorProps.current?.theme).toBe('vs')
+    expect(editorProps.current?.theme).toBe('quirky-graphite-light')
 
     act(() => {
       media.emit(true)
     })
-    expect(editorProps.current?.theme).toBe('vs-dark')
+    expect(editorProps.current?.theme).toBe('quirky-graphite-dark')
 
     act(() => {
       media.emit(false)
     })
-    expect(editorProps.current?.theme).toBe('vs')
+    expect(editorProps.current?.theme).toBe('quirky-graphite-light')
   })
 
   it('keeps an explicit theme when the system color scheme changes', () => {
@@ -136,11 +136,11 @@ describe('MonacoEditor system theme', () => {
     const media = installMatchMedia(true)
     renderEditor()
 
-    expect(editorProps.current?.theme).toBe('vs')
+    expect(editorProps.current?.theme).toBe('quirky-graphite-light')
 
     act(() => {
       media.emit(false)
     })
-    expect(editorProps.current?.theme).toBe('vs')
+    expect(editorProps.current?.theme).toBe('quirky-graphite-light')
   })
 })
