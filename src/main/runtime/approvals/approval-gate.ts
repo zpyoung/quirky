@@ -91,6 +91,10 @@ export class ApprovalGate {
       case 'answered': {
         const answer = envelope.answers[APPROVAL_QUESTION_ID]
         if (answer && 'value' in answer && answer.value === true) {
+          // a client that left mid-prompt must not have its mutation released by a late yes
+          if (signal.aborted) {
+            throw declined(summary)
+          }
           return 'approved'
         }
         throw declined(summary)

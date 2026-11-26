@@ -4,7 +4,10 @@ import {
   type CallerHint
 } from '../../../shared/public-rpc/caller-hint'
 import { classifyMethod } from '../../../shared/public-rpc/method-classification'
-import type { DestructiveSpec } from '../../../shared/public-rpc/public-method-spec'
+import type {
+  ApprovalCategory,
+  DestructiveSpec
+} from '../../../shared/public-rpc/public-method-spec'
 import { publicSpecForMethod } from '../../../shared/public-rpc/public-methods'
 import type { OrchestrationSessionCaller } from '../orchestration/orchestration-caller-identity'
 import type { QuirkyRuntimeService } from '../quirky-runtime'
@@ -14,7 +17,12 @@ import {
   rpcContextFromTransport,
   type RpcDispatchStreamingOptions
 } from './dispatcher-stream-options'
-import { getDestructivePreviewer } from './destructive-previewers'
+import {
+  getDestructivePreviewer,
+  resolveApprovalCategoryForCall,
+  resolveDestructiveForCall
+} from './destructive-previewers'
+import './public-call-resolvers'
 import { PublicRpcError } from './public-rpc-error'
 import type { RpcCallerScope } from './rpc-caller-scope'
 
@@ -78,12 +86,44 @@ export function resolvePublicCaller(
   }
 }
 
-function destructiveSpecFor(method: string): DestructiveSpec | undefined {
+function destructiveSpecFor(method: string, params: unknown): DestructiveSpec | undefined {
+  const resolved = resolveDestructiveForCall(method, params)
+  if (resolved) {
+    return resolved
+  }
   const classification = classifyMethod(method)
   if (classification?.kind === 'public') {
     return classification.spec.destructive
   }
   return classification?.kind === 'unstable' ? classification.destructive : undefined
+}
+
+function approvalCategoryFor(
+  method: string,
+  params: unknown,
+  destructive: DestructiveSpec | undefined
+): ApprovalCategory | undefined {
+  return (
+    resolveApprovalCategoryForCall(method, params) ??
+    publicSpecForMethod(method)?.approvalCategory ??
+    destructive?.category
+  )
+}
+
+/**
+ * Whether an opted-in request can park on a user approval, so the transport knows to keep the
+ * connection alive and hand the gate its disconnect signal. A destructive call only reaches the
+ * approval once confirmed; before that it returns its preview immediately.
+ */
+export function mayAwaitApproval(request: RpcRequest): boolean {
+  if (request.publicContract !== 1) {
+    return false
+  }
+  const destructive = destructiveSpecFor(request.method, request.params)
+  if (destructive && request.confirm !== true) {
+    return false
+  }
+  return approvalCategoryFor(request.method, request.params, destructive) !== undefined
 }
 
 async function previewEffects(method: string, params: unknown, ctx: RpcContext): Promise<string[]> {
@@ -168,7 +208,7 @@ async function admitPublicCall<M extends RpcMethod | RpcStreamingMethod>(
   const hint = readCallerHint(request.caller)
   const publicCaller = resolvePublicCaller(callerScope, options?.pairedDeviceId, hint)
   const spec = publicSpecForMethod(request.method)
-  const destructive = optedIn ? destructiveSpecFor(request.method) : undefined
+  const destructive = optedIn ? destructiveSpecFor(request.method, params) : undefined
   const confirmed = request.confirm === true
   const context = (): RpcContext => ({
     ...rpcContextFromTransport(runtime, request, options, orchestrationCaller),
@@ -188,7 +228,7 @@ async function admitPublicCall<M extends RpcMethod | RpcStreamingMethod>(
 
   const summary = spec?.summary ?? request.method
   const worktreeId = worktreeIdOf(params, publicCaller)
-  const category = optedIn ? (spec?.approvalCategory ?? destructive?.category) : undefined
+  const category = optedIn ? approvalCategoryFor(request.method, params, destructive) : undefined
   if (category && runtime.approvalGate.policyFor(category) === 'ask') {
     const effects = destructive ? await previewEffects(request.method, params, context()) : []
     const terminalHandle = hint.terminalHandle
