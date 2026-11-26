@@ -15,6 +15,7 @@ import { hasActivityThreadWorkspace } from './activity-thread-actions'
 import { useActivityThreadActionBindings } from './use-activity-thread-action-bindings'
 import { ActivityThreadListPane } from './activity-thread-list-pane'
 import { ActivityThreadDetailPane } from './activity-thread-detail-pane'
+import { AgentApiActivityTrail } from './AgentApiActivityTrail'
 import {
   otherActivityTerminalSlot,
   useActivityTerminalLoadingLabel,
@@ -363,6 +364,7 @@ export default function ActivityPrototypePage(): React.JSX.Element {
           visibleThreadCount={visibleThreads.length}
         />
       </main>
+      <AgentApiActivityTrail />
     </div>
   )
 }
