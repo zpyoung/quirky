@@ -91,13 +91,32 @@ export function resolveHoveredWorkspaceDeleteTarget(
     : null
 }
 
+function defaultDeleteDependencies(): HoveredWorkspaceDeleteDependencies {
+  return { deleteWorktree: runWorktreeDelete, getCurrentState: useAppStore.getState }
+}
+
 export function deleteHoveredWorkspaceImmediately(
   state: HoveredWorkspaceDeleteState,
   target: HoveredWorkspaceDeleteTarget | null = resolveHoveredWorkspaceDeleteTarget(state),
-  dependencies: HoveredWorkspaceDeleteDependencies = {
-    deleteWorktree: runWorktreeDelete,
-    getCurrentState: useAppStore.getState
-  }
+  dependencies: HoveredWorkspaceDeleteDependencies = defaultDeleteDependencies()
+): boolean {
+  return deleteWorkspaceTarget(state, target, dependencies, false)
+}
+
+/** Deletes a workspace the caller already confirmed, so it never opens the confirmation modal. */
+export function deleteConfirmedWorkspace(
+  state: HoveredWorkspaceDeleteState,
+  target: HoveredWorkspaceDeleteTarget,
+  dependencies: HoveredWorkspaceDeleteDependencies = defaultDeleteDependencies()
+): boolean {
+  return deleteWorkspaceTarget(state, target, dependencies, true)
+}
+
+function deleteWorkspaceTarget(
+  state: HoveredWorkspaceDeleteState,
+  target: HoveredWorkspaceDeleteTarget | null,
+  dependencies: HoveredWorkspaceDeleteDependencies,
+  confirmed: boolean
 ): boolean {
   if (!target) {
     return false
@@ -126,6 +145,7 @@ export function deleteHoveredWorkspaceImmediately(
     return true
   }
   dependencies.deleteWorktree(target.worktree.id, {
+    ...(confirmed ? { confirmed: true } : {}),
     expectedInstanceId: target.worktree.instanceId,
     ...(target.worktree.hostId ? { expectedHostId: target.worktree.hostId } : {})
   })

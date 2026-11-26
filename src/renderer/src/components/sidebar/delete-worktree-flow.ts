@@ -25,13 +25,21 @@ import {
 
 export { runWorktreeDeletesInParallel, runWorktreeDeleteWithToast }
 
+export type RunWorktreeDeleteOptions = WorktreeDeleteOptions & {
+  /** The caller already confirmed the delete, so the confirmation modal is skipped. */
+  confirmed?: boolean
+}
+
 /**
  * Shared funnel for the standard (non-folder) delete decision tree (WorktreeContextMenu,
  * MemoryStatusSegment); branches on the `skipDeleteWorktreeConfirm` preference.
  *
  * The missing-record and instance guards reject stale actions after concurrent state changes.
  */
-export function runWorktreeDelete(worktreeId: string, options: WorktreeDeleteOptions = {}): void {
+export function runWorktreeDelete(
+  worktreeId: string,
+  options: RunWorktreeDeleteOptions = {}
+): void {
   const state = useAppStore.getState()
   // Why (STA-4343): the id-keyed map keeps one row per `repoId::path`, so a caller
   // acting on a specific sidebar row has to name that row's host — otherwise
@@ -100,7 +108,7 @@ export function runWorktreeDelete(worktreeId: string, options: WorktreeDeleteOpt
   )
   const hasLineageChildren = deleteLineage.descendants.length > 0
   const skipConfirm = state.settings?.skipDeleteWorktreeConfirm ?? false
-  if (skipConfirm && !hasLineageChildren) {
+  if (options.confirmed || (skipConfirm && !hasLineageChildren)) {
     void runWorktreeDeleteWithToast(toWorktreeRemovalTarget(target), target.displayName)
     return
   }

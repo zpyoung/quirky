@@ -7,16 +7,18 @@ import { requestPdfZoom } from '@/components/editor/pdf-zoom-request'
 import { resolveZoomTarget } from '../hooks/resolve-zoom-target'
 import { useAppStore } from '../store'
 import { stepUIZoomLevel } from '../../../shared/ui-zoom-level'
+import type { AppCommandSource } from '@/lib/app-command-dispatch'
 import type { KeybindingActionId } from '../../../shared/keybindings'
+
+function currentZoomTarget(): ReturnType<typeof resolveZoomTarget> {
+  const { activeView, activeTabType } = useAppStore.getState()
+  return resolveZoomTarget({ activeView, activeTabType, activeElement: document.activeElement })
+}
 
 function applyZoomCommand(direction: 'in' | 'out' | 'reset'): void {
   const store = useAppStore.getState()
-  const { activeView, activeTabType, editorFontZoomLevel, setEditorFontZoomLevel, settings } = store
-  const target = resolveZoomTarget({
-    activeView,
-    activeTabType,
-    activeElement: document.activeElement
-  })
+  const { editorFontZoomLevel, setEditorFontZoomLevel, settings } = store
+  const target = currentZoomTarget()
   if (target === 'chat') {
     void writeNativeChatFontSize(
       direction === 'in' ? 'increase' : direction === 'out' ? 'decrease' : 'reset'
@@ -46,15 +48,35 @@ function applyZoomCommand(direction: 'in' | 'out' | 'reset'): void {
 }
 
 type ZoomCommandContext = {
+  options: { source?: AppCommandSource }
+  decline: (actionId: KeybindingActionId, reason: string) => false
   claim: (actionId: KeybindingActionId, run: () => void) => boolean
 }
 
-/** Zoom acts on whichever surface has focus, so it always claims. */
+type ZoomActionId = 'zoom.in' | 'zoom.out' | 'zoom.reset'
+
+/**
+ * Zoom acts on whichever surface has focus. A focused terminal zooms itself through the window
+ * menu's IPC, which a remote caller cannot trigger, so an RPC request declines rather than claim
+ * a change that never happens; the probe and the run take the same branch.
+ */
+function zoomCommand(
+  actionId: ZoomActionId,
+  direction: 'in' | 'out' | 'reset'
+): (context: ZoomCommandContext) => () => boolean {
+  return (context) => () => {
+    if (context.options.source === 'rpc' && currentZoomTarget() === 'terminal') {
+      return context.decline(
+        actionId,
+        'a terminal has focus and its font zoom is not remotely drivable'
+      )
+    }
+    return context.claim(actionId, () => applyZoomCommand(direction))
+  }
+}
+
 export const ZOOM_COMMAND_FACTORIES = {
-  'zoom.in': (context: ZoomCommandContext) => () =>
-    context.claim('zoom.in', () => applyZoomCommand('in')),
-  'zoom.out': (context: ZoomCommandContext) => () =>
-    context.claim('zoom.out', () => applyZoomCommand('out')),
-  'zoom.reset': (context: ZoomCommandContext) => () =>
-    context.claim('zoom.reset', () => applyZoomCommand('reset'))
+  'zoom.in': zoomCommand('zoom.in', 'in'),
+  'zoom.out': zoomCommand('zoom.out', 'out'),
+  'zoom.reset': zoomCommand('zoom.reset', 'reset')
 }

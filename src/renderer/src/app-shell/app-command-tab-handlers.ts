@@ -9,9 +9,11 @@ import {
   findFolderWorkspaceOwner,
   getExecutionHostIdForFolderWorkspace
 } from '@/lib/folder-workspace-runtime-owner'
-import { getAllWorktreesFromState } from '@/store/selectors'
+import { getAllWorktreesFromState, getRepoMapFromState } from '@/store/selectors'
 import type { HoveredWorkspaceDeleteTarget } from '../components/sidebar/hovered-workspace-delete'
 import { getDeleteStateForWorktreeHost } from '../components/sidebar/worktree-delete-state-host-match'
+import type { Worktree } from '../../../shared/worktree/types'
+import { getWorktreeExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { canLaunchAgentInNewTab } from '@/lib/launch-agent-in-new-tab-check'
@@ -42,10 +44,15 @@ export type TabCommandContext = {
   requireActiveWorkspace: (actionId: KeybindingActionId) => string | null
 }
 
-/** An RPC delete names its workspace; unlike the shortcut it never falls back to the hovered row. */
+/**
+ * An RPC delete names its workspace; unlike the shortcut it never falls back to the hovered row.
+ * A workspace id repeats across hosts, so `hostId` picks the copy, and an id that several hosts
+ * publish with no host given declines instead of picking one.
+ */
 export function resolveExplicitWorkspaceDeleteTarget(
   store: AppStoreState,
-  workspaceId: string
+  workspaceId: string,
+  hostId?: ExecutionHostId
 ): { target: HoveredWorkspaceDeleteTarget } | { reason: string } {
   const scope = parseWorkspaceKey(workspaceId)
   const folderWorkspaceId =
@@ -68,9 +75,24 @@ export function resolveExplicitWorkspaceDeleteTarget(
     }
   }
   const worktreeId = scope?.type === 'worktree' ? scope.worktreeId : workspaceId
-  const worktree = getAllWorktreesFromState(store).find((candidate) => candidate.id === worktreeId)
+  const repoMap = getRepoMapFromState(store)
+  const hostOf = (candidate: Worktree): ExecutionHostId =>
+    getWorktreeExecutionHostId(candidate, repoMap.get(candidate.repoId))
+  const sameId = getAllWorktreesFromState(store).filter((candidate) => candidate.id === worktreeId)
+  const candidates = hostId ? sameId.filter((candidate) => hostOf(candidate) === hostId) : sameId
+  const hosts = [...new Set(candidates.map(hostOf))].toSorted()
+  if (hosts.length > 1) {
+    return {
+      reason: `workspace ${workspaceId} exists on several hosts (${hosts.join(', ')}); name one`
+    }
+  }
+  const worktree = candidates[0]
   if (!worktree) {
-    return { reason: `workspace ${workspaceId} was not found` }
+    return {
+      reason: hostId
+        ? `workspace ${workspaceId} was not found on host ${hostId}`
+        : `workspace ${workspaceId} was not found`
+    }
   }
   if (worktree.isMainWorktree) {
     return { reason: 'the main worktree cannot be deleted' }
@@ -212,13 +234,22 @@ const TAB_FACTORIES: Partial<Record<KeybindingActionId, TabCommandFactory>> = {
     if (worktreeId === null) {
       return false
     }
-    return context.claim('tab.reopenClosed', () => {
-      try {
-        useAppStore.getState().reopenClosedTab(worktreeId)
-      } catch (error) {
-        showClientCreationActionError(error)
-      }
-    })
+    return context.claimWhen(
+      'tab.reopenClosed',
+      {
+        check: () =>
+          (useAppStore.getState().recentlyClosedTabKindsByWorktree[worktreeId]?.length ?? 0) > 0,
+        run: () => {
+          try {
+            return useAppStore.getState().reopenClosedTab(worktreeId)
+          } catch (error) {
+            showClientCreationActionError(error)
+            return true
+          }
+        }
+      },
+      `no recently closed tab to reopen in workspace ${worktreeId}`
+    )
   },
   'tab.openQuickCommandsMenu': (context) => () =>
     context.claim('tab.openQuickCommandsMenu', () =>
