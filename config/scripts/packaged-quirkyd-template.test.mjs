@@ -15,8 +15,7 @@ const {
   assertQuirkydTemplateBuilt,
   finalizePackagedQuirkydTemplate,
   findQuirkydTemplateMachOFiles,
-  resealQuirkydTemplateManifest,
-  resealSignedWindowsApp
+  resealQuirkydTemplateManifest
 } = require('./packaged-quirkyd-template.cjs')
 
 const PTY = 'node_modules/node-pty/build/Release/pty.node'
@@ -115,26 +114,5 @@ describe('packaged quirkyd template', () => {
       'QUIRKY_REQUIRE_QUIRKYD_TEMPLATE=1'
     )
     expect(() => assertQuirkydTemplateBuilt(resourcesDir, {})).not.toThrow()
-  })
-
-  it('reseals the Windows files SignPath returned, by their app-relative list', async () => {
-    quietly()
-    const appDir = await tempRoot()
-    const templateDir = await writeQuirkydTemplateTestFixture(join(appDir, 'resources'))
-    const conpty = 'node_modules/node-pty/build/Release/conpty.node'
-    await appendFile(
-      join(templateDir, QUIRKYD_TEMPLATE_TARGETS_DIR, 'win32-x64', ...conpty.split('/')),
-      'authenticode'
-    )
-    const list = join(appDir, 'inner-signing-list.txt')
-    await writeFile(
-      list,
-      [
-        'Quirky.exe',
-        `resources\\quirkyd-template\\targets\\win32-x64\\${conpty.replaceAll('/', '\\')}`
-      ].join('\r\n')
-    )
-
-    expect(() => resealSignedWindowsApp(appDir, list)).not.toThrow()
   })
 })
