@@ -28,7 +28,7 @@ import {
   AskSubscribeParams,
   AskUpdatePartialParams,
   AskWaitParams
-} from './ask-schemas'
+} from '../../../../../shared/rpc-contract/ask-params'
 
 function buildNoUiUnavailableReason(attribution: AskAttribution): string {
   return attribution.anyIdentityClaimed

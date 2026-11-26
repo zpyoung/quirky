@@ -74,6 +74,15 @@ import {
   AntigravityChatSignInFlowParams
 } from './antigravity-accounts-params'
 import {
+  AskAnswerParams,
+  AskCancelParams,
+  AskRegisterParams,
+  AskSnapshotParams,
+  AskSubscribeParams,
+  AskUpdatePartialParams,
+  AskWaitParams
+} from './ask-params'
+import {
   AutomationCreate,
   AutomationId,
   AutomationList,
@@ -735,6 +744,13 @@ export const RPC_PARAMS_BY_METHOD = {
   'aiVault.searchSessions': AiVaultSearchRequestSchema,
   'aiVault.searchStatus': AiVaultSearchStatusRequestSchema,
   'aiVault.setSearchEnabled': AiVaultSetSearchEnabledParamsSchema,
+  'ask.answer': AskAnswerParams,
+  'ask.cancel': AskCancelParams,
+  'ask.register': AskRegisterParams,
+  'ask.snapshot': AskSnapshotParams,
+  'ask.subscribe': AskSubscribeParams,
+  'ask.updatePartial': AskUpdatePartialParams,
+  'ask.wait': AskWaitParams,
   'automation.create': AutomationCreate,
   'automation.delete': AutomationId,
   'automation.list': AutomationList,
@@ -1380,13 +1396,6 @@ export const RPC_PARAMS_BY_METHOD = {
 // Why: these methods bind a schema the shared contract cannot hold because its value
 // graph reaches into src/main. Listing them keeps the gap visible instead of absent.
 export const RPC_METHODS_WITHOUT_SHARED_PARAMS: readonly string[] = [
-  'ask.answer',
-  'ask.cancel',
-  'ask.register',
-  'ask.snapshot',
-  'ask.subscribe',
-  'ask.updatePartial',
-  'ask.wait',
   'emulator.install',
   'heimdall:approve',
   'heimdall:debugReport',

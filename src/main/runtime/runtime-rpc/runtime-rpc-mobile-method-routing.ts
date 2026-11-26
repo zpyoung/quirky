@@ -6,6 +6,12 @@ import { PAIRED_DESKTOP_METHODS } from './runtime-rpc-mobile-paired-desktop-meth
 export type MobileRpcMethodRoute = 'execution-host' | 'paired-desktop'
 
 export const EXECUTION_HOST_METHODS = [
+  // Asks belong to the host whose terminal the agent runs in.
+  'ask.answer',
+  'ask.cancel',
+  'ask.snapshot',
+  'ask.subscribe',
+  'ask.updatePartial',
   'ui.getJiraQuickFilters',
   'ui.setJiraQuickFilters',
   'ui.getJiraSavedFilters',

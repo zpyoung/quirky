@@ -1,7 +1,12 @@
 // Why: the desktop host, the push gateway, and the phone must agree on these
 // exact strings. See cloud/packages/push-contract/src.
 
-export const MOBILE_PUSH_SOURCES = ['agent-task-complete', 'terminal-bell', 'plugin'] as const
+export const MOBILE_PUSH_SOURCES = [
+  'agent-task-complete',
+  'terminal-bell',
+  'plugin',
+  'pending-ask'
+] as const
 export type MobilePushSource = (typeof MOBILE_PUSH_SOURCES)[number]
 
 // The only two states a phone can be told about; the host maps its richer
