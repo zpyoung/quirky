@@ -33,6 +33,7 @@ import { LoopCreateInputSchema } from '../fork-loops/loop-types'
 import { HostAccountLaunchEnvParams } from '../host-account-launch-env'
 import { MobileWebBundleChunkParamsSchema } from '../mobile-web-bundle/bundle-rpc-contract'
 import { pluginConsentRequestSchema } from '../plugins/plugin-consent-request'
+import { EventsSubscribeParams, EventsUnsubscribeParams } from '../public-rpc/public-methods/events'
 import { QuirkydMigrationBlobChunkRequestSchema } from '../quirkyd-migration/quirkyd-migration-blob-transfer'
 import { QuirkydMigrationSnapshotChunkRequestSchema } from '../quirkyd-migration/quirkyd-migration-scrollback'
 import { QuirkydTerminalCensusParamsSchema } from '../quirkyd-terminal-census'
@@ -874,6 +875,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'emulator.tap': TapParams,
   'emulator.type': TypeParams,
   'emulator.unregisterActive': EmulatorUnregisterActiveParams,
+  'events.subscribe': EventsSubscribeParams,
+  'events.unsubscribe': EventsUnsubscribeParams,
   'files.browseServerDir': ServerDirectoryBrowse,
   'files.commitUpload': FileCommitUpload,
   'files.copy': FileCopy,
