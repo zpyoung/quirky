@@ -76,6 +76,26 @@ describe('ask.* RPC methods', () => {
     })
   })
 
+  describe('wait concurrency gate', () => {
+    it('answers a wait on an already-resolved ask even while every gate slot is parked', async () => {
+      const pending = await Promise.all(
+        [1, 2, 3, 4].map((n) => registerOnCapablePane(h, `req_parked_${n}`))
+      )
+      const resolved = await registerOnCapablePane(h, 'req_resolved')
+      await h.call('ask.cancel', { askId: resolved.askId })
+      const controller = new AbortController()
+      const parked = pending.map(({ askId }) =>
+        h.call('ask.wait', { askId, chunkMs: 60_000 }, { signal: controller.signal })
+      )
+
+      const envelope = await h.call('ask.wait', { askId: resolved.askId, chunkMs: 1000 })
+
+      expect(envelope).toMatchObject({ status: 'declined', askId: resolved.askId })
+      controller.abort()
+      await Promise.all(parked)
+    })
+  })
+
   describe('abort-signal release', () => {
     it('a mid-chunk abort resolves pending without touching the ask, so a later wait resumes it', async () => {
       const { askId } = await registerOnCapablePane(h)

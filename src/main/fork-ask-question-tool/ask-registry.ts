@@ -227,7 +227,8 @@ export class AskRegistry {
 
   /** Resolves every pending ask of a closed pane as `unavailable`, queued ones included, since no card can ever show them. */
   resolvePaneClosed(paneKey: string): void {
-    for (const askId of this.paneQueue.all(paneKey)) {
+    // tail first, so resolving the head never promotes an ask that is about to close too
+    for (const askId of this.paneQueue.all(paneKey).toReversed()) {
       const live = this.live.get(askId)
       if (live) {
         this.commitUnavailable(live, 'the pane that asked was closed')

@@ -484,8 +484,13 @@ describe('AskRegistry', () => {
         requestId: 'req_3'
       })
 
+      const events: string[] = []
+      registry.onAskChanged((event) => events.push(`${event.askId}:${event.status}`))
+
       registry.resolvePaneClosed('pane:1')
 
+      // the queued ask must not flash up as the new head before it too resolves
+      expect(events).not.toContain(`${queued.askId}:registered`)
       for (const askId of [head.askId, queued.askId]) {
         const envelope = await registry.waitChunk(askId, 0, new AbortController().signal)
         expect(envelope).toMatchObject({
