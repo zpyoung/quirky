@@ -275,7 +275,6 @@
 3 src/renderer/src/lib/http-link-routing.ts
 1 src/renderer/src/lib/launch-agent-background-session.ts
 1 src/renderer/src/lib/launch-agent-execution-context.ts
-1 src/renderer/src/lib/launch-agent-in-new-tab-check.ts
 2 src/renderer/src/lib/launch-agent-in-new-tab.ts
 2 src/renderer/src/lib/launch-agent-web-host-tab.ts
 2 src/renderer/src/lib/launch-ai-vault-session.ts

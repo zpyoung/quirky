@@ -1,10 +1,7 @@
-import { getConnectionIdFromState } from '@/lib/connection-context'
 import {
-  refineLocalLaunchPlatform,
-  resolveExecutionHostAgentStartupShell,
-  resolveWorktreeExecutionHostPlatform
-} from '@/lib/execution-host-facts'
-import type { AgentLaunchExecutionContext } from '@/lib/launch-agent-execution-context'
+  peekAgentLaunchExecutionContext,
+  type AgentLaunchExecutionContext
+} from '@/lib/launch-agent-execution-context'
 import { planLaunchAgentStartupPrompt } from '@/lib/launch-agent-startup-prompt-plan'
 import type { useAppStore } from '@/store'
 import type { SessionOptionValue } from '../../../shared/native-chat-session-options'
@@ -17,35 +14,6 @@ import {
 type AppStoreState = ReturnType<typeof useAppStore.getState>
 
 export type AgentLaunchStartupBase = Parameters<typeof planLaunchAgentStartupPrompt>[0]['base']
-
-/**
- * Where a new-tab launch would run, without telling the user when the host's OS is unknown.
- * `null` matches `resolveAgentLaunchExecutionContext` returning null.
- */
-export function peekAgentLaunchExecutionContext(
-  store: AppStoreState,
-  args: { worktreeId: string; launchPlatform?: NodeJS.Platform }
-): AgentLaunchExecutionContext | null {
-  const worktreeSshConnectionId = getConnectionIdFromState(store, args.worktreeId)
-  const workspacePath = (
-    store.getKnownWorktreeById?.(args.worktreeId) ??
-    store.allWorktrees?.().find((entry) => entry.id === args.worktreeId)
-  )?.path
-  const fact = resolveWorktreeExecutionHostPlatform(store, args.worktreeId, workspacePath)
-  if (fact.kind === 'withheld') {
-    return null
-  }
-  const launchHost = refineLocalLaunchPlatform(fact, args.launchPlatform)
-  return {
-    worktreeSshConnectionId,
-    resolvedLaunchPlatform: launchHost.platform,
-    isRemote: Boolean(worktreeSshConnectionId),
-    queuedShell: resolveExecutionHostAgentStartupShell(
-      launchHost,
-      store.settings?.terminalWindowsShell
-    )
-  }
-}
 
 /** The inputs the launch command is built from, shared by the launch and its availability check. */
 export function buildAgentLaunchStartupBase(
@@ -84,10 +52,11 @@ export function canLaunchAgentInNewTab(
   store: AppStoreState,
   args: { agent: TuiAgent; worktreeId: string }
 ): boolean {
-  const executionContext = peekAgentLaunchExecutionContext(store, { worktreeId: args.worktreeId })
-  if (!executionContext) {
+  const peek = peekAgentLaunchExecutionContext(store, { worktreeId: args.worktreeId })
+  if (peek.kind === 'withheld') {
     return false
   }
+  const executionContext = peek.context
   const { startupPlan } = planLaunchAgentStartupPrompt({
     base: buildAgentLaunchStartupBase(store, { agent: args.agent, executionContext }),
     prompt: '',
