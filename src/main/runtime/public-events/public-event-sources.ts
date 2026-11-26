@@ -40,6 +40,19 @@ type PublicEventSourceDeps = {
 }
 
 /**
+ * Runs one tap's attach step so a failure costs only that tap: the bus is an observer and must
+ * never stop the runtime from starting. A missing source or a throw yields a no-op detach.
+ */
+function attachIsolated(name: string, attach: () => (() => void) | null): () => void {
+  try {
+    return attach() ?? (() => {})
+  } catch (error) {
+    console.warn(`[public-events] ${name} tap could not attach`, error)
+    return () => {}
+  }
+}
+
+/**
  * Turns each runtime signal an agent might wait on into a public event. A chat's status edges
  * become turn.started and turn.needs-input; its turn completions become turn.finished or
  * turn.failed. Returns a function that detaches every tap.
@@ -49,73 +62,81 @@ function tapAgentSessionHost(host: AgentSessionHostTaps, bus: PublicEventBus): (
   const needsInputPublished = new Set<string>()
   const publish = (input: PublicEventInput): void => bus.publish(input)
 
-  const stopStatus = host.subscribeStatus({
-    id: STATUS_SUBSCRIBER_ID,
-    emit: (event) => {
-      if (event.type === 'snapshot') {
-        for (const session of event.sessions) {
-          statuses.set(session.sessionId, session.status)
-        }
-        return
-      }
-      if (event.type === 'end') {
-        return
-      }
-      const { sessionId, workspaceId, status } = event.session
-      const previous = statuses.get(sessionId)
-      statuses.set(sessionId, status)
-      if (status === previous) {
-        return
-      }
-      if (status !== 'attention') {
-        needsInputPublished.delete(sessionId)
-      }
-      if (status === 'working') {
-        publish({
-          topic: 'chat',
-          type: 'turn.started',
-          data: { sessionId, worktreeId: workspaceId }
-        })
-      }
-      if (status === 'attention') {
-        // the prompt edge lands in the same tick with its request id; only publish bare when it does not
-        queueMicrotask(() => {
-          if (statuses.get(sessionId) !== 'attention' || needsInputPublished.has(sessionId)) {
-            return
+  const stopStatus = attachIsolated('chat status', () =>
+    typeof host.subscribeStatus !== 'function'
+      ? null
+      : host.subscribeStatus({
+          id: STATUS_SUBSCRIBER_ID,
+          emit: (event) => {
+            if (event.type === 'snapshot') {
+              for (const session of event.sessions) {
+                statuses.set(session.sessionId, session.status)
+              }
+              return
+            }
+            if (event.type === 'end') {
+              return
+            }
+            const { sessionId, workspaceId, status } = event.session
+            const previous = statuses.get(sessionId)
+            statuses.set(sessionId, status)
+            if (status === previous) {
+              return
+            }
+            if (status !== 'attention') {
+              needsInputPublished.delete(sessionId)
+            }
+            if (status === 'working') {
+              publish({
+                topic: 'chat',
+                type: 'turn.started',
+                data: { sessionId, worktreeId: workspaceId }
+              })
+            }
+            if (status === 'attention') {
+              // the prompt edge lands in the same tick with its request id; only publish bare when it does not
+              queueMicrotask(() => {
+                if (statuses.get(sessionId) !== 'attention' || needsInputPublished.has(sessionId)) {
+                  return
+                }
+                needsInputPublished.add(sessionId)
+                publish({
+                  topic: 'chat',
+                  type: 'turn.needs-input',
+                  data: { sessionId, worktreeId: workspaceId }
+                })
+              })
+            }
           }
-          needsInputPublished.add(sessionId)
-          publish({
-            topic: 'chat',
-            type: 'turn.needs-input',
-            data: { sessionId, worktreeId: workspaceId }
-          })
         })
-      }
-    }
-  })
+  )
 
-  const stopCompletions = host.subscribeTurnCompletions({
-    id: COMPLETION_SUBSCRIBER_ID,
-    includePrompts: true,
-    emit: (event) => {
-      if (event.type === 'completion') {
-        const { sessionId, turnId, outcome, scope } = event.completion
-        publish({
-          topic: 'chat',
-          type: outcome === 'failure' ? 'turn.failed' : 'turn.finished',
-          data: { sessionId, turnId, outcome, worktreeId: scope.workspaceId }
+  const stopCompletions = attachIsolated('chat completions', () =>
+    typeof host.subscribeTurnCompletions !== 'function'
+      ? null
+      : host.subscribeTurnCompletions({
+          id: COMPLETION_SUBSCRIBER_ID,
+          includePrompts: true,
+          emit: (event) => {
+            if (event.type === 'completion') {
+              const { sessionId, turnId, outcome, scope } = event.completion
+              publish({
+                topic: 'chat',
+                type: outcome === 'failure' ? 'turn.failed' : 'turn.finished',
+                data: { sessionId, turnId, outcome, worktreeId: scope.workspaceId }
+              })
+            } else if (event.type === 'prompt') {
+              const { sessionId, promptId, scope } = event.prompt
+              needsInputPublished.add(sessionId)
+              publish({
+                topic: 'chat',
+                type: 'turn.needs-input',
+                data: { sessionId, requestId: promptId, worktreeId: scope.workspaceId }
+              })
+            }
+          }
         })
-      } else if (event.type === 'prompt') {
-        const { sessionId, promptId, scope } = event.prompt
-        needsInputPublished.add(sessionId)
-        publish({
-          topic: 'chat',
-          type: 'turn.needs-input',
-          data: { sessionId, requestId: promptId, worktreeId: scope.workspaceId }
-        })
-      }
-    }
-  })
+  )
 
   return () => {
     stopStatus()
@@ -139,8 +160,15 @@ function followAgentSessionHost(bus: PublicEventBus): () => void {
     attachedHost = host
     detach = host ? tapAgentSessionHost(host, bus) : () => {}
   }
-  attach()
-  const stopWatching = onStructuredAgentSessionsHeldChanged(attach)
+  const stopWatching = attachIsolated('chat host', () => {
+    attach()
+    return onStructuredAgentSessionsHeldChanged(() => {
+      attachIsolated('chat host', () => {
+        attach()
+        return null
+      })
+    })
+  })
   return () => {
     stopWatching()
     detach()

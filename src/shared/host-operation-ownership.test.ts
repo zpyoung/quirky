@@ -16,6 +16,8 @@ describe('getHostOperationOwnership', () => {
     expect(getHostOperationOwnership('desktopBrowserBridge.result')).toBe('host')
     expect(getHostOperationOwnership('terminal.subscribe')).toBe('stream')
     expect(getHostOperationOwnership('files.unwatch')).toBe('stream')
+    expect(getHostOperationOwnership('events.subscribe')).toBe('stream')
+    expect(getHostOperationOwnership('events.unsubscribe')).toBe('stream')
     expect(getHostOperationOwnership('session.tabs.subscribeAll')).toBe('stream')
     expect(getHostOperationOwnership('accounts.list')).toBe('host')
     expect(getHostOperationOwnership('github.prChecks')).toBe('credential')

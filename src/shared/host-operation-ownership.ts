@@ -30,6 +30,7 @@ export const HOST_OPERATION_OWNERSHIP = {
   desktopBrowserBridge: 'host',
   diagnostics: 'host',
   emulator: 'host',
+  events: 'host',
   files: 'host',
   folderWorkspace: 'host',
   git: 'host',

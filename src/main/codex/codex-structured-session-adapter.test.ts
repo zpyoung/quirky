@@ -148,6 +148,7 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
         // A user's `inherit = "core"` policy would strip these from every command the chat runs.
         config: {
           'shell_environment_policy.set.QUIRKY_AGENT_SESSION_ID': 'session-1',
+          'shell_environment_policy.set.QUIRKY_OUTPUT': 'json',
           'shell_environment_policy.set.QUIRKY_STRUCTURED_SESSION': '1',
           'shell_environment_policy.set.QUIRKY_CLI_COMMAND': expect.stringMatching(
             /^[^:;]*[\\/]cli[\\/]bin[\\/]quirky-dev$/
