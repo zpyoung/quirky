@@ -65,6 +65,8 @@ import { AGENT_LAUNCH_METHODS } from './agent-launch'
 import { ASK_METHODS } from './fork-ask-question-tool/ask'
 import { HEIMDALL_METHODS } from './fork-heimdall/heimdall'
 import { LOOPS_METHODS } from './fork-loops/loops'
+import { PUBLIC_EVENT_METHODS } from './public-events'
+import { UI_ACTION_METHODS } from './ui-actions'
 import {
   LAYOUT_APPLY_METHODS,
   LAYOUT_VIEW_REPORT_METHODS,
@@ -141,6 +143,8 @@ export const ALL_RPC_METHODS = [
   ...RUNTIME_CLIENT_CAPABILITY_METHODS,
   ...CLIENT_EVENT_METHODS,
   ...CLIENT_UI_METHODS,
+  ...UI_ACTION_METHODS,
+  ...PUBLIC_EVENT_METHODS,
   ...EMULATOR_METHODS,
   ...PAIRING_METHODS,
   ...MOBILE_PROJECT_SECTIONS_METHODS,
