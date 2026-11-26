@@ -17,6 +17,7 @@ import {
 } from '../components/sidebar/child-workspaces-toggle-target'
 import { requestTerminalTabRename } from '../components/tab-bar/terminal-tab-rename-request'
 import {
+  deleteConfirmedWorkspace,
   deleteHoveredWorkspaceImmediately,
   resolveHoveredWorkspaceDeleteTarget
 } from '../components/sidebar/hovered-workspace-delete'
@@ -24,6 +25,7 @@ import { useAppStore } from '../store'
 import { hasUnsentDiffNotesForActiveWorktree } from '../store/slices/ui/ui-slice-agent-actions'
 import type { usePluginCommands } from '@/store/plugin-panels'
 import { isGitRepoKind } from '../../../shared/repo-kind'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   isKeybindingActionId,
   type KeybindingActionId,
@@ -78,6 +80,8 @@ export type AppCommandHandlerOptions = {
   source?: AppCommandSource
   /** Workspace named by an RPC caller. */
   worktreeId?: string
+  /** Host that owns `worktreeId` when several hosts publish the same workspace id. */
+  hostId?: ExecutionHostId
   /** Answer whether the handler would claim, without running it. */
   probeOnly?: boolean
   /** Receives why a handler declined, keyed by action id. */
@@ -307,12 +311,17 @@ const STORE_FACTORIES: Partial<Record<KeybindingActionId, HandlerFactory>> = {
           'workspace.delete requires an explicit workspace'
         )
       }
-      const resolved = resolveExplicitWorkspaceDeleteTarget(store, context.options.worktreeId)
+      const resolved = resolveExplicitWorkspaceDeleteTarget(
+        store,
+        context.options.worktreeId,
+        context.options.hostId
+      )
       if ('reason' in resolved) {
         return context.decline('workspace.delete', resolved.reason)
       }
+      // the public gate already handled preview, --yes and approval, so the legacy confirm modal must not reopen
       return context.claim('workspace.delete', () => {
-        deleteHoveredWorkspaceImmediately(store, resolved.target)
+        deleteConfirmedWorkspace(store, resolved.target)
       })
     }
     if (context.floatingWorkspaceFocused) {
