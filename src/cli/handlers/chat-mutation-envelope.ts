@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { RuntimeClient } from '../runtime/client'
 import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime/types'
+import type { PublicEvent } from '../../shared/public-rpc/public-events'
 import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
 import { readCallerHintFromEnv } from '../../shared/public-rpc/caller-hint'
 import {
@@ -139,11 +140,24 @@ function turnIdOfMessage(
     : null
 }
 
+/** Resolves to `promise`'s value, or to null once `ms` elapse or it rejects; the late result is dropped. */
+async function settleWithin<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise.catch(() => null),
+      new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), Math.max(0, ms))))
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /**
  * Polls the journal until the turn that answers `clientMessageId` exists, `budgetMs` elapses or
  * `stopped` reports true. The host accepts a send before it opens the turn, so the send result
- * cannot carry the turn id. Null when none appeared: a read that fails counts as not yet, because
- * the message is already accepted and must not be sent again.
+ * cannot carry the turn id. Null when none appeared: a read that fails or outlasts the budget
+ * counts as not yet, because the message is already accepted and must not be sent again.
  */
 export async function awaitMessageTurnId(
   client: ChatClient,
@@ -153,10 +167,8 @@ export async function awaitMessageTurnId(
 ): Promise<string | null> {
   const deadline = Date.now() + options.budgetMs
   for (;;) {
-    const turnId = await readTailItems(client, sessionId).then(
-      (items) => turnIdOfMessage(items, clientMessageId),
-      () => null
-    )
+    const items = await settleWithin(readTailItems(client, sessionId), deadline - Date.now())
+    const turnId = items === null ? null : turnIdOfMessage(items, clientMessageId)
     if (
       turnId !== null ||
       options.stopped?.() === true ||
@@ -169,43 +181,80 @@ export async function awaitMessageTurnId(
 }
 
 /**
- * Decides which turn events belong to one send. A turn it opened is matched by id once the journal
- * names it; until then any turn that was not already in the journal before the send may be it, so
- * a fast turn cannot finish unmatched. A refused send settles under its own message key.
+ * Decides which turn events belong to one send. Until the journal lookup for the accepted message
+ * ends, events are held back, because any turn not in the journal before the send could be it. Once
+ * it ends, a found turn is matched by id; with none found, a turn that was not in the journal
+ * before the send may be it. An event naming no turn counts only when the send was already
+ * accepted when it arrived, and a finish or failure naming none only when no turn was found.
+ * A refused send settles under its own message key at once.
+ *
+ * `redeliver` feeds each held event back to the caller's event loop after the lookup ends, so
+ * `offer` judges it again.
  */
 export function createSendTurnTracker(
   client: ChatClient,
   sessionId: string,
-  options: { priorTurnIds: ReadonlySet<string>; budgetMs: number; intervalMs: number }
+  options: {
+    priorTurnIds: ReadonlySet<string>
+    budgetMs: number
+    intervalMs: number
+    redeliver?: (event: PublicEvent) => void
+  }
 ) {
   const turnIds = new Set<string>()
   let turnId: string | null = null
+  let lookupEnded = false
+  let sendAccepted = false
   let finished = false
+  const held: PublicEvent[] = []
+
+  const turnIdOf = (event: PublicEvent) =>
+    typeof event.data.turnId === 'string' ? event.data.turnId : undefined
+
+  const judge = (event: PublicEvent): boolean => {
+    const eventTurnId = turnIdOf(event)
+    return eventTurnId === undefined
+      ? event.type === 'turn.needs-input' || turnId === null
+      : turnIds.has(eventTurnId) || (turnId === null && !options.priorTurnIds.has(eventTurnId))
+  }
+
+  const endLookup = (found: string | null): void => {
+    if (found !== null) {
+      turnId = found
+      turnIds.add(found)
+    }
+    lookupEnded = true
+    held.splice(0).forEach((event) => options.redeliver?.(event))
+  }
+
   return {
     get turnId() {
       return turnId
     },
-    /** True when an event naming `eventTurnId` settles this send; an event naming none always does. */
-    accepts(eventTurnId: string | undefined): boolean {
-      return (
-        eventTurnId === undefined ||
-        turnIds.has(eventTurnId) ||
-        (turnId === null && !options.priorTurnIds.has(eventTurnId))
-      )
+    /** True when `event` settles this send; otherwise it is dropped, or held until the lookup ends. */
+    offer(event: PublicEvent): boolean {
+      const eventTurnId = turnIdOf(event)
+      if (eventTurnId === undefined && !sendAccepted) {
+        return false
+      }
+      if (lookupEnded || turnIds.has(eventTurnId ?? '')) {
+        return judge(event)
+      }
+      held.push(event)
+      return false
     },
     /** Starts looking for the turn of the accepted message; stops at `finish`. */
-    accepted(clientMessageId: string): void {
+    accepted(clientMessageId: string | undefined): void {
+      sendAccepted = true
+      if (clientMessageId === undefined) {
+        endLookup(null)
+        return
+      }
       turnIds.add(agentJournalSubmissionKey(clientMessageId))
       void awaitMessageTurnId(client, sessionId, clientMessageId, {
-        budgetMs: options.budgetMs,
-        intervalMs: options.intervalMs,
+        ...options,
         stopped: () => finished
-      }).then((found) => {
-        if (found !== null) {
-          turnId = found
-          turnIds.add(found)
-        }
-      })
+      }).then(endLookup)
     },
     finish(): void {
       finished = true

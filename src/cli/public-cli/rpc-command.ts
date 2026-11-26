@@ -8,7 +8,10 @@ import {
   type MethodClass
 } from '../../shared/public-rpc/method-classification'
 import { PUBLIC_METHOD_SPECS, publicSpecForMethod } from '../../shared/public-rpc/public-methods'
-import { RPC_PARAMS_BY_METHOD } from '../../shared/rpc-contract/rpc-params-catalog.generated'
+import {
+  RPC_METHODS_WITHOUT_SHARED_PARAMS,
+  RPC_PARAMS_BY_METHOD
+} from '../../shared/rpc-contract/rpc-params-catalog.generated'
 
 export type RpcListEntry = {
   method: string
@@ -25,13 +28,14 @@ function stabilityOf(entry: MethodClass): RpcListEntry['stability'] {
 
 /**
  * Every concrete method name the runtime registers, joined with its classification. The generated
- * params catalog is read back from the host registry, so it names exactly the methods a runtime of
- * this build serves; public specs and exact classification entries are added in case a build
- * variant registers a method the catalog omits.
+ * params catalog is read back from the host registry and splits the methods it serves into those
+ * with shared params and those without, so both lists are needed; public specs and exact
+ * classification entries are added in case a build variant registers a method neither names.
  */
 export function buildRpcList(): RpcListEntry[] {
   const names = new Set<string>([
     ...Object.keys(RPC_PARAMS_BY_METHOD),
+    ...RPC_METHODS_WITHOUT_SHARED_PARAMS,
     ...PUBLIC_METHOD_SPECS.map((spec) => spec.method),
     ...Object.keys(METHOD_CLASSIFICATION)
   ])

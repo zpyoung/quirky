@@ -340,30 +340,34 @@ export const CHAT_HANDLERS: Record<string, CommandHandler> = {
       printFields(ctx, { sessionId, clientMessageId, turnId }, response)
       return
     }
-    // a finish event of an earlier turn can arrive first; only turns opened after the send may settle it
+    // events are held until the turn id lookup ends, then judged again through the same stream callback
+    let deliverFrame: (frame: unknown) => void = () => {}
     const tracker = createSendTurnTracker(client, sessionId, {
       priorTurnIds: await readRecentTurnIds(client, sessionId).catch(() => new Set<string>()),
-      budgetMs: timeoutMs,
-      intervalMs: TURN_ID_POLL_INTERVAL_MS * 2
+      budgetMs: TURN_ID_LOOKUP_BUDGET_MS,
+      intervalMs: TURN_ID_POLL_INTERVAL_MS,
+      redeliver: (event) => deliverFrame(event)
     })
-    const sendAndTrack = async () => {
-      const sent = await send()
-      const clientMessageId = stringField(sent.value, 'clientMessageId')
-      if (clientMessageId !== undefined) {
-        tracker.accepted(clientMessageId)
-      }
-      return sent
-    }
+    const sendAndTrack = () =>
+      send().then((sent) => {
+        tracker.accepted(stringField(sent.value, 'clientMessageId'))
+        return sent
+      })
     try {
       const settled = await waitForEvent(
-        client,
+        {
+          stream: (method, params, onFrame, options) => {
+            deliverFrame = onFrame
+            return client.stream(method, params, onFrame, options)
+          }
+        },
         {
           topics: ['chat'],
           timeoutMs,
           match: (event) =>
             TURN_STATUS.has(event.type) &&
             event.data.sessionId === sessionId &&
-            tracker.accepts(stringField(event.data, 'turnId'))
+            tracker.offer(event)
         },
         sendAndTrack
       )

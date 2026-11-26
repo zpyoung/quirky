@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MutationEnvelope } from '../../shared/rpc-contract/structured-agent-session-params'
 import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
+import type { PublicEvent } from '../../shared/public-rpc/public-events'
 import {
   awaitMessageTurnId,
   buildMutationEnvelope,
@@ -387,56 +388,140 @@ describe('turn lookup from the journal', () => {
   })
 })
 
+describe('awaitMessageTurnId', () => {
+  it('gives up within the budget when a history request never answers', async () => {
+    // SAFETY: the lookup calls only `call`
+    const client = { call: () => new Promise(() => {}) } as unknown as ChatClient
+    const started = Date.now()
+
+    await expect(
+      awaitMessageTurnId(client, 's1', 'msg-1', { budgetMs: 30, intervalMs: 5 })
+    ).resolves.toBeNull()
+    expect(Date.now() - started).toBeLessThan(1000)
+  })
+})
+
 describe('createSendTurnTracker', () => {
   const OPENER = agentJournalSubmissionKey('msg-1')
 
-  function tracker(items: unknown[], priorTurnIds: string[] = ['t-earlier']) {
-    const call = vi.fn(async () => ({
-      id: 'r',
-      ok: true as const,
-      result: { page: { epoch: 'e', items, hasOlder: false } },
-      _meta: { runtimeId: 'rt' }
-    }))
-    // SAFETY: the tracker calls only `call`
-    const client = { call } as unknown as ChatClient
-    return createSendTurnTracker(client, 's1', {
-      priorTurnIds: new Set(priorTurnIds),
-      budgetMs: 1000,
-      intervalMs: 10
-    })
+  function event(type: string, seq: number, turnId?: string): PublicEvent {
+    return {
+      seq,
+      at: seq,
+      topic: 'chat',
+      type,
+      data: { sessionId: 's1', ...(turnId === undefined ? {} : { turnId }) }
+    }
   }
 
-  it('accepts a turn that was not in the journal before the send, and an event naming none', () => {
-    const own = tracker([])
-    expect(own.accepts('t-new')).toBe(true)
-    expect(own.accepts(undefined)).toBe(true)
-  })
+  const JOURNAL_OF_MINE = [
+    { itemId: 'turn-b', body: { kind: 'turn', turnId: 't-mine', userItemId: OPENER } }
+  ]
 
-  it('refuses the finish of a turn the journal already held', () => {
-    expect(tracker([]).accepts('t-earlier')).toBe(false)
-  })
+  /** A tracker whose redelivered events are judged by `offer` again, as the caller's event loop does. */
+  function tracker(items: unknown[], priorTurnIds: string[] = ['t-earlier'], lookupHangs = false) {
+    const settled: number[] = []
+    const call = vi.fn(() =>
+      lookupHangs
+        ? new Promise<never>(() => {})
+        : Promise.resolve({
+            id: 'r',
+            ok: true as const,
+            result: { page: { epoch: 'e', items, hasOlder: false } },
+            _meta: { runtimeId: 'rt' }
+          })
+    )
+    // SAFETY: the tracker calls only `call`
+    const client = { call } as unknown as ChatClient
+    const own = createSendTurnTracker(client, 's1', {
+      priorTurnIds: new Set(priorTurnIds),
+      budgetMs: lookupHangs ? 1000 : 60,
+      intervalMs: 10,
+      redeliver: (replayed) => {
+        if (own.offer(replayed)) {
+          settled.push(replayed.seq)
+        }
+      }
+    })
+    return { own, settled }
+  }
 
-  it('accepts a refused send under the message key the host reports', () => {
-    const own = tracker([])
+  it('holds every turn event while the lookup is pending', () => {
+    const { own } = tracker([], ['t-old'], true)
     own.accepted('msg-1')
+
+    expect(own.offer(event('turn.finished', 1))).toBe(false)
+    expect(own.offer(event('turn.finished', 2, 't-other'))).toBe(false)
+    expect(own.offer(event('turn.needs-input', 3))).toBe(false)
+    expect(own.offer(event('turn.finished', 4, 't-old'))).toBe(false)
     own.finish()
-    expect(own.accepts(OPENER)).toBe(true)
   })
 
-  it('matches only the turn the journal names once it has found it', async () => {
-    const own = tracker([
-      { itemId: 'turn-b', body: { kind: 'turn', turnId: 't-mine', userItemId: OPENER } }
-    ])
+  it('settles a refused send under its own message key without waiting for the lookup', () => {
+    const { own } = tracker([], ['t-old'], true)
     own.accepted('msg-1')
-    await vi.waitFor(() => expect(own.turnId).toBe('t-mine'))
+
+    expect(own.offer(event('turn.failed', 1, OPENER))).toBe(true)
     own.finish()
-    expect(own.accepts('t-mine')).toBe(true)
-    expect(own.accepts('t-stray')).toBe(false)
-    expect(own.accepts('t-earlier')).toBe(false)
+  })
+
+  it('replays the held event of the turn the lookup finds and drops the others', async () => {
+    const { own, settled } = tracker(JOURNAL_OF_MINE)
+    own.offer(event('turn.finished', 1, 't-stray'))
+    own.offer(event('turn.finished', 2, 't-mine'))
+    own.accepted('msg-1')
+
+    await vi.waitFor(() => expect(settled).toEqual([2]))
+    own.finish()
+  })
+
+  it('takes an event naming no turn only from after the send, and only when no turn was found', async () => {
+    const { own, settled } = tracker([])
+    own.offer(event('turn.finished', 1))
+    own.accepted('msg-1')
+    own.offer(event('turn.finished', 2))
+    await vi.waitFor(() => expect(settled).toEqual([2]))
+    own.finish()
+
+    const found = tracker(JOURNAL_OF_MINE)
+    found.own.accepted('msg-1')
+    await vi.waitFor(() => expect(found.own.turnId).toBe('t-mine'))
+    expect(found.own.offer(event('turn.finished', 4))).toBe(false)
+    found.own.finish()
+  })
+
+  it('takes a needs-input event naming no turn by session, but only from after the send', async () => {
+    const { own, settled } = tracker(JOURNAL_OF_MINE)
+    own.offer(event('turn.needs-input', 1))
+    own.accepted('msg-1')
+    own.offer(event('turn.needs-input', 2))
+
+    await vi.waitFor(() => expect(settled).toEqual([2]))
+    own.finish()
+  })
+
+  it('accepts a turn that was not in the journal before the send once no turn is found', async () => {
+    const { own, settled } = tracker([])
+    own.accepted('msg-1')
+    own.offer(event('turn.finished', 1, 't-earlier'))
+    own.offer(event('turn.finished', 2, 't-new'))
+
+    await vi.waitFor(() => expect(settled).toEqual([2]))
+    own.finish()
+  })
+
+  it('judges a live event directly once the lookup has ended', async () => {
+    const { own } = tracker([])
+    own.accepted('msg-1')
+    await new Promise((resolve) => setTimeout(resolve, 150))
+
+    expect(own.offer(event('turn.finished', 1, 't-earlier'))).toBe(false)
+    expect(own.offer(event('turn.finished', 2, 't-new'))).toBe(true)
+    own.finish()
   })
 
   it('follows a steered send into the running turn it joined, though that turn predates it', async () => {
-    const own = tracker(
+    const { own } = tracker(
       [
         { itemId: 'turn-run', body: { kind: 'turn', turnId: 't-earlier' } },
         {
@@ -450,6 +535,6 @@ describe('createSendTurnTracker', () => {
     own.accepted('msg-1')
     await vi.waitFor(() => expect(own.turnId).toBe('t-earlier'))
     own.finish()
-    expect(own.accepts('t-earlier')).toBe(true)
+    expect(own.offer(event('turn.finished', 1, 't-earlier'))).toBe(true)
   })
 })
