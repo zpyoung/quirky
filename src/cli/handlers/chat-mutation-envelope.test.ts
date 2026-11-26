@@ -121,7 +121,14 @@ function streamClient(handler: StreamHandler): ChatClient {
 }
 
 function untilAborted(signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => signal.addEventListener('abort', () => resolve()))
+  return new Promise((resolve) => {
+    // the handler aborts synchronously inside onFrame, before the stub gets to wait
+    if (signal.aborted) {
+      resolve()
+      return
+    }
+    signal.addEventListener('abort', () => resolve(), { once: true })
+  })
 }
 
 describe('readStatusSessions', () => {

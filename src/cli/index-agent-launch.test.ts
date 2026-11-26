@@ -338,17 +338,20 @@ describe('quirky cli agent launch', () => {
     [['--agent', 'codex', '--model', 'gpt-5.5', '--effort', 'turbo'], 'does not support effort'],
     [['--surface', 'terminal'], '--surface requires --agent']
   ])('refuses %j before creating anything', async (flags, message) => {
-    const output = await runRefused([
-      'worktree',
-      'create',
-      '--repo',
-      'id:repo-1',
-      '--name',
-      'design',
-      '--no-parent',
-      ...flags,
-      '--json'
-    ])
+    const output = await runRefused(
+      [
+        'worktree',
+        'create',
+        '--repo',
+        'id:repo-1',
+        '--name',
+        'design',
+        '--no-parent',
+        ...flags,
+        '--json'
+      ],
+      2
+    )
 
     expect(output).toContain(message)
     expect(callMock).not.toHaveBeenCalled()

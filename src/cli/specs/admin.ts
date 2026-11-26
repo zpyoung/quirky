@@ -30,6 +30,7 @@ export const ADMIN_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['layout', 'get'],
+    aliases: [['layout', 'show']],
     summary: 'Print the current window layout',
     usage: 'quirky layout get',
     allowedFlags: [...GLOBAL_FLAGS],
@@ -39,6 +40,7 @@ export const ADMIN_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['settings', 'get'],
+    aliases: [['settings', 'show']],
     summary: 'Read the client settings, or one setting by key',
     usage: 'quirky settings get [<key>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'key'],

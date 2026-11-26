@@ -78,7 +78,7 @@ QUIRKY layout get
 - `ui state` returns `worktreeId`, `view`, `tab`, `paneId`, `panels` and `editorFile`. It needs the app window.
 - `action list --available` shows the actions that apply now. Without `--available` each entry carries `available` and a `reason`. `destructive` marks the ones that need `--yes`. Some actions run only in the window and answer `unavailable` with reason `not_applicable`.
 - `action run <id>` takes `--workspace <selector>` for actions that act on a workspace (`workspace.delete` requires it). It returns `{claimed: true}`.
-- `layout get` prints one layout frame as JSON, without the `ok` envelope.
+- `layout get` (also `layout show`) prints one layout frame as JSON, without the `ok` envelope.
 
 ## Tabs of every type
 
@@ -126,7 +126,7 @@ QUIRKY file search --worktree id:<repoId>::<path> --query "TODO" --max-results 2
 QUIRKY file write <path> --worktree id:<repoId>::<path> --params-json '{"content":"..."}' --yes --json
 ```
 
-- `settings get` without a key returns every setting; `settings list` prints key and value lines. `settings set` reads the value as JSON when it parses, else as text. Setting `agentDefaultEnv`, `agentDefaultArgs`, `nativeChatPermissionMode` or `agentStatusHooksEnabled` is a `security-settings` change: the user may be asked, and against a remote server it needs `--yes`.
+- `settings get` (also `settings show`) without a key returns every setting; `settings list` prints key and value lines. `settings set` reads the value as JSON when it parses, else as text. Setting `agentDefaultEnv`, `agentDefaultArgs`, `nativeChatPermissionMode` or `agentStatusHooksEnabled` is a `security-settings` change: the user may be asked, and against a remote server it needs `--yes`.
 - `notifications list` takes `--last-seen-seq <n>` to read only newer ones.
 - `plugins enable <key>` and `plugins disable <key>` toggle a plugin.
 - `file read|write|search|list` act on workspace files. `file write` replaces the whole file, so it is destructive: preview first, then `--yes`. `file open`, `diff` and `open-changed` are the older commands that show a file in the editor.
