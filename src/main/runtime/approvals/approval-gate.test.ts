@@ -6,6 +6,7 @@ import type { AskOrigin } from '../../fork-ask-question-tool/ask-registry'
 import {
   APPROVAL_TIMEOUT_MS,
   ApprovalGate,
+  isApprovalRequestId,
   readAgentApprovalPolicySetting,
   type ApprovalRegistry
 } from './approval-gate'
@@ -16,12 +17,12 @@ const ASK_ID = 'ask_1'
 // A registry whose waitChunk behaves like the real one: it resolves with the terminal envelope
 // when the ask is settled, and with `pending` when the chunk or the abort signal runs out.
 function createFakeRegistry() {
-  const registered: { spec: AskSpec; origin: AskOrigin }[] = []
+  const registered: { spec: AskSpec; origin: AskOrigin; requestId: string }[] = []
   const cancelled: string[] = []
   let settle: (envelope: AskEnvelope) => void = () => {}
   const registry: ApprovalRegistry = {
-    register: async (spec, origin) => {
-      registered.push({ spec, origin })
+    register: async (spec, origin, options) => {
+      registered.push({ spec, origin, requestId: options.requestId })
       return { askId: ASK_ID }
     },
     waitChunk: (askId, chunkMs, signal) =>
@@ -126,6 +127,19 @@ describe('ApprovalGate', () => {
   })
 
   describe('require', () => {
+    it("registers its question under a request id that marks it as the user's to answer", async () => {
+      const { gate, registered, answer } = createGate()
+
+      const result = gate.require('workspace-delete', CALLER, 'delete workspace', [])
+      await flush()
+      answer(true)
+      await result
+
+      expect(registered).toHaveLength(1)
+      expect(isApprovalRequestId(registered[0].requestId)).toBe(true)
+      expect(isApprovalRequestId('req_1')).toBe(false)
+    })
+
     it('asks a confirm question naming the caller, the call and its effects', async () => {
       const { gate, registered, answer } = createGate()
 

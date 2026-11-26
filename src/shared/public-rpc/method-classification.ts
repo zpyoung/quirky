@@ -8,11 +8,16 @@ import { publicSpecForMethod } from './public-methods'
 export type MethodClass =
   | { kind: 'public'; spec: PublicMethodSpec }
   | { kind: 'internal'; reason: string }
-  | { kind: 'legacy-cli'; family: string }
+  | { kind: 'legacy-cli'; family: string; destructive?: DestructiveSpec }
   | { kind: 'unstable'; destructive?: DestructiveSpec }
 
 function legacy(family: string): MethodClass {
   return { kind: 'legacy-cli', family }
+}
+
+/** A legacy method that deletes or overwrites data; only a call that opts into the public contract is gated. */
+function legacyDestructive(family: string, category: DestructiveSpec['category']): MethodClass {
+  return { kind: 'legacy-cli', family, destructive: { category } }
 }
 
 function internal(reason: string): MethodClass {
@@ -59,6 +64,23 @@ export const METHOD_CLASSIFICATION: Readonly<Record<string, MethodClass>> = {
   'session.tabs.subscribeAll': internal(DESKTOP_VIEW_SYNC),
   'session.tabs.unsubscribe': internal(DESKTOP_VIEW_SYNC),
   'session.tabs.unsubscribeAll': internal(DESKTOP_VIEW_SYNC),
+
+  'files.writeIfUnchanged': legacyDestructive('file', 'file-overwrite-delete'),
+  'files.writeBase64': legacyDestructive('file', 'file-overwrite-delete'),
+  'files.writeBase64Chunk': legacyDestructive('file', 'file-overwrite-delete'),
+  'files.commitUpload': legacyDestructive('file', 'file-overwrite-delete'),
+  'files.rename': legacyDestructive('file', 'file-overwrite-delete'),
+  'files.copy': legacyDestructive('file', 'file-overwrite-delete'),
+
+  'worktree.rm': legacyDestructive('worktree', 'workspace-delete'),
+  'worktree.forceDeleteBranch': legacyDestructive('worktree', 'workspace-delete'),
+  'repo.rm': legacyDestructive('repo', 'workspace-delete'),
+
+  'terminal.stop': legacyDestructive('terminal', 'workspace-delete'),
+  'terminal.stopExact': legacyDestructive('terminal', 'workspace-delete'),
+  'terminal.close': legacyDestructive('terminal', 'workspace-delete'),
+  'terminal.closeAll': legacyDestructive('terminal', 'workspace-delete'),
+  'terminal.closeTab': legacyDestructive('terminal', 'workspace-delete'),
 
   'folderWorkspace.list': legacy('agent'),
   'folderWorkspace.update': legacy('reference'),
@@ -151,9 +173,7 @@ export const NAMESPACE_DEFAULTS: Readonly<Record<string, MethodClass>> = {
   'workspacePorts.': UNSTABLE
 }
 
-const PREFIXES_LONGEST_FIRST = Object.keys(NAMESPACE_DEFAULTS).sort(
-  (a, b) => b.length - a.length
-)
+const PREFIXES_LONGEST_FIRST = Object.keys(NAMESPACE_DEFAULTS).sort((a, b) => b.length - a.length)
 
 /**
  * A public spec first, then the exact entry, then the longest namespace prefix. `undefined` means

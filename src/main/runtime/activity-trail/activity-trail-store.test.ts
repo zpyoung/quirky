@@ -98,6 +98,18 @@ describe('ActivityTrailStore', () => {
     expect(JSON.stringify(bus.since(0, ['activity']))).not.toContain('tabId')
   })
 
+  it('marks a refused call in the event and the list, and leaves the field out for a successful one', () => {
+    const { bus, store } = createStore()
+
+    store.record(entry({ outcome: 'refused' }))
+    store.record(entry())
+
+    const events = bus.since(0, ['activity'])
+    expect(events).toMatchObject([{ data: { outcome: 'refused' } }, {}])
+    expect(JSON.stringify(Array.isArray(events) ? events[1] : null)).not.toContain('outcome')
+    expect(store.list().map((recorded) => recorded.outcome)).toEqual([undefined, 'refused'])
+  })
+
   it('pushes the entry to the authoritative window', () => {
     const { window, send } = fakeWindow()
     const { store } = createStore(window)

@@ -47,8 +47,8 @@ vi.mock('../../../shared/public-rpc/public-methods', async (importOriginal) => {
   }
 })
 
-// git.discard is classified destructive in 'file-overwrite-delete'; events.unsubscribe is a public mutation.
-const DESTRUCTIVE = 'git.discard'
+// git.push is classified destructive in 'file-overwrite-delete' and ships no previewer; events.unsubscribe is a public mutation.
+const DESTRUCTIVE = 'git.push'
 const PUBLIC_MUTATION = 'events.unsubscribe'
 const AGENT_ENV_REQUEST = { agentSessionId: 'session-abcdef123456', worktreeId: 'wt-1' }
 
@@ -65,7 +65,10 @@ function createRequest(method: string, extra: Partial<RpcRequest> = {}): RpcRequ
 
 type ApprovalWorld = ReturnType<typeof createWorld>
 
-function createWorld(policy: Record<string, 'agent' | 'ask'> = {}) {
+function createWorld(
+  policy: Record<string, 'agent' | 'ask'> = {},
+  extraRuntime: Record<string, unknown> = {}
+) {
   const asked: { askId: string }[] = []
   const cancelled: string[] = []
   let settle: (envelope: AskEnvelope) => void = () => {}
@@ -98,7 +101,8 @@ function createWorld(policy: Record<string, 'agent' | 'ask'> = {}) {
   const runtime = {
     approvalGate,
     activityTrail,
-    getTerminalPaneKey
+    getTerminalPaneKey,
+    ...extraRuntime
   } as unknown as QuirkyRuntimeService
   return {
     runtime,
@@ -820,6 +824,161 @@ describe('public contract gate', () => {
       const hint = readCallerHint({ role: 'brain' })
 
       expect(resolvePublicCaller({ kind: 'mobile' }, undefined, hint).kind).toBe('mobile')
+    })
+  })
+
+  describe('a refused public mutation', () => {
+    it('is recorded as refused, with no tab, instead of as a success', async () => {
+      const world = createWorld()
+      const handler = vi.fn(async () => ({ ok: false, refusal: { code: 'fence_mismatch' } }))
+
+      const bound = await gate(
+        world,
+        createMethod('session.tabs.activate', handler),
+        createRequest('session.tabs.activate', { publicContract: 1 }),
+        { params: { worktreeId: 'wt-1', tabId: 'tab-1' } }
+      )
+      await bound?.handler({ tabId: 'tab-1' }, { runtime: world.runtime })
+
+      expect(world.activityTrail.record).toHaveBeenCalledTimes(1)
+      const [entry] = world.activityTrail.record.mock.calls[0]
+      expect(entry).toMatchObject({ outcome: 'refused', workspaceId: 'wt-1' })
+      expect(entry.summary).toContain('(refused)')
+      expect(entry).not.toHaveProperty('tabId')
+    })
+
+    it('leaves a result that is not a refusal as a plain success', async () => {
+      const world = createWorld()
+
+      const bound = await gate(
+        world,
+        createMethod(
+          PUBLIC_MUTATION,
+          vi.fn(async () => ({ ok: true, value: {} }))
+        ),
+        createRequest(PUBLIC_MUTATION, { publicContract: 1 })
+      )
+      await bound?.handler({}, { runtime: world.runtime })
+
+      expect(world.activityTrail.record.mock.calls[0][0]).not.toHaveProperty('outcome')
+    })
+  })
+
+  describe('attributing a call to the workspace it targets', () => {
+    async function recordedWorkspace(
+      params: unknown,
+      options: { hint?: CallerHint; runtime?: Record<string, unknown> } = {}
+    ): Promise<unknown> {
+      const world = createWorld({}, options.runtime)
+      const bound = await gate(
+        world,
+        createMethod(PUBLIC_MUTATION),
+        createRequest(PUBLIC_MUTATION, { publicContract: 1, caller: options.hint }),
+        { params }
+      )
+      await bound?.handler({}, { runtime: world.runtime })
+      return world.activityTrail.record.mock.calls[0][0].workspaceId
+    }
+
+    it('reads an id: selector without a lookup', async () => {
+      expect(await recordedWorkspace({ worktree: 'id:wt-9' }, { hint: AGENT_ENV_REQUEST })).toBe(
+        'wt-9'
+      )
+    })
+
+    it('resolves a name selector through the runtime, ahead of the caller workspace', async () => {
+      const showTerminalWorkspaceLaunchScope = vi.fn(async () => ({ id: 'wt-feature' }))
+
+      const workspaceId = await recordedWorkspace(
+        { workspace: 'feature' },
+        { hint: AGENT_ENV_REQUEST, runtime: { showTerminalWorkspaceLaunchScope } }
+      )
+
+      expect(showTerminalWorkspaceLaunchScope).toHaveBeenCalledWith('feature')
+      expect(workspaceId).toBe('wt-feature')
+    })
+
+    it('reads a workspaceId param and the workspace of a layout command', async () => {
+      expect(await recordedWorkspace({ workspaceId: 'wt-3' })).toBe('wt-3')
+      expect(await recordedWorkspace({ command: { type: 'closePane', workspace: 'wt-4' } })).toBe(
+        'wt-4'
+      )
+    })
+
+    it('falls back to the caller workspace when the selector does not resolve', async () => {
+      const showTerminalWorkspaceLaunchScope = vi.fn(async () => {
+        throw new Error('selector_not_found')
+      })
+
+      expect(
+        await recordedWorkspace(
+          { worktree: 'gone' },
+          { hint: AGENT_ENV_REQUEST, runtime: { showTerminalWorkspaceLaunchScope } }
+        )
+      ).toBe('wt-1')
+    })
+
+    it('falls back to the caller workspace when the params name none', async () => {
+      expect(await recordedWorkspace({}, { hint: AGENT_ENV_REQUEST })).toBe('wt-1')
+    })
+  })
+
+  describe('a legacy CLI method that deletes data, reached through publicContract', () => {
+    const REMOVE = 'worktree.rm'
+    const REMOVE_PARAMS = { worktree: 'old-spike', force: true }
+
+    it('previews and refuses without confirm, with or without force', async () => {
+      const world = createWorld({ 'workspace-delete': 'ask' })
+      const handler = vi.fn(async () => ({ removed: true }))
+
+      for (const params of [REMOVE_PARAMS, { worktree: 'old-spike' }]) {
+        await expect(
+          gate(world, createMethod(REMOVE, handler), createRequest(REMOVE, { publicContract: 1 }), {
+            params
+          })
+        ).rejects.toMatchObject({ code: 'needs_confirmation', reason: 'preview' })
+      }
+      expect(handler).not.toHaveBeenCalled()
+      expect(world.requireSpy).not.toHaveBeenCalled()
+    })
+
+    it('asks for the workspace-delete approval once confirmed', async () => {
+      const world = createWorld({ 'workspace-delete': 'ask' })
+
+      const gated = gate(
+        world,
+        createMethod(REMOVE),
+        createRequest(REMOVE, { publicContract: 1, confirm: true }),
+        { params: REMOVE_PARAMS }
+      )
+      await flush()
+
+      expect(world.requireSpy).toHaveBeenCalledWith(
+        'workspace-delete',
+        expect.anything(),
+        REMOVE,
+        expect.any(Array),
+        expect.anything()
+      )
+      world.answer(true)
+      await expect(gated).resolves.toMatchObject({ name: REMOVE })
+    })
+
+    it('leaves a request without publicContract exactly as before', () => {
+      const world = createWorld({ 'workspace-delete': 'ask' })
+
+      expect(
+        gate(world, createMethod(REMOVE), createRequest(REMOVE), { params: REMOVE_PARAMS })
+      ).toBeNull()
+      expect(world.requireSpy).not.toHaveBeenCalled()
+    })
+
+    it('tells the transport a confirmed call can park on the approval', () => {
+      const request = (extra: Partial<RpcRequest>): RpcRequest =>
+        createRequest(REMOVE, { params: REMOVE_PARAMS, ...extra })
+
+      expect(mayAwaitApproval(request({ publicContract: 1, confirm: true }))).toBe(true)
+      expect(mayAwaitApproval(request({ publicContract: 1 }))).toBe(false)
     })
   })
 

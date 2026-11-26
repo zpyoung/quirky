@@ -8,6 +8,8 @@ import {
   type AskSpec
 } from '../../../../../shared/fork-ask-question-tool/ask-question-schema'
 import type { AskDb } from '../../../../fork-ask-question-tool/ask-db'
+import { isApprovalRequestId } from '../../../approvals/approval-gate'
+import { PublicRpcError } from '../../public-rpc-error'
 import { validateAskAnswerSubmission } from './ask-answer-validation'
 import { registryEventFromRow } from './ask-envelope-from-row'
 import {
@@ -128,11 +130,26 @@ export const ASK_METHODS = [
     name: 'ask.answer',
     permission: 'workspace',
     params: AskAnswerParams,
-    handler: async (params, { runtime }) => {
+    handler: async (params, { runtime, caller }) => {
       const { db, registry } = runtime.getAskServices()
       const row = db.getAsk(params.askId)
       if (!row || isTerminalAskStatus(row.status)) {
         return { committed: false }
+      }
+      // an approval releases a gated mutation, so only the app's own UI may grant it
+      if (isApprovalRequestId(row.request_id) && caller?.kind !== 'desktop') {
+        throw new PublicRpcError(
+          'unauthorized',
+          'approval_requires_user',
+          [
+            {
+              command: 'wait for the user to answer in Quirky',
+              why: 'approval prompts cannot be answered by an agent or CLI'
+            }
+          ],
+          undefined,
+          'This is an approval prompt; only the user can answer it in the Quirky app.'
+        )
       }
       const spec = JSON.parse(row.spec_json) as AskSpec
       const validation = validateAskAnswerSubmission(spec, params.answers, params.skipped)

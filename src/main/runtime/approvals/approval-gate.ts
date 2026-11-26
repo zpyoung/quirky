@@ -8,6 +8,12 @@ import { PublicRpcError } from '../rpc/public-rpc-error'
 
 export const APPROVAL_TIMEOUT_MS = 600_000
 const APPROVAL_QUESTION_ID = 'approve'
+const APPROVAL_REQUEST_ID_PREFIX = 'approval-'
+
+/** Whether an ask was registered by this gate, so only the app's own UI may answer it. */
+export function isApprovalRequestId(requestId: string): boolean {
+  return requestId.startsWith(APPROVAL_REQUEST_ID_PREFIX)
+}
 
 export type ApprovalMode = 'agent' | 'ask'
 export type ApprovalRegistry = Pick<AskRegistry, 'register' | 'waitChunk' | 'cancel'>
@@ -83,7 +89,7 @@ export class ApprovalGate {
     const { askId } = await registry.register(
       spec,
       { paneKey: options.paneKey ?? null, worktreeId: options.worktreeId ?? null },
-      { requestId: `approval-${category}-${randomUUID()}` }
+      { requestId: `${APPROVAL_REQUEST_ID_PREFIX}${category}-${randomUUID()}` }
     )
     const signal = options.signal ?? new AbortController().signal
     const envelope = await registry.waitChunk(askId, APPROVAL_TIMEOUT_MS, signal)

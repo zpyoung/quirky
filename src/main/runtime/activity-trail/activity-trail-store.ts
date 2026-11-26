@@ -11,6 +11,8 @@ export type ActivityEntry = {
   workspaceId?: string
   /** The tab the call touched, when the call names or returns one. */
   tabId?: string
+  /** `refused` when the host answered with a domain refusal, so the call changed nothing; absent means it took effect. */
+  outcome?: 'refused'
   at: number
 }
 
@@ -48,7 +50,8 @@ export class ActivityTrailStore {
         method: entry.method,
         summary: entry.summary,
         ...(entry.workspaceId === undefined ? {} : { worktreeId: entry.workspaceId }),
-        ...(entry.tabId === undefined ? {} : { tabId: entry.tabId })
+        ...(entry.tabId === undefined ? {} : { tabId: entry.tabId }),
+        ...(entry.outcome === undefined ? {} : { outcome: entry.outcome })
       }
     })
     const window = this.deps.getWindow()
