@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { z } from 'zod'
+import { normalizeCommandPositionals, parseArgs } from '../args'
 import type { HandlerContext } from '../dispatch'
 import { RuntimeClientError } from '../runtime/types'
 import {
@@ -13,6 +14,7 @@ import {
   SetOptionParams
 } from '../../shared/rpc-contract/structured-agent-session-params'
 import { structuredAgentSessionPayloadFingerprint } from '../../shared/structured-agent-session-mutation'
+import { CHAT_COMMAND_SPECS } from '../specs/chat'
 import { CHAT_HANDLERS } from './chat'
 
 const SESSION = 'claude_0b1c2d3e_4f5a_4b6c_8d7e_9f0a1b2c3d4e'
@@ -436,11 +438,20 @@ describe('chat respond', () => {
     }
   })
 
-  it('rejects an --allow that swallowed a positional', async () => {
-    const client = respondingClient()
-    await expect(respond(client, 'item-1', { allow: 'item-1' })).rejects.toMatchObject({
-      code: 'invalid_argument'
-    })
+  it('parses --allow and --deny as presence flags anywhere on the line', () => {
+    for (const argv of [
+      ['chat', 'respond', '--allow', 'S', 'R'],
+      ['chat', 'answer', 'S', '--deny', 'R'],
+      ['chat', 'respond', 'S', 'R', '--allow']
+    ]) {
+      const parsed = normalizeCommandPositionals(
+        CHAT_COMMAND_SPECS,
+        parseArgs(argv, undefined, CHAT_COMMAND_SPECS)
+      )
+      expect(parsed.flags.get(argv.includes('--deny') ? 'deny' : 'allow')).toBe(true)
+      expect(parsed.flags.get('session')).toBe('S')
+      expect(parsed.flags.get('request')).toBe('R')
+    }
   })
 
   it('hands the confirmation to the server on a local host', async () => {
@@ -454,14 +465,23 @@ describe('chat respond', () => {
     })
   })
 
-  it('holds a remote answer for --yes because a remote call cannot carry the gate', async () => {
+  it('carries the public contract and --yes to a remote host without a local refusal', async () => {
     const client = respondingClient({}, { remote: true })
-    await expect(
-      CHAT_HANDLERS['chat respond'](
-        context(client, { session: SESSION, request: 'item-1', allow: true })
-      )
-    ).rejects.toMatchObject({ code: 'needs_confirmation' })
-    expect(client.call).not.toHaveBeenCalled()
+    await CHAT_HANDLERS['chat respond'](
+      context(client, { session: SESSION, request: 'item-1', allow: true, yes: true })
+    )
+    expect(lastOptions(client, 'agentSession.respondToApproval')).toMatchObject({
+      publicContract: true,
+      confirm: true
+    })
+    const previewing = respondingClient({}, { remote: true })
+    await CHAT_HANDLERS['chat respond'](
+      context(previewing, { session: SESSION, request: 'item-1', allow: true })
+    )
+    expect(lastOptions(previewing, 'agentSession.respondToApproval')).toMatchObject({
+      publicContract: true,
+      confirm: false
+    })
   })
 
   it('surfaces a host refusal as a conflict with a next step', async () => {
@@ -929,15 +949,29 @@ describe('chat cancel, rewind and clear', () => {
     })
   })
 
-  it('holds a remote rewind and clear for --yes', async () => {
-    const client = fakeClient({ remote: true })
-    await expect(
-      CHAT_HANDLERS['chat rewind'](context(client, { session: SESSION, to: 'item-9' }))
-    ).rejects.toMatchObject({ code: 'needs_confirmation' })
-    await expect(
-      CHAT_HANDLERS['chat clear'](context(client, { session: SESSION }))
-    ).rejects.toMatchObject({ code: 'needs_confirmation' })
-    expect(client.call).not.toHaveBeenCalled()
+  it('sends a remote rewind and clear to the server with the public contract and confirm', async () => {
+    const client = fakeClient({
+      remote: true,
+      handlers: {
+        'agentSession.conversationCommand': () => mutationOk({ clientMessageId: 'op' }),
+        'agentSession.rewind': () => mutationOk({ itemId: 'item-9', epoch: 'epoch-2' })
+      }
+    })
+    await CHAT_HANDLERS['chat rewind'](context(client, { session: SESSION, to: 'item-9' }))
+    expect(lastOptions(client, 'agentSession.rewind')).toMatchObject({
+      publicContract: true,
+      confirm: false
+    })
+    await CHAT_HANDLERS['chat clear'](context(client, { session: SESSION }))
+    expect(lastOptions(client, 'agentSession.conversationCommand')).toMatchObject({
+      publicContract: true,
+      confirm: false
+    })
+    await CHAT_HANDLERS['chat clear'](context(client, { session: SESSION, yes: true }))
+    expect(lastOptions(client, 'agentSession.conversationCommand')).toMatchObject({
+      publicContract: true,
+      confirm: true
+    })
   })
 
   it('clears through the conversation command with the destructive confirm', async () => {
