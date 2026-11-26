@@ -154,22 +154,69 @@ export async function mutateSession(
   return { response, value: parsed.data.value }
 }
 
-/** The sessions in the host's status snapshot; the stream is closed after its first frame. */
+const STATUS_SNAPSHOT_TIMEOUT_MS = 10_000
+const MAX_REQUEST_PAGES = 50
+const MAX_REQUEST_BYTES = 4 * 1024 * 1024
+
+function invalidRuntimeResponse(message: string, reason: string): RuntimeClientError {
+  return new RuntimeClientError('invalid_runtime_response', message, { reason })
+}
+
+/**
+ * The sessions in the host's status snapshot; the stream is closed after its first frame. A
+ * malformed snapshot or no snapshot within the timeout rejects instead of leaving the stream open.
+ */
 export async function readStatusSessions(client: ChatClient): Promise<ChatStatusSession[]> {
   const stop = new AbortController()
   const seen: { sessions?: ChatStatusSession[] } = {}
-  await client.stream(
-    'agentSession.subscribeStatus',
-    {},
-    (frame) => {
-      const parsed = ChatStatusSnapshotSchema.safeParse(frame)
-      if (seen.sessions === undefined && parsed.success) {
-        seen.sessions = parsed.data.sessions
-        stop.abort()
-      }
-    },
-    { signal: stop.signal, ...publicCallOptions() }
-  )
+  let fail: (error: RuntimeClientError) => void = () => {}
+  const failed = new Promise<never>((_resolve, reject) => {
+    fail = (error) => {
+      stop.abort()
+      reject(error)
+    }
+  })
+  const timer = setTimeout(() => {
+    fail(
+      new RuntimeClientError('timeout', 'The host did not send a chat status snapshot in time.', {
+        reason: 'status_snapshot_timeout',
+        next: [{ command: 'quirky status', why: 'check that the Quirky runtime is up' }]
+      })
+    )
+  }, STATUS_SNAPSHOT_TIMEOUT_MS)
+  try {
+    await Promise.race([
+      client.stream(
+        'agentSession.subscribeStatus',
+        {},
+        (frame) => {
+          if (seen.sessions !== undefined) {
+            return
+          }
+          const parsed = ChatStatusSnapshotSchema.safeParse(frame)
+          if (parsed.success) {
+            seen.sessions = parsed.data.sessions
+            clearTimeout(timer)
+            stop.abort()
+            return
+          }
+          // other frame types are not snapshots and are skipped
+          if (isSnapshotFrame(frame)) {
+            fail(
+              invalidRuntimeResponse(
+                'The host sent a malformed chat status snapshot.',
+                'invalid_status_snapshot'
+              )
+            )
+          }
+        },
+        { signal: stop.signal, ...publicCallOptions() }
+      ),
+      failed
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
   if (seen.sessions === undefined) {
     throw new RuntimeClientError(
       'unavailable',
@@ -183,30 +230,67 @@ export async function readStatusSessions(client: ChatClient): Promise<ChatStatus
   return seen.sessions
 }
 
-/** The approvals and questions a session is waiting on, reassembled from the host's pieces. */
+function isSnapshotFrame(frame: unknown): boolean {
+  return typeof frame === 'object' && frame !== null && 'type' in frame && frame.type === 'snapshot'
+}
+
+/**
+ * The approvals and questions a session is waiting on, reassembled from the host's pieces. Pieces
+ * must advance their cursor and stay within a page and size budget, so a faulty host cannot keep
+ * the read going.
+ */
 export async function readPendingRequests(
   client: ChatClient,
   sessionId: string
 ): Promise<ChatPendingRequest[]> {
   // an unknown version restarts at the host's live one, so the first read is expected to restart
   let version: string = randomUUID()
+  let pages = 0
   for (let attempt = 0; attempt < 4; attempt += 1) {
     let json = ''
+    let bytes = 0
     let cursor: number | undefined
     for (;;) {
+      pages += 1
+      if (pages > MAX_REQUEST_PAGES) {
+        throw invalidRuntimeResponse(
+          `The pending requests of ${sessionId} spanned more than ${MAX_REQUEST_PAGES} pages.`,
+          'requests_too_many_pages'
+        )
+      }
       const response = await client.call<unknown>(
         'agentSession.currentRequests',
         { sessionId, version, ...(cursor === undefined ? {} : { cursor }) },
         publicCallOptions()
       )
-      const piece = ChatRequestsPieceSchema.parse(response.result)
+      const parsedPiece = ChatRequestsPieceSchema.safeParse(response.result)
+      if (!parsedPiece.success) {
+        throw invalidRuntimeResponse(
+          'The host sent a malformed page of pending requests.',
+          'invalid_requests_page'
+        )
+      }
+      const piece = parsedPiece.data
       if (piece.restart) {
         version = piece.marker.version
         break
       }
+      bytes += Buffer.byteLength(piece.json)
+      if (bytes > MAX_REQUEST_BYTES) {
+        throw invalidRuntimeResponse(
+          `The pending requests of ${sessionId} exceeded ${MAX_REQUEST_BYTES} bytes.`,
+          'requests_too_large'
+        )
+      }
       json += piece.json
       if (piece.nextCursor === null) {
-        return z.array(ChatPendingRequestSchema).parse(JSON.parse(json))
+        return parsePendingRequests(json)
+      }
+      if (cursor !== undefined && piece.nextCursor <= cursor) {
+        throw invalidRuntimeResponse(
+          'The host sent a pending-requests cursor that did not advance.',
+          'requests_cursor_stalled'
+        )
       }
       cursor = piece.nextCursor
     }
@@ -219,6 +303,26 @@ export async function readPendingRequests(
       next: [{ command: `quirky chat requests ${sessionId}`, why: 'read them again' }]
     }
   )
+}
+
+function parsePendingRequests(json: string): ChatPendingRequest[] {
+  let raw: unknown
+  try {
+    raw = JSON.parse(json)
+  } catch {
+    throw invalidRuntimeResponse(
+      'The host sent pending requests that are not valid JSON.',
+      'invalid_requests_json'
+    )
+  }
+  const parsed = z.array(ChatPendingRequestSchema).safeParse(raw)
+  if (!parsed.success) {
+    throw invalidRuntimeResponse(
+      'The host sent malformed pending requests.',
+      'invalid_requests_json'
+    )
+  }
+  return parsed.data
 }
 
 export type PromptChoice = { decision: 'allow' | 'deny' } | { option: string } | { answer: string }

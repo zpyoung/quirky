@@ -8,7 +8,7 @@ import {
 import { printResult } from '../format'
 import { RuntimeClientError } from '../runtime/types'
 import { SettingsUpdate } from '../../shared/rpc-contract/client-settings-params'
-import { publicCallOptions, throwConfirmationRequired } from './ui-actions'
+import { publicCallOptions } from './ui-actions'
 
 type SettingsResult = { settings: Record<string, unknown> }
 
@@ -23,13 +23,6 @@ type NotificationEntry = {
 type NotificationListResult = { notifications: NotificationEntry[]; epoch: string }
 
 const SETTING_KEYS: readonly string[] = Object.keys(SettingsUpdate.def.innerType.shape)
-
-const SECURITY_SETTING_KEYS: ReadonlySet<string> = new Set([
-  'agentDefaultEnv',
-  'agentDefaultArgs',
-  'nativeChatPermissionMode',
-  'agentStatusHooksEnabled'
-])
 
 function parseSettingValue(raw: string): unknown {
   try {
@@ -77,14 +70,10 @@ async function setSetting(ctx: HandlerContext): Promise<void> {
   const key = getRequiredStringFlag(flags, 'key')
   const value = parseSettingValue(getRequiredStringFlagAllowingEmpty(flags, 'value'))
   requireKnownSetting(key)
-  const yes = flags.has('yes')
-  if (client.isRemote && !yes && SECURITY_SETTING_KEYS.has(key)) {
-    throwConfirmationRequired(ctx, `settings set ${key}`)
-  }
   const response = await client.call<SettingsResult>(
     'settings.update',
     { [key]: value },
-    publicCallOptions(yes)
+    publicCallOptions(flags.has('yes'))
   )
   printResult(
     response,

@@ -101,14 +101,16 @@ describe('admin handlers', () => {
       expect(client.call).not.toHaveBeenCalled()
     })
 
-    it('refuses an unconfirmed security setting on a remote runtime before sending it', async () => {
+    it('sends a security setting to a remote runtime for the server approval policy to decide', async () => {
       const client = fakeClient({ settings: {} }, true)
-      await expect(
-        ADMIN_HANDLERS['settings set'](
-          contextFor(client, { key: 'nativeChatPermissionMode', value: 'acceptEdits' })
-        )
-      ).rejects.toMatchObject({ code: 'needs_confirmation' })
-      expect(client.call).not.toHaveBeenCalled()
+      await ADMIN_HANDLERS['settings set'](
+        contextFor(client, { key: 'agentDefaultEnv', value: '{"A":"1"}' })
+      )
+      expect(client.call).toHaveBeenCalledWith(
+        'settings.update',
+        { agentDefaultEnv: { A: '1' } },
+        PUBLIC_OPTIONS
+      )
     })
 
     it('sends an ordinary setting to a remote runtime without --yes', async () => {
