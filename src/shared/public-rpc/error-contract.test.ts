@@ -30,7 +30,12 @@ describe('normalizeErrorCode', () => {
     ['needs_confirmation', 'needs_confirmation', 'needs_confirmation'],
     ['not_found', 'not_found', 'not_found'],
     ['unavailable', 'unavailable', 'unavailable'],
-    ['something_unheard_of', 'internal', 'something_unheard_of']
+    ['something_unheard_of', 'internal', 'something_unheard_of'],
+    ['toString', 'internal', 'toString'],
+    ['constructor', 'internal', 'constructor'],
+    ['__proto__', 'internal', '__proto__'],
+    ['hasOwnProperty', 'internal', 'hasOwnProperty'],
+    ['valueOf', 'internal', 'valueOf']
   ]
 
   it.each(cases)('%s -> %s (%s)', (input, code, reason) => {

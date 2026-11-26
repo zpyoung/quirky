@@ -63,7 +63,9 @@ const LEGACY_CODE_TO_STABLE: Readonly<Record<string, { code: StableErrorCode; re
  * as the reason so nothing is lost.
  */
 export function normalizeErrorCode(code: string): { code: StableErrorCode; reason: string } {
-  const legacy = LEGACY_CODE_TO_STABLE[code]
+  const legacy = Object.hasOwn(LEGACY_CODE_TO_STABLE, code)
+    ? LEGACY_CODE_TO_STABLE[code]
+    : undefined
   if (legacy) {
     return { code: legacy.code, reason: legacy.reason ?? code }
   }
