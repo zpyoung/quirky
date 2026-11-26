@@ -130,9 +130,9 @@ export const CHAT_COMMAND_SPECS: CommandSpec[] = [
       'yes'
     ],
     positionalArgs: ['session', 'request'],
+    booleanFlags: ['allow', 'deny'],
     destructive: true,
     notes: [
-      'Put --allow and --deny after the positional arguments.',
       '--allow and --deny answer a permission request; --option and --answer answer a question. --option also picks a permission option by id.',
       '`quirky chat answer` is the same command. Permission answers need confirmation: without --yes the command exits 4 with the command to re-run.',
       'An unknown <request> exits 3; `quirky chat requests <session>` lists the pending ones.'

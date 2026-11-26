@@ -11,7 +11,6 @@ import { printResult } from '../format'
 import { waitForEvent } from '../public-cli/wait-for-event'
 import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime/types'
 import { getRequiredWorktreeSelector } from '../selectors'
-import { quoteCliCommandArgument } from '../shell-command-quote'
 import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../shared/agent-session-create-capabilities'
 import { ChatHistoryResultSchema } from '../../shared/public-rpc/public-methods/chat'
 import { StructuredAgent } from '../../shared/rpc-contract/structured-agent-session-params'
@@ -65,22 +64,6 @@ function printFields(
   from?: RuntimeRpcSuccess<unknown>
 ): void {
   printResult(from ? { ...from, result } : localResponse(result), ctx.json, formatFields)
-}
-
-/** A remote request cannot carry the server-side confirm gate, so the CLI holds the line itself. */
-function requireRemoteConfirmation(ctx: HandlerContext, command: string): void {
-  if (ctx.flags.has('yes') || !ctx.client.isRemote) {
-    return
-  }
-  const rerun = [...(ctx.rawArgs ?? command.split(' ')), '--yes'].map(quoteCliCommandArgument)
-  throw new RuntimeClientError(
-    'needs_confirmation',
-    `${command} changes state and needs confirmation.`,
-    {
-      reason: 'confirmation_required',
-      next: [{ command: `quirky ${rerun.join(' ')}`, why: 'run again with --yes to confirm' }]
-    }
-  )
 }
 
 async function resolveWorkspaceSelector(ctx: HandlerContext): Promise<string> {
@@ -197,9 +180,6 @@ function readPromptChoice(flags: Map<string, string | boolean>): PromptChoice {
     throw invalid('Pass exactly one of --allow, --deny, --option <id> or --answer <text>.')
   }
   if (kind === 'allow' || kind === 'deny') {
-    if (typeof flags.get(kind) === 'string') {
-      throw invalid(`--${kind} takes no value; put it after the positional arguments.`)
-    }
     return { decision: kind }
   }
   const value = getRequiredStringFlag(flags, kind)
@@ -210,7 +190,6 @@ async function respondToRequest(ctx: HandlerContext): Promise<void> {
   const sessionId = getRequiredStringFlag(ctx.flags, 'session')
   const requestId = getRequiredStringFlag(ctx.flags, 'request')
   const choice = readPromptChoice(ctx.flags)
-  requireRemoteConfirmation(ctx, 'chat respond')
   const request = (await readPendingRequests(ctx.client, sessionId)).find(
     (candidate) => candidate.itemId === requestId
   )
@@ -389,8 +368,7 @@ export const CHAT_HANDLERS: Record<string, CommandHandler> = {
   'chat rewind': async (ctx) => {
     const sessionId = getRequiredStringFlag(ctx.flags, 'session')
     const itemId = getRequiredStringFlag(ctx.flags, 'to')
-    requireRemoteConfirmation(ctx, 'chat rewind')
-    const { fence, epoch } = await readCheckpoint(ctx.client, sessionId)
+      const { fence, epoch } = await readCheckpoint(ctx.client, sessionId)
     if (epoch === null) {
       throw new RuntimeClientError(
         'unavailable',
@@ -414,8 +392,7 @@ export const CHAT_HANDLERS: Record<string, CommandHandler> = {
 
   'chat clear': async (ctx) => {
     const sessionId = getRequiredStringFlag(ctx.flags, 'session')
-    requireRemoteConfirmation(ctx, 'chat clear')
-    const { response } = await mutateSession(ctx.client, {
+      const { response } = await mutateSession(ctx.client, {
       method: 'agentSession.conversationCommand',
       sessionId,
       fields: { command: 'clear' },
