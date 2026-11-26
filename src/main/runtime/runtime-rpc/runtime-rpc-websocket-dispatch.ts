@@ -7,6 +7,7 @@ import type { WebSocketTransport } from '../rpc/ws-transport'
 import type { DeviceScope } from '../device-registry'
 import { RuntimeRpcMobileDevices } from './runtime-rpc-mobile-devices'
 import { classifyRuntimeLongPoll } from './runtime-rpc-long-poll'
+import { mayAwaitApproval } from '../rpc/public-contract-gate'
 import type { RpcBinarySender } from '../rpc/rpc-binary-sender'
 import { limitRuntimeRpcReplySize } from './runtime-rpc-reply-size-limit'
 import { MOBILE_RPC_METHOD_ALLOWLIST } from './runtime-rpc-mobile-method-allowlist'
@@ -129,7 +130,8 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
       wsTransport.setClientId(ws, principal.deviceId)
     }
 
-    const longPoll = classifyRuntimeLongPoll(request)
+    // Why: a call parked on an approval prompt holds its socket as long as a long-poll, so it spends the same capacity.
+    const longPoll = classifyRuntimeLongPoll(request) ?? (mayAwaitApproval(request) ? 'wait' : null)
     const rejection = this.admitLongPoll(longPoll, device.deviceId)
     if (rejection) {
       reply(JSON.stringify(this.buildError(request.id, 'runtime_busy', rejection)))

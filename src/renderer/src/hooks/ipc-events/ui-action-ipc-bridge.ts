@@ -4,6 +4,7 @@ import type { Tab } from '../../../../shared/tab-types'
 import { useAppStore } from '../../store'
 
 const FOCUS_CHANGE_DEBOUNCE_MS = 250
+const TABS_CHANGE_DEBOUNCE_MS = 100
 const MARKDOWN_FILE_PATTERN = /\.(md|markdown|mdx)$/i
 
 type AppState = ReturnType<typeof useAppStore.getState>
@@ -72,6 +73,21 @@ export function buildUiStateSnapshot(state: AppState): UiStateSnapshot {
   }
 }
 
+type UiTabsSnapshot = Record<string, { id: string; type: SnapshotTab['type'] }[]>
+
+/** Every workspace's open tabs with their public type, in the shape main diffs into tab events. */
+export function buildUiTabsSnapshot(state: AppState): UiTabsSnapshot {
+  const filePathById = new Map((state.openFiles ?? []).map((file) => [file.id, file.filePath]))
+  const snapshot: UiTabsSnapshot = {}
+  for (const [worktreeId, tabs] of Object.entries(state.unifiedTabsByWorktree ?? {})) {
+    snapshot[worktreeId] = tabs.map((tab) => ({
+      id: tab.id,
+      type: snapshotTabType(tab.contentType, filePathById.get(tab.entityId))
+    }))
+  }
+  return snapshot
+}
+
 function focusKey(state: AppState): string {
   const tab = state.activeWorktreeId ? readActiveTab(state, state.activeWorktreeId) : null
   return [state.activeWorktreeId, tab?.id, tab?.contentType, state.activeView].join('\u0000')
@@ -128,6 +144,32 @@ export function registerUiActionIpcBridge(unsubs: (() => void)[]): void {
           view: snapshot.view
         })
       }, FOCUS_CHANGE_DEBOUNCE_MS)
+    })
+    unsubs.push(unsubscribeStore, () => {
+      if (timer !== null) {
+        clearTimeout(timer)
+      }
+    })
+  }
+
+  if (ui.notifyUiTabsChanged) {
+    const notify = ui.notifyUiTabsChanged
+    let lastTabs = useAppStore.getState().unifiedTabsByWorktree
+    let timer: ReturnType<typeof setTimeout> | null = null
+    // main only learns tab changes from these reports, so the current set goes first as its baseline
+    notify({ tabs: buildUiTabsSnapshot(useAppStore.getState()) })
+    const unsubscribeStore = useAppStore.subscribe((state) => {
+      if (state.unifiedTabsByWorktree === lastTabs) {
+        return
+      }
+      lastTabs = state.unifiedTabsByWorktree
+      if (timer !== null) {
+        clearTimeout(timer)
+      }
+      timer = setTimeout(() => {
+        timer = null
+        notify({ tabs: buildUiTabsSnapshot(useAppStore.getState()) })
+      }, TABS_CHANGE_DEBOUNCE_MS)
     })
     unsubs.push(unsubscribeStore, () => {
       if (timer !== null) {

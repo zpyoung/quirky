@@ -44,7 +44,7 @@ export const PUBLIC_EVENT_TYPES_BY_TOPIC = {
 
 export const PublicTopicSchema = z.enum(PUBLIC_TOPICS)
 
-/** `data` per type: chat {sessionId, turnId?, requestId?, worktreeId?}; ui {worktreeId?, tabId?, tabType?, view?}; notifications {id, title, worktreeId?}; workspace {worktreeId?, terminalHandle?, keys?}; activity {method, summary, worktreeId?}. */
+/** `data` per type: chat {sessionId, turnId?, requestId?, worktreeId?}; ui {worktreeId?, tabId?, tabType?, view?}; notifications {id, title, worktreeId?}; workspace {worktreeId?, terminalHandle?, keys?}; activity {method, summary, worktreeId?, tabId?, outcome?: 'refused'}. */
 export const PublicEventSchema = z.object({
   seq: z.number(),
   at: z.number(),

@@ -9,6 +9,16 @@ import { classifyRuntimeLongPoll, type RuntimeLongPollClass } from './runtime-rp
 import { mayAwaitApproval } from '../rpc/public-contract-gate'
 import { OWNER_RPC_CALLER_SCOPE, type RpcCallerScope } from '../rpc/rpc-caller-scope'
 
+// Why: layout.subscribe is an internal method, yet `quirky layout get` reads its stream over the local socket.
+const LOCAL_SOCKET_STREAMING_METHODS: ReadonlySet<string> = new Set(['layout.subscribe'])
+
+/** Whether the local socket answers this method with a frame stream instead of one reply. */
+export function streamsOnLocalSocket(method: string): boolean {
+  return (
+    publicSpecForMethod(method)?.streaming === true || LOCAL_SOCKET_STREAMING_METHODS.has(method)
+  )
+}
+
 export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
   // Why: Unix socket dispatch is one-shot and auths via the shared token from the 0o600 metadata file. See §3.1.
   protected async handleMessage(
@@ -26,19 +36,19 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     }
     const { request, callerScope } = parsed
 
-    // Why: only public streaming methods open a stream on the socket; every other method stays one reply.
-    const beginStream =
-      publicSpecForMethod(request.method)?.streaming === true ? context?.beginStream : undefined
+    // Why: only streaming methods that agents and the CLI reach open a stream on the socket; every other method stays one reply.
+    const beginStream = streamsOnLocalSocket(request.method) ? context?.beginStream : undefined
     const streaming = beginStream !== undefined
-    // Why: a stream holds its connection as long as a long-poll does, so it spends the same capacity.
-    const longPoll = classifyRuntimeLongPoll(request) ?? (streaming ? 'wait' : null)
+    // Why: a call parked on an approval prompt holds the socket as long as a long-poll, and must die with it.
+    const awaitsApproval = mayAwaitApproval(request)
+    // Why: a stream or an approval wait holds its connection as long as a long-poll does, so it spends the same capacity.
+    const longPoll =
+      classifyRuntimeLongPoll(request) ?? (streaming || awaitsApproval ? 'wait' : null)
     const rejection = this.admitLongPoll(longPoll)
     if (rejection) {
       return this.buildError(request.id, 'runtime_busy', rejection)
     }
-    // Why: a call parked on an approval prompt holds the socket as long as a long-poll, and must die with it.
-    const awaitsApproval = mayAwaitApproval(request)
-    if (longPoll || awaitsApproval) {
+    if (longPoll) {
       // Why: arm keepalive only for long-polls; short RPCs never create the setInterval. See §3.1.
       context?.startKeepalive()
     }

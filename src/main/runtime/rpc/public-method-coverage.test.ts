@@ -54,4 +54,19 @@ describe('public method coverage', () => {
     }
     expect(collisions).toEqual([])
   })
+
+  it.each([
+    ['worktree.rm', 'workspace-delete'],
+    ['worktree.forceDeleteBranch', 'workspace-delete'],
+    ['repo.rm', 'workspace-delete'],
+    ['terminal.stop', 'workspace-delete'],
+    ['terminal.closeAll', 'workspace-delete'],
+    ['files.writeBase64', 'file-overwrite-delete'],
+    ['files.rename', 'file-overwrite-delete']
+  ])('marks the legacy method %s destructive so quirky rpc gates it', (method, category) => {
+    expect(classifyMethod(method)).toMatchObject({
+      kind: 'legacy-cli',
+      destructive: { category }
+    })
+  })
 })

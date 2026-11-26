@@ -22,7 +22,7 @@ import {
   resolveApprovalCategoryForCall,
   resolveDestructiveForCall
 } from './destructive-previewers'
-import './public-call-resolvers'
+import { recordField, resolveTargetWorktreeId } from './public-call-resolvers'
 import { PublicRpcError } from './public-rpc-error'
 import type { RpcCallerScope } from './rpc-caller-scope'
 
@@ -95,7 +95,9 @@ function destructiveSpecFor(method: string, params: unknown): DestructiveSpec | 
   if (classification?.kind === 'public') {
     return classification.spec.destructive
   }
-  return classification?.kind === 'unstable' ? classification.destructive : undefined
+  return classification?.kind === 'unstable' || classification?.kind === 'legacy-cli'
+    ? classification.destructive
+    : undefined
 }
 
 function approvalCategoryFor(
@@ -131,16 +133,6 @@ async function previewEffects(method: string, params: unknown, ctx: RpcContext):
   return previewer ? previewer(params, ctx) : [`${method} is destructive`]
 }
 
-function worktreeIdOf(params: unknown, caller: AttributedCaller): string | undefined {
-  if (typeof params === 'object' && params !== null && 'worktreeId' in params) {
-    const { worktreeId } = params
-    if (typeof worktreeId === 'string' && worktreeId.length > 0) {
-      return worktreeId
-    }
-  }
-  return caller.worktreeId
-}
-
 const TAB_ID_PARAM_METHODS: ReadonlySet<string> = new Set([
   'session.tabs.activate',
   'session.tabs.close',
@@ -154,14 +146,6 @@ const TAB_ID_RESULT_METHODS: ReadonlySet<string> = new Set([
 
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
-}
-
-function recordField(value: unknown, key: string): unknown {
-  if (typeof value !== 'object' || value === null) {
-    return undefined
-  }
-  const entry: [string, unknown] | undefined = Object.entries(value).find(([name]) => name === key)
-  return entry?.[1]
 }
 
 /** The tab a call touched: named by the params for tab mutations, by the result for creations. */
@@ -178,14 +162,19 @@ function touchedTabIdOf(method: string, params: unknown, result: unknown): strin
   return undefined
 }
 
+/** A host's domain refusal comes back as a successful reply carrying `ok: false`, and changed nothing. */
+function isRefusal(result: unknown): boolean {
+  return recordField(result, 'ok') === false
+}
+
 function bindPublicCall(
   method: RpcMethod | RpcStreamingMethod,
   publicCaller: AttributedCaller,
-  onSuccess: ((result: unknown) => void) | null
+  onSettled: ((result: unknown) => void) | null
 ): RpcMethod | RpcStreamingMethod {
   const settle = (result: unknown): void => {
     try {
-      onSuccess?.(result)
+      onSettled?.(result)
     } catch (error) {
       console.error('[public-contract] recording the call failed', error)
     }
@@ -264,8 +253,13 @@ async function admitPublicCall<M extends RpcMethod | RpcStreamingMethod>(
   }
 
   const summary = spec?.summary ?? request.method
-  const worktreeId = worktreeIdOf(params, publicCaller)
   const category = optedIn ? approvalCategoryFor(request.method, params, destructive) : undefined
+  const recordsActivity = spec?.effect === 'mutate' || (destructive !== undefined && confirmed)
+  // resolved before the call runs, because a delete leaves nothing to resolve afterwards
+  const worktreeId =
+    recordsActivity || category
+      ? ((await resolveTargetWorktreeId(runtime, params)) ?? publicCaller.worktreeId)
+      : undefined
   if (category && runtime.approvalGate.policyFor(category) === 'ask') {
     const effects = destructive ? await previewEffects(request.method, params, context()) : []
     const terminalHandle = hint.terminalHandle
@@ -276,20 +270,21 @@ async function admitPublicCall<M extends RpcMethod | RpcStreamingMethod>(
     })
   }
 
-  const recordsActivity = spec?.effect === 'mutate' || (destructive !== undefined && confirmed)
-  const onSuccess = recordsActivity
+  const onSettled = recordsActivity
     ? (result: unknown): void => {
-        const tabId = touchedTabIdOf(request.method, params, result)
+        const refused = isRefusal(result)
+        const tabId = refused ? undefined : touchedTabIdOf(request.method, params, result)
         runtime.activityTrail.record({
           caller: publicCaller,
           method: request.method,
-          summary,
+          summary: refused ? `${summary} (refused)` : summary,
           ...(worktreeId ? { workspaceId: worktreeId } : {}),
           ...(tabId ? { tabId } : {}),
+          ...(refused ? { outcome: 'refused' as const } : {}),
           at: Date.now()
         })
       }
     : null
   // SAFETY: bindPublicCall keeps the unary or streaming shape of the method it is given.
-  return bindPublicCall(method, publicCaller, onSuccess) as M
+  return bindPublicCall(method, publicCaller, onSettled) as M
 }

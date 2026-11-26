@@ -12,6 +12,7 @@ import type { RuntimeStore } from '../runtime-store-contract'
 import type { PublicEventBus, PublicEventInput } from './public-event-bus'
 
 export const UI_FOCUS_CHANGED_CHANNEL = 'ui:focusChanged'
+export const UI_TABS_CHANGED_CHANNEL = 'ui:tabsChanged'
 
 const STATUS_SUBSCRIBER_ID = 'public-events-status'
 const COMPLETION_SUBSCRIBER_ID = 'public-events-completions'
@@ -21,6 +22,10 @@ const FocusChangedPayload = z.object({
   tabId: z.string().optional(),
   tabType: z.string().optional(),
   view: z.string().optional()
+})
+
+const TabsChangedPayload = z.object({
+  tabs: z.record(z.string(), z.array(z.object({ id: z.string(), type: z.string() })))
 })
 
 type AgentSessionHostTaps = Pick<
@@ -33,10 +38,44 @@ type PublicEventSourceDeps = {
   runtime: Pick<
     QuirkyRuntimeService,
     'onClientEvent' | 'onWorktreeLifecycle' | 'onNotificationDispatched'
-  >
+  > &
+    Partial<Pick<QuirkyRuntimeService, 'getAgentStatusTerminalHandleForPaneKey'>>
   store: Pick<RuntimeStore, 'onSettingsChanged'> | null
   /** The window whose renderer reports focus; other senders are ignored. */
   getWindow: () => { webContents: unknown } | null
+}
+
+/**
+ * Turns the renderer's per-workspace tab lists into tab.opened and tab.closed. The first list a
+ * workspace reports only seeds what is known, since a window that is still restoring its tabs
+ * would otherwise announce every one of them as new.
+ */
+function createTabEventTracker(
+  bus: PublicEventBus
+): (tabs: z.infer<typeof TabsChangedPayload>['tabs']) => void {
+  let known = new Map<string, Map<string, string>>()
+  return (tabsByWorkspace) => {
+    const next = new Map<string, Map<string, string>>()
+    for (const [worktreeId, tabs] of Object.entries(tabsByWorkspace)) {
+      const current = new Map(tabs.map((tab) => [tab.id, tab.type]))
+      const previous = known.get(worktreeId)
+      next.set(worktreeId, current)
+      if (!previous) {
+        continue
+      }
+      for (const [tabId, tabType] of previous) {
+        if (!current.has(tabId)) {
+          bus.publish({ topic: 'ui', type: 'tab.closed', data: { worktreeId, tabId, tabType } })
+        }
+      }
+      for (const [tabId, tabType] of current) {
+        if (!previous.has(tabId)) {
+          bus.publish({ topic: 'ui', type: 'tab.opened', data: { worktreeId, tabId, tabType } })
+        }
+      }
+    }
+    known = next
+  }
 }
 
 /**
@@ -184,15 +223,36 @@ export function installPublicEventSources({
 }: PublicEventSourceDeps): () => void {
   const stops: (() => void)[] = []
 
+  // consumes terminal side effects, because terminal.idle is derived from the agent-idle fact
   stops.push(
-    runtime.onClientEvent(
-      (event) => {
-        if (event.type === 'workspaceViewChanged') {
-          bus.publish({ topic: 'ui', type: 'view.changed', data: { view: 'workspace' } })
+    runtime.onClientEvent((event) => {
+      if (event.type === 'workspaceViewChanged') {
+        bus.publish({ topic: 'ui', type: 'view.changed', data: { view: 'workspace' } })
+        return
+      }
+      if (event.type !== 'terminalSideEffects') {
+        return
+      }
+      const { batch } = event
+      // a replay restores state and a stale-title clear is a paused agent, so neither is a finished turn
+      const idled = batch.facts.some(
+        (fact) => fact.kind === 'agent-idle' && fact.staleWorkingTitleClear !== true
+      )
+      if (!idled || batch.replay) {
+        return
+      }
+      const terminalHandle = batch.paneKey
+        ? runtime.getAgentStatusTerminalHandleForPaneKey?.(batch.paneKey)
+        : undefined
+      bus.publish({
+        topic: 'workspace',
+        type: 'terminal.idle',
+        data: {
+          ...(batch.worktreeId === undefined ? {} : { worktreeId: batch.worktreeId }),
+          ...(terminalHandle === undefined ? {} : { terminalHandle })
         }
-      },
-      { consumesTerminalSideEffects: false }
-    )
+      })
+    })
   )
 
   stops.push(
@@ -245,9 +305,23 @@ export function installPublicEventSources({
       bus.publish({ topic: 'ui', type: 'focus.changed', data: parsed.data })
     }
   }
+  const publishTabChanges = createTabEventTracker(bus)
+  const onTabsChanged = (event: IpcMainEvent, payload: unknown): void => {
+    if (event.sender !== getWindow()?.webContents) {
+      return
+    }
+    const parsed = TabsChangedPayload.safeParse(payload)
+    if (parsed.success) {
+      publishTabChanges(parsed.data.tabs)
+    }
+  }
   const surface = getRuntimeDesktopSurface()
   surface.onIpc(UI_FOCUS_CHANGED_CHANNEL, onFocusChanged)
-  stops.push(() => surface.removeIpcListener(UI_FOCUS_CHANGED_CHANNEL, onFocusChanged))
+  surface.onIpc(UI_TABS_CHANGED_CHANNEL, onTabsChanged)
+  stops.push(() => {
+    surface.removeIpcListener(UI_FOCUS_CHANGED_CHANNEL, onFocusChanged)
+    surface.removeIpcListener(UI_TABS_CHANGED_CHANNEL, onTabsChanged)
+  })
 
   return () => {
     for (const stop of stops) {

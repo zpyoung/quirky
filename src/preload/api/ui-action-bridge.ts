@@ -16,6 +16,8 @@ export type UiFocusChange = {
   tabType?: string
   view?: string
 }
+/** Every workspace's open tabs, so main can tell which opened or closed between two reports. */
+export type UiTabsChange = { tabs: Record<string, { id: string; type: string }[]> }
 
 /** Optional so a renderer built without this preload (older web shells, test fixtures) still mounts. */
 export type UiActionBridgeApi = {
@@ -24,6 +26,7 @@ export type UiActionBridgeApi = {
   onRequestUiState?: (callback: (request: UiStateRequest) => void) => () => void
   replyUiState?: (reply: UiStateReply) => void
   notifyUiFocusChanged?: (change: UiFocusChange) => void
+  notifyUiTabsChanged?: (change: UiTabsChange) => void
 }
 
 export const uiActionBridgeApi = {
@@ -47,5 +50,8 @@ export const uiActionBridgeApi = {
   },
   notifyUiFocusChanged: (change: UiFocusChange): void => {
     ipcRenderer.send('ui:focusChanged', change)
+  },
+  notifyUiTabsChanged: (change: UiTabsChange): void => {
+    ipcRenderer.send('ui:tabsChanged', change)
   }
 } satisfies UiActionBridgeApi
