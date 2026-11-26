@@ -116,6 +116,7 @@ export const ADMIN_PUBLIC_METHODS: readonly PublicMethodSpec[] = [
     stability: 'stable',
     effect: 'read',
     params: FileTreePath,
+    positionals: ['relativePath'],
     result: OPAQUE_RESULT,
     errors: [...COMMON_ERRORS, 'not_found']
   }),
@@ -126,6 +127,7 @@ export const ADMIN_PUBLIC_METHODS: readonly PublicMethodSpec[] = [
     stability: 'stable',
     effect: 'read',
     params: FileOpen,
+    positionals: ['relativePath'],
     result: OPAQUE_RESULT,
     errors: [...COMMON_ERRORS, 'not_found']
   }),
@@ -136,6 +138,7 @@ export const ADMIN_PUBLIC_METHODS: readonly PublicMethodSpec[] = [
     stability: 'stable',
     effect: 'mutate',
     params: FileWrite,
+    positionals: ['relativePath'],
     result: OPAQUE_RESULT,
     destructive: { category: 'file-overwrite-delete' },
     errors: [...COMMON_ERRORS, 'needs_confirmation', 'conflict']
@@ -167,6 +170,7 @@ export const ADMIN_PUBLIC_METHODS: readonly PublicMethodSpec[] = [
     stability: 'stable',
     effect: 'mutate',
     params: FileDelete,
+    positionals: ['relativePath'],
     result: OPAQUE_RESULT,
     destructive: { category: 'file-overwrite-delete' },
     errors: [...COMMON_ERRORS, 'needs_confirmation', 'not_found']

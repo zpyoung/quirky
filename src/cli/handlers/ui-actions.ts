@@ -106,13 +106,6 @@ function formatActionRun(actionId: string, result: ActionRunWaitResult): string 
   return `Ran ${actionId}`
 }
 
-async function actionIsDestructive(ctx: HandlerContext, actionId: string): Promise<boolean> {
-  const listed = await ctx.client.call<ActionListResult>('ui.listActions', {}, publicCallOptions())
-  return listed.result.actions.some(
-    (action) => action.id === actionId && Boolean(action.destructive)
-  )
-}
-
 function isWaitTimeout(error: unknown): boolean {
   return error instanceof RuntimeClientError && error.code === 'timeout'
 }
@@ -122,9 +115,6 @@ async function runAction(ctx: HandlerContext): Promise<void> {
   const actionId = getRequiredStringFlag(flags, 'id')
   const workspace = await getOptionalWorktreeSelector(flags, 'workspace', cwd, client)
   const yes = flags.has('yes')
-  if (client.isRemote && !yes && (await actionIsDestructive(ctx, actionId))) {
-    throwConfirmationRequired(ctx, `action run ${actionId}`)
-  }
   const params = { actionId, ...(workspace ? { workspace } : {}) }
   const run = () => client.call<ActionRunResult>('ui.runAction', params, publicCallOptions(yes))
 
