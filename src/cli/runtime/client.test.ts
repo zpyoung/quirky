@@ -2,7 +2,7 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, onTestFinished } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { APPROVAL_TIMEOUT_MS } from '../../main/runtime/approvals/approval-gate'
 import { PUBLIC_CLI_RUNTIME_CAPABILITY } from '../../shared/public-cli-runtime-capabilities'
 import { exitCodeFor } from '../public-cli/exit-codes'
@@ -24,8 +24,14 @@ afterEach(async () => {
   servers.clear()
 })
 
-/** A runtime that advertises `capabilities` and answers every other method with an empty result. */
-async function startRuntime(capabilities: string[]): Promise<{
+/**
+ * A runtime that advertises `capabilities` and answers every other method with an empty result,
+ * except `silentMethod`, which it receives and never answers.
+ */
+async function startRuntime(
+  capabilities: string[],
+  silentMethod?: string
+): Promise<{
   client: RuntimeClient
   requests: SeenRequest[]
 }> {
@@ -39,6 +45,9 @@ async function startRuntime(capabilities: string[]): Promise<{
     socket.once('data', (data) => {
       const request = JSON.parse(String(data).trim()) as SeenRequest
       requests.push(request)
+      if (request.method === silentMethod) {
+        return
+      }
       socket.write(
         `${JSON.stringify({
           id: request.id,
@@ -107,6 +116,26 @@ describe.skipIf(process.platform === 'win32')('public-contract calls', () => {
     ])
     expect(requests[1]).toMatchObject({ publicContract: 1 })
     expect(requests[2]).toMatchObject({ publicContract: 1, confirm: true })
+  })
+
+  it('stops waiting for a call whose signal aborts', async () => {
+    const { client, requests } = await startRuntime([], 'ui.state')
+    const abort = new AbortController()
+
+    const pending = client.call('ui.state', undefined, { signal: abort.signal })
+    await vi.waitFor(() => expect(requests).toHaveLength(1))
+    abort.abort()
+
+    await expect(pending).rejects.toMatchObject({ code: 'aborted' })
+  })
+
+  it('sends nothing for a call whose signal has already aborted', async () => {
+    const { client, requests } = await startRuntime([])
+
+    await expect(
+      client.call('ui.state', undefined, { signal: AbortSignal.abort() })
+    ).rejects.toMatchObject({ code: 'aborted' })
+    expect(requests).toEqual([])
   })
 
   it('does not probe for a legacy call', async () => {

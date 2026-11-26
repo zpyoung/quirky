@@ -361,17 +361,23 @@ describe('turn lookup from the journal', () => {
     vi.useRealTimers()
   })
 
-  it('stops when told to and treats an unreadable journal as not yet opened', async () => {
+  it('treats an unreadable journal as not yet opened', async () => {
     const call = vi.fn(async () => {
       throw new Error('down')
     })
     // SAFETY: the lookup calls only `call`
     const client = { call } as unknown as ChatClient
+    await expect(awaitMessageTurnId(client, 's1', 'msg-1', NO_WAIT)).resolves.toBeNull()
+    expect(call).toHaveBeenCalledTimes(1)
+  })
+
+  it('ends after one read when the caller has already stopped the lookup', async () => {
+    const { client, call } = historyClient([[]])
     await expect(
       awaitMessageTurnId(client, 's1', 'msg-1', {
         budgetMs: 5000,
         intervalMs: 100,
-        stopped: () => true
+        signal: AbortSignal.abort()
       })
     ).resolves.toBeNull()
     expect(call).toHaveBeenCalledTimes(1)
@@ -389,15 +395,49 @@ describe('turn lookup from the journal', () => {
 })
 
 describe('awaitMessageTurnId', () => {
-  it('gives up within the budget when a history request never answers', async () => {
+  /** A host whose history request never answers; like the runtime client it rejects once aborted. */
+  function silentHost() {
+    const requests: { signal?: AbortSignal; timeoutMs?: number }[] = []
+    const call = vi.fn(
+      (_method: string, _params: unknown, options: { signal?: AbortSignal; timeoutMs?: number }) =>
+        new Promise<never>((_resolve, reject) => {
+          requests.push(options)
+          options.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+            once: true
+          })
+        })
+    )
     // SAFETY: the lookup calls only `call`
-    const client = { call: () => new Promise(() => {}) } as unknown as ChatClient
+    return { client: { call } as unknown as ChatClient, requests }
+  }
+
+  it('gives up within the budget and cancels the history request still in flight', async () => {
+    const { client, requests } = silentHost()
     const started = Date.now()
 
     await expect(
       awaitMessageTurnId(client, 's1', 'msg-1', { budgetMs: 30, intervalMs: 5 })
     ).resolves.toBeNull()
+
     expect(Date.now() - started).toBeLessThan(1000)
+    expect(requests[0].signal?.aborted).toBe(true)
+    expect(requests[0].timeoutMs).toBeLessThanOrEqual(30)
+  })
+
+  it('cancels the history request in flight when the caller aborts the lookup', async () => {
+    const { client, requests } = silentHost()
+    const stop = new AbortController()
+
+    const found = awaitMessageTurnId(client, 's1', 'msg-1', {
+      budgetMs: 5000,
+      intervalMs: 5,
+      signal: stop.signal
+    })
+    await vi.waitFor(() => expect(requests).toHaveLength(1))
+    stop.abort()
+
+    await expect(found).resolves.toBeNull()
+    expect(requests[0].signal?.aborted).toBe(true)
   })
 })
 
@@ -475,12 +515,12 @@ describe('createSendTurnTracker', () => {
     own.finish()
   })
 
-  it('takes an event naming no turn only from after the send, and only when no turn was found', async () => {
+  it('takes an event naming no turn only when no turn was found, including one held before the send reply', async () => {
     const { own, settled } = tracker([])
     own.offer(event('turn.finished', 1))
     own.accepted('msg-1')
     own.offer(event('turn.finished', 2))
-    await vi.waitFor(() => expect(settled).toEqual([2]))
+    await vi.waitFor(() => expect(settled).toEqual([1, 2]))
     own.finish()
 
     const found = tracker(JOURNAL_OF_MINE)
@@ -490,13 +530,32 @@ describe('createSendTurnTracker', () => {
     found.own.finish()
   })
 
-  it('takes a needs-input event naming no turn by session, but only from after the send', async () => {
+  it('settles on a needs-input event naming no turn, also one that arrived before the send reply', async () => {
     const { own, settled } = tracker(JOURNAL_OF_MINE)
-    own.offer(event('turn.needs-input', 1))
+    expect(own.offer(event('turn.needs-input', 1))).toBe(false)
     own.accepted('msg-1')
     own.offer(event('turn.needs-input', 2))
 
+    await vi.waitFor(() => expect(settled).toEqual([1, 2]))
+    own.finish()
+  })
+
+  it('drops a finish naming no turn that arrived before the send reply once the lookup finds the turn', async () => {
+    const { own, settled } = tracker(JOURNAL_OF_MINE)
+    own.offer(event('turn.finished', 1))
+    own.offer(event('turn.needs-input', 2))
+    own.accepted('msg-1')
+
     await vi.waitFor(() => expect(settled).toEqual([2]))
+    own.finish()
+  })
+
+  it('settles on a turn event that arrived before the send reply once the send is accepted', async () => {
+    const { own, settled } = tracker(JOURNAL_OF_MINE)
+    own.offer(event('turn.finished', 1, 't-mine'))
+    own.accepted('msg-1')
+
+    await vi.waitFor(() => expect(settled).toEqual([1]))
     own.finish()
   })
 

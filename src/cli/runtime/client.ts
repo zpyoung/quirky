@@ -81,6 +81,8 @@ type CallOptions = {
   publicContract?: true
   confirm?: boolean
   caller?: CallerHint
+  /** Stops the caller waiting for the reply; the request's own `timeoutMs` still bounds the transport. */
+  signal?: AbortSignal
 } & RuntimeOrchestrationEnvelope
 
 type StreamOptions = {
@@ -95,6 +97,28 @@ function markClientFailure(error: unknown): unknown {
   return error instanceof RuntimeRpcFailureError || error instanceof RuntimeClientError
     ? markPublicContractError(error)
     : error
+}
+
+/** Runs `start`, rejecting with `aborted` as soon as `signal` aborts; an already aborted signal starts nothing. */
+async function rejectOnAbort<T>(
+  signal: AbortSignal | undefined,
+  start: () => Promise<T>
+): Promise<T> {
+  if (signal === undefined) {
+    return await start()
+  }
+  const aborted = () =>
+    new RuntimeClientError('aborted', 'The request was aborted before it was answered.')
+  if (signal.aborted) {
+    throw aborted()
+  }
+  return await new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(aborted())
+    signal.addEventListener('abort', onAbort, { once: true })
+    start()
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener('abort', onAbort))
+  })
 }
 
 export class RuntimeClient {
@@ -145,7 +169,9 @@ export class RuntimeClient {
     options?: CallOptions
   ): Promise<RuntimeRpcSuccess<TResult>> {
     try {
-      return await this.callUnmarked<TResult>(method, params, options)
+      return await rejectOnAbort(options?.signal, () =>
+        this.callUnmarked<TResult>(method, params, options)
+      )
     } catch (error) {
       throw options?.publicContract ? markClientFailure(error) : error
     }
