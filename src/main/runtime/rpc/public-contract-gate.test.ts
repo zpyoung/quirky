@@ -15,7 +15,12 @@ import {
   registerDestructivePreviewer
 } from './destructive-previewers'
 import { mapRuntimeError } from './errors'
-import { gatePublicContract, readCallerHint, resolvePublicCaller } from './public-contract-gate'
+import {
+  gatePublicContract,
+  mayAwaitApproval,
+  readCallerHint,
+  resolvePublicCaller
+} from './public-contract-gate'
 import { PublicRpcError } from './public-rpc-error'
 import { admitRpcRequest } from './rpc-request-admission-prologue'
 import { OWNER_RPC_CALLER_SCOPE, type RpcCallerScope } from './rpc-caller-scope'
@@ -118,7 +123,12 @@ function gate(
   world: ApprovalWorld,
   method: RpcMethod,
   request: RpcRequest,
-  options: { params?: unknown; scope?: RpcCallerScope; pairedDeviceId?: string } = {}
+  options: {
+    params?: unknown
+    scope?: RpcCallerScope
+    pairedDeviceId?: string
+    signal?: AbortSignal
+  } = {}
 ) {
   return gatePublicContract({
     runtime: world.runtime,
@@ -126,7 +136,10 @@ function gate(
     request,
     params: options.params,
     callerScope: options.scope ?? OWNER_RPC_CALLER_SCOPE,
-    options: options.pairedDeviceId ? { pairedDeviceId: options.pairedDeviceId } : undefined,
+    options:
+      options.pairedDeviceId || options.signal
+        ? { pairedDeviceId: options.pairedDeviceId, signal: options.signal }
+        : undefined,
     orchestrationCaller: undefined
   })
 }
@@ -461,6 +474,29 @@ describe('public contract gate', () => {
       expect(handler).not.toHaveBeenCalled()
     })
 
+    it('cancels the ask and never dispatches when the requesting client disconnects', async () => {
+      const world = createWorld({ 'file-overwrite-delete': 'ask' })
+      const controller = new AbortController()
+      const handler = vi.fn(async () => ({ discarded: 3 }))
+      const gated = gate(
+        world,
+        createMethod(DESTRUCTIVE, handler),
+        createRequest(DESTRUCTIVE, { publicContract: 1, confirm: true }),
+        { signal: controller.signal }
+      )
+      const assertion = expect(gated).rejects.toMatchObject({
+        code: 'needs_confirmation',
+        reason: 'declined'
+      })
+      await flush()
+
+      controller.abort()
+
+      await assertion
+      expect(world.cancelled).toEqual(['ask_1'])
+      expect(handler).not.toHaveBeenCalled()
+    })
+
     it('points the question at the pane of the calling terminal', async () => {
       const world = createWorld({ 'file-overwrite-delete': 'ask' })
       world.getTerminalPaneKey.mockReturnValue('pane-7')
@@ -486,6 +522,122 @@ describe('public contract gate', () => {
         expect.anything(),
         expect.objectContaining({ paneKey: 'pane-7' })
       )
+    })
+  })
+
+  describe('ui.runAction, whose destructiveness depends on the action id', () => {
+    const RUN_ACTION = 'ui.runAction'
+    const DELETE_PARAMS = { actionId: 'workspace.delete', workspace: 'feature' }
+
+    it('previews workspace.delete without confirm using the registered previewer', async () => {
+      registerDestructivePreviewer(RUN_ACTION, async () => ['deletes the worktree at /w/feature'])
+      const world = createWorld({ 'workspace-delete': 'ask' })
+      const handler = vi.fn(async () => ({ ran: true }))
+
+      const gated = gate(
+        world,
+        createMethod(RUN_ACTION, handler),
+        createRequest(RUN_ACTION, { publicContract: 1 }),
+        { params: DELETE_PARAMS }
+      )
+
+      await expect(gated).rejects.toMatchObject({
+        code: 'needs_confirmation',
+        reason: 'preview',
+        data: { effects: ['deletes the worktree at /w/feature'] }
+      })
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it('requests approval for a confirmed workspace.delete when the policy says ask', async () => {
+      registerDestructivePreviewer(RUN_ACTION, async () => ['deletes the worktree at /w/feature'])
+      const world = createWorld({ 'workspace-delete': 'ask' })
+
+      const gated = gate(
+        world,
+        createMethod(RUN_ACTION),
+        createRequest(RUN_ACTION, { publicContract: 1, confirm: true }),
+        { params: DELETE_PARAMS }
+      )
+      await flush()
+
+      expect(world.requireSpy).toHaveBeenCalledWith(
+        'workspace-delete',
+        expect.anything(),
+        expect.any(String),
+        ['deletes the worktree at /w/feature'],
+        expect.anything()
+      )
+      world.answer(true)
+      await expect(gated).resolves.toMatchObject({ name: RUN_ACTION })
+    })
+
+    it('passes a non-destructive action straight through', async () => {
+      const world = createWorld({ 'workspace-delete': 'ask', 'file-overwrite-delete': 'ask' })
+
+      const gated = gate(
+        world,
+        createMethod(RUN_ACTION),
+        createRequest(RUN_ACTION, { publicContract: 1 }),
+        { params: { actionId: 'workspace.rename' } }
+      )
+
+      await expect(gated).resolves.toMatchObject({ name: RUN_ACTION })
+      expect(world.requireSpy).not.toHaveBeenCalled()
+    })
+
+    it('tells the transport which requests can park on an approval', () => {
+      const request = (extra: Partial<RpcRequest>): RpcRequest =>
+        createRequest(RUN_ACTION, { params: DELETE_PARAMS, ...extra })
+
+      expect(mayAwaitApproval(request({ publicContract: 1, confirm: true }))).toBe(true)
+      expect(mayAwaitApproval(request({ publicContract: 1 }))).toBe(false)
+      expect(mayAwaitApproval(request({ confirm: true }))).toBe(false)
+      expect(
+        mayAwaitApproval(
+          request({ publicContract: 1, confirm: true, params: { actionId: 'workspace.rename' } })
+        )
+      ).toBe(false)
+    })
+  })
+
+  describe('settings.update, which needs approval only for security keys', () => {
+    const SETTINGS_UPDATE = 'settings.update'
+
+    it('asks for security-settings approval when agentDefaultEnv is touched', async () => {
+      const world = createWorld({ 'security-settings': 'ask' })
+
+      const gated = gate(
+        world,
+        createMethod(SETTINGS_UPDATE),
+        createRequest(SETTINGS_UPDATE, { publicContract: 1 }),
+        { params: { agentDefaultEnv: { claude: { FOO: 'bar' } } } }
+      )
+      await flush()
+
+      expect(world.requireSpy).toHaveBeenCalledWith(
+        'security-settings',
+        expect.anything(),
+        'Change client settings',
+        [],
+        expect.anything()
+      )
+      world.answer(true)
+      await expect(gated).resolves.toMatchObject({ name: SETTINGS_UPDATE })
+    })
+
+    it('does not ask for a benign key', async () => {
+      const world = createWorld({ 'security-settings': 'ask' })
+
+      const gated = gate(
+        world,
+        createMethod(SETTINGS_UPDATE),
+        createRequest(SETTINGS_UPDATE, { publicContract: 1 }),
+        { params: { machineName: 'laptop' } }
+      )
+
+      await expect(gated).resolves.toMatchObject({ name: SETTINGS_UPDATE })
+      expect(world.requireSpy).not.toHaveBeenCalled()
     })
   })
 

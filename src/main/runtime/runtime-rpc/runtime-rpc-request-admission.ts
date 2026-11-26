@@ -6,6 +6,7 @@ import { errorResponse, successResponse } from '../rpc/errors'
 import { publicSpecForMethod } from '../../../shared/public-rpc/public-methods'
 import { RuntimeRpcBinaryRouting } from './runtime-rpc-binary-routing'
 import { classifyRuntimeLongPoll, type RuntimeLongPollClass } from './runtime-rpc-long-poll'
+import { mayAwaitApproval } from '../rpc/public-contract-gate'
 import { OWNER_RPC_CALLER_SCOPE, type RpcCallerScope } from '../rpc/rpc-caller-scope'
 
 export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
@@ -35,7 +36,9 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     if (rejection) {
       return this.buildError(request.id, 'runtime_busy', rejection)
     }
-    if (longPoll) {
+    // Why: a call parked on an approval prompt holds the socket as long as a long-poll, and must die with it.
+    const awaitsApproval = mayAwaitApproval(request)
+    if (longPoll || awaitsApproval) {
       // Why: arm keepalive only for long-polls; short RPCs never create the setInterval. See §3.1.
       context?.startKeepalive()
     }
@@ -56,6 +59,7 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
       return await this.dispatcher.dispatch(request, {
         signal:
           longPoll ||
+          awaitsApproval ||
           request.method === 'linear.commentEdit' ||
           request.method === 'linear.commentDelete'
             ? context?.signal
