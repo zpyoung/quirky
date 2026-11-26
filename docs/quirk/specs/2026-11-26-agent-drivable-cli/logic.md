@@ -1,10 +1,13 @@
 # Agent-drivable Quirky: one public CLI and API surface
 
-**Status:** Approved (2026-11-26)
+**Status:** Approved (2026-11-26) · Tech spec: authored (crosses main, renderer, shared and CLI subsystems)
 
 ## Status & amendments
 
-**Amendments:** none yet.
+**Amendments:**
+
+- 2026-11-26: Tab family. `quirky tab list/show/current/switch/create/close` already mean browser tabs. With no `--type`, they keep exactly today's behavior. `--type all|terminal|editor|markdown|chat|browser` widens them, and the new verbs `focus`, `move` and `pin` work on any tab by id. The user chose this during the tech spec. SC-2 already passes `--type browser`, so it is unchanged.
+- 2026-11-26: The workspace-delete app action id is `workspace.delete`, not `workspace.delete`. SC-3 is updated to match. Over the API it takes an explicit workspace and never targets the hovered one.
 
 ## Conceptual model
 
@@ -78,7 +81,7 @@ The dispatcher first checks that the runtime advertises the method's capability,
    - **Then** (a) without `--yes` nothing runs; it exits 4 with the effects and the confirm command; (b) with `--yes` a Quirky approval prompt appears; if the user declines, the call exits 4 with reason `declined` and the workspace stays
    - **Data before:** **Workspace old-spike***: 3 uncommitted files*
    - **Walkthrough:**
-     1. The agent runs `quirky action run worktree.delete --workspace old-spike`
+     1. The agent runs `quirky action run workspace.delete --workspace old-spike`
      2. The output is `needs_confirmation`, effects "delete workspace old-spike; 3 uncommitted files lost", confirm `... --yes`
      3. The agent runs the confirm command, and the user sees the approval prompt and declines
    - **Data after:** **Workspace old-spike**: ✓ unchanged; **CLI result**: ✗ `needs_confirmation`, reason `declined`, exit 4
