@@ -110,13 +110,13 @@ export async function sendStreamingRequest(
       if (isKeepaliveFrame(raw)) {
         return
       }
-      // the envelope schema strips `streaming`, so the flag is read from the raw frame
-      const streaming = (raw as { streaming?: unknown }).streaming === true
       const parsed = RuntimeRpcEnvelopeSchema.safeParse(raw)
       if (!parsed.success || '_keepalive' in parsed.data) {
         finish(invalidFrameError())
         return
       }
+      // the envelope schema strips `streaming`, so the flag is read from the raw frame
+      const streaming = (raw as { streaming?: unknown }).streaming === true
       const frame = parsed.data
       if (frame.id !== requestId) {
         finish(

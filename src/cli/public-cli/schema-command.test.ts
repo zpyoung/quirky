@@ -123,6 +123,14 @@ describe('quirky schema', () => {
     ])
   })
 
+  it('lists the commands under a group prefix as json entries with --json', async () => {
+    await run(['chat'], true)
+    expect(JSON.parse(printed())).toEqual([
+      { command: 'chat list', summary: 'List chat sessions' },
+      { command: 'chat respond', summary: respondSpec.summary }
+    ])
+  })
+
   it('rejects an unknown command as not_found with a next step', async () => {
     await expect(run(['nope'])).rejects.toMatchObject({
       code: 'not_found',

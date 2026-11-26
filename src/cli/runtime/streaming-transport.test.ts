@@ -198,6 +198,18 @@ describe('sendStreamingRequest', () => {
     ).rejects.toMatchObject({ code: 'invalid_runtime_response' })
   })
 
+  it.each(['null', '42', '"text"', '[]'])(
+    'rejects a frame that parses to a non-object (%s)',
+    async (line) => {
+      const runtime = await startRuntime((_request, socket) => {
+        socket.write(`${line}\n`)
+      })
+      await expect(
+        sendStreamingRequest(runtime.metadata, 'events.subscribe', {}, () => {})
+      ).rejects.toMatchObject({ code: 'invalid_runtime_response' })
+    }
+  )
+
   it('rejects with what onFrame throws and closes the connection', async () => {
     const runtime = await startRuntime((request, socket) => {
       socket.write(frame(request.id, { n: 1 }))

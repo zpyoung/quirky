@@ -99,7 +99,11 @@ export function createSchemaHandler(
     const prefix = path.join(' ')
     const group = buildSchemaIndex(specs).filter((entry) => entry.command.startsWith(`${prefix} `))
     if (group.length > 0) {
-      console.log(group.map((entry) => `${entry.command}  ${entry.summary}`).join('\n'))
+      if (json) {
+        printJson(group)
+      } else {
+        console.log(group.map((entry) => `${entry.command}  ${entry.summary}`).join('\n'))
+      }
       return
     }
     throw new RuntimeClientError('not_found', `Unknown command: ${prefix}`, {
