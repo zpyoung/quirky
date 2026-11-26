@@ -7,9 +7,24 @@ import {
   subscribeRemoteRuntimeRequest,
   type RemoteRuntimeSubscription
 } from '../../shared/remote-runtime-client'
+import { AGENT_SESSION_CURRENT_REQUESTS_CLIENT_CAPABILITY } from '../../shared/agent-session-current-requests-capability'
+import {
+  STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
+  type RuntimeCapability
+} from '../../shared/protocol-version'
 import type { RuntimeStatus } from '../../shared/runtime-types'
 import { isSafeTimerDelayMs, MAX_TIMER_DELAY_MS } from '../../shared/timer-delay'
 import { RuntimeClientError, RuntimeRpcFailureError, type RuntimeRpcResponse } from './types'
+
+/**
+ * What the CLI adds to the shared remote capability set. The local socket reads as an in-process
+ * caller and gets structured chat and current requests unconditionally; a paired socket gets them
+ * only by naming them, so `quirky chat` behaves the same against either.
+ */
+export const CLI_REMOTE_CLIENT_CAPABILITIES: readonly RuntimeCapability[] = [
+  STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
+  AGENT_SESSION_CURRENT_REQUESTS_CLIENT_CAPABILITY
+]
 
 export async function sendWebSocketRequest<TResult>(
   connection: PairedRuntimeConnection,
@@ -19,7 +34,15 @@ export async function sendWebSocketRequest<TResult>(
   envelope?: RemoteRuntimeRequestEnvelope
 ): Promise<RuntimeRpcResponse<TResult>> {
   try {
-    return await sendRemoteRuntimeRequest<TResult>(connection, method, params, timeoutMs, envelope)
+    return await sendRemoteRuntimeRequest<TResult>(
+      connection,
+      method,
+      params,
+      timeoutMs,
+      envelope,
+      undefined,
+      CLI_REMOTE_CLIENT_CAPABILITIES
+    )
   } catch (error) {
     if (error instanceof RemoteRuntimeClientError) {
       throw new RuntimeClientError(error.code, error.message, error.data)
@@ -43,7 +66,8 @@ export async function sendWebSocketRequestWithStatusPreflight<TResult>(
       params,
       timeoutMs,
       validateStatus,
-      envelope
+      envelope,
+      CLI_REMOTE_CLIENT_CAPABILITIES
     )
   } catch (error) {
     if (error instanceof RemoteRuntimeClientError) {
@@ -154,7 +178,7 @@ export async function streamWebSocketRequest(
             )
           )
       },
-      { signal }
+      { signal, clientCapabilities: CLI_REMOTE_CLIENT_CAPABILITIES }
     ).then(
       (opened) => {
         subscription = opened

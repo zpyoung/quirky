@@ -4,6 +4,8 @@ import type { HandlerContext } from '../dispatch'
 import type { RuntimeClient } from '../runtime-client'
 import { ADMIN_PUBLIC_METHODS } from '../../shared/public-rpc/public-methods/admin'
 import { definePublicMethod } from '../../shared/public-rpc/public-method-spec'
+import { PUBLIC_METHOD_SPECS } from '../../shared/public-rpc/public-methods'
+import { RuntimeClientError } from '../runtime/types'
 import { exitCodeFor } from './exit-codes'
 import { buildGeneratedCommands } from './generated-commands'
 
@@ -514,6 +516,31 @@ describe('buildGeneratedCommands', () => {
     it('does not offer --full on a stream', () => {
       const { specs } = buildGeneratedCommands([watchSpec], new Set())
       expect(specs[0].allowedFlags).not.toContain('full')
+    })
+  })
+
+  describe('layout apply', () => {
+    it('is generated in every build, not only a layout-owner one', () => {
+      const { specs, handlers } = buildGeneratedCommands(PUBLIC_METHOD_SPECS, new Set())
+      expect(specs.some((spec) => spec.path.join(' ') === 'layout apply')).toBe(true)
+      expect(handlers['layout apply']).toBeDefined()
+    })
+
+    it('reports unavailable, exit 6, when the runtime does not register it', async () => {
+      const { handlers } = buildGeneratedCommands(PUBLIC_METHOD_SPECS, new Set())
+      const client = fakeClient({
+        call: vi.fn(async () => {
+          throw new RuntimeClientError('method_not_found', 'Unknown method')
+        })
+      })
+      const error = await handlers['layout apply'](
+        contextFor(client, {
+          'params-json': JSON.stringify({
+            command: { type: 'equalizePanes', workspace: 'w', tabId: 't' }
+          })
+        })
+      ).catch((caught: unknown) => caught)
+      expect(exitCodeFor(error)).toBe(6)
     })
   })
 })
