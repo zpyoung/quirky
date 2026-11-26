@@ -165,28 +165,25 @@ describe('ui and action handlers', () => {
       )
     })
 
-    it('refuses an unconfirmed destructive action on a remote runtime without running it', async () => {
-      const call = vi.fn(async (method: string) =>
-        envelope(
-          method === 'ui.listActions'
-            ? {
-                actions: [
-                  {
-                    id: 'workspace.delete',
-                    description: 'Delete',
-                    available: true,
-                    destructive: { category: 'workspace-delete' }
-                  }
-                ]
-              }
-            : { claimed: true }
-        )
-      )
+    it('sends a remote run straight to the server gate, with confirm following --yes', async () => {
+      const call = vi.fn(async () => envelope({ claimed: true }))
       const client = fakeClient({ call, isRemote: true })
-      await expect(
-        UI_ACTION_HANDLERS['action run'](contextFor(client, { id: 'workspace.delete' }))
-      ).rejects.toMatchObject({ code: 'needs_confirmation' })
-      expect(call).not.toHaveBeenCalledWith('ui.runAction', expect.anything(), expect.anything())
+      await UI_ACTION_HANDLERS['action run'](contextFor(client, { id: 'workspace.delete' }))
+      await UI_ACTION_HANDLERS['action run'](
+        contextFor(client, { id: 'workspace.delete', yes: true })
+      )
+      expect(call.mock.calls).toEqual([
+        [
+          'ui.runAction',
+          { actionId: 'workspace.delete' },
+          expect.objectContaining({ confirm: false })
+        ],
+        [
+          'ui.runAction',
+          { actionId: 'workspace.delete' },
+          expect.objectContaining({ confirm: true })
+        ]
+      ])
     })
 
     describe('--wait', () => {

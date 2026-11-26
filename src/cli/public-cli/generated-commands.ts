@@ -51,7 +51,8 @@ function unwrapSchema(schema: ParamSchema): ParamSchema {
     ) {
       current = current.def.innerType
     } else if (current instanceof z.ZodPipe) {
-      current = current.in
+      // a trailing transform has no type of its own, so the input side names the flag's kind
+      current = current.out instanceof z.ZodTransform ? current.in : current.out
     } else {
       break
     }

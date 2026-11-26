@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import type { HandlerContext } from '../dispatch'
 import type { RuntimeClient } from '../runtime-client'
+import { ADMIN_PUBLIC_METHODS } from '../../shared/public-rpc/public-methods/admin'
 import { definePublicMethod } from '../../shared/public-rpc/public-method-spec'
 import { exitCodeFor } from './exit-codes'
 import { buildGeneratedCommands } from './generated-commands'
@@ -387,6 +388,71 @@ describe('buildGeneratedCommands', () => {
     })
   })
 
+  describe('transform-piped string params', () => {
+    const pipedString = (message: string) =>
+      z
+        .unknown()
+        .transform((v) => (typeof v === 'string' ? v : ''))
+        .pipe(z.string().min(1, message))
+
+    const readSpec = definePublicMethod({
+      method: 'widget.read',
+      cliPath: ['widget', 'read'],
+      summary: 'Read a widget file',
+      stability: 'unstable',
+      effect: 'read',
+      params: z.object({
+        worktree: pipedString('Missing worktree'),
+        relativePath: pipedString('Missing path'),
+        depth: z.number().optional().default(1)
+      }),
+      result: z.unknown(),
+      positionals: ['relativePath'],
+      errors: []
+    })
+
+    it('exposes them as plain string flags and positionals instead of --params-json only', () => {
+      const { specs } = buildGeneratedCommands([readSpec], new Set())
+      expect(specs[0].positionalArgs).toEqual(['relative-path'])
+      expect(specs[0].allowedFlags).toEqual(expect.arrayContaining(['worktree', 'depth']))
+      expect(specs[0].usage).toContain('--worktree <value>')
+    })
+
+    it('sends the flag and positional values as strings', async () => {
+      const { handlers } = buildGeneratedCommands([readSpec], new Set())
+      const client = fakeClient()
+      await handlers['widget read'](
+        contextFor(client, { worktree: 'id:repo::/w', 'relative-path': 'src/a.ts' })
+      )
+      expect(client.call.mock.calls[0][1]).toEqual({
+        worktree: 'id:repo::/w',
+        relativePath: 'src/a.ts'
+      })
+    })
+
+    it('still rejects a missing required piped value', async () => {
+      const { handlers } = buildGeneratedCommands([readSpec], new Set())
+      const error = await handlers['widget read'](
+        contextFor(fakeClient(), { worktree: 'id:repo::/w' })
+      ).catch((caught: unknown) => caught)
+      expect(exitCodeFor(error)).toBe(2)
+      expect(String((error as Error).message)).toContain('<relative-path>')
+    })
+
+    it.each([
+      ['file read', 'files.read'],
+      ['file write', 'files.write'],
+      ['file delete', 'files.delete'],
+      ['file list', 'files.readDir']
+    ])('maps `quirky %s` to a --worktree flag and a <relative-path> positional', (path, method) => {
+      const publicSpec = ADMIN_PUBLIC_METHODS.find((candidate) => candidate.method === method)
+      expect(publicSpec?.cliPath.join(' ')).toBe(path)
+      const { specs } = buildGeneratedCommands(publicSpec ? [publicSpec] : [], new Set())
+      expect(specs[0].positionalArgs).toEqual(['relative-path'])
+      expect(specs[0].allowedFlags).toContain('worktree')
+    })
+  })
+
   describe('destructive methods', () => {
     it('lets the server gate a local call, sending confirm false without --yes', async () => {
       const { handlers } = buildGeneratedCommands([removeSpec], new Set())
@@ -395,25 +461,28 @@ describe('buildGeneratedCommands', () => {
       expect(client.call.mock.calls[0][2]).toMatchObject({ confirm: false })
     })
 
-    it('asks for --yes itself on a remote server, whose wire carries no confirm', async () => {
+    it('sends a remote call to the server gate without a local refusal', async () => {
       const { handlers } = buildGeneratedCommands([removeSpec], new Set())
       const client = fakeClient({ isRemote: true })
-      const error = await handlers['widget remove'](
+      await handlers['widget remove'](
         contextFor(client, { 'widget-id': 'w1' }, { rawArgs: ['widget', 'remove', 'w1'] })
-      ).catch((caught: unknown) => caught)
-      expect(error).toMatchObject({
-        code: 'needs_confirmation',
-        data: { next: [{ command: 'quirky widget remove w1 --yes' }] }
-      })
-      expect(exitCodeFor(error)).toBe(4)
-      expect(client.call).not.toHaveBeenCalled()
+      )
+      expect(client.call).toHaveBeenCalledWith(
+        'widget.remove',
+        { widgetId: 'w1' },
+        { publicContract: true, confirm: false, caller: undefined }
+      )
     })
 
-    it('goes through on a remote server once --yes is given', async () => {
+    it('sends confirm true on a remote call once --yes is given', async () => {
       const { handlers } = buildGeneratedCommands([removeSpec], new Set())
       const client = fakeClient({ isRemote: true })
       await handlers['widget remove'](contextFor(client, { 'widget-id': 'w1', yes: true }))
-      expect(client.call).toHaveBeenCalledTimes(1)
+      expect(client.call).toHaveBeenCalledWith(
+        'widget.remove',
+        { widgetId: 'w1' },
+        { publicContract: true, confirm: true, caller: undefined }
+      )
     })
   })
 
