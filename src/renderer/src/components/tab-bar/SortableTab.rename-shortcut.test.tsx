@@ -45,6 +45,9 @@ vi.mock('react', async () => {
     useRef<T>(initial: T) {
       return { current: initial }
     },
+    useSyncExternalStore<T>(_subscribe: unknown, getSnapshot: () => T) {
+      return getSnapshot()
+    },
     useState<T>(initial: T | (() => T)) {
       const stateIndex = reactHookRuntime.index++
       if (!(stateIndex in reactHookRuntime.states)) {

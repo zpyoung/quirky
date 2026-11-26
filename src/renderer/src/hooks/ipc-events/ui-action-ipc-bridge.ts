@@ -1,5 +1,6 @@
 import { dispatchAppCommandWithResult } from '@/lib/app-command-dispatch'
 import type { UiStateSnapshot } from '../../../../shared/public-rpc/ui-state'
+import type { Tab } from '../../../../shared/tab-types'
 import { useAppStore } from '../../store'
 
 const FOCUS_CHANGE_DEBOUNCE_MS = 250
@@ -22,10 +23,25 @@ function snapshotTabType(contentType: string, filePath: string | undefined): Sna
   }
 }
 
+/**
+ * The focused tab of a worktree, read from state fields instead of the `getActiveTab` action so
+ * observers keep working against partial store state; absent maps mean no active tab.
+ */
+export function readActiveTab(state: AppState, worktreeId: string): Tab | null {
+  const groupId = state.activeGroupIdByWorktree?.[worktreeId]
+  const group = state.groupsByWorktree?.[worktreeId]?.find((candidate) => candidate.id === groupId)
+  if (!group?.activeTabId) {
+    return null
+  }
+  return (
+    state.unifiedTabsByWorktree?.[worktreeId]?.find((tab) => tab.id === group.activeTabId) ?? null
+  )
+}
+
 /** What the user is looking at, read from the store the same way the window renders it. */
 export function buildUiStateSnapshot(state: AppState): UiStateSnapshot {
   const worktreeId = state.activeWorktreeId
-  const activeTab = worktreeId ? state.getActiveTab(worktreeId) : null
+  const activeTab = worktreeId ? readActiveTab(state, worktreeId) : null
   const editorFile =
     activeTab?.contentType === 'editor'
       ? (state.openFiles.find((file) => file.id === activeTab.entityId)?.filePath ?? null)
@@ -57,7 +73,7 @@ export function buildUiStateSnapshot(state: AppState): UiStateSnapshot {
 }
 
 function focusKey(state: AppState): string {
-  const tab = state.activeWorktreeId ? state.getActiveTab(state.activeWorktreeId) : null
+  const tab = state.activeWorktreeId ? readActiveTab(state, state.activeWorktreeId) : null
   return [state.activeWorktreeId, tab?.id, tab?.contentType, state.activeView].join('\u0000')
 }
 
