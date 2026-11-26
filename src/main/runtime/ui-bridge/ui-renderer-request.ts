@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { BrowserWindow, IpcMainEvent } from 'electron'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import { getRuntimeDesktopSurface } from '../runtime-desktop-surface'
 import { PublicRpcError } from '../rpc/public-rpc-error'
 import { UiStateSnapshotSchema, type UiStateSnapshot } from '../../../shared/public-rpc/ui-state'
@@ -9,6 +10,8 @@ export const UI_RENDERER_REQUEST_TIMEOUT_MS = 10_000
 export type RendererActionRequest = {
   actionId: string
   worktreeId?: string
+  /** Host that owns `worktreeId`; absent from an older main, in which case the renderer cannot disambiguate. */
+  hostId?: ExecutionHostId
   probeOnly?: boolean
 }
 

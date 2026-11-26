@@ -1,4 +1,5 @@
 import type { BrowserWindow } from 'electron'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { ACTION_CATALOG, isCatalogedActionId } from '../../../../shared/keybindings/action-catalog'
 import {
   UiListActionsParams,
@@ -50,13 +51,26 @@ function requireUiWindow(runtime: QuirkyRuntimeService): BrowserWindow {
   }
 }
 
-async function resolveWorkspaceId(
+type ResolvedUiWorkspace = { worktreeId: string; hostId?: ExecutionHostId }
+
+/**
+ * The workspace a selector names, with the host that owns it: a workspace id repeats across hosts,
+ * so the renderer needs the host to pick the same checkout main resolved. A host main cannot settle
+ * is left out and the renderer declines an id that several hosts publish.
+ */
+async function resolveWorkspace(
   runtime: QuirkyRuntimeService,
   selector: string | undefined
-): Promise<string | undefined> {
-  return selector === undefined
-    ? undefined
-    : (await runtime.showTerminalWorkspaceLaunchScope(selector)).id
+): Promise<ResolvedUiWorkspace | undefined> {
+  if (selector === undefined) {
+    return undefined
+  }
+  const scope = await runtime.showTerminalWorkspaceLaunchScope(selector)
+  const hostId = await runtime
+    .resolveRuntimeFileTarget(selector)
+    .then((target) => target.executionHostId)
+    .catch(() => undefined)
+  return { worktreeId: scope.id, ...(hostId ? { hostId } : {}) }
 }
 
 /** Lists what `ui.runAction` with `workspace.delete` would remove, one effect per line. */
@@ -101,7 +115,7 @@ export const UI_ACTION_METHODS = [
     params: UiListActionsParams,
     handler: async (params, { runtime }) => {
       const win = requireUiWindow(runtime)
-      const worktreeId = await resolveWorkspaceId(runtime, params.workspace)
+      const workspace = await resolveWorkspace(runtime, params.workspace)
       const actions: {
         id: string
         description: string
@@ -124,7 +138,7 @@ export const UI_ACTION_METHODS = [
         const probe = await requestRendererAction(win, {
           actionId: id,
           probeOnly: true,
-          ...(worktreeId ? { worktreeId } : {})
+          ...workspace
         })
         actions.push({
           id,
@@ -155,10 +169,10 @@ export const UI_ACTION_METHODS = [
         throw invalidActionArgument(`${params.actionId} requires a workspace`)
       }
       const win = requireUiWindow(runtime)
-      const worktreeId = await resolveWorkspaceId(runtime, params.workspace)
+      const workspace = await resolveWorkspace(runtime, params.workspace)
       const reply = await requestRendererAction(win, {
         actionId: params.actionId,
-        ...(worktreeId ? { worktreeId } : {})
+        ...workspace
       })
       if (!reply.claimed) {
         throw notApplicableError(reply.reason ?? `${params.actionId} is not available right now`)

@@ -1,3 +1,4 @@
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import { isKeybindingActionId, type KeybindingActionId } from '../../../shared/keybindings'
 
 export type AppCommandSource = 'plugin-keybinding' | 'plugin-palette' | 'rpc'
@@ -5,6 +6,8 @@ export type AppCommandSource = 'plugin-keybinding' | 'plugin-palette' | 'rpc'
 export type AppCommandDispatchOptions = {
   /** Workspace the command targets; actions that act on the active workspace decline for any other. */
   worktreeId?: string
+  /** Host that owns `worktreeId` when several hosts publish the same workspace id. */
+  hostId?: ExecutionHostId
   /** Report whether the command would be claimed without running it. */
   probeOnly?: boolean
 }

@@ -76,6 +76,24 @@ export const METHOD_CLASSIFICATION: Readonly<Record<string, MethodClass>> = {
   'worktree.forceDeleteBranch': legacyDestructive('worktree', 'workspace-delete'),
   'repo.rm': legacyDestructive('repo', 'workspace-delete'),
 
+  'automation.delete': legacyDestructive('automations', 'workspace-delete'),
+  'orchestration.reset': legacyDestructive('orchestration', 'workspace-delete'),
+  'skills.delete': legacyDestructive('skills', 'file-overwrite-delete'),
+  'projectHostSetup.delete': legacyDestructive('project', 'workspace-delete'),
+
+  'accounts.removeClaude': legacyDestructive('account', 'workspace-delete'),
+  'accounts.removeCodex': legacyDestructive('account', 'workspace-delete'),
+  'accounts.removeData': legacyDestructive('account', 'workspace-delete'),
+  'accounts.antigravityRemove': legacyDestructive('account', 'workspace-delete'),
+  'accounts.minimaxClearApiKey': legacyDestructive('account', 'workspace-delete'),
+  'accounts.minimaxClearSessionCookie': legacyDestructive('account', 'workspace-delete'),
+  'accounts.zcodePlanClearApiKey': legacyDestructive('account', 'workspace-delete'),
+  'speech.openAiKey.clear': legacyDestructive('speech', 'workspace-delete'),
+
+  'browser.profileDelete': legacyDestructive('browser', 'workspace-delete'),
+  'browser.profileClearDefaultCookies': legacyDestructive('browser', 'workspace-delete'),
+  'linear.commentDelete': legacyDestructive('linear', 'workspace-delete'),
+
   'terminal.stop': legacyDestructive('terminal', 'workspace-delete'),
   'terminal.stopExact': legacyDestructive('terminal', 'workspace-delete'),
   'terminal.close': legacyDestructive('terminal', 'workspace-delete'),
@@ -85,6 +103,8 @@ export const METHOD_CLASSIFICATION: Readonly<Record<string, MethodClass>> = {
   'folderWorkspace.list': legacy('agent'),
   'folderWorkspace.update': legacy('reference'),
   'folderWorkspace.delete': destructive('workspace-delete'),
+  'projectGroup.delete': destructive('workspace-delete'),
+  'github.project.deleteIssueCommentBySlug': destructive('workspace-delete'),
 
   'ssh.getState': legacy('host'),
   'ssh.listTargetSummaries': legacy('host'),

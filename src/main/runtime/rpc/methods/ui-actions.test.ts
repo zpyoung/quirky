@@ -38,6 +38,7 @@ type SentRequest = {
   requestId: string
   actionId?: string
   worktreeId?: string
+  hostId?: string
   probeOnly?: boolean
 }
 
@@ -74,6 +75,7 @@ function makeRuntime(win: ReturnType<typeof makeWindow> | null) {
       path: `/work/${selector}`,
       folderWorkspace: null
     })),
+    resolveRuntimeFileTarget: vi.fn(async () => ({ executionHostId: 'local' as const })),
     getRuntimeGitStatus: vi.fn(async () => ({ entries: [{}, {}, {}] }))
   }
 }
@@ -143,6 +145,36 @@ describe('ui.runAction', () => {
       'ui:requestAction',
       expect.objectContaining({ actionId: 'tab.close', worktreeId: 'resolved:feature' })
     )
+  })
+
+  it('sends the host that owns the workspace so the renderer picks the same checkout', async () => {
+    const win = makeWindow(() => ({ claimed: true }))
+    const runtime = makeRuntime(win)
+    runtime.resolveRuntimeFileTarget.mockResolvedValue({
+      executionHostId: 'ssh:other-host' as never
+    })
+
+    await call('ui.runAction', { actionId: 'workspace.delete', workspace: 'feature' }, runtime)
+
+    expect(runtime.resolveRuntimeFileTarget).toHaveBeenCalledWith('feature')
+    expect(win.webContents.send).toHaveBeenCalledWith(
+      'ui:requestAction',
+      expect.objectContaining({ worktreeId: 'resolved:feature', hostId: 'ssh:other-host' })
+    )
+  })
+
+  it('omits the host when main cannot settle one, leaving the renderer to decline an ambiguous id', async () => {
+    const win = makeWindow(() => ({ claimed: true }))
+    const runtime = makeRuntime(win)
+    runtime.resolveRuntimeFileTarget.mockRejectedValue(
+      new Error('worktree_execution_host_unresolved')
+    )
+
+    await call('ui.runAction', { actionId: 'workspace.delete', workspace: 'feature' }, runtime)
+
+    const sent = win.webContents.send.mock.calls[0]?.[1] as SentRequest
+    expect(sent.worktreeId).toBe('resolved:feature')
+    expect('hostId' in sent).toBe(false)
   })
 
   it('surfaces the renderer reason as the message of unavailable/not_applicable', async () => {
