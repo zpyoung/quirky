@@ -1,4 +1,8 @@
-import { dispatchWorkspaceTabCommand } from '@/lib/workspace-tab-commands'
+import {
+  canDispatchWorkspaceTabCommand,
+  dispatchWorkspaceTabCommand,
+  type WorkspaceTabCommand
+} from '@/lib/workspace-tab-commands'
 import { TOGGLE_QUICK_COMMANDS_MENU_EVENT } from '@/lib/quick-commands-menu-events'
 import { showClientCreationActionError } from '@/lib/client-creation-action-error'
 import {
@@ -13,6 +17,7 @@ import { createBrowserUuid } from '@/lib/browser-uuid'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
+import { canLaunchAgentInNewTab } from '@/lib/launch-agent-in-new-tab-check'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { readDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inventory'
 import { resolveDefaultAgentForNewTab } from '@/lib/agent-tab-shortcuts'
@@ -32,8 +37,12 @@ export type TabCommandContext = {
   /** Records why the handler declined and returns false so callers can `return decline(...)`. */
   decline: (actionId: KeybindingActionId, reason: string) => false
   claim: (actionId: KeybindingActionId, run: () => void) => boolean
-  /** Runs first and claims only when `run` reports it acted. */
-  claimIfActed: (actionId: KeybindingActionId, run: () => boolean, reason: string) => boolean
+  /** Claims only when `check` passes and then `run` reports it acted; a probe runs `check` alone. */
+  claimWhen: (
+    actionId: KeybindingActionId,
+    action: { check: () => boolean; run: () => boolean },
+    reason: string
+  ) => boolean
   /** The workspace an active-workspace action acts on, or null after recording why it cannot. */
   requireActiveWorkspace: (actionId: KeybindingActionId) => string | null
 }
@@ -107,6 +116,16 @@ function openNewTerminalTab(worktreeId: string): void {
   focusTerminalTabSurface(tabId)
 }
 
+function tabCommandAction(command: WorkspaceTabCommand): {
+  check: () => boolean
+  run: () => boolean
+} {
+  return {
+    check: () => canDispatchWorkspaceTabCommand(command),
+    run: () => dispatchWorkspaceTabCommand(command)
+  }
+}
+
 function switchTab(
   actionId: KeybindingActionId,
   direction: number,
@@ -115,9 +134,9 @@ function switchTab(
   return (context) => () =>
     context.requireActiveWorkspace(actionId) === null
       ? false
-      : context.claimIfActed(
+      : context.claimWhen(
           actionId,
-          () => dispatchWorkspaceTabCommand({ type: 'switch', direction, scope }),
+          tabCommandAction({ type: 'switch', direction, scope }),
           'no other tab to switch to'
         )
 }
@@ -140,20 +159,24 @@ function launchAgentTab(actionId: KeybindingActionId, agent: string): TabCommand
     if (!resolvedAgent) {
       return context.decline(actionId, 'no agent CLI is detected for this workspace')
     }
-    return context.claimIfActed(
+    return context.claimWhen(
       actionId,
-      () => {
-        const { groupId, focusIntent } = captureAgentTabLaunchContext(worktreeId)
-        return (
-          launchAgentInNewTab({
-            requestId: newAgentLaunchRequestId(),
-            focusIntent,
-            agent: resolvedAgent,
-            worktreeId,
-            groupId,
-            launchSource: 'shortcut'
-          }) !== null
-        )
+      {
+        check: () =>
+          canLaunchAgentInNewTab(useAppStore.getState(), { agent: resolvedAgent, worktreeId }),
+        run: () => {
+          const { groupId, focusIntent } = captureAgentTabLaunchContext(worktreeId)
+          return (
+            launchAgentInNewTab({
+              requestId: newAgentLaunchRequestId(),
+              focusIntent,
+              agent: resolvedAgent,
+              worktreeId,
+              groupId,
+              launchSource: 'shortcut'
+            }) !== null
+          )
+        }
       },
       `could not build a launch command for ${resolvedAgent}`
     )
@@ -170,9 +193,9 @@ const TAB_FACTORIES: Partial<Record<KeybindingActionId, TabCommandFactory>> = {
   'tab.previousRecent': (context) => () =>
     context.requireActiveWorkspace('tab.previousRecent') === null
       ? false
-      : context.claimIfActed(
+      : context.claimWhen(
           'tab.previousRecent',
-          () => dispatchWorkspaceTabCommand({ type: 'previous-recent' }),
+          tabCommandAction({ type: 'previous-recent' }),
           'no previously used tab to switch to'
         ),
   'tab.close': (context) => () => {
@@ -182,13 +205,12 @@ const TAB_FACTORIES: Partial<Record<KeybindingActionId, TabCommandFactory>> = {
       if (!tab) {
         return context.decline('tab.close', `no focused tab in workspace ${worktreeId}`)
       }
-      return context.claimIfActed(
+      return context.claimWhen(
         'tab.close',
-        () =>
-          dispatchWorkspaceTabCommand({
-            type: 'close',
-            target: { kind: 'tab', worktreeId, tabId: tab.id }
-          }),
+        tabCommandAction({
+          type: 'close',
+          target: { kind: 'tab', worktreeId, tabId: tab.id }
+        }),
         `the tab in workspace ${worktreeId} could not be closed`
       )
     }
@@ -196,9 +218,9 @@ const TAB_FACTORIES: Partial<Record<KeybindingActionId, TabCommandFactory>> = {
     if (activeWorktreeId === null) {
       return false
     }
-    return context.claimIfActed(
+    return context.claimWhen(
       'tab.close',
-      () => dispatchWorkspaceTabCommand({ type: 'close' }),
+      tabCommandAction({ type: 'close' }),
       `no focused tab in workspace ${activeWorktreeId}`
     )
   },

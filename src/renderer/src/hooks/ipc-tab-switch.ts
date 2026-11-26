@@ -105,9 +105,20 @@ export function activateCyclableTab(store: AppStoreState, next: TypeCyclableTab)
  * Returns true if a tab switch occurred, false otherwise.
  */
 export function handleSwitchTab(direction: number): boolean {
+  const resolved = resolveSameTypeSwitch(direction)
+  if (!resolved) {
+    return false
+  }
+  activateCyclableTab(resolved.store, resolved.next)
+  return true
+}
+
+function resolveSameTypeSwitch(
+  direction: number
+): { store: AppStoreState; next: TypeCyclableTab } | null {
   const ctx = resolveCycleContext()
   if (!ctx) {
-    return false
+    return null
   }
   const { store, allTabIds, groupTabIdInNav } = ctx
   const next = getNextTabWithinActiveType({
@@ -119,11 +130,12 @@ export function handleSwitchTab(direction: number): boolean {
     activeGroupTabId: groupTabIdInNav,
     direction
   })
-  if (!next) {
-    return false
-  }
-  activateCyclableTab(store, next)
-  return true
+  return next ? { store, next } : null
+}
+
+/** Whether `handleSwitchTab` would switch, without switching. */
+export function canSwitchTab(direction: number): boolean {
+  return resolveSameTypeSwitch(direction) !== null
 }
 
 /**
@@ -136,9 +148,20 @@ export function handleSwitchTab(direction: number): boolean {
  * rationale). Returns true if a tab switch occurred, false otherwise.
  */
 export function handleSwitchTabAcrossAllTypes(direction: number): boolean {
+  const resolved = resolveAllTypesSwitch(direction)
+  if (!resolved) {
+    return false
+  }
+  activateCyclableTab(resolved.store, resolved.next)
+  return true
+}
+
+function resolveAllTypesSwitch(
+  direction: number
+): { store: AppStoreState; next: TypeCyclableTab } | null {
   const ctx = resolveCycleContext()
   if (!ctx) {
-    return false
+    return null
   }
   const { store, allTabIds, groupTabIdInNav } = ctx
   const next = getNextTabAcrossAllTypes({
@@ -150,11 +173,12 @@ export function handleSwitchTabAcrossAllTypes(direction: number): boolean {
     activeGroupTabId: groupTabIdInNav,
     direction
   })
-  if (!next) {
-    return false
-  }
-  activateCyclableTab(store, next)
-  return true
+  return next ? { store, next } : null
+}
+
+/** Whether `handleSwitchTabAcrossAllTypes` would switch, without switching. */
+export function canSwitchTabAcrossAllTypes(direction: number): boolean {
+  return resolveAllTypesSwitch(direction) !== null
 }
 
 /** Build a stable worktree-wide terminal order for a temporarily incomplete group projection. */
@@ -284,37 +308,46 @@ function shouldUseWorktreeTerminalFallback(
  * Returns true if a tab switch occurred, false otherwise.
  */
 export function handleSwitchRecentTab(): boolean {
+  const resolved = resolveRecentTabSwitch()
+  if (!resolved) {
+    return false
+  }
+  activateCyclableTab(resolved.store, resolved.next)
+  return true
+}
+
+function resolveRecentTabSwitch(): { store: AppStoreState; next: TypeCyclableTab } | null {
   const ctx = resolveCycleContext()
   if (!ctx) {
-    return false
+    return null
   }
   const { store, worktreeId, allTabIds, groupTabIdInNav } = ctx
   if (!groupTabIdInNav) {
-    return false
+    return null
   }
   const groupId = store.activeGroupIdByWorktree[worktreeId]
   const group = groupId
     ? (store.groupsByWorktree[worktreeId] ?? []).find((candidate) => candidate.id === groupId)
     : undefined
   if (!group?.recentTabIds) {
-    return false
+    return null
   }
 
   const visibleTabIds = allTabIds.flatMap((entry) => (entry.tabId ? [entry.tabId] : []))
   const recentTabIds = sanitizeRecentTabIds(group.recentTabIds, visibleTabIds)
   const currentIndex = recentTabIds.lastIndexOf(groupTabIdInNav)
   if (currentIndex <= 0) {
-    return false
+    return null
   }
 
   const previousRecentTabId = recentTabIds[currentIndex - 1]
   const next = allTabIds.find((entry) => entry.tabId === previousRecentTabId)
-  if (!next) {
-    return false
-  }
+  return next ? { store, next } : null
+}
 
-  activateCyclableTab(store, next)
-  return true
+/** Whether `handleSwitchRecentTab` would switch, without switching. */
+export function canSwitchRecentTab(): boolean {
+  return resolveRecentTabSwitch() !== null
 }
 
 /**
@@ -322,10 +355,23 @@ export function handleSwitchRecentTab(): boolean {
  * Returns true if a terminal tab switch occurred, false otherwise.
  */
 export function handleSwitchTerminalTab(direction: number): boolean {
+  const resolved = resolveTerminalTabSwitch(direction)
+  if (!resolved) {
+    return false
+  }
+  const { store, worktreeId, next } = resolved
+  store.setActiveTab(next.id)
+  store.setActiveTabType('terminal', worktreeId)
+  return true
+}
+
+function resolveTerminalTabSwitch(
+  direction: number
+): { store: AppStoreState; worktreeId: string; next: TypeCyclableTab } | null {
   const store = useAppStore.getState()
   const worktreeId = store.activeWorktreeId
   if (!worktreeId) {
-    return false
+    return null
   }
   // Why: reuse the same visible-order source as handleSwitchTab so drag-reordered
   // tabs still cycle in the sequence shown in the active tab strip.
@@ -342,7 +388,7 @@ export function handleSwitchTerminalTab(direction: number): boolean {
     ? worktreeTerminalTabs
     : activeGroupTerminalTabs
   if (terminalTabs.length === 0) {
-    return false
+    return null
   }
   // Why: this list is pre-filtered to terminals, so the index search below has no type check to
   // reject a stale terminal id — a structured tab must resolve to its own entity or the chord
@@ -363,7 +409,7 @@ export function handleSwitchTerminalTab(direction: number): boolean {
   // that is the whole point of the shortcut. The single-terminal-already-active
   // case is the only true no-op.
   if (terminalTabs.length === 1 && idx === 0) {
-    return false
+    return null
   }
   const currentIndex = idx === -1 && direction > 0 ? -1 : idx === -1 ? 0 : idx
   const next = terminalTabs[(currentIndex + direction + terminalTabs.length) % terminalTabs.length]
@@ -372,9 +418,12 @@ export function handleSwitchTerminalTab(direction: number): boolean {
   // code path). Redundant setActiveTab calls trigger unnecessary subscriber
   // work in components that react to active-tab changes.
   if (next.id === store.activeTabId && store.activeTabType === 'terminal') {
-    return false
+    return null
   }
-  store.setActiveTab(next.id)
-  store.setActiveTabType('terminal', worktreeId)
-  return true
+  return { store, worktreeId, next }
+}
+
+/** Whether `handleSwitchTerminalTab` would switch, without switching. */
+export function canSwitchTerminalTab(direction: number): boolean {
+  return resolveTerminalTabSwitch(direction) !== null
 }
