@@ -9,6 +9,7 @@ import {
   type AgentSessionRefusalError
 } from '../../../shared/agent-session-wire-refusals'
 import type { RpcEnvelopeMeta, RpcFailure, RpcSuccess } from './core'
+import { PublicRpcError } from './public-rpc-error'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES } from '../../../shared/orchestration-session-caller-codes'
 import { computerUseErrorRecoveryData } from '../../../shared/computer-use-error-recovery'
 import { COMPUTER_ERROR_CODES } from '../../../shared/runtime-types'
@@ -174,6 +175,13 @@ const STRUCTURED_RUNTIME_PASSTHROUGH_CODES: ReadonlySet<string> = new Set([
 
 export function mapRuntimeError(id: string, meta: RpcEnvelopeMeta, error: unknown): RpcFailure {
   const message = error instanceof Error ? error.message : String(error)
+  if (error instanceof PublicRpcError) {
+    return errorResponse(id, meta, error.code, message, {
+      reason: error.reason,
+      next: error.next,
+      ...error.data
+    })
+  }
   if (error instanceof LedgerError) {
     return errorResponse(id, meta, error.code, message, error.details)
   }

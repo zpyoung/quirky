@@ -43,6 +43,7 @@ import type {
   TaskViewPresetId
 } from './ui-chrome-types'
 import type { WorktreeVisibilityDefaults } from './repo-types'
+import type { ApprovalCategory } from './public-rpc/public-method-spec'
 
 export type { WorktreeVisibilityDefaults } from './repo-types'
 
@@ -522,6 +523,8 @@ export type GlobalSettings = GlobalSettingsBase & {
   voice?: VoiceSettings
   /** Transcript full-text search consent + retention. Absent means off; nothing indexes until the user opts in. */
   aiVaultSearch?: AiVaultSearchSettings
+  /** Per category, whether a public-API call from an agent runs directly or waits for the user's approval. */
+  agentApprovalPolicy: Record<ApprovalCategory, 'agent' | 'ask'>
 }
 
 // Re-exported so existing importers keep one entry point; the shape lives in its

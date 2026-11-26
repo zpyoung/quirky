@@ -13,6 +13,8 @@ const MAX_RUNTIME_RPC_MESSAGE_BYTES = 1024 * 1024
 const RUNTIME_RPC_SOCKET_IDLE_TIMEOUT_MS = 30_000
 const MAX_RUNTIME_RPC_CONNECTIONS = 32
 const DEFAULT_KEEPALIVE_INTERVAL_MS = 10_000
+// A subscriber that stops reading must not make the runtime buffer its stream without bound.
+const MAX_STREAM_BACKLOG_BYTES = 8 * 1024 * 1024
 
 export type UnixSocketTransportOptions = {
   endpoint: string
@@ -24,10 +26,19 @@ export type UnixSocketTransportOptions = {
   keepaliveIntervalMs?: number
 }
 
+/**
+ * The context a unary request gets, plus a way to turn it into a stream. `beginStream` returns a
+ * writer that sends one NDJSON line per frame, keeps keepalives running, and makes the final
+ * `reply` only release the request instead of writing a second line.
+ */
+export type UnixSocketMessageContext = RpcMessageContext & {
+  beginStream?: () => (frame: string) => void
+}
+
 type MessageHandler = (
   msg: string,
   reply: (response: string) => void,
-  context?: RpcMessageContext
+  context?: UnixSocketMessageContext
 ) => void
 
 export class UnixSocketTransport implements RpcTransport {
@@ -185,6 +196,7 @@ export class UnixSocketTransport implements RpcTransport {
     rearmIdleTimer: () => void
   ): void {
     let replied = false
+    let streaming = false
     let keepaliveTimer: NodeJS.Timeout | null = null
     // Why: each dispatch needs its own abort signal and keepalive timer
     // cleanup. Socket close runs every cleanup without touching sibling
@@ -216,9 +228,20 @@ export class UnixSocketTransport implements RpcTransport {
       }
       replied = true
       cleanupDispatch(false)
-      if (!socket.destroyed && socket.writable) {
+      if (!streaming && !socket.destroyed && socket.writable) {
         socket.write(`${response}\n`)
       }
+    }
+
+    const writeFrame = (frame: string): void => {
+      if (replied || socket.destroyed || !socket.writable) {
+        return
+      }
+      if (socket.writableLength > MAX_STREAM_BACKLOG_BYTES) {
+        socket.destroy()
+        return
+      }
+      socket.write(`${frame}\n`)
     }
 
     const startKeepalive = (): void => {
@@ -238,9 +261,16 @@ export class UnixSocketTransport implements RpcTransport {
       }
     }
 
+    const beginStream = (): ((frame: string) => void) => {
+      streaming = true
+      startKeepalive()
+      return writeFrame
+    }
+
     this.messageHandler?.(rawMessage, reply, {
       signal: abortController.signal,
-      startKeepalive
+      startKeepalive,
+      beginStream
     })
   }
 }

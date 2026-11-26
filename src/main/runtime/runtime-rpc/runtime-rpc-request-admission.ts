@@ -1,8 +1,9 @@
 import type { RuntimeMetadata } from '../../../shared/runtime-bootstrap'
 import { writeRuntimeMetadata } from '../runtime-metadata'
-import type { RpcMessageContext } from '../rpc/transport'
+import type { UnixSocketMessageContext } from '../rpc/unix-socket-transport'
 import type { RpcRequest, RpcResponse } from '../rpc/core'
-import { errorResponse } from '../rpc/errors'
+import { errorResponse, successResponse } from '../rpc/errors'
+import { publicSpecForMethod } from '../../../shared/public-rpc/public-methods'
 import { RuntimeRpcBinaryRouting } from './runtime-rpc-binary-routing'
 import { classifyRuntimeLongPoll, type RuntimeLongPollClass } from './runtime-rpc-long-poll'
 import { OWNER_RPC_CALLER_SCOPE, type RpcCallerScope } from '../rpc/rpc-caller-scope'
@@ -11,7 +12,7 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
   // Why: Unix socket dispatch is one-shot and auths via the shared token from the 0o600 metadata file. See §3.1.
   protected async handleMessage(
     rawMessage: string,
-    context?: RpcMessageContext
+    context?: UnixSocketMessageContext
   ): Promise<RpcResponse> {
     // Why: the transport sends an empty message when a client exceeds max size, then closes the connection.
     if (!rawMessage) {
@@ -24,8 +25,12 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     }
     const { request, callerScope } = parsed
 
-    // Why: long-poll admission fence; short RPCs bypass the counter. See §7 risk #2.
-    const longPoll = classifyRuntimeLongPoll(request)
+    // Why: only public streaming methods open a stream on the socket; every other method stays one reply.
+    const beginStream =
+      publicSpecForMethod(request.method)?.streaming === true ? context?.beginStream : undefined
+    const streaming = beginStream !== undefined
+    // Why: a stream holds its connection as long as a long-poll does, so it spends the same capacity.
+    const longPoll = classifyRuntimeLongPoll(request) ?? (streaming ? 'wait' : null)
     const rejection = this.admitLongPoll(longPoll)
     if (rejection) {
       return this.buildError(request.id, 'runtime_busy', rejection)
@@ -36,6 +41,18 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     }
 
     try {
+      if (beginStream) {
+        await this.dispatcher.dispatchStreaming(request, beginStream(), {
+          signal: context?.signal,
+          callerScope
+        })
+        // Why: the transport drops this reply, since the stream already wrote its own frames and end marker.
+        return successResponse(
+          request.id,
+          { runtimeId: this.runtime.getRuntimeId() },
+          { type: 'end' }
+        )
+      }
       return await this.dispatcher.dispatch(request, {
         signal:
           longPoll ||
