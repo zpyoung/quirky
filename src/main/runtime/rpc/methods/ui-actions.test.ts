@@ -4,22 +4,10 @@ import type { UiStateSnapshot } from '../../../../shared/public-rpc/ui-state'
 import type { RpcContext } from '../core'
 import { getDestructivePreviewer } from '../destructive-previewers'
 import { PublicRpcError } from '../public-rpc-error'
+import { setRuntimeDesktopSurface } from '../../runtime-desktop-surface'
 
 const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (event: { sender: unknown }, reply: unknown) => void>()
-}))
-
-vi.mock('electron', () => ({
-  ipcMain: {
-    on: (channel: string, listener: (event: { sender: unknown }, reply: unknown) => void) => {
-      mocks.listeners.set(channel, listener)
-    },
-    removeListener: (channel: string, listener: unknown) => {
-      if (mocks.listeners.get(channel) === listener) {
-        mocks.listeners.delete(channel)
-      }
-    }
-  }
 }))
 
 import { UI_ACTION_METHODS, previewUiRunAction } from './ui-actions'
@@ -107,8 +95,25 @@ async function call(name: string, params: unknown, runtime: ReturnType<typeof ma
   return (method.handler as (params: unknown, context: RpcContext) => unknown)(parsed, context)
 }
 
-beforeEach(() => mocks.listeners.clear())
-afterEach(() => vi.useRealTimers())
+beforeEach(() => {
+  mocks.listeners.clear()
+  setRuntimeDesktopSurface({
+    showNotification: () => false,
+    findWindowById: () => null,
+    onIpc: (channel, listener) => {
+      mocks.listeners.set(channel, listener as (event: { sender: unknown }, reply: unknown) => void)
+    },
+    removeIpcListener: (channel, listener) => {
+      if (mocks.listeners.get(channel) === listener) {
+        mocks.listeners.delete(channel)
+      }
+    }
+  })
+})
+afterEach(() => {
+  vi.useRealTimers()
+  setRuntimeDesktopSurface(null)
+})
 
 describe('ui.* methods without a window', () => {
   it.each([

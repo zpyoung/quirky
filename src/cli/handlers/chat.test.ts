@@ -93,6 +93,13 @@ function lastParams(
   return { ...params }
 }
 
+function envelopeField(envelope: unknown, key: string): unknown {
+  if (typeof envelope !== 'object' || envelope === null) {
+    throw new Error('envelope is not an object')
+  }
+  return Object.fromEntries(Object.entries(envelope))[key]
+}
+
 function lastOptions(client: ReturnType<typeof fakeClient>, method: string): unknown {
   return callsTo(client, method).at(-1)?.[2]
 }
@@ -217,7 +224,7 @@ function printedResult(): Record<string, unknown> {
   const text = output.mock.calls.map((call: unknown[]) => String(call[0])).join('\n')
   const parsed: unknown = JSON.parse(text)
   const result =
-    typeof parsed === 'object' && parsed !== null ? Reflect.get(parsed, 'result') : null
+    typeof parsed === 'object' && parsed !== null && 'result' in parsed ? parsed.result : null
   if (typeof result !== 'object' || result === null) {
     throw new Error(`no result printed: ${text}`)
   }
@@ -759,9 +766,12 @@ describe('chat create and resume', () => {
     expectValid(CreateIntentParams, params)
     const envelope = params.envelope
     expect(envelope).toMatchObject({ expectedRuntimeFence: null })
-    const sessionId = Reflect.get(Object(envelope), 'sessionId')
+    const sessionId = envelopeField(envelope, 'sessionId')
+    if (typeof sessionId !== 'string') {
+      throw new Error('envelope has no sessionId')
+    }
     expect(sessionId).toMatch(/^claude_[0-9a-f_]+$/)
-    expect(Reflect.get(Object(envelope), 'payloadFingerprint')).toBe(
+    expect(envelopeField(envelope, 'payloadFingerprint')).toBe(
       structuredAgentSessionPayloadFingerprint({
         method: 'agentSession.create',
         sessionId,

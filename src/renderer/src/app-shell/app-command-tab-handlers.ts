@@ -13,18 +13,13 @@ import { getAllWorktreesFromState } from '@/store/selectors'
 import type { HoveredWorkspaceDeleteTarget } from '../components/sidebar/hovered-workspace-delete'
 import { getDeleteStateForWorktreeHost } from '../components/sidebar/worktree-delete-state-host-match'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../shared/workspace-scope'
-import { createBrowserUuid } from '@/lib/browser-uuid'
-import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
-import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { canLaunchAgentInNewTab } from '@/lib/launch-agent-in-new-tab-check'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { readDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inventory'
 import { resolveDefaultAgentForNewTab } from '@/lib/agent-tab-shortcuts'
-import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
-import { createWebRuntimeSessionTerminal } from '@/runtime/web-runtime-terminal-creation'
+import { createNewTerminalTab } from '../components/terminal/terminal-tab-create'
 import { captureAgentTabLaunchContext } from '../components/agent-tab-launch-context'
-import { getActiveWorktreeRuntimeEnvironmentId } from '../components/terminal-workspace-model'
 import { useAppStore } from '../store'
 import { ALL_TUI_AGENTS } from '../../../shared/tui-agent-display-names'
 import { agentTabActionId, type KeybindingActionId } from '../../../shared/keybindings'
@@ -95,25 +90,12 @@ function activeGroupIdFor(store: AppStoreState, worktreeId: string): string | un
 function openNewTerminalTab(worktreeId: string): void {
   const store = useAppStore.getState()
   const targetGroupId = activeGroupIdFor(store, worktreeId)
-  const runtimeEnvironmentId = getActiveWorktreeRuntimeEnvironmentId(worktreeId)
-  if (isWebRuntimeSessionActive(runtimeEnvironmentId)) {
-    void createWebRuntimeSessionTerminal({
-      worktreeId,
-      environmentId: runtimeEnvironmentId,
-      targetGroupId,
-      activate: true
-    })
-    return
-  }
-  if (targetGroupId) {
+  // the store action resolves the target from the active workspace, so only the active one may use it
+  if (targetGroupId && store.activeWorktreeId === worktreeId) {
     void store.openNewTerminalTabInActiveWorkspace(targetGroupId)
     return
   }
-  const tabId = createBrowserUuid()
-  store.createTab(worktreeId, undefined, undefined, { id: tabId })
-  store.setActiveTabType('terminal', worktreeId)
-  persistAgentLaunchTabOrder(worktreeId, tabId)
-  focusTerminalTabSurface(tabId)
+  createNewTerminalTab(worktreeId)
 }
 
 function tabCommandAction(command: WorkspaceTabCommand): {

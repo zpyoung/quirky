@@ -28,7 +28,7 @@ function parseTopics(raw: string | undefined): PublicTopic[] | undefined {
 }
 
 function frameType(frame: unknown): unknown {
-  return typeof frame === 'object' && frame !== null ? Reflect.get(frame, 'type') : undefined
+  return typeof frame === 'object' && frame !== null && 'type' in frame ? frame.type : undefined
 }
 
 export const EVENTS_HANDLERS: Record<string, CommandHandler> = {

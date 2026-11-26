@@ -270,7 +270,9 @@ function genericNextSteps(
     }
     case 'conflict':
       return [{ command: 'quirky status', why: 'state changed; check it, then retry' }]
-    default:
+    case 'internal':
+    case 'timeout':
+    case 'unauthorized':
       return []
   }
 }
