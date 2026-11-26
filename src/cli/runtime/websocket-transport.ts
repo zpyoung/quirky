@@ -3,10 +3,13 @@ import type { RuntimeOrchestrationEnvelope } from '../../shared/runtime-rpc-enve
 import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
 import {
   sendRemoteRuntimeRequest,
-  sendRemoteRuntimeRequestWithStatusPreflight
+  sendRemoteRuntimeRequestWithStatusPreflight,
+  subscribeRemoteRuntimeRequest,
+  type RemoteRuntimeSubscription
 } from '../../shared/remote-runtime-client'
 import type { RuntimeStatus } from '../../shared/runtime-types'
-import { RuntimeClientError, type RuntimeRpcResponse } from './types'
+import { isSafeTimerDelayMs, MAX_TIMER_DELAY_MS } from '../../shared/timer-delay'
+import { RuntimeClientError, RuntimeRpcFailureError, type RuntimeRpcResponse } from './types'
 
 export async function sendWebSocketRequest<TResult>(
   connection: PairedRuntimeConnection,
@@ -48,4 +51,126 @@ export async function sendWebSocketRequestWithStatusPreflight<TResult>(
     }
     throw error
   }
+}
+
+export type WebSocketStreamOptions = {
+  /** Bound on connecting and authenticating; the stream itself has no per-request timeout. */
+  startTimeoutMs: number
+  /** Wall-clock budget for the whole stream; unset means no limit. */
+  timeoutMs?: number
+  /** Aborting stops the stream cleanly: the promise resolves and no further frame is delivered. */
+  signal?: AbortSignal
+}
+
+function isEndFrameResult(result: unknown): boolean {
+  return (
+    typeof result === 'object' && result !== null && (result as { type?: unknown }).type === 'end'
+  )
+}
+
+/**
+ * The remote counterpart of `sendStreamingRequest`: delivers each streamed result to `onFrame` and
+ * resolves on the server's `{type:'end'}` frame or on abort. Rejects on a failure envelope, a
+ * closed connection, or an elapsed `timeoutMs` (code `timeout`).
+ */
+export async function streamWebSocketRequest(
+  connection: PairedRuntimeConnection,
+  method: string,
+  params: unknown,
+  onFrame: (result: unknown) => void,
+  options: WebSocketStreamOptions
+): Promise<void> {
+  const { signal, timeoutMs, startTimeoutMs } = options
+  if (timeoutMs !== undefined && !isSafeTimerDelayMs(timeoutMs)) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      `Stream timeout must be an integer between 0 and ${MAX_TIMER_DELAY_MS}ms.`
+    )
+  }
+  if (signal?.aborted) {
+    return
+  }
+  return await new Promise<void>((resolve, reject) => {
+    let subscription: RemoteRuntimeSubscription | null = null
+    let settled = false
+    let deadline: ReturnType<typeof setTimeout> | null = null
+
+    const finish = (error?: Error): void => {
+      if (settled) {
+        return
+      }
+      settled = true
+      if (deadline) {
+        clearTimeout(deadline)
+      }
+      signal?.removeEventListener('abort', onAbort)
+      subscription?.close()
+      if (error) {
+        reject(error)
+      } else {
+        resolve()
+      }
+    }
+    const onAbort = (): void => finish()
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (timeoutMs !== undefined) {
+      deadline = setTimeout(() => {
+        finish(
+          new RuntimeClientError('timeout', 'Timed out waiting for the Quirky runtime stream.')
+        )
+      }, timeoutMs)
+    }
+
+    subscribeRemoteRuntimeRequest<unknown>(
+      connection,
+      method,
+      params,
+      startTimeoutMs,
+      {
+        onResponse: (response) => {
+          if (settled) {
+            return
+          }
+          if (response.ok === false) {
+            finish(new RuntimeRpcFailureError(response))
+            return
+          }
+          if (isEndFrameResult(response.result)) {
+            finish()
+            return
+          }
+          try {
+            onFrame(response.result)
+          } catch (error) {
+            finish(error instanceof Error ? error : new Error(String(error)))
+          }
+        },
+        onError: (error) => finish(new RuntimeClientError(error.code, error.message, error.data)),
+        onClose: () =>
+          finish(
+            new RuntimeClientError(
+              'runtime_unavailable',
+              'The remote Quirky runtime closed the stream before it ended.'
+            )
+          )
+      },
+      { signal }
+    ).then(
+      (opened) => {
+        subscription = opened
+        if (settled) {
+          opened.close()
+        }
+      },
+      (error: unknown) => {
+        if (signal?.aborted) {
+          finish()
+        } else if (error instanceof RemoteRuntimeClientError) {
+          finish(new RuntimeClientError(error.code, error.message, error.data))
+        } else {
+          finish(error instanceof Error ? error : new Error(String(error)))
+        }
+      }
+    )
+  })
 }

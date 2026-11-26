@@ -1,4 +1,4 @@
-import type { CommandSpec } from '../args'
+import { specPaths, type CommandSpec } from '../args'
 import { ASK_COMMAND_SPECS } from '../fork-ask-question-tool/specs'
 import { HEIMDALL_COMMAND_SPECS } from '../fork-heimdall/specs'
 import { LOOP_COMMAND_SPECS } from '../fork-loops/specs'
@@ -28,8 +28,14 @@ import { LEDGER_COMMAND_SPECS } from './ledger'
 import { SEARCH_COMMAND_SPECS } from './search'
 import { PROFILE_STATE_COMMAND_SPECS } from './profile-state'
 import { REFERENCE_COMMAND_SPECS } from './reference'
+import { ADMIN_COMMAND_SPECS } from './admin'
+import { CHAT_COMMAND_SPECS } from './chat'
+import { EVENTS_COMMAND_SPECS } from './events'
+import { PUBLIC_CLI_COMMAND_SPECS } from './public-cli'
+import { buildGeneratedCommands } from '../public-cli/generated-commands'
+import { PUBLIC_METHOD_SPECS } from '../../shared/public-rpc/public-methods'
 
-export const COMMAND_SPECS: CommandSpec[] = [
+const HAND_WRITTEN_COMMAND_SPECS: CommandSpec[] = [
   ...CORE_COMMAND_SPECS,
   ...REFERENCE_COMMAND_SPECS,
   ...ASK_COMMAND_SPECS,
@@ -58,5 +64,21 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...SKILL_COMMAND_SPECS,
   ...LEDGER_COMMAND_SPECS,
   ...SEARCH_COMMAND_SPECS,
-  ...PROFILE_STATE_COMMAND_SPECS
+  ...PROFILE_STATE_COMMAND_SPECS,
+  ...PUBLIC_CLI_COMMAND_SPECS,
+  ...EVENTS_COMMAND_SPECS,
+  ...CHAT_COMMAND_SPECS,
+  ...ADMIN_COMMAND_SPECS
+]
+
+const HAND_WRITTEN_PATHS: ReadonlySet<string> = new Set(
+  HAND_WRITTEN_COMMAND_SPECS.flatMap((spec) => specPaths(spec).map((path) => path.join(' ')))
+)
+
+/** Commands derived from public method specs; a hand-written command with the same path wins. */
+export const GENERATED_COMMANDS = buildGeneratedCommands(PUBLIC_METHOD_SPECS, HAND_WRITTEN_PATHS)
+
+export const COMMAND_SPECS: CommandSpec[] = [
+  ...HAND_WRITTEN_COMMAND_SPECS,
+  ...GENERATED_COMMANDS.specs
 ]

@@ -12,6 +12,9 @@ import { isStructuredWorkerHandle } from './structured-worker-handle'
 
 export const QUIRKY_AGENT_SESSION_ID_ENV = 'QUIRKY_AGENT_SESSION_ID'
 
+/** Set to `json` in an agent's environment so every CLI call answers machine-readably without `--json`. */
+export const QUIRKY_OUTPUT_ENV = 'QUIRKY_OUTPUT'
+
 /** The spawn token a structured session's child echoes, so the owner probe can tell a live child
  *  of that reservation from a same-pid stranger. */
 export const QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV = 'QUIRKY_AGENT_SESSION_SPAWN_TOKEN'
