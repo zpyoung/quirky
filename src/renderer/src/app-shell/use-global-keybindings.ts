@@ -34,6 +34,7 @@ import { shortcutPlatform } from './app-window-chrome'
 import {
   createAppCommandHandlers,
   getKeybindingContext,
+  runAppCommand,
   useAppShortcutActions,
   type AppShortcutState,
   type ShortcutDispatchInput
@@ -84,8 +85,9 @@ export function useGlobalKeybindings(args: {
   useEffect(() => {
     const doubleTapDetector = new ModifierDoubleTapDetector()
 
-    const unregisterAppCommandDispatcher = registerAppCommandDispatcher((actionId) =>
-      (createAppCommandHandlers(shortcutStateRef.current).get(actionId) ?? (() => false))()
+    const unregisterAppCommandDispatcher = registerAppCommandDispatcher(
+      (actionId, source, options) =>
+        runAppCommand(shortcutStateRef.current, actionId, { ...options, source })
     )
 
     const dispatchShortcutInput = (input: ShortcutDispatchInput): void => {
@@ -99,9 +101,7 @@ export function useGlobalKeybindings(args: {
         floatingTerminalOpen,
         floatingVisibleTabCount,
         keybindings,
-        openFloatingWorkspaceMaximized,
         pluginCommands,
-        setFloatingTerminalOpen,
         terminalShortcutPolicy
       } = state
 
@@ -176,7 +176,7 @@ export function useGlobalKeybindings(args: {
         })
       ) {
         input.preventDefault()
-        setFloatingTerminalOpen(false)
+        createAppCommandHandlers(state).get('floatingWorkspace.minimize')?.()
         return
       }
 
@@ -187,7 +187,7 @@ export function useGlobalKeybindings(args: {
         floatingTerminalEnabled
       ) {
         input.preventDefault()
-        openFloatingWorkspaceMaximized()
+        createAppCommandHandlers(state).get('floatingWorkspace.maximize')?.()
         return
       }
 
@@ -256,11 +256,8 @@ export function useGlobalKeybindings(args: {
       }
 
       // Unbound by default, so it runs after the built-in alias handlers above; only consumes the chord when the active worktree has unsent notes.
-      if (canRevealRightSidebar && matchShortcut('sourceControl.sendReviewNotes')) {
-        if (actions.openDiffNotesSendMenuForActiveWorktree()) {
-          input.preventDefault()
-          notifyTerminalCapture('sourceControl.sendReviewNotes')
-        }
+      if (matchShortcut('sourceControl.sendReviewNotes')) {
+        handlers.get('sourceControl.sendReviewNotes')?.()
       }
     }
 
