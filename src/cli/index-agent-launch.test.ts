@@ -48,12 +48,12 @@ import { agentLaunchFixture, agentLaunchHostFixture } from './agent-launch-test-
 
 const WORKTREE_ID = 'repo-1::/tmp/repo'
 
-async function runRefused(argv: string[]): Promise<string> {
+async function runRefused(argv: string[], exitCode = 1): Promise<string> {
   const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
   const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
   const priorExitCode = process.exitCode
   await main(argv, '/tmp/repo')
-  expect(process.exitCode).toBe(1)
+  expect(process.exitCode).toBe(exitCode)
   process.exitCode = priorExitCode
   return [...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')
 }
@@ -197,16 +197,19 @@ describe('quirky cli agent launch', () => {
   it.each([['--retry-launch'], ['--retry-launch', ' ']])(
     'rejects an invalid retry identity before launching: %j',
     async (...retryArgs) => {
-      const output = await runRefused([
-        'agent',
-        'launch',
-        '--agent',
-        'codex',
-        '--worktree',
-        `id:${WORKTREE_ID}`,
-        ...retryArgs,
-        '--json'
-      ])
+      const output = await runRefused(
+        [
+          'agent',
+          'launch',
+          '--agent',
+          'codex',
+          '--worktree',
+          `id:${WORKTREE_ID}`,
+          ...retryArgs,
+          '--json'
+        ],
+        2
+      )
       expect(JSON.parse(output).error).toMatchObject({
         code: 'invalid_argument',
         message: expect.stringContaining('--retry-launch')

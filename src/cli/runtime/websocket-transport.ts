@@ -1,5 +1,5 @@
 import type { PairedRuntimeConnection } from '../../shared/paired-runtime-connection'
-import type { RuntimeOrchestrationEnvelope } from '../../shared/runtime-rpc-envelope'
+import type { RemoteRuntimeRequestEnvelope } from '../../shared/remote-runtime-memory-limits'
 import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
 import {
   sendRemoteRuntimeRequest,
@@ -16,7 +16,7 @@ export async function sendWebSocketRequest<TResult>(
   method: string,
   params: unknown,
   timeoutMs: number,
-  envelope?: RuntimeOrchestrationEnvelope
+  envelope?: RemoteRuntimeRequestEnvelope
 ): Promise<RuntimeRpcResponse<TResult>> {
   try {
     return await sendRemoteRuntimeRequest<TResult>(connection, method, params, timeoutMs, envelope)
@@ -34,7 +34,7 @@ export async function sendWebSocketRequestWithStatusPreflight<TResult>(
   params: unknown,
   timeoutMs: number,
   validateStatus: (response: RuntimeRpcResponse<RuntimeStatus>) => void,
-  envelope?: RuntimeOrchestrationEnvelope
+  envelope?: RemoteRuntimeRequestEnvelope
 ): Promise<RuntimeRpcResponse<TResult>> {
   try {
     return await sendRemoteRuntimeRequestWithStatusPreflight<TResult>(

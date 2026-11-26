@@ -27,6 +27,29 @@ export type CliErrorContext = {
   repoSelector?: string
   /** True when --environment, --pairing-code, --host runtime:, or their env vars chose a server. */
   remoteServerSelected?: boolean
+  /** Report the stable code in `error.code`; unset, legacy commands keep their original code there. */
+  publicContract?: true
+}
+
+// errors are marked, not contexts, because index.ts builds the context without knowing which handler ran
+const publicContractErrors = new WeakSet<object>()
+
+/** Marks an error raised by a public-contract command so `reportCliError` gives it the stable `error.code`. */
+export function markPublicContractError<T>(error: T): T {
+  if (typeof error === 'object' && error !== null) {
+    publicContractErrors.add(error)
+  }
+  return error
+}
+
+const PUBLIC_CONTRACT_COMMAND_ROOTS: ReadonlySet<string> = new Set(['rpc', 'schema', 'events'])
+
+function usesPublicContract(error: unknown, context: CliErrorContext): boolean {
+  return (
+    context.publicContract === true ||
+    (typeof error === 'object' && error !== null && publicContractErrors.has(error)) ||
+    PUBLIC_CONTRACT_COMMAND_ROOTS.has(context.commandPath?.[0] ?? '')
+  )
 }
 
 type ContextRecovery = { nextSteps: readonly string[] } & Record<string, unknown>
@@ -164,7 +187,13 @@ export function reportCliError(error: unknown, json: boolean, context: CliErrorC
         }
       }
     }
-    console.log(JSON.stringify(withStableErrorContract(response, context), null, 2))
+    console.log(
+      JSON.stringify(
+        withStableErrorContract(response, context, usesPublicContract(error, context)),
+        null,
+        2
+      )
+    )
   } else {
     console.error(formatCliError(error, context))
   }
@@ -248,12 +277,15 @@ function textNextSteps(error: unknown): NextStep[] {
 }
 
 /**
- * Rewrites a failure into the public error contract: the stable code in `error.code`, the specific
- * cause in `error.data.reason`, and `error.data.next` always present where the contract requires it.
+ * Adds the public error contract to a failure: the specific cause in `error.data.reason` and
+ * `error.data.next` wherever the contract requires it. A public command also gets the stable code in
+ * `error.code`; a legacy command keeps its original code there and carries the stable one in
+ * `error.data.stableCode`, so scripts written before the contract keep working.
  */
 function withStableErrorContract(
   response: RuntimeRpcFailure,
-  context: CliErrorContext
+  context: CliErrorContext,
+  publicContract: boolean
 ): RuntimeRpcFailure {
   const normalized = normalizeErrorCode(response.error.code)
   const sent = response.error.data
@@ -277,13 +309,14 @@ function withStableErrorContract(
         : []
   const data = {
     ...base,
+    ...(publicContract ? {} : { stableCode: normalized.code }),
     ...(reason === undefined ? {} : { reason }),
     ...(next.length === 0 ? {} : { next })
   }
   return {
     ...response,
     error: {
-      code: normalized.code,
+      code: publicContract ? normalized.code : response.error.code,
       message: response.error.message,
       ...(Object.keys(data).length === 0 ? {} : { data })
     }

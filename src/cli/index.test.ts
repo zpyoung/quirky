@@ -190,7 +190,7 @@ describe('command aliases dispatch to the canonical handler', () => {
         '/tmp/repo'
       )
 
-      expect(process.exitCode).toBe(1)
+      expect(process.exitCode).toBe(2)
       // The removal must never have been attempted.
       expect(callMock).not.toHaveBeenCalledWith('worktree.rm', expect.anything())
     } finally {
@@ -281,7 +281,7 @@ describe('unknown command surfaces a suggestion', () => {
   it('prints did-you-mean for a near-miss command and exits non-zero', async () => {
     await main(['worktree', 'remov'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     const stderr = errorSpy.mock.calls.map((call) => String(call[0])).join('\n')
     expect(stderr).toContain('Unknown command: worktree remov')
     expect(stderr).toContain('quirky worktree')
@@ -302,7 +302,7 @@ describe('unknown command surfaces a suggestion', () => {
     runtimeClientConstructorMock.mockClear()
     try {
       await main([...input.split(' '), '--json'], '/tmp/repo')
-      expect(process.exitCode).toBe(1)
+      expect(process.exitCode).toBe(2)
       const output = logSpy.mock.calls.flat().join('\n')
       expect(output).toContain('invalid_argument')
       expect(output).toContain('"runtimeId": null')
@@ -323,7 +323,7 @@ describe('unknown command surfaces a suggestion', () => {
   it('reports a mistyped pre-command flag without swallowing the command', async () => {
     await main(['--jso', 'worktree', 'list'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     const stderr = errorSpy.mock.calls.map((call) => String(call[0])).join('\n')
     expect(stderr).toContain('Unknown flag --jso for command: worktree list')
     expect(stderr).toContain('--json')
@@ -345,7 +345,7 @@ describe('unknown command surfaces a suggestion', () => {
       '/tmp/repo'
     )
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(3)
     const stderr = errorSpy.mock.calls.map((call) => String(call[0])).join('\n')
     expect(stderr).toContain('No Quirky workspace matched the worktree selector "repo-1"')
     expect(stderr).toContain('id:repo-1::<absolute-path>')
@@ -355,7 +355,7 @@ describe('unknown command surfaces a suggestion', () => {
   it('reports a pre-command flag that belongs to another command', async () => {
     await main(['--workspace', 'worktree', 'list'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     const stderr = errorSpy.mock.calls.map((call) => String(call[0])).join('\n')
     expect(stderr).toContain('Unknown flag --workspace for command: worktree list')
   })
@@ -365,7 +365,7 @@ describe('unknown command surfaces a suggestion', () => {
 
     await main(['--jso', 'worktree', '--json', 'list'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(logSpy.mock.calls.flat().join('\n')).toContain(
       'Unknown flag --jso for command: worktree list'
     )
@@ -380,7 +380,7 @@ describe('unknown command surfaces a suggestion', () => {
 
       await main([`--${flag}`, 'worktree', 'list'], '/tmp/repo')
 
-      expect(process.exitCode).toBe(1)
+      expect(process.exitCode).toBe(2)
       const stderr = errorSpy.mock.calls.map((call) => String(call[0])).join('\n')
       expect(stderr).toContain(`Flag --${flag} requires a value.`)
       expect(runtimeClientConstructorMock).not.toHaveBeenCalled()
