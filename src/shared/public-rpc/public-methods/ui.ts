@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../layout-owner-switch'
 import { LayoutApplyParams } from '../../rpc-contract/workspace-layout-params'
 import { definePublicMethod, type PublicMethodSpec } from '../public-method-spec'
 import { UiStateSnapshotSchema } from '../ui-state'
@@ -68,7 +67,7 @@ const UI_RUN_ACTION_SPEC = definePublicMethod({
   errors: ['invalid_argument', 'not_found', 'unavailable', 'timeout', 'needs_confirmation']
 })
 
-// Registered only in a layout-owner build, so the spec exists only where the method does.
+// A runtime without the method answers method_not_found, which reports as unavailable/capability_missing.
 const LAYOUT_APPLY_SPEC = definePublicMethod({
   method: 'layout.apply',
   cliPath: ['layout', 'apply'],
@@ -84,5 +83,5 @@ export const UI_PUBLIC_METHODS: readonly PublicMethodSpec[] = [
   UI_STATE_SPEC,
   UI_LIST_ACTIONS_SPEC,
   UI_RUN_ACTION_SPEC,
-  ...(QUIRKY_LAYOUT_OWNER_IS_MAIN ? [LAYOUT_APPLY_SPEC] : [])
+  LAYOUT_APPLY_SPEC
 ]

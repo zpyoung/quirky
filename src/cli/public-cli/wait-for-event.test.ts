@@ -130,6 +130,21 @@ describe('waitForEvent', () => {
     expect(fake.wasAborted()).toBe(true)
   })
 
+  it('times out when a matching event arrived but the call never settles', async () => {
+    const fake = controllableStream()
+    const done = waitForEvent(
+      fake.client,
+      { match: () => true, timeoutMs: 20 },
+      () => new Promise<never>(() => {})
+    )
+    fake.emit(READY)
+    fake.emit(eventFrame(8, 'turn.finished'))
+    const error = await done.catch((caught: unknown) => caught)
+    expect(error).toMatchObject({ code: 'timeout' })
+    expect(exitCodeFor(error)).toBe(6)
+    expect(fake.wasAborted()).toBe(true)
+  })
+
   it('rejects with what start rejects with and closes the stream', async () => {
     const fake = controllableStream()
     const done = waitForEvent(fake.client, { match: () => true, timeoutMs: 1000 }, async () => {

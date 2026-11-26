@@ -110,7 +110,7 @@ function errorCode(error: unknown): string | undefined {
 /** The human message plus `Next: <command>  (<why>)` lines for follow-ups the runtime or contract names. */
 export function formatCliError(error: unknown, context: CliErrorContext = {}): string {
   const message = formatCliErrorMessage(error, context)
-  const next = textNextSteps(error)
+  const next = textNextSteps(error, context)
   return next.length === 0 ? message : `${message}\n${next.map(formatNextStep).join('\n')}`
 }
 
@@ -234,13 +234,41 @@ function formatNextStep(step: NextStep): string {
   return step.why ? `Next: ${step.command}  (${step.why})` : `Next: ${step.command}`
 }
 
-function confirmCommand(context: CliErrorContext): string | null {
-  const args = context.rawArgs ?? context.commandPath
+function spellConfirmCommand(args: readonly string[] | undefined): string | null {
   if (!args || args.length === 0) {
     return null
   }
   const spelled = args.map(quoteCliCommandArgument).join(' ')
   return args.includes('--yes') ? `quirky ${spelled}` : `quirky ${spelled} --yes`
+}
+
+function confirmCommand(context: CliErrorContext): string | null {
+  return spellConfirmCommand(context.rawArgs ?? context.commandPath)
+}
+
+const EXECUTABLE_COMMAND = /^quirky(\s|$)/
+
+/**
+ * The runtime cannot know the caller's argv, so its confirmation step is a placeholder such as
+ * `re-run with --yes`. This swaps each placeholder for the invocation that was actually run plus
+ * `--yes`, and leaves a step that already names a `quirky` command alone.
+ */
+function withExecutableConfirmation(
+  steps: NextStep[],
+  normalizedCode: StableErrorCode,
+  context: CliErrorContext
+): NextStep[] {
+  const confirm =
+    normalizedCode === 'needs_confirmation' ? spellConfirmCommand(context.rawArgs) : null
+  if (!confirm) {
+    return steps
+  }
+  const rewritten = steps.map((step) =>
+    EXECUTABLE_COMMAND.test(step.command) ? step : { ...step, command: confirm }
+  )
+  return rewritten.filter(
+    (step, index) => rewritten.findIndex((other) => other.command === step.command) === index
+  )
 }
 
 /** Generic follow-ups for a stable code whose error carried none, so an agent always has a next move. */
@@ -278,12 +306,12 @@ function genericNextSteps(
 }
 
 /** Text mode shows what the runtime sent, plus the compat hint for a runtime that lacks the method. */
-function textNextSteps(error: unknown): NextStep[] {
+function textNextSteps(error: unknown, context: CliErrorContext): NextStep[] {
+  const normalized = normalizeErrorCode(rawCliErrorCode(error))
   const sent = nextStepsSentIn(errorData(error))
   if (sent.length > 0) {
-    return sent
+    return withExecutableConfirmation(sent, normalized.code, context)
   }
-  const normalized = normalizeErrorCode(rawCliErrorCode(error))
   return normalized.code === 'unavailable' && normalized.reason === 'capability_missing'
     ? [RUNTIME_PREDATES_PUBLIC_CLI]
     : []
@@ -313,7 +341,7 @@ function withStableErrorContract(
       : normalized.reason !== normalized.code
         ? normalized.reason
         : undefined
-  const sentNext = nextStepsSentIn(base)
+  const sentNext = withExecutableConfirmation(nextStepsSentIn(base), normalized.code, context)
   const next =
     sentNext.length > 0
       ? sentNext

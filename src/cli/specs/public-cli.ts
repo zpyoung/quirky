@@ -25,7 +25,7 @@ export const PUBLIC_CLI_COMMAND_SPECS: CommandSpec[] = [
     usage: 'quirky rpc list [--json]',
     allowedFlags: [...GLOBAL_FLAGS],
     notes: [
-      'Pure local read: prints the methods named in the public specs and classification tables, plus namespace patterns such as `agentSession.*`.'
+      'Pure local read: prints every RPC method this CLI knows with its class and stability tier.'
     ],
     examples: ['quirky rpc list']
   },

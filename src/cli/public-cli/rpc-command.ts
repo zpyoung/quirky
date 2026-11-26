@@ -4,17 +4,16 @@ import { RuntimeClientError } from '../runtime/types'
 import { readCallerHintFromEnv } from '../../shared/public-rpc/caller-hint'
 import {
   METHOD_CLASSIFICATION,
-  NAMESPACE_DEFAULTS,
+  classifyMethod,
   type MethodClass
 } from '../../shared/public-rpc/method-classification'
 import { PUBLIC_METHOD_SPECS, publicSpecForMethod } from '../../shared/public-rpc/public-methods'
+import { RPC_PARAMS_BY_METHOD } from '../../shared/rpc-contract/rpc-params-catalog.generated'
 
 export type RpcListEntry = {
   method: string
   class: MethodClass['kind']
   stability: 'stable' | 'unstable' | null
-  /** True for a namespace prefix such as `agentSession.`, which covers many methods. */
-  pattern?: true
 }
 
 function stabilityOf(entry: MethodClass): RpcListEntry['stability'] {
@@ -25,26 +24,27 @@ function stabilityOf(entry: MethodClass): RpcListEntry['stability'] {
 }
 
 /**
- * Every method name the classification tables and public specs know, plus each namespace prefix.
- * The runtime's full registry lives server-side, so this is the part the CLI can state offline.
+ * Every concrete method name the runtime registers, joined with its classification. The generated
+ * params catalog is read back from the host registry, so it names exactly the methods a runtime of
+ * this build serves; public specs and exact classification entries are added in case a build
+ * variant registers a method the catalog omits.
  */
 export function buildRpcList(): RpcListEntry[] {
+  const names = new Set<string>([
+    ...Object.keys(RPC_PARAMS_BY_METHOD),
+    ...PUBLIC_METHOD_SPECS.map((spec) => spec.method),
+    ...Object.keys(METHOD_CLASSIFICATION)
+  ])
   const entries: RpcListEntry[] = []
-  for (const spec of PUBLIC_METHOD_SPECS) {
-    entries.push({ method: spec.method, class: 'public', stability: spec.stability })
-  }
-  for (const [method, entry] of Object.entries(METHOD_CLASSIFICATION)) {
-    if (!publicSpecForMethod(method)) {
-      entries.push({ method, class: entry.kind, stability: stabilityOf(entry) })
+  for (const method of names) {
+    const classification = classifyMethod(method)
+    if (classification) {
+      entries.push({
+        method,
+        class: classification.kind,
+        stability: stabilityOf(classification)
+      })
     }
-  }
-  for (const [prefix, entry] of Object.entries(NAMESPACE_DEFAULTS)) {
-    entries.push({
-      method: `${prefix}*`,
-      class: entry.kind,
-      stability: stabilityOf(entry),
-      pattern: true
-    })
   }
   return entries.toSorted((a, b) => a.method.localeCompare(b.method))
 }

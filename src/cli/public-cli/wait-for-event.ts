@@ -23,7 +23,8 @@ function isReadyFrame(frame: unknown): boolean {
  *
  * The event stream is opened first and `start()` runs only after the server's `ready` frame, so an
  * event the call causes cannot arrive before anyone is listening. Rejects with `timeout` (exit 6)
- * when no matching event arrives within `timeoutMs`, and with whatever `start()` rejects with.
+ * when the call has not settled and a matching event has not arrived within `timeoutMs`, and with
+ * whatever `start()` rejects with. `timeoutMs` bounds the whole operation, not just the event.
  */
 export async function waitForEvent<T>(
   client: Pick<RuntimeClient, 'stream'>,
@@ -45,15 +46,18 @@ export async function waitForEvent<T>(
     }
   })
 
-  const event = new Promise<PublicEvent>((resolve, reject) => {
+  const deadline = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
       reject(
         new RuntimeClientError(
           'timeout',
-          `Timed out after ${options.timeoutMs}ms waiting for a matching event.`
+          `Timed out after ${options.timeoutMs}ms waiting for a matching event and the call to settle.`
         )
       )
     }, options.timeoutMs)
+  })
+
+  const event = new Promise<PublicEvent>((resolve, reject) => {
     const params = options.topics ? { topics: options.topics } : {}
     client
       .stream(
@@ -84,7 +88,7 @@ export async function waitForEvent<T>(
   })
 
   try {
-    const [settled, matched] = await Promise.all([result, event])
+    const [settled, matched] = await Promise.race([Promise.all([result, event]), deadline])
     return { result: settled, event: matched }
   } finally {
     clearTimeout(timer)

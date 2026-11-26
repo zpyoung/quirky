@@ -15,6 +15,9 @@ import { getCliStatus, projectRemoteAppStatus } from './status'
 import { sendRequest } from './transport'
 import { sendStreamingRequest } from './streaming-transport'
 import type { CallerHint } from '../../shared/public-rpc/caller-hint'
+import { classifyMethod } from '../../shared/public-rpc/method-classification'
+import { publicSpecForMethod } from '../../shared/public-rpc/public-methods'
+import { PUBLIC_CLI_RUNTIME_CAPABILITY } from '../../shared/public-cli-runtime-capabilities'
 import type { RemoteRuntimeRequestEnvelope } from '../../shared/remote-runtime-memory-limits'
 import { RuntimeClientError, RuntimeRpcFailureError, type RuntimeRpcSuccess } from './types'
 import { markPublicContractError } from '../cli-error'
@@ -46,6 +49,24 @@ import {
 } from './orchestration-recovery-command'
 
 const LONG_POLL_CLIENT_GRACE_MS = 10_000
+
+// The server holds an approval question open for 10 minutes; the margin keeps the client from
+// abandoning a call the server is still entitled to answer.
+const PUBLIC_APPROVAL_CLIENT_TIMEOUT_MS = 600_000 + 30_000
+
+/** Whether a public-contract call to this method can park on a user approval before it answers. */
+function publicCallMayAwaitApproval(method: string): boolean {
+  const spec = publicSpecForMethod(method)
+  if (spec) {
+    return (
+      spec.effect === 'mutate' ||
+      spec.destructive !== undefined ||
+      spec.approvalCategory !== undefined
+    )
+  }
+  const classification = classifyMethod(method)
+  return classification?.kind === 'unstable' && classification.destructive !== undefined
+}
 
 const loadWebSocketTransport = async () => await import('./websocket-transport.js')
 
@@ -82,6 +103,7 @@ export class RuntimeClient {
   private readonly originalArgs: readonly string[] | undefined
   private readonly remoteCompat: RemoteRuntimeCompatGate
   private orchestrationContractCheck: Promise<void> | null = null
+  private publicCliContractCheck: Promise<void> | null = null
   private readonly orchestrationCompatibility = createOrchestrationCompatibilityEnvelope(
     process.env
   )
@@ -131,7 +153,11 @@ export class RuntimeClient {
     params?: unknown,
     options?: CallOptions
   ): Promise<RuntimeRpcSuccess<TResult>> {
-    const effectiveTimeoutMs = options?.timeoutMs ?? this.resolveMethodTimeoutMs(method, params)
+    const effectiveTimeoutMs =
+      options?.timeoutMs ?? this.resolveCallTimeoutMs(method, params, options)
+    if (options?.publicContract) {
+      await this.ensurePublicCliContract()
+    }
     const orchestrationMutation = isOrchestrationMutation(method, params)
     const terminalPromptMutation = isTerminalPromptMutation(method, params)
     const legacyTerminalPrompt = options?.legacyTerminalPrompt === true && terminalPromptMutation
@@ -264,6 +290,9 @@ export class RuntimeClient {
     onFrame: (result: unknown) => void,
     options?: StreamOptions
   ): Promise<void> {
+    if (options?.publicContract) {
+      await this.ensurePublicCliContract()
+    }
     if (this.remote) {
       const transport = await loadWebSocketTransport()
       await transport.streamWebSocketRequest(this.remote, method, params, onFrame, {
@@ -284,6 +313,13 @@ export class RuntimeClient {
       },
       expectedRuntimeSource
     })
+  }
+
+  private resolveCallTimeoutMs(method: string, params: unknown, options?: CallOptions): number {
+    const base = this.resolveMethodTimeoutMs(method, params)
+    return options?.publicContract && publicCallMayAwaitApproval(method)
+      ? Math.max(base, PUBLIC_APPROVAL_CLIENT_TIMEOUT_MS)
+      : base
   }
 
   // Why: centralises the per-method timeout policy. Long-poll inner waiter
@@ -366,6 +402,39 @@ export class RuntimeClient {
       })
     }
     await this.orchestrationContractCheck
+  }
+
+  /**
+   * Refuses a public-contract call before anything is sent when the runtime predates `public-cli.v1`.
+   * An older runtime ignores the `publicContract` and `confirm` fields, so it would run a destructive
+   * call without the confirmation gate.
+   */
+  private async ensurePublicCliContract(): Promise<void> {
+    if (!this.publicCliContractCheck) {
+      this.publicCliContractCheck = this.checkPublicCliContract().catch((error: unknown) => {
+        // Why: a missing capability is final for this connection; only a failed probe may be retried.
+        if (!(error instanceof RuntimeClientError && error.code === 'capability_unsupported')) {
+          this.publicCliContractCheck = null
+        }
+        throw error
+      })
+    }
+    await this.publicCliContractCheck
+  }
+
+  private async checkPublicCliContract(): Promise<void> {
+    const response = await this.call<RuntimeStatus>('status.get', undefined, {
+      timeoutMs: this.requestTimeoutMs
+    })
+    if (this.remote) {
+      this.remoteCompat.noteVerifiedStatus(response.result)
+    }
+    if (!response.result.capabilities?.includes(PUBLIC_CLI_RUNTIME_CAPABILITY)) {
+      throw new RuntimeClientError(
+        'capability_unsupported',
+        `The connected Quirky runtime does not support the public CLI contract (${PUBLIC_CLI_RUNTIME_CAPABILITY}). Nothing was sent.`
+      )
+    }
   }
 
   private async checkOrchestrationContractCompatibility(timeoutMs: number): Promise<void> {
