@@ -344,6 +344,36 @@ test.describe('Ask card', () => {
     await cancelAsk(quirkyPage, secondAskId)
   })
 
+  test('titlebar list jumps back to an ask on a background tab', async ({ quirkyPage }) => {
+    const { paneKey, worktreeId } = await setupAskPane(quirkyPage)
+    const question = 'Which tab owns this question?'
+    const askId = await registerAsk(quirkyPage, { paneKey, worktreeId, questionId: 'q1', question })
+    await expect(quirkyPage.getByRole('textbox', { name: question })).toBeVisible({
+      timeout: 10_000
+    })
+
+    await quirkyPage.evaluate((id) => {
+      const state = window.__store?.getState()
+      if (!state) {
+        throw new Error('store unavailable')
+      }
+      const tab = state.createTab(id, undefined, undefined, { activate: true })
+      state.setActiveTab(tab.id)
+      state.setActiveTabType('terminal', id)
+    }, worktreeId)
+    await expect(quirkyPage.getByRole('textbox', { name: question })).toHaveCount(0, {
+      timeout: 10_000
+    })
+
+    await quirkyPage.getByRole('button', { name: '1 pending question' }).click()
+    await quirkyPage.getByRole('menuitem', { name: new RegExp(question) }).click()
+
+    await expect(quirkyPage.getByRole('textbox', { name: question })).toBeVisible({
+      timeout: 10_000
+    })
+    await cancelAsk(quirkyPage, askId)
+  })
+
   test('scrolls a long card and keeps Submit pinned inside the panel', async ({ quirkyPage }) => {
     const { paneKey } = await setupAskPane(quirkyPage)
     const askId = `e2e-ask-tall-${randomUUID()}`
