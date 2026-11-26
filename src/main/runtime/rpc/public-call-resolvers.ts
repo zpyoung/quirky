@@ -1,5 +1,16 @@
 import { ACTION_CATALOG, isCatalogedActionId } from '../../../shared/keybindings/action-catalog'
 import { UiRunActionParams } from '../../../shared/public-rpc/public-methods/ui'
+import { AutomationId } from '../../../shared/rpc-contract/automation-params'
+import { ProfileDelete } from '../../../shared/rpc-contract/browser-params'
+import { LinearCommentDelete } from '../../../shared/rpc-contract/linear-agent-access-params'
+import { ResetParams } from '../../../shared/rpc-contract/orchestration-params'
+import { ProjectGroupSelector } from '../../../shared/rpc-contract/repo-params'
+import {
+  RemoveAccountParams,
+  RemoveDataAccountParams
+} from '../../../shared/rpc-contract/accounts-params'
+import { AntigravityAccountMutationParams } from '../../../shared/rpc-contract/antigravity-accounts-params'
+import { SkillDeleteRequestSchema } from '../../../shared/skill-delete-contract'
 import { FileDelete, FileWrite } from '../../../shared/rpc-contract/files-mutation-params'
 import { GitBulkPaths, GitFilePath } from '../../../shared/rpc-contract/git-params'
 import { WorktreeRemove } from '../../../shared/rpc-contract/worktree-params'
@@ -190,4 +201,95 @@ registerDestructivePreviewer('worktree.rm', async (params, ctx) => {
     `removes ${workspace} from disk`,
     ...(parsed.data.force ? ['--force discards its uncommitted changes'] : [])
   ]
+})
+
+/** For a target the params already name, so the preview needs no runtime lookup. */
+function registerParamsPreviewer(method: string, describe: (params: unknown) => string[]): void {
+  registerDestructivePreviewer(method, (params) => Promise.resolve(describe(params)))
+}
+
+registerParamsPreviewer('automation.delete', (params) => {
+  const parsed = AutomationId.safeParse(params)
+  return parsed.success
+    ? [`deletes automation ${parsed.data.id} and stops its schedule`]
+    : genericEffect('automation.delete')
+})
+
+registerParamsPreviewer('orchestration.reset', (params) => {
+  const parsed = ResetParams.safeParse(params)
+  if (!parsed.success) {
+    return genericEffect('orchestration.reset')
+  }
+  if (parsed.data.all) {
+    return ['deletes every orchestration run, task, dispatch and message on this host']
+  }
+  return parsed.data.tasks
+    ? ['deletes every orchestration task and dispatch on this host; messages are kept']
+    : ['deletes every orchestration message on this host']
+})
+
+registerParamsPreviewer('skills.delete', (params) => {
+  const parsed = SkillDeleteRequestSchema.safeParse(params)
+  if (!parsed.success) {
+    return genericEffect('skills.delete')
+  }
+  const { skills } = parsed.data
+  const listed = skills.slice(0, MAX_LISTED_PATHS)
+  const more = skills.length - listed.length
+  return [
+    ...listed.map((skill) => `deletes the skill ${skill.name} at ${skill.directoryPath}`),
+    ...(more > 0 ? [`and ${more} more skills`] : [])
+  ]
+})
+
+function registerAccountRemovalPreviewer(method: string, label: string): void {
+  registerParamsPreviewer(method, (params) => {
+    const parsed = RemoveAccountParams.safeParse(params)
+    return parsed.success
+      ? [`removes the ${label} account ${parsed.data.accountId} and its stored sign-in`]
+      : genericEffect(method)
+  })
+}
+
+registerAccountRemovalPreviewer('accounts.removeClaude', 'Claude')
+registerAccountRemovalPreviewer('accounts.removeCodex', 'Codex')
+
+registerParamsPreviewer('accounts.removeData', (params) => {
+  const parsed = RemoveDataAccountParams.safeParse(params)
+  return parsed.success
+    ? [`removes the ${parsed.data.provider} account ${parsed.data.accountId} and its stored data`]
+    : genericEffect('accounts.removeData')
+})
+
+registerParamsPreviewer('accounts.antigravityRemove', (params) => {
+  const parsed = AntigravityAccountMutationParams.safeParse(params)
+  return parsed.success
+    ? [`removes the Antigravity account ${parsed.data.accountId} and its stored sign-in`]
+    : genericEffect('accounts.antigravityRemove')
+})
+
+registerParamsPreviewer('browser.profileDelete', (params) => {
+  const parsed = ProfileDelete.safeParse(params)
+  return parsed.success
+    ? [`deletes the browser profile ${parsed.data.profileId} with its cookies and site data`]
+    : genericEffect('browser.profileDelete')
+})
+
+registerParamsPreviewer('linear.commentDelete', (params) => {
+  const parsed = LinearCommentDelete.safeParse(params)
+  return parsed.success
+    ? [`permanently deletes Linear comment ${parsed.data.commentId}`]
+    : genericEffect('linear.commentDelete')
+})
+
+registerParamsPreviewer('projectGroup.delete', (params) => {
+  const parsed = ProjectGroupSelector.safeParse(params)
+  const removesProjects = recordField(params, 'removeContainedProjects') === true
+  return parsed.success
+    ? [
+        removesProjects
+          ? `deletes project group ${parsed.data.groupId} and removes the projects inside it from Quirky`
+          : `deletes project group ${parsed.data.groupId}; its projects stay`
+      ]
+    : genericEffect('projectGroup.delete')
 })

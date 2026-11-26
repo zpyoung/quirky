@@ -103,9 +103,10 @@ export function registerUiActionIpcBridge(unsubs: (() => void)[]): void {
   if (ui.onRequestUiAction && ui.replyUiAction) {
     const reply = ui.replyUiAction
     unsubs.push(
-      ui.onRequestUiAction(({ requestId, actionId, worktreeId, probeOnly }) => {
+      ui.onRequestUiAction(({ requestId, actionId, worktreeId, hostId, probeOnly }) => {
         const result = dispatchAppCommandWithResult(actionId, 'rpc', {
           ...(worktreeId ? { worktreeId } : {}),
+          ...(hostId ? { hostId } : {}),
           ...(probeOnly ? { probeOnly } : {})
         })
         reply({ requestId, ...result })

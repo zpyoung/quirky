@@ -142,6 +142,73 @@ describe('destructive previewers for file and workspace methods', () => {
   })
 })
 
+describe('destructive previewers for legacy data deleters', () => {
+  it.each([
+    ['automation.delete', { id: 'auto-1' }, 'deletes automation auto-1 and stops its schedule'],
+    [
+      'orchestration.reset',
+      { all: true },
+      'deletes every orchestration run, task, dispatch and message on this host'
+    ],
+    [
+      'orchestration.reset',
+      { tasks: true },
+      'deletes every orchestration task and dispatch on this host; messages are kept'
+    ],
+    ['orchestration.reset', { messages: true }, 'deletes every orchestration message on this host'],
+    [
+      'accounts.removeClaude',
+      { accountId: 'acct-1' },
+      'removes the Claude account acct-1 and its stored sign-in'
+    ],
+    [
+      'accounts.removeCodex',
+      { accountId: 'acct-2' },
+      'removes the Codex account acct-2 and its stored sign-in'
+    ],
+    [
+      'browser.profileDelete',
+      { profileId: 'p1' },
+      'deletes the browser profile p1 with its cookies and site data'
+    ],
+    [
+      'projectGroup.delete',
+      { groupId: 'g1', removeContainedProjects: true },
+      'deletes project group g1 and removes the projects inside it from Quirky'
+    ],
+    ['projectGroup.delete', { groupId: 'g1' }, 'deletes project group g1; its projects stay']
+  ])('%s names what it deletes', async (method, params, effect) => {
+    const { ctx } = createContext()
+
+    expect(await preview(method, params, ctx)).toEqual([effect])
+  })
+
+  it('lists each skill a delete removes and caps a long list', async () => {
+    const { ctx } = createContext()
+    const skills = Array.from({ length: 12 }, (_, index) => ({
+      id: `s${index}`,
+      directoryPath: `/skills/s${index}`,
+      skillFilePath: `/skills/s${index}/SKILL.md`,
+      name: `skill-${index}`,
+      updatedAt: 1
+    }))
+
+    const effects = await preview('skills.delete', { operationId: 'op', skills }, ctx)
+
+    expect(effects[0]).toBe('deletes the skill skill-0 at /skills/s0')
+    expect(effects).toHaveLength(11)
+    expect(effects.at(-1)).toBe('and 2 more skills')
+  })
+
+  it('falls back to a generic effect when the params do not parse', async () => {
+    const { ctx } = createContext()
+
+    expect(await preview('automation.delete', {}, ctx)).toEqual([
+      'automation.delete is destructive'
+    ])
+  })
+})
+
 describe('resolveTargetWorktreeId', () => {
   const runtime = (id: string | Error) => ({
     showTerminalWorkspaceLaunchScope: vi.fn(async () => {

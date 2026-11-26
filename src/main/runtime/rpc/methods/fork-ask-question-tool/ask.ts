@@ -1,4 +1,5 @@
-import { defineMethod, defineStreamingMethod } from '../../core'
+import { defineMethod, defineStreamingMethod, type RpcContext } from '../../core'
+import type { RpcCallerIdentity } from '../../rpc-caller-identity'
 import { isTerminalAskStatus } from '../../../../../shared/fork-ask-question-tool/ask-answer-envelope'
 import {
   ASK_DEFAULT_CHUNK_MS,
@@ -60,6 +61,18 @@ function buildPendingSnapshot(
 }
 
 let askSubscriptionSeq = 0
+
+/**
+ * An approval releases a gated mutation, so only the user's own apps may grant it: the desktop UI
+ * or their paired phone. A CLI over a pairing code is also a paired device but pairs with the
+ * runtime scope, so only the mobile scope counts.
+ */
+function isUserApprovalAnswerer(
+  caller: RpcCallerIdentity | undefined,
+  clientKind: RpcContext['clientKind']
+): boolean {
+  return caller?.kind === 'desktop' || (caller?.kind === 'paired-device' && clientKind === 'mobile')
+}
 
 export const ASK_METHODS = [
   defineMethod({
@@ -130,14 +143,13 @@ export const ASK_METHODS = [
     name: 'ask.answer',
     permission: 'workspace',
     params: AskAnswerParams,
-    handler: async (params, { runtime, caller }) => {
+    handler: async (params, { runtime, caller, clientKind }) => {
       const { db, registry } = runtime.getAskServices()
       const row = db.getAsk(params.askId)
       if (!row || isTerminalAskStatus(row.status)) {
         return { committed: false }
       }
-      // an approval releases a gated mutation, so only the app's own UI may grant it
-      if (isApprovalRequestId(row.request_id) && caller?.kind !== 'desktop') {
+      if (isApprovalRequestId(row.request_id) && !isUserApprovalAnswerer(caller, clientKind)) {
         throw new PublicRpcError(
           'unauthorized',
           'approval_requires_user',

@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { registerAppCommandDispatcher } from '@/lib/app-command-dispatch'
 import type { Tab } from '../../../../shared/tab-types'
 import { createTestStore } from '../../store/slices/store-test-helpers'
-import { buildUiTabsSnapshot } from './ui-action-ipc-bridge'
+import { buildUiTabsSnapshot, registerUiActionIpcBridge } from './ui-action-ipc-bridge'
 
 function tab(id: string, worktreeId: string, contentType: Tab['contentType']): Tab {
   return {
@@ -37,5 +38,50 @@ describe('buildUiTabsSnapshot', () => {
       'wt-2': [{ id: 'c1', type: 'chat' }],
       'wt-3': []
     })
+  })
+})
+
+describe('registerUiActionIpcBridge', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('hands the requested host to the command dispatcher with the workspace', () => {
+    let deliver: ((request: Record<string, unknown>) => void) | undefined
+    const replyUiAction = vi.fn()
+    vi.stubGlobal('window', {
+      api: {
+        ui: {
+          onRequestUiAction: (callback: (request: Record<string, unknown>) => void) => {
+            deliver = callback
+            return () => {}
+          },
+          replyUiAction
+        }
+      }
+    })
+    const dispatcher = vi.fn(() => ({ claimed: true }))
+    const unregister = registerAppCommandDispatcher(dispatcher)
+    const unsubs: (() => void)[] = []
+
+    registerUiActionIpcBridge(unsubs)
+    deliver?.({
+      requestId: 'r1',
+      actionId: 'workspace.delete',
+      worktreeId: 'repo::/feature',
+      hostId: 'ssh:other-host'
+    })
+    deliver?.({ requestId: 'r2', actionId: 'workspace.delete', worktreeId: 'repo::/feature' })
+    unregister()
+    unsubs.forEach((unsub) => unsub())
+
+    expect(dispatcher).toHaveBeenNthCalledWith(1, 'workspace.delete', 'rpc', {
+      worktreeId: 'repo::/feature',
+      hostId: 'ssh:other-host'
+    })
+    expect(dispatcher).toHaveBeenNthCalledWith(2, 'workspace.delete', 'rpc', {
+      worktreeId: 'repo::/feature'
+    })
+    expect(replyUiAction).toHaveBeenCalledWith({ requestId: 'r1', claimed: true })
   })
 })

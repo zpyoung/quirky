@@ -1,10 +1,12 @@
 import { ipcRenderer } from 'electron'
+import type { ExecutionHostId } from '../../shared/execution-host'
 import type { UiStateSnapshot } from '../../shared/public-rpc/ui-state'
 
 export type UiActionRequest = {
   requestId: string
   actionId: string
   worktreeId?: string
+  hostId?: ExecutionHostId
   probeOnly?: boolean
 }
 export type UiActionReply = { requestId: string; claimed: boolean; reason?: string }

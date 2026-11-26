@@ -62,11 +62,32 @@ describe('public method coverage', () => {
     ['terminal.stop', 'workspace-delete'],
     ['terminal.closeAll', 'workspace-delete'],
     ['files.writeBase64', 'file-overwrite-delete'],
-    ['files.rename', 'file-overwrite-delete']
+    ['files.rename', 'file-overwrite-delete'],
+    ['automation.delete', 'workspace-delete'],
+    ['orchestration.reset', 'workspace-delete'],
+    ['skills.delete', 'file-overwrite-delete'],
+    ['accounts.removeClaude', 'workspace-delete'],
+    ['accounts.removeCodex', 'workspace-delete'],
+    ['accounts.removeData', 'workspace-delete'],
+    ['accounts.antigravityRemove', 'workspace-delete'],
+    ['browser.profileDelete', 'workspace-delete'],
+    ['linear.commentDelete', 'workspace-delete']
   ])('marks the legacy method %s destructive so quirky rpc gates it', (method, category) => {
     expect(classifyMethod(method)).toMatchObject({
       kind: 'legacy-cli',
       destructive: { category }
     })
   })
+})
+
+describe('unstable methods that delete data', () => {
+  it.each(['projectGroup.delete', 'github.project.deleteIssueCommentBySlug'])(
+    'marks %s destructive so quirky rpc gates it',
+    (method) => {
+      expect(classifyMethod(method)).toMatchObject({
+        kind: 'unstable',
+        destructive: { category: 'workspace-delete' }
+      })
+    }
+  )
 })
