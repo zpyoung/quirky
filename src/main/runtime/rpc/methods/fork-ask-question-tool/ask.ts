@@ -3,15 +3,15 @@ import type { RpcCallerIdentity } from '../../rpc-caller-identity'
 import { isTerminalAskStatus } from '../../../../../shared/fork-ask-question-tool/ask-answer-envelope'
 import {
   ASK_DEFAULT_CHUNK_MS,
+  ASK_MAX_CHUNK_MS,
   validateAskSpec,
-  type AskPartial,
   type AskRegistryEvent,
   type AskSpec
 } from '../../../../../shared/fork-ask-question-tool/ask-question-schema'
 import type { AskDb } from '../../../../fork-ask-question-tool/ask-db'
 import { isApprovalRequestId } from '../../../approvals/approval-gate'
 import { PublicRpcError } from '../../public-rpc-error'
-import { validateAskAnswerSubmission } from './ask-answer-validation'
+import { validateAskAnswerSubmission } from '../../../../../shared/fork-ask-question-tool/ask-answer-validation'
 import { registryEventFromRow } from './ask-envelope-from-row'
 import {
   cancelHandoff,
@@ -31,7 +31,7 @@ import {
   AskSubscribeParams,
   AskUpdatePartialParams,
   AskWaitParams
-} from './ask-schemas'
+} from '../../../../../shared/rpc-contract/ask-params'
 
 function buildNoUiUnavailableReason(attribution: AskAttribution): string {
   return attribution.anyIdentityClaimed
@@ -128,9 +128,13 @@ export const ASK_METHODS = [
     params: AskWaitParams,
     handler: async (params, { runtime, signal }) => {
       const { db, registry, waitGate } = runtime.getAskServices()
-      const chunkMs = params.chunkMs ?? ASK_DEFAULT_CHUNK_MS
+      const chunkMs = Math.min(params.chunkMs ?? ASK_DEFAULT_CHUNK_MS, ASK_MAX_CHUNK_MS)
       const waitSignal = signal ?? new AbortController().signal
       const row = db.getAsk(params.askId)
+      // terminal and unknown asks resolve instantly, so they must not queue behind parked waits
+      if (!row || isTerminalAskStatus(row.status)) {
+        return registry.waitChunk(params.askId, 0, waitSignal)
+      }
       return waitGate.run(() =>
         row?.origin === 'handoff'
           ? waitHandoffChunk(runtime, db, params.askId, chunkMs, waitSignal)
@@ -191,9 +195,9 @@ export const ASK_METHODS = [
       const { db, registry } = runtime.getAskServices()
       const row = db.getAsk(params.askId)
       if (row?.origin === 'handoff') {
-        updatePartialHandoff(runtime, db, params.askId, params.partial as AskPartial)
+        updatePartialHandoff(runtime, db, params.askId, params.partial)
       } else {
-        registry.updatePartial(params.askId, params.partial as AskPartial)
+        registry.updatePartial(params.askId, params.partial)
       }
       return { ok: true as const }
     }

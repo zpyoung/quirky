@@ -4,6 +4,7 @@ import type { AskRegistryEvent } from '../../../../../shared/fork-ask-question-t
 import type { RuntimeRpcResponse } from '../../../../../shared/runtime-rpc-envelope'
 import {
   ASK_DISMISS_DELAY_MS,
+  ASK_EVENT_BUFFER_LIMIT,
   createAsksSlice,
   selectHeadAsk,
   selectPendingAskCount,
@@ -90,7 +91,8 @@ describe('asks slice', () => {
         status: 'registered',
         spec: event.spec,
         partial: { q1: { confirm: true } },
-        result: undefined
+        result: undefined,
+        worktreeId: null
       }
     ])
     expect(store.getState().askWatermark).toEqual({ seq: 5, epoch: 'epoch-a' })
@@ -388,5 +390,47 @@ describe('asks slice — terminal auto-dismiss', () => {
     store.getState().applyAskRegistryEvent(makeEvent({ epoch: 'epoch-b', seq: 99 }))
 
     expect(store.getState()._dismissTimers).toEqual({})
+  })
+})
+
+describe('asks slice — hydration recovery', () => {
+  it('retries a failed snapshot with backoff and then replays buffered events', async () => {
+    const call = stubSnapshotApi(
+      vi
+        .fn()
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValue(successResponse({ asks: [], seq: 0, epoch: 'epoch-a' }))
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const store = createSliceStore()
+    await store.getState().hydrateAsks()
+    store.getState().applyAskRegistryEvent(makeEvent({ seq: 1 }))
+    expect(store.getState().askWatermark).toBeNull()
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(call).toHaveBeenCalledTimes(2)
+    expect(selectHeadAsk(store.getState(), 'pane-a')?.askId).toBe('ask-1')
+  })
+
+  it('keeps only the newest buffered events while hydration is unavailable', () => {
+    const store = createSliceStore()
+    for (let seq = 1; seq <= ASK_EVENT_BUFFER_LIMIT + 5; seq += 1) {
+      store.getState().applyAskRegistryEvent(makeEvent({ seq, askId: `ask-${seq}` }))
+    }
+    const buffer = store.getState()._askEventBuffer
+    expect(buffer).toHaveLength(ASK_EVENT_BUFFER_LIMIT)
+    expect(buffer[0]?.askId).toBe('ask-6')
+  })
+
+  it('resync re-reads the snapshot and keeps events that arrive during the read', async () => {
+    const store = await hydratedStore()
+    const { resolve } = stubDeferredSnapshot()
+    const pending = store.getState().resyncAsks()
+    store.getState().applyAskRegistryEvent(makeEvent({ seq: 5, askId: 'ask-late' }))
+    resolve(successResponse({ asks: [], seq: 3, epoch: 'epoch-a' }))
+    await pending
+
+    expect(selectHeadAsk(store.getState(), 'pane-a')?.askId).toBe('ask-late')
   })
 })

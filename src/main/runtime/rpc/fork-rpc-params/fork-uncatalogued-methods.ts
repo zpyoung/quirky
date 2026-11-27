@@ -3,13 +3,6 @@
  *  schema. Kept beside upstream's own list so the gap stays visible rather than
  *  absent; `generate:rpc-params-catalog` writes the matching runtime array. */
 export type ForkUncataloguedMethod =
-  | 'ask.answer'
-  | 'ask.cancel'
-  | 'ask.register'
-  | 'ask.snapshot'
-  | 'ask.subscribe'
-  | 'ask.updatePartial'
-  | 'ask.wait'
   | 'heimdall:approve'
   | 'heimdall:debugReport'
   | 'heimdall:disarm'

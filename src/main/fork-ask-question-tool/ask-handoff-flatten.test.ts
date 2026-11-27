@@ -41,6 +41,29 @@ describe('flattenAskSpecToQuestion', () => {
   })
 })
 
+describe('flattenAskSpecToQuestion answer hints', () => {
+  it('includes option descriptions and a per-type format hint', () => {
+    const spec = specOf(
+      {
+        id: 'tags',
+        type: 'multiselect',
+        question: 'Tags?',
+        required: true,
+        options: [{ value: 'a', label: 'A', description: 'the first' }]
+      },
+      { id: 'go', type: 'confirm', question: 'Go?' },
+      { id: 'due', type: 'date', question: 'Due?' },
+      { id: 'n', type: 'number', question: 'How many?', integer: true, min: 1, max: 9 }
+    )
+    const flattened = flattenAskSpecToQuestion(spec)
+    expect(flattened).toContain('1. [tags] Tags? (required; comma-separated values)')
+    expect(flattened).toContain('- a — A: the first')
+    expect(flattened).toContain('2. [go] Go? (yes/no)')
+    expect(flattened).toContain('3. [due] Due? (YYYY-MM-DD)')
+    expect(flattened).toContain('4. [n] How many? (integer; min 1; max 9)')
+  })
+})
+
 describe('mapCoordinatorReply', () => {
   const dbQuestion: AskQuestion = {
     id: 'db',
@@ -172,5 +195,26 @@ describe('mapCoordinatorReply', () => {
       const result = mapCoordinatorReply(spec, 'yes')
       expect(result.answers.ready).toEqual({ value: true, source: 'input' })
     })
+  })
+
+  it('ignores trailing lines for a non-text question', () => {
+    const spec = specOf({
+      id: 'db',
+      type: 'select',
+      question: 'DB?',
+      options: [{ value: 'postgres', label: 'Postgres' }]
+    })
+    const result = mapCoordinatorReply(spec, '1: postgres\nThanks!')
+    expect(result.answers.db).toMatchObject({ value: 'postgres', source: 'option' })
+  })
+
+  it('appends continuation lines without an id prefix to the previous answer', () => {
+    const spec = specOf(
+      { id: 'why', type: 'text', question: 'Why?' },
+      { id: 'db', type: 'select', question: 'DB?', options: [{ value: 'pg', label: 'Postgres' }] }
+    )
+    const result = mapCoordinatorReply(spec, 'why: first line\nsecond line\ndb: pg')
+    expect(result.answers.why).toEqual({ value: 'first line\nsecond line', source: 'input' })
+    expect(result.answers.db).toMatchObject({ value: 'pg' })
   })
 })

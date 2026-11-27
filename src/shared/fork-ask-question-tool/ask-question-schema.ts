@@ -93,6 +93,9 @@ export type AskRegistryEvent = {
   spec?: AskSpec
   partial?: AskPartial
   result?: AskRegistryResult
+  worktreeId?: string | null
+  /** When the ask registered; orders a pane's queue independently of event arrival. */
+  createdAt?: string
 }
 
 /** `ask.subscribe`'s frame union; `type` is the discriminator (tech.md § Data models). */
@@ -108,6 +111,9 @@ export const ASK_DEFAULT_CHUNK_MS = 100_000
 // New ask-only constant: mirrors resolveOrchestrationAskClientTimeoutMs's chunk+grace shape
 // without reusing orchestration-ask-timeout.ts's constants (tech.md C5, DO-NOT-CHANGE #3).
 export const ASK_CHUNK_CLIENT_GRACE_MS = 5_000
+
+/** Largest `--chunk-ms` whose client timeout (chunk plus grace) still fits a 32-bit timer. */
+export const ASK_MAX_CHUNK_MS = 2 ** 31 - 1 - ASK_CHUNK_CLIENT_GRACE_MS
 
 /** Client-side RPC timeout for one `ask.wait` chunk: the chunk budget plus network/keepalive grace. */
 export function resolveAskWaitClientTimeoutMs(chunkMs: number | undefined): number {

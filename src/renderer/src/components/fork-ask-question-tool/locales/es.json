@@ -24,7 +24,9 @@
         "numberIntegerError": "Introduce un número entero.",
         "numberMinError": "Introduce un número de al menos {{value0}}.",
         "numberMaxError": "Introduce un número de como máximo {{value0}}.",
-        "dateInvalidError": "Introduce una fecha válida."
+        "dateInvalidError": "Introduce una fecha válida.",
+        "submitNotCommitted": "Esta pregunta ya se respondió o se cerró en otro lugar.",
+        "submitFailed": "No se pudo enviar tu respuesta: {{reason}}"
       },
       "askPreview": {
         "hide": "Ocultar vista previa",
@@ -43,6 +45,12 @@
         "title": "Preguntas",
         "empty": "Sin preguntas",
         "emptyDescription": "Aquí aparece una pregunta que espera tu respuesta."
+      },
+      "pendingList": {
+        "heading": "Preguntas pendientes",
+        "untitled": "Pregunta",
+        "paneClosed": "Panel cerrado",
+        "dismiss": "Descartar"
       }
     }
   }

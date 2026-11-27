@@ -157,16 +157,19 @@ describe('ask.snapshot / ask.subscribe (C4)', () => {
   it('F1: the snapshot watermark is the store head, not just the highest seq among pending rows', async () => {
     const { askId: askA } = await registerOnCapablePane(h, 'req_a')
     const { askId: askB } = await registerOnCapablePane(h, 'req_b')
-    // Resolving A bumps its seq past B's — the true head now belongs to a row listPending() excludes.
+    // Resolving queued B bumps its seq past A's without promoting anything, so the true head now
+    // belongs to a row listPending() excludes.
     await h.call('ask.answer', {
-      askId: askA,
+      askId: askB,
       answers: { q1: { value: 'Ada', source: 'input' } },
       skipped: []
     })
 
     const snapshotResult = (await h.call('ask.snapshot', {})) as { seq: number; epoch: string }
     expect(snapshotResult.seq).toBe(h.askDb.currentSeq())
-    expect(snapshotResult.seq).toBeGreaterThan(h.askDb.getAsk(askB)?.seq as number)
+    expect(snapshotResult.seq).toBeGreaterThan(
+      h.askDb.getAsk(askA)?.seq ?? Number.POSITIVE_INFINITY
+    )
 
     // A reconnect quoting that watermark already covers the resolved ask, so nothing replays.
     const resumed = h.subscribe('ask.subscribe', {

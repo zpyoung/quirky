@@ -217,6 +217,29 @@ describe('validateAskSpec — pattern safety (X2)', () => {
   })
 })
 
+describe('validateAskSpec — reserved ids and duplicate options', () => {
+  it.each(['__proto__', 'constructor', 'toString', 'hasOwnProperty'])(
+    'rejects question id %s',
+    (id) => {
+      expect(validateAskSpec(specOf(textQuestion({ id }))).ok).toBe(false)
+    }
+  )
+
+  it('rejects duplicate option values', () => {
+    const result = validateAskSpec(
+      specOf(
+        selectQuestion({
+          options: [
+            { value: 'a', label: 'A' },
+            { value: 'a', label: 'A again' }
+          ]
+        })
+      )
+    )
+    expect(result.ok).toBe(false)
+  })
+})
+
 describe('validateAskSpec — credential refusal', () => {
   it.each([
     ['id', textQuestion({ id: 'db-password' })],
@@ -258,6 +281,42 @@ describe('validateAskSpec — credential refusal', () => {
       expect(result.ok).toBe(true)
     }
   )
+
+  it.each([
+    'Should the tests pass before merge?',
+    'What token budget should we use?',
+    'Enable pass-through proxy?'
+  ])('accepts ordinary question text: %s', (question) => {
+    expect(validateAskSpec(specOf(textQuestion({ question }))).ok).toBe(true)
+  })
+
+  it.each([
+    'Which passwords do we use?',
+    'Are the passphrases rotated?',
+    'Where are the API keys?',
+    'Share the private keys',
+    'List the secret keys'
+  ])('rejects plural credential question text: %s', (question) => {
+    expect(validateAskSpec(specOf(textQuestion({ question }))).ok).toBe(false)
+  })
+
+  it.each(["What's your GitHub token?", 'Paste the bearer token', 'What is the client secret?'])(
+    'rejects credential question text: %s',
+    (question) => {
+      expect(validateAskSpec(specOf(textQuestion({ question }))).ok).toBe(false)
+    }
+  )
+
+  it.each(['authToken', 'db_password', 'MYAPIKEY'])('still rejects id %s', (id) => {
+    expect(validateAskSpec(specOf(textQuestion({ id }))).ok).toBe(false)
+  })
+
+  it('does not treat bare pass as a credential in ids or option values', () => {
+    expect(validateAskSpec(specOf(textQuestion({ id: 'pass_rate' }))).ok).toBe(true)
+    expect(
+      validateAskSpec(specOf(selectQuestion({ options: [{ value: 'pass', label: 'Pass' }] }))).ok
+    ).toBe(true)
+  })
 
   it('accepts an id where a trigger word is a strict prefix of a longer word', () => {
     const result = validateAskSpec(specOf(textQuestion({ id: 'tokenize_input' })))

@@ -13,6 +13,11 @@ export class AskPaneQueue {
     return queue[0] === askId
   }
 
+  /** Every pending ask id on the pane, head first. */
+  all(paneKey: string): string[] {
+    return [...(this.queues.get(paneKey) ?? [])]
+  }
+
   head(paneKey: string): string | undefined {
     return this.queues.get(paneKey)?.[0]
   }

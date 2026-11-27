@@ -157,12 +157,23 @@ export function closeQuestionsForDispatch(this: OrchestrationDb, dispatchId: str
   return rows.map((row) => row.message_id)
 }
 
+/** Closes one still-pending question; false when it was already answered, closed, or unknown. */
+export function closeQuestion(this: OrchestrationDb, messageId: string): boolean {
+  const result = this.db
+    .prepare(
+      "UPDATE question_threads SET status = 'closed', closed_at = datetime('now') WHERE message_id = ? AND status = 'pending'"
+    )
+    .run(messageId)
+  return Number(result.changes) === 1
+}
+
 export type QuestionThreadsMethods = {
   createQuestion: typeof createQuestion
   getQuestion: typeof getQuestion
   getQuestionRaw: typeof getQuestionRaw
   answerQuestion: typeof answerQuestion
   closeQuestionsForDispatch: typeof closeQuestionsForDispatch
+  closeQuestion: typeof closeQuestion
 }
 
 export function attachQuestionThreads(ctor: { prototype: object }): void {
@@ -171,6 +182,7 @@ export function attachQuestionThreads(ctor: { prototype: object }): void {
     getQuestion,
     getQuestionRaw,
     answerQuestion,
-    closeQuestionsForDispatch
+    closeQuestionsForDispatch,
+    closeQuestion
   })
 }

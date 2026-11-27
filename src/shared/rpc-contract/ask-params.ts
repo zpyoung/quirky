@@ -1,11 +1,8 @@
 // RPC param schemas for ask.* (tech.md C4). Domain validation (spec shape, answer domains) is
 // re-run server-side by the handlers via the shared validators — these schemas only police wire
-// shape, matching the loosely-typed-CLI-JSON convention in ../schemas.
+// shape, matching the loosely-typed-CLI-JSON convention in the main RPC schemas.
 import { z } from 'zod'
-import {
-  OptionalFiniteNumber,
-  OptionalString
-} from '../../../../../shared/rpc-contract/rpc-param-primitives'
+import { OptionalFiniteNumber, OptionalString } from './rpc-param-primitives'
 
 const UnknownRecord = z.record(z.string(), z.unknown())
 

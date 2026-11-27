@@ -7,6 +7,7 @@ import { styles } from './mobile-session-styles'
 import type { MobileSessionController } from './use-mobile-session-controller'
 import { MobileSessionActiveContent } from './MobileSessionActiveContent'
 import { MobileSessionCommandDock } from './MobileSessionCommandDock'
+import { MobileSessionQuirkyAsk } from './MobileSessionQuirkyAsk'
 
 export function MobileSessionContentRow({ controller }: { controller: MobileSessionController }) {
   const {
@@ -41,6 +42,7 @@ export function MobileSessionContentRow({ controller }: { controller: MobileSess
           </View>
         ) : null}
         <MobileSessionActiveContent controller={controller} />
+        <MobileSessionQuirkyAsk controller={controller} />
         {/* Why: translate instead of resize so keyboard toggles don't trigger a server-side PTY viewport change. */}
         <MobileSessionCommandDock controller={controller} />
       </View>

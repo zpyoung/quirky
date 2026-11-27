@@ -3,55 +3,70 @@ import {
   pendingEnvelope,
   type AskEnvelope
 } from '../../shared/fork-ask-question-tool/ask-answer-envelope'
-import { resolveAskWaitClientTimeoutMs } from '../../shared/fork-ask-question-tool/ask-question-schema'
+import {
+  ASK_DEFAULT_CHUNK_MS,
+  resolveAskWaitClientTimeoutMs
+} from '../../shared/fork-ask-question-tool/ask-question-schema'
 import { callWithTransportRetry, isRetryableTransportError } from './ask-cli-transport-retry'
 
-const REACHABILITY_PROBE_TIMEOUT_MS = 2_000
+export const ASK_CLI_BUSY_BACKOFF_MS = 1_000
+export const ASK_CLI_BUSY_JITTER_MS = 1_000
+export const ASK_CLI_TRANSPORT_LOSS_PAUSE_MS = 2_000
 
-/**
- * Answers whether the host is still reachable after a wait chunk lost its transport.
- * Any answer at all — including an RPC failure — counts as reachable, because it proves
- * the durable ask is still resumable; only a second bare transport failure does not.
- */
-async function isRuntimeReachable(client: RuntimeClient): Promise<boolean> {
-  try {
-    await client.call('status.get', undefined, { timeoutMs: REACHABILITY_PROBE_TIMEOUT_MS })
-    return true
-  } catch (error) {
-    return !isRetryableTransportError(error)
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function pauseBeforeRetry(error: unknown): number | null {
+  if (error instanceof RuntimeRpcFailureError && error.code === 'runtime_busy') {
+    return ASK_CLI_BUSY_BACKOFF_MS + Math.random() * ASK_CLI_BUSY_JITTER_MS
   }
+  return isRetryableTransportError(error) ? ASK_CLI_TRANSPORT_LOSS_PAUSE_MS : null
 }
 
 /**
- * Blocks on one `ask.wait` chunk, resolving to a resumable pending envelope whenever the
- * ask survives — bare transport retries exhausted against a host that still answers, or a
- * host too busy to park another long poll. An unreachable host keeps its original
- * transport error so the caller still learns Quirky is not running.
+ * Blocks on `ask.wait` for one chunk and resolves to the envelope, or to a resumable `pending`
+ * envelope once the chunk budget is spent. A host that sheds the wait as busy, or drops the
+ * transport (an app restart), is retried inside that budget, because the ask is durable and a
+ * restarted host resumes it. That patience applies only once the runtime has answered at least
+ * once (`hasContactedRuntime` for a caller that already registered); a runtime that never answered
+ * keeps the short transport retry and then throws, so "Quirky is not running" still surfaces.
  */
 export async function waitAskChunkWithRetry(
   client: RuntimeClient,
   askId: string,
-  chunkMs: number | undefined
+  chunkMs: number | undefined,
+  hasContactedRuntime = false
 ): Promise<AskEnvelope> {
-  try {
-    const response = await callWithTransportRetry(() =>
-      client.call<AskEnvelope>(
-        'ask.wait',
-        { askId, chunkMs },
-        { timeoutMs: resolveAskWaitClientTimeoutMs(chunkMs) }
+  let contacted = hasContactedRuntime
+  const deadline = Date.now() + (chunkMs ?? ASK_DEFAULT_CHUNK_MS)
+  let attemptChunkMs = chunkMs
+  for (;;) {
+    try {
+      const response = await callWithTransportRetry(() =>
+        client.call<AskEnvelope>(
+          'ask.wait',
+          { askId, chunkMs: attemptChunkMs },
+          { timeoutMs: resolveAskWaitClientTimeoutMs(attemptChunkMs) }
+        )
       )
-    )
-    return response.result
-  } catch (error) {
-    if (error instanceof RuntimeRpcFailureError && error.code === 'runtime_busy') {
-      return pendingEnvelope(askId)
+      return response.result
+    } catch (error) {
+      if (error instanceof RuntimeRpcFailureError) {
+        contacted = true
+      }
+      if (!contacted && isRetryableTransportError(error)) {
+        throw error
+      }
+      const pause = pauseBeforeRetry(error)
+      if (pause === null) {
+        throw error
+      }
+      if (Date.now() + pause >= deadline) {
+        return pendingEnvelope(askId)
+      }
+      await delay(pause)
+      attemptChunkMs = Math.max(deadline - Date.now(), 1)
     }
-    if (!isRetryableTransportError(error)) {
-      throw error
-    }
-    if (!(await isRuntimeReachable(client))) {
-      throw error
-    }
-    return pendingEnvelope(askId)
   }
 }

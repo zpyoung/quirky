@@ -29,4 +29,16 @@ describe('mobile RPC method routing census', () => {
   it('sends a targeted status to the server, whose features a server workspace gates on', () => {
     expect(MOBILE_RPC_METHOD_ROUTES.get('status.get')).toBe('execution-host')
   })
+
+  it.each(['ask.subscribe', 'ask.snapshot', 'ask.answer', 'ask.cancel', 'ask.updatePartial'])(
+    'lets the phone call %s on the host that owns the asking terminal',
+    (method) => {
+      expect(MOBILE_RPC_METHOD_ROUTES.get(method)).toBe('execution-host')
+    }
+  )
+
+  it('keeps ask.register and ask.wait off the phone allowlist', () => {
+    expect(MOBILE_RPC_METHOD_ROUTES.has('ask.register')).toBe(false)
+    expect(MOBILE_RPC_METHOD_ROUTES.has('ask.wait')).toBe(false)
+  })
 })

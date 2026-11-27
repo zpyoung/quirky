@@ -19,11 +19,24 @@ export type UseAskNotificationEscalationParams = {
   paneKey: string
 }
 
-function isAskPaneFocused(worktreeId: string, paneKey: string): boolean {
-  return createTerminalAttentionSurface(useAppStore.getState()).isSurfaceViewed({
-    workspaceId: worktreeId,
-    surfaceKey: paneKey
-  })
+/** Seen means the user can read the card: its pane is the focused leaf of the visible tab and the
+ * Questions panel is open on it. A visible tab alone does not count. */
+function isAskSeen(
+  state: ReturnType<typeof useAppStore.getState>,
+  worktreeId: string,
+  paneKey: string,
+  askId: string
+): boolean {
+  const parsed = parsePaneKey(paneKey)
+  if (!parsed) {
+    return false
+  }
+  const paneInFront =
+    createTerminalAttentionSurface(state).isSurfaceViewed({
+      workspaceId: worktreeId,
+      surfaceKey: paneKey
+    }) && state.terminalLayoutsByTabId?.[parsed.tabId]?.activeLeafId === parsed.leafId
+  return paneInFront && state.rightSidebarOpen && state.askPanelShownAskId === askId
 }
 
 function dispatchAskEscalationNotification(
@@ -83,41 +96,47 @@ export function useAskNotificationEscalation({
     }
   }, [])
 
-  const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
-  const activeTabId = useAppStore((s) => s.activeTabId)
-  const activeLeafId = useAppStore((s) => {
-    const parsed = parsePaneKey(paneKey)
-    return parsed ? s.terminalLayoutsByTabId?.[parsed.tabId]?.activeLeafId : undefined
-  })
+  // focusTick is a re-render trigger only: window focus is not store state, so the selector must re-run
+  void focusTick
+  const seen = useAppStore((state) =>
+    askId === null ? false : isAskSeen(state, worktreeId, paneKey, askId)
+  )
+
+  const isPending = askId !== null && status !== null && !isTerminalAskStatus(status)
 
   useEffect(() => {
-    function disarm(): void {
+    if (!isPending || askId === null || seen) {
       if (timerRef.current !== null) {
         clearTimeout(timerRef.current)
         timerRef.current = null
       }
       armedAskIdRef.current = null
-    }
-
-    const isPending = askId !== null && status !== null && !isTerminalAskStatus(status)
-    if (!isPending || askId === null || isAskPaneFocused(worktreeId, paneKey)) {
-      disarm()
       return
     }
     if (armedAskIdRef.current === askId) {
       return
     }
-    disarm()
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current)
+    }
     armedAskIdRef.current = askId
     timerRef.current = setTimeout(() => {
       timerRef.current = null
-      // arming and firing are separate decisions: the pane may have regained focus during the
-      // delay, and only a fresh check here (not the state captured at arm time) catches that
-      if (!isAskPaneFocused(worktreeId, paneKey)) {
+      // the pane may have been seen during the delay; only a fresh check catches that
+      if (!isAskSeen(useAppStore.getState(), worktreeId, paneKey, askId)) {
         dispatchAskEscalationNotification(worktreeId, paneKey, askId)
       }
     }, ASK_NOTIFICATION_ESCALATION_DELAY_MS)
+  }, [askId, isPending, seen, worktreeId, paneKey])
 
-    return disarm
-  }, [askId, status, worktreeId, paneKey, activeWorktreeId, activeTabId, activeLeafId, focusTick])
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      armedAskIdRef.current = null
+    },
+    []
+  )
 }

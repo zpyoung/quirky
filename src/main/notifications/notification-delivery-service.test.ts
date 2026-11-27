@@ -110,6 +110,28 @@ describe('createNotificationDeliveryService', () => {
     expect(harness.order).toEqual(['tray', 'mobile'])
   })
 
+  it('pushes a pending ask to the phone with its own title, body and worktree', () => {
+    const harness = makeHarness(makeSettings())
+    createNotificationDeliveryService(harness.deps).dispatch(
+      makeRequest({
+        source: 'pending-ask',
+        notificationId: 'ask-pending-a1',
+        title: 'Pending question in wt-1',
+        body: 'Waiting for your answer.'
+      })
+    )
+
+    expect(harness.dispatchMobileNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'pending-ask',
+        notificationId: 'ask-pending-a1',
+        worktreeId: 'wt-1',
+        title: 'Pending question in wt-1',
+        body: 'Waiting for your answer.'
+      })
+    )
+  })
+
   it('keeps the desktop source gates distinct per source', () => {
     const harness = makeHarness(makeSettings({ terminalBell: false }))
     const service = createNotificationDeliveryService(harness.deps)

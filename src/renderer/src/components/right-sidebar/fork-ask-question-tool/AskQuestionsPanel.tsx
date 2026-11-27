@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { MessageCircleQuestionMark } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
 import { AskCard } from '@/components/fork-ask-question-tool/AskCard'
 import { useAskPaneDock } from '@/components/fork-ask-question-tool/use-ask-pane-dock'
 import { useFocusedPaneKey } from '../fork-session-info/focused-session-info'
@@ -29,7 +31,15 @@ function NoQuestionsState(): React.JSX.Element {
  */
 export default function AskQuestionsPanel(): React.JSX.Element {
   const paneKey = useFocusedPaneKey()
-  const { model, isSubmitting, onSubmit, onCancel, onDraftChange } = useAskPaneDock(paneKey)
+  const { model, isSubmitting, submitError, onSubmit, onCancel, onDraftChange } =
+    useAskPaneDock(paneKey)
+
+  const setAskPanelShownAskId = useAppStore((state) => state.setAskPanelShownAskId)
+  const shownAskId = model?.askId ?? null
+  useEffect(() => {
+    setAskPanelShownAskId(shownAskId)
+    return () => setAskPanelShownAskId(null)
+  }, [shownAskId, setAskPanelShownAskId])
 
   if (!model) {
     return <NoQuestionsState />
@@ -44,6 +54,7 @@ export default function AskQuestionsPanel(): React.JSX.Element {
       onSubmit={onSubmit}
       onCancel={onCancel}
       isSubmitting={isSubmitting}
+      submitError={submitError}
       onDraftChange={onDraftChange}
     />
   )

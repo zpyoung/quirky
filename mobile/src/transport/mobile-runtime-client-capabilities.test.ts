@@ -14,6 +14,7 @@ import {
   AGENT_LAUNCH_UNSTARTED_TAB_CLIENT_CAPABILITY
 } from '../../../src/shared/agent-launch-runtime-capability'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from '../../../src/shared/agent-session-optional-model-capability'
+import { ASK_SURFACE_CLIENT_CAPABILITY } from '../../../src/shared/fork-ask-question-tool/ask-question-capability'
 import { MOBILE_RUNTIME_CLIENT_CAPABILITIES } from './mobile-runtime-client-capabilities'
 
 /** Mirrors the host's `parseRuntimeClientCapabilities`, which returns an EMPTY list — silently
@@ -56,6 +57,10 @@ describe('mobile runtime client capabilities', () => {
     // Why: `supportsAgentLaunch` refuses the method outright unless the client claims it, so
     // without this every mobile create with an agent stays a terminal no matter the user default.
     expect(MOBILE_RUNTIME_CLIENT_CAPABILITIES).toContain(AGENT_LAUNCH_RUNTIME_CAPABILITY)
+  })
+
+  it('claims an ask surface so the host counts the phone as an owner that can show a card', () => {
+    expect(MOBILE_RUNTIME_CLIENT_CAPABILITIES).toContain(ASK_SURFACE_CLIENT_CAPABILITY)
   })
 
   it('reads an early launch tab as not started and a closed one as stopped', () => {

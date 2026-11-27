@@ -13,7 +13,8 @@ import type { AskValidationError } from '../../shared/fork-ask-question-tool/ask
  */
 export function getOptionalPositiveSafeIntegerFlag(
   flags: Map<string, string | boolean>,
-  name: string
+  name: string,
+  max: number = Number.MAX_SAFE_INTEGER
 ): number | undefined {
   if (!flags.has(name)) {
     return undefined
@@ -28,6 +29,9 @@ export function getOptionalPositiveSafeIntegerFlag(
       'invalid_argument',
       `Invalid positive safe integer for --${name}: ${raw}`
     )
+  }
+  if (value > max) {
+    throw new RuntimeClientError('invalid_argument', `--${name} must be at most ${max}.`)
   }
   return value
 }

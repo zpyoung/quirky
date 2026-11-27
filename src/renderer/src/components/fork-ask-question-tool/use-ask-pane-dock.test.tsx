@@ -74,4 +74,49 @@ describe('useAskPaneDock — debounced partial updates', () => {
       params: { askId: 'ask-1', partial: { name: { draft: 'quirky' } } }
     })
   })
+
+  it('flushes the pending draft when the dock unmounts inside the debounce window', () => {
+    vi.useFakeTimers()
+    const call = vi.fn().mockResolvedValue(successResponse({ ok: true }))
+    stubRuntimeCall(call)
+    storeState.pendingAsksByPaneKey['pane-a'] = [card()]
+
+    const { result, unmount } = renderHook(() => useAskPaneDock('pane-a'))
+    act(() => result.current.onDraftChange({ name: { draft: 'quirky' } }))
+    unmount()
+
+    expect(call).toHaveBeenCalledWith({
+      method: 'ask.updatePartial',
+      params: { askId: 'ask-1', partial: { name: { draft: 'quirky' } } }
+    })
+  })
+})
+
+describe('useAskPaneDock — submit failures', () => {
+  it('surfaces an uncommitted answer instead of swallowing it', async () => {
+    const call = vi.fn().mockResolvedValue(successResponse({ committed: false }))
+    stubRuntimeCall(call)
+    storeState.pendingAsksByPaneKey['pane-a'] = [card()]
+
+    const { result } = renderHook(() => useAskPaneDock('pane-a'))
+    await act(async () => result.current.onSubmit({}, []))
+
+    expect(result.current.submitError).toBe(
+      'This question was already answered or closed elsewhere.'
+    )
+  })
+
+  it('surfaces a server rejection and clears it when the draft changes', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const call = vi.fn().mockRejectedValue(new Error('url must include a scheme'))
+    stubRuntimeCall(call)
+    storeState.pendingAsksByPaneKey['pane-a'] = [card()]
+
+    const { result } = renderHook(() => useAskPaneDock('pane-a'))
+    await act(async () => result.current.onSubmit({}, []))
+    expect(result.current.submitError).toContain('url must include a scheme')
+
+    act(() => result.current.onDraftChange({ name: { draft: 'x' } }))
+    expect(result.current.submitError).toBeNull()
+  })
 })

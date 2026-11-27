@@ -312,48 +312,66 @@ test.describe('Ask card', () => {
   test('clears a resolved card and surfaces the next queued ask on its own', async ({
     quirkyPage
   }) => {
-    const { paneKey } = await setupAskPane(quirkyPage)
-    const epoch = `e2e-dismiss-${randomUUID()}`
+    const { paneKey, worktreeId } = await setupAskPane(quirkyPage)
     const first = 'Should the old stack be retired?'
     const second = 'Which region goes first?'
-    const askId = `e2e-ask-first-${randomUUID()}`
 
-    await applyAskEvent(
-      quirkyPage,
-      textAsk({ seq: 1, epoch, askId, paneKey, questionId: 'q1', question: first })
-    )
-    await applyAskEvent(
-      quirkyPage,
-      textAsk({
-        seq: 2,
-        epoch,
-        askId: `e2e-ask-second-${randomUUID()}`,
-        paneKey,
-        questionId: 'q2',
-        question: second
-      })
-    )
+    const firstAskId = await registerAsk(quirkyPage, {
+      paneKey,
+      worktreeId,
+      questionId: 'q1',
+      question: first
+    })
+    const secondAskId = await registerAsk(quirkyPage, {
+      paneKey,
+      worktreeId,
+      questionId: 'q2',
+      question: second
+    })
 
     await expect(quirkyPage.getByRole('textbox', { name: first })).toBeVisible({ timeout: 10_000 })
     await expect(quirkyPage.getByRole('textbox', { name: second })).toHaveCount(0)
 
-    await applyAskEvent(quirkyPage, {
-      seq: 3,
-      epoch,
-      askId,
-      paneKey,
-      status: 'declined',
-      partial: {},
-      result: { answers: {}, skipped: ['q1'], summary: 'Declined.' }
-    })
+    await cancelAsk(quirkyPage, firstAskId)
 
-    await expect(quirkyPage.getByText('Declined.')).toBeVisible({ timeout: 10_000 })
-    // The regression this guards: the resolved card used to sit at the head forever, so the
-    // already-queued second ask was never shown.
+    // The regression this guards: the promoted ask used to carry its old register seq, which the
+    // renderer's watermark dropped, so the second card never appeared.
     await expect(quirkyPage.getByRole('textbox', { name: second })).toBeVisible({
       timeout: ASK_DISMISS_DELAY_MS + 10_000
     })
-    await expect(quirkyPage.getByText('Declined.')).toHaveCount(0)
+    await expect(quirkyPage.getByRole('textbox', { name: first })).toHaveCount(0)
+
+    await cancelAsk(quirkyPage, secondAskId)
+  })
+
+  test('titlebar list jumps back to an ask on a background tab', async ({ quirkyPage }) => {
+    const { paneKey, worktreeId } = await setupAskPane(quirkyPage)
+    const question = 'Which tab owns this question?'
+    const askId = await registerAsk(quirkyPage, { paneKey, worktreeId, questionId: 'q1', question })
+    await expect(quirkyPage.getByRole('textbox', { name: question })).toBeVisible({
+      timeout: 10_000
+    })
+
+    await quirkyPage.evaluate((id) => {
+      const state = window.__store?.getState()
+      if (!state) {
+        throw new Error('store unavailable')
+      }
+      const tab = state.createTab(id, undefined, undefined, { activate: true })
+      state.setActiveTab(tab.id)
+      state.setActiveTabType('terminal', id)
+    }, worktreeId)
+    await expect(quirkyPage.getByRole('textbox', { name: question })).toHaveCount(0, {
+      timeout: 10_000
+    })
+
+    await quirkyPage.getByRole('button', { name: '1 pending question' }).click()
+    await quirkyPage.getByRole('menuitem', { name: new RegExp(question) }).click()
+
+    await expect(quirkyPage.getByRole('textbox', { name: question })).toBeVisible({
+      timeout: 10_000
+    })
+    await cancelAsk(quirkyPage, askId)
   })
 
   test('scrolls a long card and keeps Submit pinned inside the panel', async ({ quirkyPage }) => {

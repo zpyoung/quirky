@@ -3,11 +3,17 @@ import type {
   AskAnswer,
   AskAnswers
 } from '../../../../shared/fork-ask-question-tool/ask-answer-envelope'
-import type { AskQuestion } from '../../../../shared/fork-ask-question-tool/ask-question-schema'
+import type {
+  AskNumberQuestion,
+  AskQuestion,
+  AskTextQuestion
+} from '../../../../shared/fork-ask-question-tool/ask-question-schema'
+import {
+  parseDateAnswerValue,
+  parseNumberAnswerValue,
+  parseTextAnswerValue
+} from '../../../../shared/fork-ask-question-tool/ask-answer-value-parsing'
 import type { AskQuestionDraft } from './ask-question-draft'
-
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export type AskFieldOutcome =
   | { kind: 'answer'; answer: AskAnswer }
@@ -67,6 +73,22 @@ function resolveOptionQuestion(
   }
 }
 
+/** The shared parser answers only valid or not; re-parsing without `format` tells a pattern miss from a format miss. */
+function textErrorMessage(question: AskTextQuestion, value: string): string {
+  if (parseTextAnswerValue({ ...question, format: undefined }, value) === null) {
+    return translate(
+      'components.fork-ask-question-tool.askCard.textPatternError',
+      "Doesn't match the expected format."
+    )
+  }
+  return question.format === 'url'
+    ? translate('components.fork-ask-question-tool.askCard.textUrlError', 'Enter a valid URL.')
+    : translate(
+        'components.fork-ask-question-tool.askCard.textEmailError',
+        'Enter a valid email address.'
+      )
+}
+
 function resolveTextQuestion(
   question: AskQuestion & { type: 'text' },
   draft: AskQuestionDraft
@@ -75,46 +97,39 @@ function resolveTextQuestion(
   if (value.trim().length === 0) {
     return requiredOrSkip(question)
   }
-  if (question.format === 'email' && !EMAIL_RE.test(value)) {
-    return {
-      kind: 'error',
-      message: translate(
-        'components.fork-ask-question-tool.askCard.textEmailError',
-        'Enter a valid email address.'
-      )
-    }
-  }
-  if (question.format === 'url') {
-    try {
-      new URL(value)
-    } catch {
-      return {
-        kind: 'error',
-        message: translate(
-          'components.fork-ask-question-tool.askCard.textUrlError',
-          'Enter a valid URL.'
-        )
-      }
-    }
-  }
-  if (question.pattern) {
-    let matches = false
-    try {
-      matches = new RegExp(question.pattern).test(value)
-    } catch {
-      matches = true // an unparseable pattern was already rejected at spec validation; never block submit on it here
-    }
-    if (!matches) {
-      return {
-        kind: 'error',
-        message: translate(
-          'components.fork-ask-question-tool.askCard.textPatternError',
-          "Doesn't match the expected format."
-        )
-      }
-    }
+  if (parseTextAnswerValue(question, value) === null) {
+    return { kind: 'error', message: textErrorMessage(question, value) }
   }
   return { kind: 'answer', answer: { value, source: 'input' } }
+}
+
+/** Relaxes one constraint at a time so the first one the shared parser rejects names the message. */
+function numberErrorMessage(question: AskNumberQuestion, raw: string): string {
+  const unbounded = { ...question, integer: false, min: undefined, max: undefined }
+  if (parseNumberAnswerValue(unbounded, raw) === null) {
+    return translate(
+      'components.fork-ask-question-tool.askCard.numberInvalidError',
+      'Enter a number.'
+    )
+  }
+  if (parseNumberAnswerValue({ ...unbounded, integer: question.integer }, raw) === null) {
+    return translate(
+      'components.fork-ask-question-tool.askCard.numberIntegerError',
+      'Enter a whole number.'
+    )
+  }
+  if (parseNumberAnswerValue({ ...unbounded, min: question.min }, raw) === null) {
+    return translate(
+      'components.fork-ask-question-tool.askCard.numberMinError',
+      'Enter a number of at least {{value0}}.',
+      { value0: question.min }
+    )
+  }
+  return translate(
+    'components.fork-ask-question-tool.askCard.numberMaxError',
+    'Enter a number of at most {{value0}}.',
+    { value0: question.max }
+  )
 }
 
 function resolveNumberQuestion(
@@ -122,11 +137,7 @@ function resolveNumberQuestion(
   draft: AskQuestionDraft
 ): AskFieldOutcome {
   const raw = draft.text.trim()
-  if (raw.length === 0) {
-    return requiredOrSkip(question)
-  }
-  const value = Number(raw)
-  if (!Number.isFinite(value)) {
+  if (draft.numberBadInput) {
     return {
       kind: 'error',
       message: translate(
@@ -135,34 +146,12 @@ function resolveNumberQuestion(
       )
     }
   }
-  if (question.integer && !Number.isInteger(value)) {
-    return {
-      kind: 'error',
-      message: translate(
-        'components.fork-ask-question-tool.askCard.numberIntegerError',
-        'Enter a whole number.'
-      )
-    }
+  if (raw.length === 0) {
+    return requiredOrSkip(question)
   }
-  if (question.min !== undefined && value < question.min) {
-    return {
-      kind: 'error',
-      message: translate(
-        'components.fork-ask-question-tool.askCard.numberMinError',
-        'Enter a number of at least {{value0}}.',
-        { value0: question.min }
-      )
-    }
-  }
-  if (question.max !== undefined && value > question.max) {
-    return {
-      kind: 'error',
-      message: translate(
-        'components.fork-ask-question-tool.askCard.numberMaxError',
-        'Enter a number of at most {{value0}}.',
-        { value0: question.max }
-      )
-    }
+  const value = parseNumberAnswerValue(question, raw)
+  if (value === null) {
+    return { kind: 'error', message: numberErrorMessage(question, raw) }
   }
   return { kind: 'answer', answer: { value, source: 'input' } }
 }
@@ -175,8 +164,7 @@ function resolveDateQuestion(
   if (raw.length === 0) {
     return requiredOrSkip(question)
   }
-  const parsed = ISO_DATE_RE.test(raw) ? new Date(`${raw}T00:00:00Z`) : null
-  if (!parsed || Number.isNaN(parsed.getTime())) {
+  if (parseDateAnswerValue(raw) === null) {
     return {
       kind: 'error',
       message: translate(

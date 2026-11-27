@@ -1,19 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
+import { translate } from '@/i18n/i18n'
 import { unwrapRuntimeRpcResult } from '@/runtime/runtime-rpc-result'
 import { selectHeadAsk } from '@/store/slices/fork-ask-question-tool/asks'
 import type { AskAnswers } from '../../../../shared/fork-ask-question-tool/ask-answer-envelope'
 import type { AskPartial } from '../../../../shared/fork-ask-question-tool/ask-question-schema'
 import type { RuntimeRpcResponse } from '../../../../shared/runtime-rpc-envelope'
 import type { AskCardModel } from './ask-card-model'
+import { cancelAsk } from './cancel-ask'
 
 /** Coalesces rapid keystrokes into far fewer `ask.updatePartial` calls while keeping restart-resilience current. */
 const DRAFT_UPDATE_DEBOUNCE_MS = 500
+
+function sendPartial(askId: string, partial: AskPartial): void {
+  void window.api.runtime
+    .call({ method: 'ask.updatePartial', params: { askId, partial } })
+    .then((response) => unwrapRuntimeRpcResult(response))
+    .catch((error: unknown) => console.error('Failed to update ask partial:', error))
+}
 
 export type AskPaneDock = {
   /** Null when there is no head ask, or the head ask has no spec yet. */
   model: AskCardModel | null
   isSubmitting: boolean
+  /** Why the last submit did not land; null until one fails, and cleared by the next attempt or edit. */
+  submitError: string | null
   onSubmit: (answers: AskAnswers, skipped: string[]) => void
   onCancel: () => void
   onDraftChange: (partial: AskPartial) => void
@@ -44,6 +55,9 @@ export function useAskPaneDock(paneKey: string | null): AskPaneDock {
   }, [entry])
 
   const [submittingAskId, setSubmittingAskId] = useState<string | null>(null)
+  const [submitFailure, setSubmitFailure] = useState<{ askId: string; message: string } | null>(
+    null
+  )
   const askId = model?.askId ?? null
 
   const onSubmit = useCallback(
@@ -52,35 +66,57 @@ export function useAskPaneDock(paneKey: string | null): AskPaneDock {
         return
       }
       setSubmittingAskId(askId)
+      setSubmitFailure(null)
       void window.api.runtime
         .call({ method: 'ask.answer', params: { askId, answers, skipped } })
         .then((response) =>
           unwrapRuntimeRpcResult(response as RuntimeRpcResponse<{ committed: boolean }>)
         )
-        .catch((error: unknown) => console.error('Failed to submit ask answer:', error))
+        .then((result) => {
+          if (!result.committed) {
+            setSubmitFailure({
+              askId,
+              message: translate(
+                'components.fork-ask-question-tool.askCard.submitNotCommitted',
+                'This question was already answered or closed elsewhere.'
+              )
+            })
+          }
+        })
+        .catch((error: unknown) => {
+          console.error('Failed to submit ask answer:', error)
+          setSubmitFailure({
+            askId,
+            message: translate(
+              'components.fork-ask-question-tool.askCard.submitFailed',
+              "Couldn't submit your answer: {{reason}}",
+              { reason: error instanceof Error ? error.message : String(error) }
+            )
+          })
+        })
         .finally(() => setSubmittingAskId((current) => (current === askId ? null : current)))
     },
     [askId]
   )
 
   const onCancel = useCallback(() => {
-    if (!askId) {
-      return
+    if (askId) {
+      cancelAsk(askId)
     }
-    void window.api.runtime
-      .call({ method: 'ask.cancel', params: { askId } })
-      .then((response) => unwrapRuntimeRpcResult(response))
-      .catch((error: unknown) => console.error('Failed to cancel ask:', error))
   }, [askId])
 
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Why: a pending timer belongs to the askId that scheduled it — a stale one must not fire a
-  // partial update for whatever ask is current when it wakes up.
+  const pendingDraftRef = useRef<{ askId: string; partial: AskPartial } | null>(null)
+  // a pending draft belongs to the ask that wrote it; leaving that ask flushes it instead of dropping the last keystrokes
   useEffect(
     () => () => {
       if (draftTimerRef.current !== null) {
         clearTimeout(draftTimerRef.current)
         draftTimerRef.current = null
+      }
+      if (pendingDraftRef.current) {
+        sendPartial(pendingDraftRef.current.askId, pendingDraftRef.current.partial)
+        pendingDraftRef.current = null
       }
     },
     [askId]
@@ -90,15 +126,15 @@ export function useAskPaneDock(paneKey: string | null): AskPaneDock {
       if (!askId) {
         return
       }
+      setSubmitFailure(null)
       if (draftTimerRef.current !== null) {
         clearTimeout(draftTimerRef.current)
       }
+      pendingDraftRef.current = { askId, partial }
       draftTimerRef.current = setTimeout(() => {
         draftTimerRef.current = null
-        void window.api.runtime
-          .call({ method: 'ask.updatePartial', params: { askId, partial } })
-          .then((response) => unwrapRuntimeRpcResult(response))
-          .catch((error: unknown) => console.error('Failed to update ask partial:', error))
+        pendingDraftRef.current = null
+        sendPartial(askId, partial)
       }, DRAFT_UPDATE_DEBOUNCE_MS)
     },
     [askId]
@@ -107,6 +143,7 @@ export function useAskPaneDock(paneKey: string | null): AskPaneDock {
   return {
     model,
     isSubmitting: askId !== null && submittingAskId === askId,
+    submitError: askId !== null && submitFailure?.askId === askId ? submitFailure.message : null,
     onSubmit,
     onCancel,
     onDraftChange

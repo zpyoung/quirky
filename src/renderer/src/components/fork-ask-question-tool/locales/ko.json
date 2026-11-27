@@ -24,7 +24,9 @@
         "numberIntegerError": "정수를 입력하세요.",
         "numberMinError": "{{value0}} 이상의 숫자를 입력하세요.",
         "numberMaxError": "{{value0}} 이하의 숫자를 입력하세요.",
-        "dateInvalidError": "유효한 날짜를 입력하세요."
+        "dateInvalidError": "유효한 날짜를 입력하세요.",
+        "submitNotCommitted": "이 질문은 이미 답변되었거나 다른 곳에서 닫혔습니다.",
+        "submitFailed": "답변을 제출하지 못했습니다: {{reason}}"
       },
       "askPreview": {
         "hide": "미리보기 숨기기",
@@ -43,6 +45,12 @@
         "title": "질문",
         "empty": "질문 없음",
         "emptyDescription": "답변을 기다리는 질문이 여기에 표시됩니다."
+      },
+      "pendingList": {
+        "heading": "대기 중인 질문",
+        "untitled": "질문",
+        "paneClosed": "창이 닫힘",
+        "dismiss": "무시"
       }
     }
   }

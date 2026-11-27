@@ -48,9 +48,13 @@ describe('ask.wait long-poll transport', () => {
     const registry = new AskRegistry(db)
     const roster = createAskAttachedSurfaceRoster({ hasLocalRendererWindow: () => true })
     const runtime = new QuirkyRuntimeService()
-    const getAskServicesSpy = vi
-      .spyOn(runtime, 'getAskServices')
-      .mockReturnValue({ db, registry, roster, waitGate: createAskWaitConcurrencyGate() })
+    const getAskServicesSpy = vi.spyOn(runtime, 'getAskServices').mockReturnValue({
+      db,
+      registry,
+      roster,
+      waitGate: createAskWaitConcurrencyGate(),
+      resolvePaneClosed: (paneKey) => registry.resolvePaneClosed(paneKey)
+    })
     const { askId } = await registry.register(
       { questions: [{ id: 'q1', type: 'text', question: 'Still waiting?' }] },
       { paneKey: 'tab_wait:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', worktreeId: null },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { validateAskAnswerSubmission } from './ask-answer-validation'
-import type { AskSpec } from '../../../../../shared/fork-ask-question-tool/ask-question-schema'
+import type { AskSpec } from './ask-question-schema'
 
 const SELECT_SPEC: AskSpec = {
   questions: [
@@ -106,5 +106,70 @@ describe('validateAskAnswerSubmission (C4)', () => {
       ['q2']
     )
     expect(result.ok).toBe(true)
+  })
+})
+
+describe('validateAskAnswerSubmission — required and prototype-shaped input', () => {
+  const REQUIRED_SPEC: AskSpec = {
+    questions: [
+      { id: 'note', type: 'text', question: 'Note?', required: true },
+      {
+        id: 'tags',
+        type: 'multiselect',
+        question: 'Tags?',
+        required: true,
+        options: [
+          { value: 'a', label: 'A' },
+          { value: 'b', label: 'B' }
+        ]
+      }
+    ]
+  }
+
+  it('rejects a blank answer to a required text question', () => {
+    const result = validateAskAnswerSubmission(
+      REQUIRED_SPEC,
+      { note: { value: '   ', source: 'input' }, tags: { values: ['a'], source: 'options' } },
+      []
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects an empty required multiselect without other', () => {
+    const result = validateAskAnswerSubmission(
+      REQUIRED_SPEC,
+      { note: { value: 'x', source: 'input' }, tags: { values: [], source: 'options' } },
+      []
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('accepts an empty required multiselect that carries a non-blank other', () => {
+    const result = validateAskAnswerSubmission(
+      REQUIRED_SPEC,
+      {
+        note: { value: 'x', source: 'input' },
+        tags: { values: [], other: 'custom', source: 'options' }
+      },
+      []
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it('dedupes repeated multiselect values', () => {
+    const result = validateAskAnswerSubmission(
+      REQUIRED_SPEC,
+      { note: { value: 'x', source: 'input' }, tags: { values: ['a', 'a'], source: 'options' } },
+      []
+    )
+    expect(result.ok && result.answers.tags).toMatchObject({ values: ['a'], labels: ['A'] })
+  })
+
+  it('does not treat inherited Object.prototype names as answered', () => {
+    const spec: AskSpec = {
+      questions: [{ id: 'toString', type: 'text', question: 'Q?', required: false }]
+    }
+    const result = validateAskAnswerSubmission(spec, {}, [])
+    expect(result.ok).toBe(false)
   })
 })

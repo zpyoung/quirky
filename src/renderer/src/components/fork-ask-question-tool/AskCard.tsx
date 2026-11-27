@@ -17,6 +17,8 @@ export type AskCardProps = {
   onCancel: () => void
   /** Whether the submitted answer is still being delivered to the agent. */
   isSubmitting?: boolean
+  /** Why the last submit did not land; shown above the actions. */
+  submitError?: string | null
   /** Fires with the normalized partial on every draft change; callers own debouncing the send. */
   onDraftChange?: (partial: AskPartial) => void
 }
@@ -51,6 +53,7 @@ export function AskCard({
   onSubmit,
   onCancel,
   isSubmitting = false,
+  submitError = null,
   onDraftChange
 }: AskCardProps): React.JSX.Element {
   const [drafts, setDrafts] = useState<Record<string, AskQuestionDraft>>(() =>
@@ -103,6 +106,14 @@ export function AskCard({
           </AskQuestionFrame>
         ))}
       </div>
+      {submitError ? (
+        <p
+          role="alert"
+          className="shrink-0 border-t border-border px-4 py-2 text-xs text-destructive"
+        >
+          {submitError}
+        </p>
+      ) : null}
       <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border p-3">
         <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>
           {translate('components.fork-ask-question-tool.askCard.cancel', 'Cancel')}

@@ -4,224 +4,224 @@
     {
       "name": "quirky-ask",
       "sourcePath": "skills/quirky-ask",
-      "packageDigest": "ace1a8f27bd949dabd33fda9e0635273c982cfe7ad2c4e4baf5621a49ab1bcb7",
+      "packageDigest": "c35d9cb124e8c6d8fce95e0e8a4046c062f876527b6a3255e26cf4adc735abd4",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 3738,
+          "size": 3367,
           "executable": false,
           "classification": "text",
-          "exactSha256": "44433e30f7c0e1d1bd485195746c7429afaa9ce381a71ea804106ee17f80ac16",
-          "textNormalizedSha256": "44433e30f7c0e1d1bd485195746c7429afaa9ce381a71ea804106ee17f80ac16",
-          "identitySha256": "44433e30f7c0e1d1bd485195746c7429afaa9ce381a71ea804106ee17f80ac16"
+          "exactSha256": "93f2e5394b9b350dc0b778d853b135621e69e0e76e137b4ab4dd26f9c340bbba",
+          "textNormalizedSha256": "93f2e5394b9b350dc0b778d853b135621e69e0e76e137b4ab4dd26f9c340bbba",
+          "identitySha256": "93f2e5394b9b350dc0b778d853b135621e69e0e76e137b4ab4dd26f9c340bbba"
         }
       ]
     },
     {
       "name": "quirky-cli",
       "sourcePath": "skills/quirky-cli",
-      "packageDigest": "d5d7e20ba4a09f319e6eb9087f09355754afd14df682b74e0d19764953d65ceb",
+      "packageDigest": "ae877c8d089afaea8c80cb5456c0716d12cede0288461bd0cdcbd9551f55c17b",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2440,
+          "size": 2069,
           "executable": false,
           "classification": "text",
-          "exactSha256": "882944d4e9d183eddfdcabf334197bd09d3a128a038f518bc53e4de7f02a8afb",
-          "textNormalizedSha256": "882944d4e9d183eddfdcabf334197bd09d3a128a038f518bc53e4de7f02a8afb",
-          "identitySha256": "882944d4e9d183eddfdcabf334197bd09d3a128a038f518bc53e4de7f02a8afb"
+          "exactSha256": "5aeb19547b1fbbef60bc5ad647864d1e5f27353087c2a6188ffb77b112564b3e",
+          "textNormalizedSha256": "5aeb19547b1fbbef60bc5ad647864d1e5f27353087c2a6188ffb77b112564b3e",
+          "identitySha256": "5aeb19547b1fbbef60bc5ad647864d1e5f27353087c2a6188ffb77b112564b3e"
         }
       ]
     },
     {
       "name": "quirky-computer-use",
       "sourcePath": "skills/quirky-computer-use",
-      "packageDigest": "c138ef4fce2e1289f42bde5d508be0e34645528b1c72d7fd29ce141c3be06197",
+      "packageDigest": "b9d13e8ba2f37fed47bcc1759d321f005c81add04e1b84f870cb0f2103a78b2e",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2275,
+          "size": 1904,
           "executable": false,
           "classification": "text",
-          "exactSha256": "95bfc2c54679d22bd6d5bb65356d6e7ad9f371893f92c12daa810378966abd4d",
-          "textNormalizedSha256": "95bfc2c54679d22bd6d5bb65356d6e7ad9f371893f92c12daa810378966abd4d",
-          "identitySha256": "95bfc2c54679d22bd6d5bb65356d6e7ad9f371893f92c12daa810378966abd4d"
+          "exactSha256": "8b6b46abb089338a2f032bc2c3c188f5d3482a8e51349aca6fe876e5fb4d0526",
+          "textNormalizedSha256": "8b6b46abb089338a2f032bc2c3c188f5d3482a8e51349aca6fe876e5fb4d0526",
+          "identitySha256": "8b6b46abb089338a2f032bc2c3c188f5d3482a8e51349aca6fe876e5fb4d0526"
         }
       ]
     },
     {
       "name": "quirky-emulator",
       "sourcePath": "skills/quirky-emulator",
-      "packageDigest": "e56638a91ce3b910387f71f398609f7d4457357ead363ddca006cc3825c3c8eb",
+      "packageDigest": "6128f8cb4885b7871a231a79676436b030b2cdabe25c402b06497597c1f7cf5d",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2395,
+          "size": 2024,
           "executable": false,
           "classification": "text",
-          "exactSha256": "80193f72f9b4089b48be7a2ae695d4143a36387b214c07d1f123513f6c0b1f6a",
-          "textNormalizedSha256": "80193f72f9b4089b48be7a2ae695d4143a36387b214c07d1f123513f6c0b1f6a",
-          "identitySha256": "80193f72f9b4089b48be7a2ae695d4143a36387b214c07d1f123513f6c0b1f6a"
+          "exactSha256": "5fc98f5eaa4707e37370a3be24baa9e049009adb9e3bd21e5c5669af52bb7474",
+          "textNormalizedSha256": "5fc98f5eaa4707e37370a3be24baa9e049009adb9e3bd21e5c5669af52bb7474",
+          "identitySha256": "5fc98f5eaa4707e37370a3be24baa9e049009adb9e3bd21e5c5669af52bb7474"
         }
       ]
     },
     {
       "name": "quirky-emulator-android",
       "sourcePath": "skills/quirky-emulator-android",
-      "packageDigest": "707092908cfe0dc4ad87a8a8af76f7981331973f9444a5f251fdd99928a8a30b",
+      "packageDigest": "e86fcc6d5ee8490e6bdd35dc614416e1f7817ab2df3d4e3f96633e7f5e1d4f87",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2288,
+          "size": 1917,
           "executable": false,
           "classification": "text",
-          "exactSha256": "47429fec9e2715082d51d0cdcdde47500b6757a12bbc5211edf76082f06159af",
-          "textNormalizedSha256": "47429fec9e2715082d51d0cdcdde47500b6757a12bbc5211edf76082f06159af",
-          "identitySha256": "47429fec9e2715082d51d0cdcdde47500b6757a12bbc5211edf76082f06159af"
+          "exactSha256": "339f4520540096c9d7b9e433081486eff615ec40f53b17408f15ac672bdf172f",
+          "textNormalizedSha256": "339f4520540096c9d7b9e433081486eff615ec40f53b17408f15ac672bdf172f",
+          "identitySha256": "339f4520540096c9d7b9e433081486eff615ec40f53b17408f15ac672bdf172f"
         }
       ]
     },
     {
       "name": "quirky-heimdall",
       "sourcePath": "skills/quirky-heimdall",
-      "packageDigest": "fcf98198a4a7081db3c7e4826516a5f31f35c172503f668a14adee6704129056",
+      "packageDigest": "88070cf739fdc503d4dbfc53a1fc5d395f461bbc1469118e1c1c0d48d3574dc6",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2863,
+          "size": 2492,
           "executable": false,
           "classification": "text",
-          "exactSha256": "823deb92ff99f3b673a61e066fce353e391d53b6dc01ed70eb583c13d1d255f2",
-          "textNormalizedSha256": "823deb92ff99f3b673a61e066fce353e391d53b6dc01ed70eb583c13d1d255f2",
-          "identitySha256": "823deb92ff99f3b673a61e066fce353e391d53b6dc01ed70eb583c13d1d255f2"
+          "exactSha256": "06d908cae365d0deaad220e2e414ff9782bd1c2e401a4d7d5ca28baeae7f7198",
+          "textNormalizedSha256": "06d908cae365d0deaad220e2e414ff9782bd1c2e401a4d7d5ca28baeae7f7198",
+          "identitySha256": "06d908cae365d0deaad220e2e414ff9782bd1c2e401a4d7d5ca28baeae7f7198"
         }
       ]
     },
     {
       "name": "quirky-jira",
       "sourcePath": "skills/quirky-jira",
-      "packageDigest": "d37aee6281f265469164cbedc4911af349e16e768bedf65d4ae786859cc74133",
+      "packageDigest": "902e4d944b1951c14213a739e631e4c30213d1b25174e2fdd20e3f44b1141a53",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2132,
+          "size": 1761,
           "executable": false,
           "classification": "text",
-          "exactSha256": "6597ae2c3240751411e85511d7888d328a1ad6fac734a1a0bc0b07605351cbc3",
-          "textNormalizedSha256": "6597ae2c3240751411e85511d7888d328a1ad6fac734a1a0bc0b07605351cbc3",
-          "identitySha256": "6597ae2c3240751411e85511d7888d328a1ad6fac734a1a0bc0b07605351cbc3"
+          "exactSha256": "9a809fba1dff268fdb986ce921015a641ec98eec14592218599a95bce63191d5",
+          "textNormalizedSha256": "9a809fba1dff268fdb986ce921015a641ec98eec14592218599a95bce63191d5",
+          "identitySha256": "9a809fba1dff268fdb986ce921015a641ec98eec14592218599a95bce63191d5"
         }
       ]
     },
     {
       "name": "quirky-jira-tickets",
       "sourcePath": "skills/quirky-jira-tickets",
-      "packageDigest": "c325a8b314aac9ee5d38392f9026584f78d47bf17128a3cf37a202dd49f0a3a7",
+      "packageDigest": "892367b7f4df2e1cf03f9125ded43108375a8b8b901aecdba1c8f015d063bcef",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2189,
+          "size": 1818,
           "executable": false,
           "classification": "text",
-          "exactSha256": "d9eab6c6f06400013a4ee46d00752ce1cf6c29c45ab88a6f8b85decb996ab9dc",
-          "textNormalizedSha256": "d9eab6c6f06400013a4ee46d00752ce1cf6c29c45ab88a6f8b85decb996ab9dc",
-          "identitySha256": "d9eab6c6f06400013a4ee46d00752ce1cf6c29c45ab88a6f8b85decb996ab9dc"
+          "exactSha256": "5dfd65dc4973bf32d0689038fdc01b7c3b688e2b5ffb4b81952854f55afce848",
+          "textNormalizedSha256": "5dfd65dc4973bf32d0689038fdc01b7c3b688e2b5ffb4b81952854f55afce848",
+          "identitySha256": "5dfd65dc4973bf32d0689038fdc01b7c3b688e2b5ffb4b81952854f55afce848"
         }
       ]
     },
     {
       "name": "quirky-ledger",
       "sourcePath": "skills/quirky-ledger",
-      "packageDigest": "2de8e10f15f3b2e951ecb455cea7f4ddc63c169d21079da41e2ee67a662c399c",
+      "packageDigest": "acc133c83c4a3d27b42cae6c1b8e83ba692abd63ecd22a4c86f8f01a5b5ccf62",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 3410,
+          "size": 3039,
           "executable": false,
           "classification": "text",
-          "exactSha256": "d294567dd2a7156ed441ebadfdb85b853e65aaade8742d55cfa81f52c3b7a690",
-          "textNormalizedSha256": "d294567dd2a7156ed441ebadfdb85b853e65aaade8742d55cfa81f52c3b7a690",
-          "identitySha256": "d294567dd2a7156ed441ebadfdb85b853e65aaade8742d55cfa81f52c3b7a690"
+          "exactSha256": "4b2e3d8e0dc49f4a9a2212d789d3e244172c7e2a1cdf74daafa6e51dd279f737",
+          "textNormalizedSha256": "4b2e3d8e0dc49f4a9a2212d789d3e244172c7e2a1cdf74daafa6e51dd279f737",
+          "identitySha256": "4b2e3d8e0dc49f4a9a2212d789d3e244172c7e2a1cdf74daafa6e51dd279f737"
         }
       ]
     },
     {
       "name": "quirky-linear",
       "sourcePath": "skills/quirky-linear",
-      "packageDigest": "c9ee52e199161419c07f0ec814ca3bb0e3021268a24db1299b2d645db6519357",
+      "packageDigest": "3dc362971ef8f5f96b779b2db3063ab28896a80472beb7d04c92c94014f7dee3",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2140,
+          "size": 1769,
           "executable": false,
           "classification": "text",
-          "exactSha256": "dbd12e55b723dd81d0162bfff6f9e8afb8c13677aa3b4a18eac10b7fa47a33d1",
-          "textNormalizedSha256": "dbd12e55b723dd81d0162bfff6f9e8afb8c13677aa3b4a18eac10b7fa47a33d1",
-          "identitySha256": "dbd12e55b723dd81d0162bfff6f9e8afb8c13677aa3b4a18eac10b7fa47a33d1"
+          "exactSha256": "bc4ccb163454d053a0c66157eb7faa076f45fca55dba66ce5d1ea5d4758f0089",
+          "textNormalizedSha256": "bc4ccb163454d053a0c66157eb7faa076f45fca55dba66ce5d1ea5d4758f0089",
+          "identitySha256": "bc4ccb163454d053a0c66157eb7faa076f45fca55dba66ce5d1ea5d4758f0089"
         }
       ]
     },
     {
       "name": "quirky-linear-tickets",
       "sourcePath": "skills/quirky-linear-tickets",
-      "packageDigest": "415240f5cac46bddd2c5d93f0c7fd64bac25dfe4e64f0f25e74794b6c1aaec98",
+      "packageDigest": "9778980e220541bd248f73699ab5ffb87a0c54561e9d8571fe37028b368346b8",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2295,
+          "size": 1924,
           "executable": false,
           "classification": "text",
-          "exactSha256": "5618df20367522183b7e38d69307d28ad290083859360eeca24339f2f5924fd9",
-          "textNormalizedSha256": "5618df20367522183b7e38d69307d28ad290083859360eeca24339f2f5924fd9",
-          "identitySha256": "5618df20367522183b7e38d69307d28ad290083859360eeca24339f2f5924fd9"
+          "exactSha256": "2424f08deaf78142b3a3503182f3910d78e28efca2de2aabf54d58e4b1cc9913",
+          "textNormalizedSha256": "2424f08deaf78142b3a3503182f3910d78e28efca2de2aabf54d58e4b1cc9913",
+          "identitySha256": "2424f08deaf78142b3a3503182f3910d78e28efca2de2aabf54d58e4b1cc9913"
         }
       ]
     },
     {
       "name": "quirky-loop",
       "sourcePath": "skills/quirky-loop",
-      "packageDigest": "926aefaa943c97aa1bf38dc99104972cb18d16123682235b7e0ae52dd9a476fa",
+      "packageDigest": "5b065856bdedf6c1fb62bb00c29d5e799185471428e1f624d5de9df231259786",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2672,
+          "size": 2301,
           "executable": false,
           "classification": "text",
-          "exactSha256": "aa1176ebf05a9e71321860c592a2c4d2ffedf70d420600f1af1287bbf63714fc",
-          "textNormalizedSha256": "aa1176ebf05a9e71321860c592a2c4d2ffedf70d420600f1af1287bbf63714fc",
-          "identitySha256": "aa1176ebf05a9e71321860c592a2c4d2ffedf70d420600f1af1287bbf63714fc"
+          "exactSha256": "1918304c92bff84dc1800723a63c40c88f397ac3b89d5a245cda842308efb149",
+          "textNormalizedSha256": "1918304c92bff84dc1800723a63c40c88f397ac3b89d5a245cda842308efb149",
+          "identitySha256": "1918304c92bff84dc1800723a63c40c88f397ac3b89d5a245cda842308efb149"
         }
       ]
     },
     {
       "name": "quirky-orchestration",
       "sourcePath": "skills/quirky-orchestration",
-      "packageDigest": "db694d15aadf661b0315545831177682a92a81f6ca0b5023037fcf074e16cb89",
+      "packageDigest": "7b8d29d15b7b85df2060a17af08afde12e021d6df926d6346ed714d349da8325",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 3765,
+          "size": 3394,
           "executable": false,
           "classification": "text",
-          "exactSha256": "cff5cb7d1c6d8b561a3680d3a3659854c6be3247df2fa59cf7efefbb54dd25a1",
-          "textNormalizedSha256": "cff5cb7d1c6d8b561a3680d3a3659854c6be3247df2fa59cf7efefbb54dd25a1",
-          "identitySha256": "cff5cb7d1c6d8b561a3680d3a3659854c6be3247df2fa59cf7efefbb54dd25a1"
+          "exactSha256": "a4c0bfee61772d73b8093b0859119770971d9924222f52762fa321f8e0a5ab15",
+          "textNormalizedSha256": "a4c0bfee61772d73b8093b0859119770971d9924222f52762fa321f8e0a5ab15",
+          "identitySha256": "a4c0bfee61772d73b8093b0859119770971d9924222f52762fa321f8e0a5ab15"
         }
       ]
     },
     {
       "name": "quirky-per-workspace-env",
       "sourcePath": "skills/quirky-per-workspace-env",
-      "packageDigest": "0d158523489f24fa130424d1565fd95ca6a70749b8da7cee5745b663dd480f50",
+      "packageDigest": "b559b3c472d72aa81b34159fcb5f4a4604be2a58101f506300915489034baf13",
       "files": [
         {
           "path": "SKILL.md",
-          "size": 2315,
+          "size": 1944,
           "executable": false,
           "classification": "text",
-          "exactSha256": "f1c5a9461ce2127ba35782195d82b42fcc6e18ae4aa7eaebeccc66c879ce5340",
-          "textNormalizedSha256": "f1c5a9461ce2127ba35782195d82b42fcc6e18ae4aa7eaebeccc66c879ce5340",
-          "identitySha256": "f1c5a9461ce2127ba35782195d82b42fcc6e18ae4aa7eaebeccc66c879ce5340"
+          "exactSha256": "42d9e39d4db11157b6f42915364058b66b5595b97d52440b2cc4efc5d4bf4ba1",
+          "textNormalizedSha256": "42d9e39d4db11157b6f42915364058b66b5595b97d52440b2cc4efc5d4bf4ba1",
+          "identitySha256": "42d9e39d4db11157b6f42915364058b66b5595b97d52440b2cc4efc5d4bf4ba1"
         }
       ]
     }

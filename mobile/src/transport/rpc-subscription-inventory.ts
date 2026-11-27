@@ -62,6 +62,14 @@ export const RPC_SUBSCRIPTION_SITES: readonly RpcSubscriptionSite[] = [
       wall: 'Wired on a per-host client from `useAllHostClients`, and the runner hands an adapter one client rather than the multi-host context that hook reads.'
     }
   },
+  // The host has no ask-unsubscribe call; it releases the stream when the socket closes, so one
+  // stream is kept per client instead of one per screen.
+  {
+    file: 'src/ask/host-ask-stream.ts',
+    method: 'ask.subscribe',
+    release: 'params',
+    coverage: { kind: 'unwritten-scenario' }
+  },
   // The browser tab's screencast. Frames are pixels, not JSON.
   {
     file: 'src/browser/use-mobile-browser-stream.ts',

@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { AskDb, AskRow } from './ask-db'
 import { AskPaneQueue } from './ask-registry-pane-queue'
 import { buildTimeoutResult } from './ask-registry-timeout-answers'
-import { buildResultSummary } from './ask-answer-value-parsing'
+import { sanitizeAskPartial } from './ask-partial-draft-sanitizer'
+import { buildResultSummary } from '../../shared/fork-ask-question-tool/ask-answer-value-parsing'
 import {
   isTerminalAskStatus,
   pendingEnvelope,
@@ -12,7 +13,6 @@ import {
   type PersistedAskStatus
 } from '../../shared/fork-ask-question-tool/ask-answer-envelope'
 import type {
-  AskPartial,
   AskRegistryEvent,
   AskSpec
 } from '../../shared/fork-ask-question-tool/ask-question-schema'
@@ -44,6 +44,8 @@ type LiveAsk = {
   paneKey: string | null
   spec: AskSpec
   surfaced: boolean
+  /** Re-adopted from a previous run and not touched by any waiter since; its asker may be dead. */
+  restored: boolean
   timeoutTimer: ReturnType<typeof setTimeout> | null
   livenessGraceTimer: ReturnType<typeof setTimeout> | null
   waiters: Set<(envelope: AskEnvelope) => void>
@@ -55,10 +57,8 @@ function assertValidAskId(askId: string): void {
   }
 }
 
-function filterPartialToKnownQuestions(spec: AskSpec, partial: AskPartial): AskPartial {
-  const ids = new Set(spec.questions.map((question) => question.id))
-  return Object.fromEntries(Object.entries(partial).filter(([id]) => ids.has(id)))
-}
+/** Largest delay `setTimeout` honors; anything bigger fires immediately, so longer waits are re-armed in slices. */
+export const MAX_TIMER_DELAY_MS = 2 ** 31 - 1
 
 /**
  * Lifecycle owner for the `quirky ask` registry (tech.md C2): the only writer of terminal
@@ -71,7 +71,9 @@ export class AskRegistry {
   private readonly live = new Map<string, LiveAsk>()
   private readonly paneQueue = new AskPaneQueue()
 
-  constructor(private readonly db: AskDb) {}
+  constructor(private readonly db: AskDb) {
+    this.restorePendingAsks()
+  }
 
   /** Stable for this instance's lifetime, fresh on every construction — how clients detect a host restart. */
   getEpoch(): string {
@@ -106,11 +108,16 @@ export class AskRegistry {
       return { askId: row.ask_id }
     }
 
+    if (origin.paneKey !== null) {
+      this.replaceUntouchedRestoredAsks(origin.paneKey)
+    }
+
     const live: LiveAsk = {
       askId: row.ask_id,
       paneKey: row.pane_key,
       spec,
       surfaced: row.pane_key === null,
+      restored: false,
       timeoutTimer: null,
       livenessGraceTimer: null,
       waiters: new Set()
@@ -128,7 +135,9 @@ export class AskRegistry {
         askId: live.askId,
         paneKey: live.paneKey,
         status: 'registered',
-        spec
+        spec,
+        worktreeId: row.worktree_id,
+        createdAt: row.created_at
       })
     }
     return { askId: live.askId }
@@ -185,13 +194,13 @@ export class AskRegistry {
     return { committed: true }
   }
 
-  updatePartial(askId: string, partial: AskPartial): void {
+  updatePartial(askId: string, partial: Record<string, unknown>): void {
     assertValidAskId(askId)
     const live = this.loadLive(askId)
     if (!live) {
       return
     }
-    const filtered = filterPartialToKnownQuestions(live.spec, partial)
+    const filtered = sanitizeAskPartial(live.spec, partial)
     const row = this.db.updatePartial(askId, JSON.stringify(filtered))
     if (!live.surfaced) {
       return
@@ -203,7 +212,9 @@ export class AskRegistry {
       paneKey: row.pane_key,
       status: 'registered',
       spec: live.spec,
-      partial: filtered
+      partial: filtered,
+      worktreeId: row.worktree_id,
+      createdAt: row.created_at
     })
   }
 
@@ -221,6 +232,30 @@ export class AskRegistry {
   onAskChanged(listener: (event: AskRegistryEvent) => void): Unsubscribe {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
+  }
+
+  /** Resolves every pending ask of a closed pane as `unavailable`, queued ones included, since no card can ever show them. */
+  resolvePaneClosed(paneKey: string): void {
+    // tail first, so resolving the head never promotes an ask that is about to close too
+    for (const askId of this.paneQueue.all(paneKey).toReversed()) {
+      const live = this.live.get(askId)
+      if (live) {
+        this.commitUnavailable(live, 'the pane that asked was closed')
+      }
+    }
+  }
+
+  /** Drops the in-memory entry of a hand-off ask whose terminal status was committed outside the registry. */
+  releaseCommittedExternally(askId: string): void {
+    const live = this.live.get(askId)
+    if (!live) {
+      return
+    }
+    this.clearTimers(live)
+    this.live.delete(askId)
+    if (live.paneKey !== null) {
+      this.paneQueue.remove(live.paneKey, askId)
+    }
   }
 
   /** Starts the surfaced ask's liveness grace timer for `paneKey`; a no-op when one is already running. */
@@ -254,8 +289,72 @@ export class AskRegistry {
     if (expiresAt === null) {
       return
     }
-    const remaining = Date.parse(expiresAt) - Date.now()
-    live.timeoutTimer = setTimeout(() => this.resolveTimeout(live.askId), Math.max(remaining, 0))
+    const expiresAtMs = Date.parse(expiresAt)
+    const remaining = Math.max(expiresAtMs - Date.now(), 0)
+    live.timeoutTimer = setTimeout(
+      () => {
+        if (Date.now() < expiresAtMs) {
+          this.scheduleTimeoutTimer(live, expiresAt)
+          return
+        }
+        this.resolveTimeout(live.askId)
+      },
+      Math.min(remaining, MAX_TIMER_DELAY_MS)
+    )
+  }
+
+  private restorePendingAsks(): void {
+    for (const row of this.db.listPending()) {
+      if (row.origin === 'handoff') {
+        continue
+      }
+      const live = this.liveFromRow(row)
+      live.restored = true
+      if (live.paneKey !== null) {
+        live.surfaced = this.paneQueue.enqueue(live.paneKey, live.askId)
+      }
+    }
+  }
+
+  // a quit kills PTYs without exit events, so a restored ask on a pane key the new agent now
+  // reuses would otherwise sit at the head and hide the new agent's ask
+  private replaceUntouchedRestoredAsks(paneKey: string): void {
+    for (const askId of this.paneQueue.all(paneKey)) {
+      const restored = this.live.get(askId)
+      if (restored?.restored) {
+        this.commitUnavailable(
+          restored,
+          'replaced by a newer ask from the same pane after a restart'
+        )
+      }
+    }
+  }
+
+  private liveFromRow(row: AskRow): LiveAsk {
+    const live: LiveAsk = {
+      askId: row.ask_id,
+      paneKey: row.pane_key,
+      spec: JSON.parse(row.spec_json) as AskSpec,
+      surfaced: true,
+      restored: false,
+      timeoutTimer: null,
+      livenessGraceTimer: null,
+      waiters: new Set()
+    }
+    this.live.set(live.askId, live)
+    this.scheduleTimeoutTimer(live, row.expires_at)
+    return live
+  }
+
+  private clearTimers(live: LiveAsk): void {
+    if (live.timeoutTimer) {
+      clearTimeout(live.timeoutTimer)
+      live.timeoutTimer = null
+    }
+    if (live.livenessGraceTimer) {
+      clearTimeout(live.livenessGraceTimer)
+      live.livenessGraceTimer = null
+    }
   }
 
   // Loading a row this instance never registered (a resumed wait after a restart) has no way to
@@ -264,24 +363,14 @@ export class AskRegistry {
   private loadLive(askId: string): LiveAsk | undefined {
     const cached = this.live.get(askId)
     if (cached) {
+      cached.restored = false
       return cached
     }
     const row = this.db.getAsk(askId)
     if (!row || isTerminalAskStatus(row.status)) {
       return undefined
     }
-    const live: LiveAsk = {
-      askId: row.ask_id,
-      paneKey: row.pane_key,
-      spec: JSON.parse(row.spec_json) as AskSpec,
-      surfaced: true,
-      timeoutTimer: null,
-      livenessGraceTimer: null,
-      waiters: new Set()
-    }
-    this.live.set(askId, live)
-    this.scheduleTimeoutTimer(live, row.expires_at)
-    return live
+    return this.liveFromRow(row)
   }
 
   private resolveTimeout(askId: string): void {
@@ -289,9 +378,19 @@ export class AskRegistry {
     if (!live) {
       return
     }
-    const row = this.db.getAsk(askId)
-    const partial: AskPartial = row?.partial_json ? JSON.parse(row.partial_json) : {}
-    this.commitTerminal(live, 'timed_out', buildTimeoutResult(live.spec, partial))
+    let result: AskResultBody
+    try {
+      const row = this.db.getAsk(askId)
+      const partial: unknown = row?.partial_json ? JSON.parse(row.partial_json) : {}
+      result = buildTimeoutResult(live.spec, partial)
+    } catch {
+      result = {
+        answers: {},
+        skipped: live.spec.questions.map((question) => question.id),
+        summary: ''
+      }
+    }
+    this.commitTerminal(live, 'timed_out', result)
   }
 
   private resolveLivenessExpiry(askId: string): void {
@@ -299,12 +398,15 @@ export class AskRegistry {
     if (!live) {
       return
     }
+    this.commitUnavailable(
+      live,
+      `pane ${live.paneKey} disconnected and did not reconnect within the grace window`
+    )
+  }
+
+  private commitUnavailable(live: LiveAsk, reason: string): void {
     const skipped = live.spec.questions.map((question) => question.id)
-    this.commitTerminal(live, 'unavailable', {
-      answers: {},
-      skipped,
-      summary: `pane ${live.paneKey} disconnected and did not reconnect within the grace window`
-    })
+    this.commitTerminal(live, 'unavailable', { answers: {}, skipped, summary: reason })
   }
 
   private commitTerminal(
@@ -312,12 +414,7 @@ export class AskRegistry {
     status: Exclude<PersistedAskStatus, 'registered'>,
     result: AskResultBody
   ): void {
-    if (live.timeoutTimer) {
-      clearTimeout(live.timeoutTimer)
-    }
-    if (live.livenessGraceTimer) {
-      clearTimeout(live.livenessGraceTimer)
-    }
+    this.clearTimers(live)
     const row = this.db.commitAskResult(live.askId, { status, answersJson: JSON.stringify(result) })
     this.live.delete(live.askId)
 
@@ -328,7 +425,9 @@ export class AskRegistry {
       askId: live.askId,
       paneKey: row.pane_key,
       status,
-      result
+      result,
+      worktreeId: row.worktree_id,
+      createdAt: row.created_at
     })
     for (const release of live.waiters) {
       release(envelope)
@@ -350,17 +449,17 @@ export class AskRegistry {
       return
     }
     next.surfaced = true
-    const nextRow = this.db.getAsk(promotedId)
-    if (nextRow) {
-      this.emit({
-        seq: nextRow.seq,
-        epoch: this.epoch,
-        askId: promotedId,
-        paneKey: next.paneKey,
-        status: 'registered',
-        spec: next.spec
-      })
-    }
+    const nextRow = this.db.touchSeq(promotedId)
+    this.emit({
+      seq: nextRow.seq,
+      epoch: this.epoch,
+      askId: promotedId,
+      paneKey: next.paneKey,
+      status: 'registered',
+      spec: next.spec,
+      worktreeId: nextRow.worktree_id,
+      createdAt: nextRow.created_at
+    })
   }
 
   private envelopeFromRow(row: AskRow): AskEnvelope {
