@@ -108,7 +108,8 @@ published, report "nothing to release" and stop.
   changes warrant a minor or major bump.
 - First release: `2.0.0-rc.0`.
 
-Unless `--yes` was passed, ask which of the applicable versions to cut. `TAG` is `v${VERSION}`.
+Unless `--yes` was passed or this is an approved recut (Step 6), ask which of the applicable
+versions to cut. `TAG` is `v${VERSION}`.
 Sanity-check it: it must sort above every published version.
 
 ## 5. Write the changelog
@@ -139,6 +140,13 @@ Prepend a new section under `# Changelog`, newest first:
 
 Unless `--yes` was passed, show `$TAG`, the changelog diff, and the commits included, then ask for
 confirmation.
+
+**An approved recut skips this prompt.** That covers a recut after this invocation's own fix PR
+merged (Step 7), when the user confirmed the original cut in this invocation and the only non-bot
+commits since that cut are the fix PR. Its version is the next rc, and its changelog only carries
+the draft's entries forward, so the user has already approved everything it ships. Say in the
+report that you recut and why. If anything else landed on `main` in between, the recut would ship
+content nobody approved, so ask as usual.
 
 ```sh
 git add CHANGELOG.md
@@ -233,7 +241,8 @@ account-side causes. If the rerun fails the same way, treat the cause as a repo 
    release workflows, so green checks prove only that nothing else broke, and the recut is the real
    test.
 4. Detach onto the new `origin/main`, then go back to Step 2 and recut. Step 3 finds the failed
-   draft, and Step 5 carries its entries forward.
+   draft, and Step 5 carries its entries forward. When only the fix PR landed since the original
+   cut, this is an approved recut: dispatch it without asking (Step 6).
 
 If the fix needs a judgement call, or a change outside the release pipeline, or if its PR doesn't
 go green within 2 hours, leave the PR open and report "needs attention".
