@@ -40,6 +40,18 @@ What this skill needs is a clean checkout whose content **is** `origin/main`. Th
 exactly that, and they hold on a detached `HEAD` as readily as on the branch, so do not additionally
 require `HEAD` to be the branch `main`.
 
+Then check the latest nightly quirkyd template qualification, which builds the same template the
+release bundles:
+
+```sh
+gh run list --repo zpyoung/quirky --workflow=quirkyd-template-nightly.yml --limit 1 \
+  --json databaseId,conclusion,headSha,url
+```
+
+If it failed, classify the failure with Step 7's table before cutting. A repo defect there fails
+the cut's `desktop_template` job the same way, so fix it first. A transient failure doesn't block
+the cut, because the cut qualifies the template again anyway.
+
 ## 2. Find the previous release and the commits since
 
 ```sh
