@@ -106,7 +106,7 @@ describe('GitLab flag project identity', () => {
       expect(logSpy.mock.calls.flat().join('\n')).toContain(
         'must match the workspace source project'
       )
-      expect(process.exitCode).toBe(1)
+      expect(process.exitCode).toBe(2)
     }
   })
 
@@ -165,7 +165,7 @@ describe('GitLab flag project identity', () => {
         )
       } else {
         expect(callMock).toHaveBeenCalledTimes(readCount)
-        expect(process.exitCode).toBe(1)
+        expect(process.exitCode).toBe(2)
       }
     })
   }

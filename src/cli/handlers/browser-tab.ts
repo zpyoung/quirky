@@ -13,8 +13,9 @@ import {
 } from '../flags'
 import { RuntimeClientError } from '../runtime-client'
 import { getBrowserCommandTarget, getBrowserWorktreeSelector } from '../selectors'
+import { withNonBrowserTabTypes } from './tab-all-types'
 
-export const BROWSER_TAB_HANDLERS: Record<string, CommandHandler> = {
+const BROWSER_ONLY_TAB_HANDLERS: Record<string, CommandHandler> = {
   'open-url': async ({ flags, client, cwd, json }) => {
     const url = getRequiredStringFlag(flags, 'url')
     const worktree = await getBrowserWorktreeSelector(flags, cwd, client)
@@ -93,3 +94,5 @@ export const BROWSER_TAB_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, (v) => JSON.stringify(v, null, 2))
   }
 }
+
+export const BROWSER_TAB_HANDLERS = withNonBrowserTabTypes(BROWSER_ONLY_TAB_HANDLERS)

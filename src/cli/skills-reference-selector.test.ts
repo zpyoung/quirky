@@ -120,7 +120,7 @@ describe('quirky skills get --reference', () => {
 
     await main(['skills', 'get', 'zeta', '--references'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(errorSpy).toHaveBeenCalledWith('Guide "zeta" has no bundled references.')
   })
 
@@ -129,7 +129,7 @@ describe('quirky skills get --reference', () => {
 
     await main(['skills', 'get', 'alpha', '--reference', 'nope'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(errorSpy).toHaveBeenCalledWith(
       'Unknown reference "nope" for alpha. Available: first-gate, second-gate'
     )
@@ -140,7 +140,7 @@ describe('quirky skills get --reference', () => {
 
     await main(['skills', 'get', 'zeta', '--reference', 'first-gate'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(errorSpy).toHaveBeenCalledWith('Guide "zeta" has no bundled references.')
   })
 
@@ -149,7 +149,7 @@ describe('quirky skills get --reference', () => {
 
     await main(['skills', 'get', 'alpha', '--reference'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(errorSpy).toHaveBeenCalledWith('Missing required --reference')
   })
 
@@ -158,7 +158,7 @@ describe('quirky skills get --reference', () => {
 
     await main(['skills', 'get', 'alpha', '--full', '--reference', 'first-gate'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(errorSpy).toHaveBeenCalledWith('Use either --full or --reference, not both.')
   })
 
@@ -168,7 +168,7 @@ describe('quirky skills get --reference', () => {
     await main(['skills', 'get', 'alpha', '--references', '--full'], '/tmp/repo')
     await main(['skills', 'get', 'alpha', '--references', '--reference', 'first-gate'], '/tmp/repo')
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(errorSpy).toHaveBeenNthCalledWith(1, 'Use either --references or --full, not both.')
     expect(errorSpy).toHaveBeenNthCalledWith(2, 'Use either --references or --reference, not both.')
   })

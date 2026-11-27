@@ -260,7 +260,7 @@ describe('runtime-selector flags on locally pinned CLI commands', () => {
     const printed = JSON.parse(String(logSpy.mock.calls[0]?.[0]))
     expect(printed.ok).toBe(false)
     expect(printed.error.code).toBe('runtime_unavailable')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(6)
     process.exitCode = 0
   })
 
@@ -278,7 +278,7 @@ describe('runtime-selector flags on locally pinned CLI commands', () => {
     expect(printed.ok).toBe(false)
     expect(printed.error.code).toBe('invalid_argument')
     expect(printed.error.message).toContain('`--environment` does not retarget `quirky host list`')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(callMock).not.toHaveBeenCalled()
     expect(runtimeClientConstructorMock).not.toHaveBeenCalledWith(null, 'm4air')
     process.exitCode = 0

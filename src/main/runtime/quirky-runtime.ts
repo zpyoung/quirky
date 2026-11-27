@@ -50,6 +50,10 @@ import { CollapseWriteOrder } from './workspace-view-collapse-writes'
 import { SidebarInputsFeed } from './sidebar-inputs/sidebar-inputs-feed'
 import { sidebarInputsFeedDomains } from './sidebar-inputs/sidebar-inputs-feed-domains'
 import { requireSwitchedOn } from './sidebar-inputs/require-switched-on'
+import { ActivityTrailStore } from './activity-trail/activity-trail-store'
+import { ApprovalGate, readAgentApprovalPolicySetting } from './approvals/approval-gate'
+import { PublicEventBus } from './public-events/public-event-bus'
+import { installPublicEventSources } from './public-events/public-event-sources'
 
 // Switch point: a window-fed build keeps no sidebar facts layer.
 const QuirkyRuntimeSidebarBase: typeof QuirkyRuntimeWithAgentTransitions =
@@ -105,6 +109,19 @@ class QuirkyRuntimeService extends QuirkyRuntimeSidebarBase {
         (event) => this.emitClientEvent(event)
       )
     : null
+
+  /** What agents and scripts can wait on: chat turns, UI focus, notifications, workspace changes, activity. */
+  readonly publicEvents = new PublicEventBus()
+  /** The ring of public-API calls that changed something, newest 1000. */
+  readonly activityTrail = new ActivityTrailStore({
+    bus: this.publicEvents,
+    getWindow: () => this.getAvailableAuthoritativeWindow()
+  })
+  /** Holds an agent's gated call for the user's answer when the approval policy says `ask`. */
+  readonly approvalGate = new ApprovalGate({
+    readPolicy: () => readAgentApprovalPolicySetting(this.store),
+    registry: () => this.getAskServices().registry
+  })
 
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
     const catalog = listReferenceWorkspaces(
@@ -167,6 +184,35 @@ class QuirkyRuntimeService extends QuirkyRuntimeSidebarBase {
     registerDetectedWorktreeScanInvalidation()
     registerWorktreeChangeInvalidator((repoId) => this.invalidateWorktreeCatalog(repoId))
     publishWorkspaceViewChanges(this.store, (event) => this.emitClientEvent(event))
+    installPublicEventSources({
+      bus: this.publicEvents,
+      runtime: this,
+      store: this.store,
+      getWindow: () => this.getAvailableAuthoritativeWindow()
+    })
+  }
+
+  override onPtyExit(
+    ...args: Parameters<QuirkyRuntimeWithAgentTransitions['onPtyExit']>
+  ): ReturnType<QuirkyRuntimeWithAgentTransitions['onPtyExit']> {
+    const [ptyId, , exitIncarnationId] = args
+    // Read first: the exit prunes the record and the handle.
+    const pty = this.ptysById.get(ptyId)
+    const terminalHandle = this.handleByPtyId.get(ptyId)
+    const result = super.onPtyExit(...args)
+    const staleExit =
+      exitIncarnationId && pty?.incarnationId && exitIncarnationId !== pty.incarnationId
+    if (pty && !staleExit) {
+      this.publicEvents.publish({
+        topic: 'workspace',
+        type: 'terminal.exited',
+        data: {
+          worktreeId: pty.worktreeId,
+          ...(terminalHandle === undefined ? {} : { terminalHandle })
+        }
+      })
+    }
+    return result
   }
 
   getAskServices(): AskServices {

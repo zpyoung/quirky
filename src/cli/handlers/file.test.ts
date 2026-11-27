@@ -119,7 +119,7 @@ describe('quirky file CLI handlers', () => {
     ['--line', '2', '--column', '0']
   ])('rejects invalid positioning %j before resolving a workspace', async (...flags) => {
     await main(['file', 'open', 'a.ts', ...flags], '/tmp/repo')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(callMock).not.toHaveBeenCalled()
     expect(vi.mocked(console.error).mock.calls[0]?.[0]).toMatch(/--(?:line|column)/)
     process.exitCode = undefined
@@ -208,7 +208,7 @@ describe('quirky file CLI handlers', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain('Missing value for --worktree.')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -554,7 +554,7 @@ describe('quirky file CLI handlers', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'Remote file commands require --worktree'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -568,7 +568,7 @@ describe('quirky file CLI handlers', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'Missing value for --mode. Use edit, diff, or both.'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -582,7 +582,7 @@ describe('quirky file CLI handlers', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'Invalid --mode. Use edit, diff, or both.'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

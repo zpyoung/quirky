@@ -19,6 +19,7 @@ const FAMILIES: VerbFamily[] = [
       'cookie delete',
       'tab profile delete',
       'automations remove',
+      'file delete',
       'linear label remove'
     ])
   },

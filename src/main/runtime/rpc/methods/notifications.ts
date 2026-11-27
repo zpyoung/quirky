@@ -1,4 +1,5 @@
 import { createNotificationStreamFilter } from './notification-stream-policy'
+import { NotificationDismissParams } from '../../../../shared/public-rpc/public-methods/admin'
 import { defineStreamingMethod, defineMethod } from '../core'
 import {
   NotificationGetMissedSinceParams,
@@ -74,6 +75,16 @@ export const NOTIFICATION_METHODS = [
           ? { dismissedPushes: runtime.reconcileDismissedPushes(params.deliveredPushes) }
           : {})
       }
+    }
+  }),
+  defineMethod({
+    name: 'notifications.dismiss',
+    permission: 'workspace',
+    params: NotificationDismissParams,
+    // Retires the notification on every connected client; an unknown id is a no-op, as for the desktop's own dismiss.
+    handler: async (params, { runtime }) => {
+      runtime.dismissMobileNotification(params.id)
+      return { dismissed: true as const, id: params.id }
     }
   }),
   defineMethod({

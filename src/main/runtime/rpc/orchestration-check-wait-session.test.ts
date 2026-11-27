@@ -13,9 +13,13 @@ import {
 } from './orchestration-session-caller-test-fixture'
 
 const hostRef = vi.hoisted((): { current: unknown } => ({ current: null }))
-vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry', () => ({
-  getStructuredAgentSessionHost: () => hostRef.current
-}))
+vi.mock(
+  '../../native-chat/agent-session-wire/structured-agent-session-registry',
+  async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    getStructuredAgentSessionHost: () => hostRef.current
+  })
+)
 
 describe('check --wait from an agent session', () => {
   let h: SessionCallerHarness

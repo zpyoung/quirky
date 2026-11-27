@@ -108,7 +108,7 @@ describe('quirky cli worktree awareness', () => {
     await main(['orchestration', 'reset'], '/tmp/repo')
 
     expect(callMock).not.toHaveBeenCalled()
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it.each([
@@ -143,7 +143,7 @@ describe('quirky cli worktree awareness', () => {
     await main(args, '/tmp/repo')
 
     expect(callMock).not.toHaveBeenCalled()
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects unknown task-update status with an enum-aware error', async () => {
@@ -164,7 +164,7 @@ describe('quirky cli worktree awareness', () => {
     expect(output).toContain("invalid status 'complete'")
     expect(output).toContain('pending, ready, dispatched, completed, failed, blocked')
     expect(callMock).not.toHaveBeenCalled()
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     // Reset exitCode so subsequent tests don't inherit the failure.
     process.exitCode = priorExitCode

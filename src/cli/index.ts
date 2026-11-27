@@ -16,6 +16,8 @@ import {
 } from './execution-host-flag'
 import { fetchSshTargetSummaries, listSshTargets } from './host-selector-alternatives'
 import { reportCliError } from './cli-error'
+import { exitCodeFor } from './public-cli/exit-codes'
+import { resolveOutputMode } from './public-cli/output-mode'
 import { printHelp } from './help'
 import type { RuntimeClient } from './runtime-client'
 import { COMMAND_SPECS } from './specs'
@@ -39,6 +41,8 @@ function shouldIgnoreRemoteSelection(commandPath: string[]): boolean {
     (commandPath[0] === 'agent' && commandPath[1] !== 'launch') ||
     commandPath[0] === 'vm' ||
     commandPath[0] === 'agent-context' ||
+    commandPath[0] === 'schema' ||
+    commandPath.join(' ') === 'rpc list' ||
     commandPath[0] === 'profile'
   )
 }
@@ -104,7 +108,7 @@ export async function main(
     printHelp(COMMAND_SPECS, [])
     return
   }
-  const json = parsed.flags.has('json')
+  const json = resolveOutputMode(parsed.flags, process.env) === 'json'
 
   try {
     // Why: CLI syntax and flag errors should be reported before any runtime
@@ -193,6 +197,7 @@ export async function main(
     const hostFlag = parsed.flags.get('host')
     reportCliError(error, json, {
       commandPath: parsed.commandPath,
+      rawArgs: argv,
       ...(typeof worktreeSelector === 'string' ? { worktreeSelector } : {}),
       ...(typeof repoSelector === 'string' ? { repoSelector } : {}),
       remoteServerSelected:
@@ -201,7 +206,7 @@ export async function main(
         (typeof hostFlag === 'string' && hostFlag.startsWith('runtime:')) ||
         Boolean(process.env.QUIRKY_ENVIRONMENT?.trim() || process.env.QUIRKY_PAIRING_CODE?.trim())
     })
-    process.exitCode = 1
+    process.exitCode = exitCodeFor(error)
   }
 }
 
@@ -219,7 +224,7 @@ async function runClaudeTeams(argv: string[], cwd: string): Promise<void> {
     })
   } catch (error) {
     reportCliError(error, false, { commandPath: ['claude-teams'] })
-    process.exitCode = 1
+    process.exitCode = exitCodeFor(error)
   }
 }
 
@@ -244,7 +249,7 @@ async function runAgentTeamsTmuxShim(argv: string[]): Promise<void> {
     process.exitCode = response.result.tmux.exitCode
   } catch (error) {
     reportCliError(error, false, { commandPath: ['agent-teams-tmux'] })
-    process.exitCode = 1
+    process.exitCode = exitCodeFor(error)
   }
 }
 

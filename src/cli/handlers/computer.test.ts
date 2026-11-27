@@ -96,7 +96,7 @@ describe('quirky computer observation CLI handlers', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'Unknown flag --worktree for command: computer list-apps'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('prints provider capabilities without resolving a worktree', async () => {
@@ -168,7 +168,7 @@ describe('quirky computer observation CLI handlers', () => {
     const output = vi.mocked(console.error).mock.calls[0][0]
     expect(output).toContain('--id must be "accessibility" or "screenshots"')
     expect(output).toContain('Next step: Do not retry the same command unchanged.')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('passes get-app-state target and observe flags', async () => {
@@ -208,7 +208,7 @@ describe('quirky computer observation CLI handlers', () => {
       code: 'invalid_argument',
       message: expect.stringContaining('Missing required --app')
     })
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('passes list-windows target and formats window IDs', async () => {
@@ -247,7 +247,7 @@ describe('quirky computer observation CLI handlers', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain('Missing required --app')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 })
 

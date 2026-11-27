@@ -188,7 +188,7 @@ describe('quirky linear CLI handlers', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       '--depth requires --children or --full'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('maps search to agent search RPC with capped limit', async () => {

@@ -2,6 +2,7 @@ import { basename, delimiter, win32 as pathWin32 } from 'node:path'
 import { resolvePathEnvKey } from '../pty/windows-path-segment-merge'
 import { expandWindowsEnvironmentVariables } from '../../shared/windows-environment-expansion'
 import { resolveSafePtyDefaultCwd } from './pty-default-cwd'
+import { QUIRKY_OUTPUT_ENV } from '../../shared/agent-session-caller-env'
 import { QUIRKYD_MANAGED_ACTIVATION_ROOT_ENV } from '../../shared/quirkyd-managed-launch-env'
 
 const PANE_IDENTITY_ENV_KEYS = [
@@ -26,6 +27,10 @@ export function removeUnspecifiedPaneIdentityEnv(
     if (!explicitEnv || !Object.hasOwn(explicitEnv, key)) {
       delete env[key]
     }
+  }
+  // the launch token is only minted for agent launches, so it is what tells them from plain shells
+  if (explicitEnv && Object.hasOwn(explicitEnv, 'QUIRKY_AGENT_LAUNCH_TOKEN')) {
+    env[QUIRKY_OUTPUT_ENV] = 'json'
   }
 }
 

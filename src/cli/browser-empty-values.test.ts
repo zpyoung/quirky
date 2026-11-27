@@ -111,7 +111,7 @@ describe('quirky cli storage set preserves an empty value', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect(errorSpy.mock.calls.flat().join('\n')).toContain('Missing required --key')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -127,7 +127,7 @@ describe('quirky cli storage set preserves an empty value', () => {
 
     expect(callMock).not.toHaveBeenCalled()
     expect(errorSpy.mock.calls.flat().join('\n')).toContain('Missing required --value')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -190,7 +190,7 @@ describe('quirky cli cookie set and set credentials preserve an empty value', ()
 
     expect(callMock).not.toHaveBeenCalled()
     expect(errorSpy.mock.calls.flat().join('\n')).toContain('Missing required --name')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -206,7 +206,7 @@ describe('quirky cli cookie set and set credentials preserve an empty value', ()
 
     expect(callMock).not.toHaveBeenCalled()
     expect(errorSpy.mock.calls.flat().join('\n')).toContain('Missing required --pass')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

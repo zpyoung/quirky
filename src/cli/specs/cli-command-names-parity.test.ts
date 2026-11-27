@@ -9,4 +9,24 @@ describe('CLI launch redirect command names', () => {
       []
     )
   })
+
+  it('routes the public command roots to the CLI before their specs are registered', () => {
+    const publicRoots = [
+      'schema',
+      'rpc',
+      'events',
+      'ui',
+      'action',
+      'layout',
+      'chat',
+      'settings',
+      'notifications',
+      'plugins',
+      'tab',
+      'file'
+    ]
+    expect(publicRoots.filter((root) => !CLI_COMMAND_NAMES.some((name) => name === root))).toEqual(
+      []
+    )
+  })
 })

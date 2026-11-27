@@ -16,6 +16,17 @@ function createAgentSendTargetModeInstanceId(): string {
   return `${Date.now()}:${agentSendTargetModeInstanceCounter}`
 }
 
+/** Whether the active workspace has review notes nobody has sent yet. */
+export function hasUnsentDiffNotesForActiveWorktree(get: UISliceGet): boolean {
+  const worktreeId = get().activeWorktreeId
+  return (
+    worktreeId !== null &&
+    get()
+      .getDiffComments(worktreeId)
+      .some((comment) => !comment.sentAt)
+  )
+}
+
 export function createUiAgentActions(
   set: UISliceSet,
   get: UISliceGet
@@ -83,16 +94,9 @@ export function createUiAgentActions(
     },
     diffNotesSendMenuOpenRequest: null,
     openDiffNotesSendMenuForActiveWorktree: () => {
-      const worktreeId = get().activeWorktreeId
-      if (!worktreeId) {
-        return false
-      }
       // Why: no unsent notes means nothing to send, so don't hijack focus or reveal the panel.
-      if (
-        !get()
-          .getDiffComments(worktreeId)
-          .some((comment) => !comment.sentAt)
-      ) {
+      const worktreeId = get().activeWorktreeId
+      if (!worktreeId || !hasUnsentDiffNotesForActiveWorktree(get)) {
         return false
       }
       get().setRightSidebarTab('source-control')

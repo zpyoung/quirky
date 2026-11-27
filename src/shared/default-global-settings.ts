@@ -284,6 +284,13 @@ export function buildDefaultSettings(args: {
       customAgentCommand: ''
     },
     sourceControlAi: getDefaultSourceControlAiSettings(),
+    agentApprovalPolicy: {
+      'workspace-delete': 'agent',
+      'file-overwrite-delete': 'agent',
+      'chat-discard-rewind': 'agent',
+      'permission-answers': 'agent',
+      'security-settings': 'agent'
+    },
     voice: args.voice
   }
 }

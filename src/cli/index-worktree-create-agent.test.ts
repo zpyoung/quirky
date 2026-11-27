@@ -184,7 +184,7 @@ describe('quirky cli worktree awareness', () => {
       ],
       '/tmp/repo'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     process.exitCode = priorExitCode
     expect(JSON.parse(String(logSpy.mock.calls[0]?.[0])).error).toMatchObject({
       code: 'invalid_argument',
@@ -265,7 +265,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       '--prompt requires --agent'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -287,7 +287,7 @@ describe('quirky cli worktree awareness', () => {
         message: 'Unknown TUI agent "wat"'
       }
     })
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -372,7 +372,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Choose either --run-hooks or --setup run'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

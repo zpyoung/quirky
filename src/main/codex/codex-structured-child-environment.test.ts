@@ -65,6 +65,7 @@ describe('the Codex child environment', () => {
       CODEX_HOME: '/pinned/home',
       [QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV]: 'spawn-token',
       QUIRKY_AGENT_SESSION_ID: 'session-not-a-worker',
+      QUIRKY_OUTPUT: 'json',
       QUIRKY_STRUCTURED_SESSION: '1',
       QUIRKY_CLI_COMMAND: expect.stringMatching(DEV_CLI_LAUNCHER),
       ...(process.platform !== 'win32'
@@ -85,6 +86,7 @@ describe('the Codex child environment', () => {
       [QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV]: 'spawn-token',
       // Not a worker, so no handle: the id alone names this chat as a caller.
       QUIRKY_AGENT_SESSION_ID: sessionId,
+      QUIRKY_OUTPUT: 'json',
       QUIRKY_STRUCTURED_SESSION: '1',
       QUIRKY_CLI_COMMAND: expect.stringMatching(DEV_CLI_LAUNCHER),
       ...(process.platform !== 'win32'

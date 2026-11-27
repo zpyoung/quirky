@@ -184,6 +184,36 @@ describe('parseArgs', () => {
   })
 })
 
+describe('per-command boolean flags', () => {
+  const specs: CommandSpec[] = [
+    {
+      path: ['widget', 'set'],
+      summary: 'Set a widget',
+      usage: 'quirky widget set <name> [--enabled]',
+      allowedFlags: ['name', 'enabled'],
+      positionalArgs: ['name'],
+      booleanFlags: ['enabled']
+    }
+  ]
+
+  it('keeps a spec boolean flag from swallowing the positional after it', () => {
+    const parsed = normalizeCommandPositionals(
+      specs,
+      parseArgs(['widget', 'set', '--enabled', 'w1'], undefined, specs)
+    )
+
+    expect(parsed.flags.get('enabled')).toBe(true)
+    expect(parsed.flags.get('name')).toBe('w1')
+  })
+
+  it('still reads an explicit =false and treats the flag as a value flag without the spec', () => {
+    expect(
+      parseArgs(['widget', 'set', '--enabled=false', 'w1'], undefined, specs).flags.get('enabled')
+    ).toBe('false')
+    expect(parseArgs(['widget', 'set', '--enabled', 'w1']).flags.get('enabled')).toBe('w1')
+  })
+})
+
 describe('command aliases', () => {
   const specs: CommandSpec[] = [
     {

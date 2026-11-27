@@ -33,6 +33,9 @@ import { LoopCreateInputSchema } from '../fork-loops/loop-types'
 import { HostAccountLaunchEnvParams } from '../host-account-launch-env'
 import { MobileWebBundleChunkParamsSchema } from '../mobile-web-bundle/bundle-rpc-contract'
 import { pluginConsentRequestSchema } from '../plugins/plugin-consent-request'
+import { NotificationDismissParams } from '../public-rpc/public-methods/admin'
+import { EventsSubscribeParams, EventsUnsubscribeParams } from '../public-rpc/public-methods/events'
+import { UiListActionsParams, UiRunActionParams } from '../public-rpc/public-methods/ui'
 import { QuirkydMigrationBlobChunkRequestSchema } from '../quirkyd-migration/quirkyd-migration-blob-transfer'
 import { QuirkydMigrationSnapshotChunkRequestSchema } from '../quirkyd-migration/quirkyd-migration-scrollback'
 import { QuirkydTerminalCensusParamsSchema } from '../quirkyd-terminal-census'
@@ -888,6 +891,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'emulator.tap': TapParams,
   'emulator.type': TypeParams,
   'emulator.unregisterActive': EmulatorUnregisterActiveParams,
+  'events.subscribe': EventsSubscribeParams,
+  'events.unsubscribe': EventsUnsubscribeParams,
   'files.browseServerDir': ServerDirectoryBrowse,
   'files.commitUpload': FileCommitUpload,
   'files.copy': FileCopy,
@@ -1145,6 +1150,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'nativeChat.subscribe': NativeChatSession,
   'nativeChat.unsubscribe': NativeChatUnsubscribe,
   'network.browserTunnel': BrowserNetworkTunnelAttachParams,
+  'notifications.dismiss': NotificationDismissParams,
   'notifications.getMissedSince': NotificationGetMissedSinceParams,
   'notifications.registerPush': NotificationRegisterPushParams,
   'notifications.subscribe': NotificationsSubscribeParams,
@@ -1358,11 +1364,14 @@ export const RPC_PARAMS_BY_METHOD = {
   'ui.get': null,
   'ui.getJiraQuickFilters': null,
   'ui.getJiraSavedFilters': null,
+  'ui.listActions': UiListActionsParams,
   'ui.mutateJiraSavedFilters': JiraSavedFilterMutationParam,
   'ui.recordFeatureInteraction': FeatureInteractionIdParam,
+  'ui.runAction': UiRunActionParams,
   'ui.set': UiUpdate,
   'ui.setCollapsed': SetCollapsedParams,
   'ui.setJiraQuickFilters': JiraQuickFilterStateParam,
+  'ui.state': null,
   'updater.check': UpdaterCheckParams,
   'updater.download': null,
   'updater.getStatus': null,

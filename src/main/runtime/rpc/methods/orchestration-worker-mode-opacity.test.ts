@@ -36,9 +36,13 @@ const structuredPreambles: string[] = []
 // The session host the code under test reads; a structural fake, so no host type is claimed.
 const hostRef = vi.hoisted((): { current: unknown } => ({ current: null }))
 
-vi.mock('../../../native-chat/agent-session-wire/structured-agent-session-registry', () => ({
-  getStructuredAgentSessionHost: () => hostRef.current
-}))
+vi.mock(
+  '../../../native-chat/agent-session-wire/structured-agent-session-registry',
+  async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    getStructuredAgentSessionHost: () => hostRef.current
+  })
+)
 
 vi.mock('./orchestration/worker/worker-topology', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),

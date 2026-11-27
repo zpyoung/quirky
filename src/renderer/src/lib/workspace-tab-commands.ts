@@ -5,6 +5,10 @@ import { guardPinnedTabClose, resolvePinnedTabLabel } from '@/store/pinned-tab-c
 import { createWorkspaceTabCloseCommands } from '@/components/tab-group/workspace-tab-close-commands'
 import { captureWorkspaceEmptiedReaction } from '@/components/tab-group/workspace-emptied-reaction'
 import {
+  canSwitchRecentTab,
+  canSwitchTab,
+  canSwitchTabAcrossAllTypes,
+  canSwitchTerminalTab,
   handleSwitchRecentTab,
   handleSwitchTab,
   handleSwitchTabAcrossAllTypes,
@@ -102,29 +106,79 @@ function resolveCloseTarget(
   return null
 }
 
+type CloseCommand = Extract<WorkspaceTabCommand, { type: 'close' }>
+
+type CloseOutcome =
+  | { kind: 'empty-floating-panel' }
+  | { kind: 'browser-workspace'; worktreeId: string; browserWorkspaceId: string }
+  | { kind: 'tab'; worktreeId: string; tab: Tab }
+  | null
+
+/** What a close command would act on, or null when it would decline; reads state only. */
+function resolveCloseOutcome(state: TabState, command: CloseCommand): CloseOutcome {
+  if (!command.target) {
+    if (selectEmptyFloatingWorkspacePanelVisible(state)) {
+      return { kind: 'empty-floating-panel' }
+    }
+    if (isFloatingWorkspacePanelFocused()) {
+      return null
+    }
+  }
+  const target = resolveCloseTarget(state, command.target)
+  if (!target) {
+    return null
+  }
+  if (!target.tab) {
+    return target.browserWorkspaceId
+      ? {
+          kind: 'browser-workspace',
+          worktreeId: target.worktreeId,
+          browserWorkspaceId: target.browserWorkspaceId
+        }
+      : null
+  }
+  if (command.context === 'terminal' && target.tab.contentType === 'terminal') {
+    return null
+  }
+  return { kind: 'tab', worktreeId: target.worktreeId, tab: target.tab }
+}
+
+/** Whether `dispatchWorkspaceTabCommand` would claim the command, without running it. */
+export function canDispatchWorkspaceTabCommand(command: WorkspaceTabCommand): boolean {
+  if (command.type === 'close') {
+    return resolveCloseOutcome(useAppStore.getState(), command) !== null
+  }
+  if (command.type === 'previous-recent') {
+    return !isFloatingWorkspacePanelFocused() && canSwitchRecentTab()
+  }
+  if (isFloatingWorkspacePanelFocused()) {
+    return true
+  }
+  switch (command.scope) {
+    case 'same-type':
+      return canSwitchTab(command.direction)
+    case 'all-types':
+      return canSwitchTabAcrossAllTypes(command.direction)
+    case 'terminal':
+      return canSwitchTerminalTab(command.direction)
+  }
+}
+
 /** Input adapters describe intent; targeting and tab operations live here. */
 export function dispatchWorkspaceTabCommand(command: WorkspaceTabCommand): boolean {
   const state = useAppStore.getState()
   if (command.type === 'close') {
-    if (!command.target) {
-      if (selectEmptyFloatingWorkspacePanelVisible(state)) {
-        window.dispatchEvent(new Event(TOGGLE_FLOATING_TERMINAL_EVENT))
-        return true
-      }
-      if (isFloatingWorkspacePanelFocused()) {
-        return false
-      }
-    }
-    const target = resolveCloseTarget(state, command.target)
-    if (!target) {
+    const outcome = resolveCloseOutcome(state, command)
+    if (!outcome) {
       return false
     }
-    if (!target.tab) {
-      if (!target.browserWorkspaceId) {
-        return false
-      }
-      const whenEmptied = captureWorkspaceEmptiedReaction(target.worktreeId)
-      const plan = closeWorkspaceBrowserTab(target.worktreeId, target.browserWorkspaceId)
+    if (outcome.kind === 'empty-floating-panel') {
+      window.dispatchEvent(new Event(TOGGLE_FLOATING_TERMINAL_EVENT))
+      return true
+    }
+    if (outcome.kind === 'browser-workspace') {
+      const whenEmptied = captureWorkspaceEmptiedReaction(outcome.worktreeId)
+      const plan = closeWorkspaceBrowserTab(outcome.worktreeId, outcome.browserWorkspaceId)
       if (
         plan.closesLocally &&
         plan.localCloseReason !== 'cleanup' &&
@@ -135,13 +189,10 @@ export function dispatchWorkspaceTabCommand(command: WorkspaceTabCommand): boole
       }
       return true
     }
-    const tab = target.tab
-    if (command.context === 'terminal' && tab.contentType === 'terminal') {
-      return false
-    }
+    const { tab, worktreeId } = outcome
     const commands = createWorkspaceTabCloseCommands({
-      worktreeId: target.worktreeId,
-      groupTabs: state.unifiedTabsByWorktree[target.worktreeId] ?? []
+      worktreeId,
+      groupTabs: state.unifiedTabsByWorktree[worktreeId] ?? []
     })
     if ((command.bulk || command.skipEmptyCheck) && tab.isPinned) {
       return true
@@ -150,7 +201,7 @@ export function dispatchWorkspaceTabCommand(command: WorkspaceTabCommand): boole
     const whenEmptied =
       command.bulk || command.skipEmptyCheck
         ? undefined
-        : captureWorkspaceEmptiedReaction(target.worktreeId, {
+        : captureWorkspaceEmptiedReaction(worktreeId, {
             floatingPanelGuestOwned: command.floatingPanelGuestOwned
           })
     const close = () =>
@@ -160,7 +211,7 @@ export function dispatchWorkspaceTabCommand(command: WorkspaceTabCommand): boole
     } else {
       guardPinnedTabClose({
         isPinned: tab.isPinned === true,
-        tabLabel: resolvePinnedTabLabel(state, target.worktreeId, tab.id),
+        tabLabel: resolvePinnedTabLabel(state, worktreeId, tab.id),
         onClose: close
       })
     }
