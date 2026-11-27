@@ -1,4 +1,5 @@
-import { defineMethod, defineStreamingMethod } from '../../core'
+import { defineMethod, defineStreamingMethod, type RpcContext } from '../../core'
+import type { RpcCallerIdentity } from '../../rpc-caller-identity'
 import { isTerminalAskStatus } from '../../../../../shared/fork-ask-question-tool/ask-answer-envelope'
 import {
   ASK_DEFAULT_CHUNK_MS,
@@ -8,6 +9,8 @@ import {
   type AskSpec
 } from '../../../../../shared/fork-ask-question-tool/ask-question-schema'
 import type { AskDb } from '../../../../fork-ask-question-tool/ask-db'
+import { isApprovalRequestId } from '../../../approvals/approval-gate'
+import { PublicRpcError } from '../../public-rpc-error'
 import { validateAskAnswerSubmission } from '../../../../../shared/fork-ask-question-tool/ask-answer-validation'
 import { registryEventFromRow } from './ask-envelope-from-row'
 import {
@@ -58,6 +61,18 @@ function buildPendingSnapshot(
 }
 
 let askSubscriptionSeq = 0
+
+/**
+ * An approval releases a gated mutation, so only the user's own apps may grant it: the desktop UI
+ * or their paired phone. A CLI over a pairing code is also a paired device but pairs with the
+ * runtime scope, so only the mobile scope counts.
+ */
+function isUserApprovalAnswerer(
+  caller: RpcCallerIdentity | undefined,
+  clientKind: RpcContext['clientKind']
+): boolean {
+  return caller?.kind === 'desktop' || (caller?.kind === 'paired-device' && clientKind === 'mobile')
+}
 
 export const ASK_METHODS = [
   defineMethod({
@@ -132,11 +147,25 @@ export const ASK_METHODS = [
     name: 'ask.answer',
     permission: 'workspace',
     params: AskAnswerParams,
-    handler: async (params, { runtime }) => {
+    handler: async (params, { runtime, caller, clientKind }) => {
       const { db, registry } = runtime.getAskServices()
       const row = db.getAsk(params.askId)
       if (!row || isTerminalAskStatus(row.status)) {
         return { committed: false }
+      }
+      if (isApprovalRequestId(row.request_id) && !isUserApprovalAnswerer(caller, clientKind)) {
+        throw new PublicRpcError(
+          'unauthorized',
+          'approval_requires_user',
+          [
+            {
+              command: 'wait for the user to answer in Quirky',
+              why: 'approval prompts cannot be answered by an agent or CLI'
+            }
+          ],
+          undefined,
+          'This is an approval prompt; only the user can answer it in the Quirky app.'
+        )
       }
       const spec = JSON.parse(row.spec_json) as AskSpec
       const validation = validateAskAnswerSubmission(spec, params.answers, params.skipped)

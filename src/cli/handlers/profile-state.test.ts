@@ -226,7 +226,7 @@ describe('profile-state CLI recovery', () => {
     const profile = createProfile()
     getDefaultUserDataPathMock.mockReturnValue(profile.userDataPath)
     await main(['profile', 'state', 'rollback', ...flags, '--json'], profile.userDataPath)
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(existsSync(profile.databaseFile)).toBe(true)
     expect(getCliStatusMock).not.toHaveBeenCalled()
   })
@@ -487,7 +487,7 @@ describe('profile-state CLI recovery', () => {
       profile.userDataPath
     )
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(readFileSync(profile.databaseFile, 'utf8')).toBe('damaged sqlite primary')
     expect(String(vi.mocked(console.log).mock.calls.at(-1)?.[0])).toContain('exactly one')
   })
@@ -501,7 +501,7 @@ describe('profile-state CLI recovery', () => {
       profile.userDataPath
     )
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(readFileSync(profile.databaseFile, 'utf8')).toBe('damaged sqlite primary')
     expect(String(vi.mocked(console.log).mock.calls.at(-1)?.[0])).toContain('backup is unavailable')
   })

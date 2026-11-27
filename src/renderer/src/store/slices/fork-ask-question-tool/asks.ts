@@ -40,6 +40,8 @@ export type AsksSlice = {
   /** Per-pane FIFO; index 0 is the ask the card renders. A terminal entry occupies index 0 for
    * at most `ASK_DISMISS_DELAY_MS` before `dismissAsk` drops it and the next queued ask surfaces. */
   pendingAsksByPaneKey: Record<string, AskCardModel[]>
+  /** Asks whose caller has no terminal pane (brain, scripts, remote); same FIFO and dismiss rules as a pane's queue. */
+  globalAsks: AskCardModel[]
   /** Null until `hydrateAsks` resolves once; also the "is hydrated" gate for `applyAskRegistryEvent`. */
   askWatermark: AskWatermark | null
   /** Events received while `askWatermark` is null; replayed in order once hydration resolves. */
@@ -53,9 +55,9 @@ export type AsksSlice = {
   _dismissTimers: Record<string, ReturnType<typeof setTimeout>>
   /** Applies one live registry event under the hydration-ordering rules in tech.md § C8. */
   applyAskRegistryEvent: (event: AskRegistryEvent) => void
-  /** Removes a resolved ask from its pane so the next queued one becomes the head. No-op for an
-   * unknown pane or askId. */
-  dismissAsk: (paneKey: string, askId: string) => void
+  /** Removes a resolved ask from its pane (or from `globalAsks` when `paneKey` is null) so the
+   * next queued one becomes the head. No-op for an unknown pane or askId. */
+  dismissAsk: (paneKey: string | null, askId: string) => void
   /** `rightSidebarOpen` as it stood when the ask panel forced the sidebar open, so the panel can
    * put it back. Null while the panel is not holding a restore target. */
   askFocusRestoreOpen: boolean | null
@@ -112,7 +114,12 @@ function upsertCard(bucket: AskCardModel[], event: AskRegistryEvent): AskCardMod
  * than a component effect: an effect's cleanup fires on unmount, so switching tabs mid-flash would
  * leave the resolved card wedged at the head forever.
  */
-function scheduleAskDismiss(set: AsksSet, get: AsksGet, paneKey: string, askId: string): void {
+function scheduleAskDismiss(
+  set: AsksSet,
+  get: AsksGet,
+  paneKey: string | null,
+  askId: string
+): void {
   if (askId in get()._dismissTimers) {
     return
   }
@@ -132,6 +139,7 @@ export const createAsksSlice: StateCreator<AppState, [], [], AsksSlice> = (set, 
 
   return {
     pendingAsksByPaneKey: {},
+    globalAsks: [],
     askWatermark: null,
     _askEventBuffer: [],
     _dismissTimers: {},
@@ -167,8 +175,10 @@ export const createAsksSlice: StateCreator<AppState, [], [], AsksSlice> = (set, 
       hydrateFailures = 0
 
       const seeded: Record<string, AskCardModel[]> = {}
+      let seededGlobal: AskCardModel[] = []
       for (const event of snapshot.asks) {
         if (event.paneKey === null) {
+          seededGlobal = upsertCard(seededGlobal, event)
           continue
         }
         seeded[event.paneKey] = upsertCard(seeded[event.paneKey] ?? [], event)
@@ -178,6 +188,7 @@ export const createAsksSlice: StateCreator<AppState, [], [], AsksSlice> = (set, 
       clearDismissTimers(get()._dismissTimers)
       set({
         pendingAsksByPaneKey: seeded,
+        globalAsks: seededGlobal,
         askWatermark: { seq: snapshot.seq, epoch: snapshot.epoch },
         _askEventBuffer: [],
         _dismissTimers: {}
@@ -209,6 +220,7 @@ export const createAsksSlice: StateCreator<AppState, [], [], AsksSlice> = (set, 
         clearDismissTimers(state._dismissTimers)
         set({
           pendingAsksByPaneKey: {},
+          globalAsks: [],
           askWatermark: null,
           _askEventBuffer: [],
           _dismissTimers: {}
@@ -220,16 +232,17 @@ export const createAsksSlice: StateCreator<AppState, [], [], AsksSlice> = (set, 
         return
       }
       set({
-        pendingAsksByPaneKey:
-          event.paneKey === null
-            ? state.pendingAsksByPaneKey
-            : {
+        ...(event.paneKey === null
+          ? { globalAsks: upsertCard(state.globalAsks, event) }
+          : {
+              pendingAsksByPaneKey: {
                 ...state.pendingAsksByPaneKey,
                 [event.paneKey]: upsertCard(state.pendingAsksByPaneKey[event.paneKey] ?? [], event)
-              },
+              }
+            }),
         askWatermark: { seq: event.seq, epoch: event.epoch }
       })
-      if (event.paneKey !== null && isTerminalAskStatus(event.status)) {
+      if (isTerminalAskStatus(event.status)) {
         scheduleAskDismiss(set, get, event.paneKey, event.askId)
       }
     },
@@ -243,12 +256,17 @@ export const createAsksSlice: StateCreator<AppState, [], [], AsksSlice> = (set, 
       const nextTimers = { ...state._dismissTimers }
       delete nextTimers[askId]
 
-      const bucket = state.pendingAsksByPaneKey[paneKey]
+      const bucket = paneKey === null ? state.globalAsks : state.pendingAsksByPaneKey[paneKey]
       const remaining = bucket?.filter((card) => card.askId !== askId)
       if (!bucket || !remaining || remaining.length === bucket.length) {
         if (timer !== undefined) {
           set({ _dismissTimers: nextTimers })
         }
+        return
+      }
+
+      if (paneKey === null) {
+        set({ globalAsks: remaining, _dismissTimers: nextTimers })
         return
       }
 

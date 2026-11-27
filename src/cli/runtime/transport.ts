@@ -6,9 +6,17 @@ import type {
   RuntimeOrchestrationEnvelope
 } from '../../shared/runtime-rpc-envelope'
 import { isKeepaliveFrame, RuntimeRpcEnvelopeSchema } from './envelope-schema'
+import type { CallerHint } from '../../shared/public-rpc/caller-hint'
 import { RuntimeClientError, type RuntimeRpcResponse } from './types'
 import { MAX_TIMER_DELAY_MS, isSafeTimerDelayMs } from '../../shared/timer-delay'
 import { runtimeAccessDeniedError } from './runtime-access-denied'
+
+/** Request-frame fields only the public CLI sends; legacy callers omit them, so their frames are unchanged. */
+export type PublicRequestFields = {
+  publicContract?: 1
+  confirm?: boolean
+  caller?: CallerHint
+}
 
 export async function sendRequest<TResult>(
   metadata: RuntimeMetadata,
@@ -17,7 +25,8 @@ export async function sendRequest<TResult>(
   timeoutMs: number,
   envelope?: RuntimeOrchestrationEnvelope,
   // Why separate from the envelope: federation forwards envelopes to other runtimes.
-  expectedRuntimeSource?: ExpectedRuntimeSource
+  expectedRuntimeSource?: ExpectedRuntimeSource,
+  publicRequest?: PublicRequestFields
 ): Promise<RuntimeRpcResponse<TResult>> {
   if (!isSafeTimerDelayMs(timeoutMs)) {
     throw new RuntimeClientError(
@@ -209,7 +218,10 @@ export async function sendRequest<TResult>(
           orchestrationRequestId: envelope?.orchestrationRequestId,
           compatibilityInvocationId: envelope?.compatibilityInvocationId,
           orchestrationCompatibilityEvidence: envelope?.orchestrationCompatibilityEvidence,
-          expectedRuntimeSource
+          expectedRuntimeSource,
+          publicContract: publicRequest?.publicContract,
+          confirm: publicRequest?.confirm,
+          caller: publicRequest?.caller
         })}\n`
       )
     })

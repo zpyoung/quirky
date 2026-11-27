@@ -141,7 +141,7 @@ describe('quirky emulator CLI handlers', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'Remote emulator install requires --path to be an absolute path on the remote server.'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('preserves absolute server APK paths for remote runtimes', async () => {
@@ -187,7 +187,7 @@ describe('quirky emulator CLI handlers', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       'reset does not accept package or permission'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects grant without a permission before calling the runtime', async () => {
@@ -200,6 +200,6 @@ describe('quirky emulator CLI handlers', () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
       '<permission> is required for grant'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { formatCliError, reportCliError } from './format'
+import { markPublicContractError } from './cli-error'
 import { RuntimeClientError, RuntimeRpcFailureError } from './runtime-client'
 
 function selectorNotFound(): RuntimeRpcFailureError {
@@ -276,5 +277,87 @@ describe('stale terminal handle recovery', () => {
         remoteServerSelected: true
       })
     ).toBe('terminal_handle_stale')
+  })
+})
+
+describe('legacy and public error codes in --json', () => {
+  type ReportedError = { error: { code: string; data: Record<string, unknown> } }
+
+  function reported(error: unknown, context: Parameters<typeof reportCliError>[2]): ReportedError {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    reportCliError(error, true, context)
+    const payload = JSON.parse(String(log.mock.calls[0]?.[0]))
+    log.mockRestore()
+    return payload
+  }
+
+  it('keeps the original code for a legacy command and adds the stable one under data', () => {
+    const payload = reported(selectorNotFound(), { commandPath: ['worktree', 'show'] })
+
+    expect(payload.error.code).toBe('selector_not_found')
+    expect(payload.error.data).toMatchObject({
+      stableCode: 'not_found',
+      reason: 'selector_not_found',
+      next: [{ command: 'quirky schema worktree show', why: expect.any(String) }]
+    })
+  })
+
+  it('keeps an unknown legacy code and reports it as the reason of an internal error', () => {
+    const payload = reported(new RuntimeClientError('incompatible_runtime', 'too old'), {
+      commandPath: ['status']
+    })
+
+    expect(payload.error.code).toBe('incompatible_runtime')
+    expect(payload.error.data).toMatchObject({
+      stableCode: 'internal',
+      reason: 'incompatible_runtime'
+    })
+    expect(payload.error.data.next).toBeUndefined()
+  })
+
+  it('gives a hand-written public command such as ui state the stable code', () => {
+    const payload = reported(new RuntimeClientError('renderer_unavailable', 'no window'), {
+      commandPath: ['ui', 'state']
+    })
+
+    expect(payload.error.code).toBe('unavailable')
+    expect(payload.error.data.reason).toBe('renderer_unavailable')
+    expect(payload.error.data.stableCode).toBeUndefined()
+  })
+
+  it('keeps the original code for the legacy browser tab list', () => {
+    const payload = reported(new RuntimeClientError('browser_error', 'no browser'), {
+      commandPath: ['tab', 'list']
+    })
+
+    expect(payload.error.code).toBe('browser_error')
+    expect(payload.error.data.stableCode).toBe('internal')
+  })
+
+  it('puts the stable code in error.code for an error a public command marked', () => {
+    const payload = reported(markPublicContractError(selectorNotFound()), {
+      commandPath: ['tab', 'list']
+    })
+
+    expect(payload.error.code).toBe('not_found')
+    expect(payload.error.data.reason).toBe('selector_not_found')
+    expect(payload.error.data.stableCode).toBeUndefined()
+    expect(payload.error.data.next).toHaveLength(1)
+  })
+
+  it('treats a context that opts in, and the rpc command, as public', () => {
+    expect(
+      reported(selectorNotFound(), { commandPath: ['tab', 'list'], publicContract: true }).error
+        .code
+    ).toBe('not_found')
+    expect(reported(selectorNotFound(), { commandPath: ['rpc'] }).error.code).toBe('not_found')
+  })
+
+  it('leaves an error a legacy command raised unmarked even after a public one was', () => {
+    markPublicContractError(selectorNotFound())
+
+    expect(reported(selectorNotFound(), { commandPath: ['worktree', 'show'] }).error.code).toBe(
+      'selector_not_found'
+    )
   })
 })

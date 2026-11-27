@@ -237,7 +237,7 @@ describe('orchestration gate commands carry caller identity', () => {
       '/tmp/repo'
     )
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(6)
     const output = JSON.parse(String(logSpy.mock.calls[0]?.[0])) as {
       error: { message: string; data: Record<string, unknown> }
     }

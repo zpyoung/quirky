@@ -1,17 +1,29 @@
 import type { RuntimeMetadata } from '../../../shared/runtime-bootstrap'
 import { writeRuntimeMetadata } from '../runtime-metadata'
-import type { RpcMessageContext } from '../rpc/transport'
+import type { UnixSocketMessageContext } from '../rpc/unix-socket-transport'
 import type { RpcRequest, RpcResponse } from '../rpc/core'
-import { errorResponse } from '../rpc/errors'
+import { errorResponse, successResponse } from '../rpc/errors'
+import { publicSpecForMethod } from '../../../shared/public-rpc/public-methods'
 import { RuntimeRpcBinaryRouting } from './runtime-rpc-binary-routing'
 import { classifyRuntimeLongPoll, type RuntimeLongPollClass } from './runtime-rpc-long-poll'
+import { mayAwaitApproval } from '../rpc/public-contract-gate'
 import { OWNER_RPC_CALLER_SCOPE, type RpcCallerScope } from '../rpc/rpc-caller-scope'
+
+// Why: layout.subscribe is an internal method, yet `quirky layout get` reads its stream over the local socket.
+const LOCAL_SOCKET_STREAMING_METHODS: ReadonlySet<string> = new Set(['layout.subscribe'])
+
+/** Whether the local socket answers this method with a frame stream instead of one reply. */
+export function streamsOnLocalSocket(method: string): boolean {
+  return (
+    publicSpecForMethod(method)?.streaming === true || LOCAL_SOCKET_STREAMING_METHODS.has(method)
+  )
+}
 
 export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
   // Why: Unix socket dispatch is one-shot and auths via the shared token from the 0o600 metadata file. See §3.1.
   protected async handleMessage(
     rawMessage: string,
-    context?: RpcMessageContext
+    context?: UnixSocketMessageContext
   ): Promise<RpcResponse> {
     // Why: the transport sends an empty message when a client exceeds max size, then closes the connection.
     if (!rawMessage) {
@@ -24,8 +36,14 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     }
     const { request, callerScope } = parsed
 
-    // Why: long-poll admission fence; short RPCs bypass the counter. See §7 risk #2.
-    const longPoll = classifyRuntimeLongPoll(request)
+    // Why: only streaming methods that agents and the CLI reach open a stream on the socket; every other method stays one reply.
+    const beginStream = streamsOnLocalSocket(request.method) ? context?.beginStream : undefined
+    const streaming = beginStream !== undefined
+    // Why: a call parked on an approval prompt holds the socket as long as a long-poll, and must die with it.
+    const awaitsApproval = mayAwaitApproval(request)
+    // Why: a stream or an approval wait holds its connection as long as a long-poll does, so it spends the same capacity.
+    const longPoll =
+      classifyRuntimeLongPoll(request) ?? (streaming || awaitsApproval ? 'wait' : null)
     const rejection = this.admitLongPoll(longPoll)
     if (rejection) {
       return this.buildError(request.id, 'runtime_busy', rejection)
@@ -36,9 +54,22 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     }
 
     try {
+      if (beginStream) {
+        await this.dispatcher.dispatchStreaming(request, beginStream(), {
+          signal: context?.signal,
+          callerScope
+        })
+        // Why: the transport drops this reply, since the stream already wrote its own frames and end marker.
+        return successResponse(
+          request.id,
+          { runtimeId: this.runtime.getRuntimeId() },
+          { type: 'end' }
+        )
+      }
       return await this.dispatcher.dispatch(request, {
         signal:
           longPoll ||
+          awaitsApproval ||
           request.method === 'linear.commentEdit' ||
           request.method === 'linear.commentDelete'
             ? context?.signal

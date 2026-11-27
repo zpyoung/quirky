@@ -6,7 +6,7 @@ import type {
   RpcResponse,
   RpcStreamingMethod
 } from './core'
-import { errorResponse } from './errors'
+import { errorResponse, mapRuntimeError } from './errors'
 import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { orchestrationMigrationFence } from './orchestration-contract-fence'
 import { runtimeSourceFence } from './runtime-source-admission'
@@ -18,6 +18,8 @@ import {
   OWNER_RPC_CALLER_SCOPE,
   type RpcCallerScope
 } from './rpc-caller-scope'
+import { gatePublicContract } from './public-contract-gate'
+import { PublicRpcError } from './public-rpc-error'
 import {
   needsOrchestrationCallerResolution,
   resolveOrchestrationSessionCaller,
@@ -74,7 +76,27 @@ export function admitRpcRequest<M extends RpcMethod | RpcStreamingMethod>(
         )
       )
     }
-    return { method, request, caller, params: parsedParams.value }
+    const admitted = { method, request, caller, params: parsedParams.value }
+    const gated = gatePublicContract({
+      runtime,
+      method,
+      request,
+      params: parsedParams.value,
+      callerScope,
+      options,
+      orchestrationCaller: caller
+    })
+    return gated
+      ? gated.then(
+          (gatedMethod) => ({ ...admitted, method: gatedMethod }),
+          (error: unknown) =>
+            reject(
+              error instanceof PublicRpcError
+                ? mapRuntimeError(request.id, meta, error)
+                : mapDispatcherError(request, meta, error)
+            )
+        )
+      : admitted
   }
   // Why: before params parse and the unary/streaming split, so both branches see one caller.
   return needsOrchestrationCallerResolution(rawRequest)

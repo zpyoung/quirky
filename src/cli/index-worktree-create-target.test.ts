@@ -307,7 +307,7 @@ describe('quirky cli worktree awareness', () => {
     expect(printed).toContain('github:acme/scalp-it')
     expect(printed).toContain('gitlab:other/scalp-it')
     expect(callMock).not.toHaveBeenCalledWith('worktree.create', expect.anything())
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -416,7 +416,7 @@ describe('quirky cli worktree awareness', () => {
     const printed = [...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')
     expect(printed).toContain('No ready setup found for --project nope on any host.')
     expect(printed).not.toContain('selected host')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     process.exitCode = priorExitCode
   })
 
@@ -465,7 +465,7 @@ describe('quirky cli worktree awareness', () => {
     expect(printed).toContain('it is set up on 2 hosts')
     expect(printed).toContain('--host local')
     expect(printed).toContain('--host runtime:gpu')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })
@@ -545,7 +545,7 @@ describe('quirky cli worktree awareness', () => {
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Choose either --repo or project target flags, not both.'
     )
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

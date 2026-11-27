@@ -3,7 +3,15 @@ import {
   matchAutomationOwnerConflict,
   stripAutomationOwnerConflictCode
 } from '../shared/automation-owner-conflict'
+import {
+  normalizeErrorCode,
+  requiresNext,
+  type NextStep,
+  type StableErrorCode
+} from '../shared/public-rpc/error-contract'
 import { automationOwnerConflictRecovery } from './automation-owner-conflict-recovery'
+import { rawCliErrorCode } from './public-cli/exit-codes'
+import { quoteCliCommandArgument } from './shell-command-quote'
 import { worktreeSelectorRecovery } from './worktree-selector-recovery'
 import { selectorAmbiguityRecovery } from './selector-ambiguity-recovery'
 import type { RuntimeRpcFailure } from './runtime-client'
@@ -11,12 +19,48 @@ import { RuntimeClientError, RuntimeRpcFailureError } from './runtime/types'
 
 export type CliErrorContext = {
   commandPath?: readonly string[]
+  /** The invocation's argv, used to spell the `--yes` re-run for a confirmation prompt. */
+  rawArgs?: readonly string[]
   /** The `--worktree` value this invocation sent; the runtime's error never echoes it. */
   worktreeSelector?: string
   /** The `--repo` value this invocation sent, for the same reason. */
   repoSelector?: string
   /** True when --environment, --pairing-code, --host runtime:, or their env vars chose a server. */
   remoteServerSelected?: boolean
+  /** Report the stable code in `error.code`; unset, legacy commands keep their original code there. */
+  publicContract?: true
+}
+
+// errors are marked, not contexts, because index.ts builds the context without knowing which handler ran
+const publicContractErrors = new WeakSet<object>()
+
+/** Marks an error raised by a public-contract command so `reportCliError` gives it the stable `error.code`. */
+export function markPublicContractError<T>(error: T): T {
+  if (typeof error === 'object' && error !== null) {
+    publicContractErrors.add(error)
+  }
+  return error
+}
+
+const PUBLIC_CONTRACT_COMMAND_ROOTS: ReadonlySet<string> = new Set([
+  'rpc',
+  'schema',
+  'events',
+  'ui',
+  'action',
+  'layout',
+  'chat',
+  'settings',
+  'notifications',
+  'plugins'
+])
+
+function usesPublicContract(error: unknown, context: CliErrorContext): boolean {
+  return (
+    context.publicContract === true ||
+    (typeof error === 'object' && error !== null && publicContractErrors.has(error)) ||
+    PUBLIC_CONTRACT_COMMAND_ROOTS.has(context.commandPath?.[0] ?? '')
+  )
 }
 
 type ContextRecovery = { nextSteps: readonly string[] } & Record<string, unknown>
@@ -63,7 +107,14 @@ function errorCode(error: unknown): string | undefined {
   return error instanceof RuntimeClientError ? error.code : undefined
 }
 
+/** The human message plus `Next: <command>  (<why>)` lines for follow-ups the runtime or contract names. */
 export function formatCliError(error: unknown, context: CliErrorContext = {}): string {
+  const message = formatCliErrorMessage(error, context)
+  const next = textNextSteps(error, context)
+  return next.length === 0 ? message : `${message}\n${next.map(formatNextStep).join('\n')}`
+}
+
+function formatCliErrorMessage(error: unknown, context: CliErrorContext): string {
   const message = error instanceof Error ? error.message : String(error)
   const selector = contextRecovery(errorCode(error), context)
   if (selector) {
@@ -119,31 +170,24 @@ function hasOrchestrationRequestId(data: unknown): boolean {
 export function reportCliError(error: unknown, json: boolean, context: CliErrorContext = {}): void {
   const selector = contextRecovery(errorCode(error), context)
   if (json) {
+    let response: RuntimeRpcFailure
     if (error instanceof RuntimeRpcFailureError) {
-      const response = withAutomationOwnerConflictRecovery(error.response)
-      console.log(
-        JSON.stringify(
-          selector
-            ? {
-                ...response,
-                error: {
-                  ...response.error,
-                  data: mergeContextRecovery(response.error.data, selector)
-                }
-              }
-            : response,
-          null,
-          2
-        )
-      )
+      const recovered = withAutomationOwnerConflictRecovery(error.response)
+      response = selector
+        ? {
+            ...recovered,
+            error: {
+              ...recovered.error,
+              data: mergeContextRecovery(recovered.error.data, selector)
+            }
+          }
+        : recovered
     } else {
-      const response: RuntimeRpcFailure = {
+      response = {
         id: 'local',
         ok: false,
         error: {
-          code:
-            matchAutomationOwnerConflict(error) ??
-            (error instanceof RuntimeClientError ? error.code : 'runtime_error'),
+          code: rawCliErrorCode(error),
           message: stripAutomationOwnerConflictCode(
             error instanceof Error ? error.message : String(error)
           ),
@@ -153,10 +197,170 @@ export function reportCliError(error: unknown, json: boolean, context: CliErrorC
           runtimeId: null
         }
       }
-      console.log(JSON.stringify(response, null, 2))
     }
+    console.log(
+      JSON.stringify(
+        withStableErrorContract(response, context, usesPublicContract(error, context)),
+        null,
+        2
+      )
+    )
   } else {
     console.error(formatCliError(error, context))
+  }
+}
+
+const RUNTIME_PREDATES_PUBLIC_CLI: NextStep = {
+  command: 'quirky status',
+  why: 'runtime predates public-cli.v1; update it'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function nextStepsSentIn(data: unknown): NextStep[] {
+  if (!isRecord(data) || !Array.isArray(data.next)) {
+    return []
+  }
+  return data.next.flatMap((entry: unknown): NextStep[] =>
+    isRecord(entry) && typeof entry.command === 'string' && entry.command.length > 0
+      ? [{ command: entry.command, why: typeof entry.why === 'string' ? entry.why : '' }]
+      : []
+  )
+}
+
+function formatNextStep(step: NextStep): string {
+  return step.why ? `Next: ${step.command}  (${step.why})` : `Next: ${step.command}`
+}
+
+function spellConfirmCommand(args: readonly string[] | undefined): string | null {
+  if (!args || args.length === 0) {
+    return null
+  }
+  const spelled = args.map(quoteCliCommandArgument).join(' ')
+  return args.includes('--yes') ? `quirky ${spelled}` : `quirky ${spelled} --yes`
+}
+
+function confirmCommand(context: CliErrorContext): string | null {
+  return spellConfirmCommand(context.rawArgs ?? context.commandPath)
+}
+
+const EXECUTABLE_COMMAND = /^quirky(\s|$)/
+
+/**
+ * The runtime cannot know the caller's argv, so its confirmation step is a placeholder such as
+ * `re-run with --yes`. This swaps each placeholder for the invocation that was actually run plus
+ * `--yes`, and leaves a step that already names a `quirky` command alone.
+ */
+function withExecutableConfirmation(
+  steps: NextStep[],
+  normalizedCode: StableErrorCode,
+  context: CliErrorContext
+): NextStep[] {
+  const confirm =
+    normalizedCode === 'needs_confirmation' ? spellConfirmCommand(context.rawArgs) : null
+  if (!confirm) {
+    return steps
+  }
+  const rewritten = steps.map((step) =>
+    EXECUTABLE_COMMAND.test(step.command) ? step : { ...step, command: confirm }
+  )
+  return rewritten.filter(
+    (step, index) => rewritten.findIndex((other) => other.command === step.command) === index
+  )
+}
+
+/** Generic follow-ups for a stable code whose error carried none, so an agent always has a next move. */
+function genericNextSteps(
+  normalized: { code: StableErrorCode; reason: string },
+  context: CliErrorContext
+): NextStep[] {
+  const command = context.commandPath?.join(' ')
+  const schemaStep: NextStep = {
+    command: command ? `quirky schema ${command}` : 'quirky schema',
+    why: 'check the command and its inputs'
+  }
+  switch (normalized.code) {
+    case 'unavailable':
+      return [
+        normalized.reason === 'capability_missing'
+          ? RUNTIME_PREDATES_PUBLIC_CLI
+          : { command: 'quirky status', why: 'check that Quirky is running and what it supports' }
+      ]
+    case 'invalid_argument':
+      return command ? [schemaStep] : []
+    case 'not_found':
+      return [schemaStep]
+    case 'needs_confirmation': {
+      const confirm = confirmCommand(context)
+      return [confirm ? { command: confirm, why: 'run again with --yes to confirm' } : schemaStep]
+    }
+    case 'conflict':
+      return [{ command: 'quirky status', why: 'state changed; check it, then retry' }]
+    case 'internal':
+    case 'timeout':
+    case 'unauthorized':
+      return []
+  }
+}
+
+/** Text mode shows what the runtime sent, plus the compat hint for a runtime that lacks the method. */
+function textNextSteps(error: unknown, context: CliErrorContext): NextStep[] {
+  const normalized = normalizeErrorCode(rawCliErrorCode(error))
+  const sent = nextStepsSentIn(errorData(error))
+  if (sent.length > 0) {
+    return withExecutableConfirmation(sent, normalized.code, context)
+  }
+  return normalized.code === 'unavailable' && normalized.reason === 'capability_missing'
+    ? [RUNTIME_PREDATES_PUBLIC_CLI]
+    : []
+}
+
+/**
+ * Adds the public error contract to a failure: the specific cause in `error.data.reason` and
+ * `error.data.next` wherever the contract requires it. A public command also gets the stable code in
+ * `error.code`; a legacy command keeps its original code there and carries the stable one in
+ * `error.data.stableCode`, so scripts written before the contract keep working.
+ */
+function withStableErrorContract(
+  response: RuntimeRpcFailure,
+  context: CliErrorContext,
+  publicContract: boolean
+): RuntimeRpcFailure {
+  const normalized = normalizeErrorCode(response.error.code)
+  const sent = response.error.data
+  const base: Record<string, unknown> = isRecord(sent)
+    ? sent
+    : sent === undefined
+      ? {}
+      : { detail: sent }
+  const reason =
+    typeof base.reason === 'string'
+      ? base.reason
+      : normalized.reason !== normalized.code
+        ? normalized.reason
+        : undefined
+  const sentNext = withExecutableConfirmation(nextStepsSentIn(base), normalized.code, context)
+  const next =
+    sentNext.length > 0
+      ? sentNext
+      : requiresNext(normalized.code) || normalized.code === 'invalid_argument'
+        ? genericNextSteps(normalized, context)
+        : []
+  const data = {
+    ...base,
+    ...(publicContract ? {} : { stableCode: normalized.code }),
+    ...(reason === undefined ? {} : { reason }),
+    ...(next.length === 0 ? {} : { next })
+  }
+  return {
+    ...response,
+    error: {
+      code: publicContract ? normalized.code : response.error.code,
+      message: response.error.message,
+      ...(Object.keys(data).length === 0 ? {} : { data })
+    }
   }
 }
 

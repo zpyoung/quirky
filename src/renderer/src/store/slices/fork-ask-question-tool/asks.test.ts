@@ -255,13 +255,112 @@ describe('asks slice — terminal auto-dismiss', () => {
     expect(store.getState()._dismissTimers['ask-1']).toBe(armed)
   })
 
-  it('schedules nothing for a terminal event with no pane', async () => {
+  it('keeps an ask with no pane in globalAsks and out of every pane queue', async () => {
     const store = await hydratedStore()
 
-    store
-      .getState()
-      .applyAskRegistryEvent(makeEvent({ paneKey: null, seq: 1, status: 'unavailable' }))
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, seq: 1 }))
 
+    expect(store.getState().pendingAsksByPaneKey).toEqual({})
+    expect(store.getState().globalAsks).toMatchObject([{ askId: 'ask-1', paneKey: null }])
+    expect(store.getState().askWatermark).toEqual({ seq: 1, epoch: 'epoch-a' })
+  })
+
+  it('merges later events for a global ask and queues a second one behind it', async () => {
+    const store = await hydratedStore()
+
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, seq: 1 }))
+    store.getState().applyAskRegistryEvent(
+      makeEvent({
+        paneKey: null,
+        seq: 2,
+        status: 'partial',
+        spec: undefined,
+        partial: { q1: { confirm: true } }
+      })
+    )
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, askId: 'ask-2', seq: 3 }))
+
+    expect(store.getState().globalAsks.map((card) => card.askId)).toEqual(['ask-1', 'ask-2'])
+    expect(store.getState().globalAsks[0]).toMatchObject({
+      status: 'partial',
+      partial: { q1: { confirm: true } }
+    })
+    expect(store.getState().globalAsks[0]?.spec).not.toBeNull()
+  })
+
+  it('seeds global asks from ask.snapshot', async () => {
+    stubSnapshotResult({
+      asks: [makeEvent({ paneKey: null }), makeEvent({ askId: 'ask-2', paneKey: 'pane-a' })],
+      seq: 2,
+      epoch: 'epoch-a'
+    })
+    const store = createSliceStore()
+
+    await store.getState().hydrateAsks()
+
+    expect(store.getState().globalAsks.map((card) => card.askId)).toEqual(['ask-1'])
+    expect(Object.keys(store.getState().pendingAsksByPaneKey)).toEqual(['pane-a'])
+  })
+
+  it('buffers a no-pane event until hydration resolves', async () => {
+    const { resolve } = stubDeferredSnapshot()
+    const store = createSliceStore()
+
+    const hydration = store.getState().hydrateAsks()
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, seq: 1 }))
+    expect(store.getState().globalAsks).toEqual([])
+
+    resolve(successResponse({ asks: [], seq: 0, epoch: 'epoch-a' }))
+    await hydration
+
+    expect(store.getState().globalAsks.map((card) => card.askId)).toEqual(['ask-1'])
+  })
+
+  it('drops a no-pane event at or below the watermark', async () => {
+    const store = await hydratedStore(5)
+
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, seq: 5 }))
+
+    expect(store.getState().globalAsks).toEqual([])
+  })
+
+  it('auto-dismisses a resolved global ask after the window elapses', async () => {
+    const store = await hydratedStore()
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, seq: 1 }))
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, askId: 'ask-2', seq: 2 }))
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, seq: 3, status: 'answered' }))
+
+    expect(Object.keys(store.getState()._dismissTimers)).toEqual(['ask-1'])
+    expect(store.getState().globalAsks).toHaveLength(2)
+
+    vi.advanceTimersByTime(ASK_DISMISS_DELAY_MS)
+
+    expect(store.getState().globalAsks.map((card) => card.askId)).toEqual(['ask-2'])
+    expect(store.getState()._dismissTimers).toEqual({})
+  })
+
+  it('dismisses a global ask with a null pane key and no-ops for an unknown askId', async () => {
+    const store = await hydratedStore()
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, seq: 1 }))
+
+    store.getState().dismissAsk(null, 'ask-missing')
+    expect(store.getState().globalAsks).toHaveLength(1)
+
+    store.getState().dismissAsk(null, 'ask-1')
+    expect(store.getState().globalAsks).toEqual([])
+  })
+
+  it('clears global asks and their timers when an epoch mismatch discards the slice', async () => {
+    const call = stubSnapshotResult({ asks: [], seq: 0, epoch: 'epoch-a' })
+    const store = createSliceStore()
+    await store.getState().hydrateAsks()
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, seq: 1 }))
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, seq: 2, status: 'answered' }))
+
+    call.mockResolvedValueOnce(successResponse({ asks: [], seq: 1, epoch: 'epoch-b' }))
+    store.getState().applyAskRegistryEvent(makeEvent({ paneKey: null, epoch: 'epoch-b', seq: 99 }))
+
+    expect(store.getState().globalAsks).toEqual([])
     expect(store.getState()._dismissTimers).toEqual({})
   })
 

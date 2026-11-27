@@ -18,15 +18,19 @@ export type AgentLaunchExecutionContext = {
   queuedShell: AgentStartupShell | undefined
 }
 
-/** `null` means the host's OS is unknown; the user has been told why the launch stopped. */
-export function resolveAgentLaunchExecutionContext(
-  store: ReturnType<typeof useAppStore.getState>,
+type AppStoreState = ReturnType<typeof useAppStore.getState>
+
+export type AgentLaunchExecutionContextPeek =
+  | { kind: 'resolved'; context: AgentLaunchExecutionContext }
+  | { kind: 'withheld'; reason: string }
+
+/** Where a new-tab launch would run, without telling the user when the host's OS is unknown. */
+export function peekAgentLaunchExecutionContext(
+  store: AppStoreState,
   args: { worktreeId: string; launchPlatform?: NodeJS.Platform }
-): AgentLaunchExecutionContext | null {
+): AgentLaunchExecutionContextPeek {
   // Why: `undefined` (rival host rows disagree) is not evidence of a remote; main rejects it anyway.
   const worktreeSshConnectionId = getConnectionIdFromState(store, args.worktreeId)
-  // Why: SSH remotes deploy the shim as plain `quirky`, so skip the Linux-only `quirky-ide` rename for remote launches.
-  const isRemote = Boolean(worktreeSshConnectionId)
   // Why getKnownWorktreeById: folder workspaces are not in allWorktrees, and their path marks WSL.
   const workspacePath = (
     store.getKnownWorktreeById?.(args.worktreeId) ??
@@ -35,17 +39,33 @@ export function resolveAgentLaunchExecutionContext(
   // Why: the agent runs on the workspace's execution host, so its OS and shell decide quoting (#22204).
   const fact = resolveWorktreeExecutionHostPlatform(store, args.worktreeId, workspacePath)
   if (fact.kind === 'withheld') {
-    toast.error(fact.reason)
-    return null
+    return { kind: 'withheld', reason: fact.reason }
   }
   const launchHost = refineLocalLaunchPlatform(fact, args.launchPlatform)
   return {
-    worktreeSshConnectionId,
-    resolvedLaunchPlatform: launchHost.platform,
-    isRemote,
-    queuedShell: resolveExecutionHostAgentStartupShell(
-      launchHost,
-      store.settings?.terminalWindowsShell
-    )
+    kind: 'resolved',
+    context: {
+      worktreeSshConnectionId,
+      resolvedLaunchPlatform: launchHost.platform,
+      // Why: SSH remotes deploy the shim as plain `quirky`, so skip the Linux-only `quirky-ide` rename for remote launches.
+      isRemote: Boolean(worktreeSshConnectionId),
+      queuedShell: resolveExecutionHostAgentStartupShell(
+        launchHost,
+        store.settings?.terminalWindowsShell
+      )
+    }
   }
+}
+
+/** `null` means the host's OS is unknown; the user has been told why the launch stopped. */
+export function resolveAgentLaunchExecutionContext(
+  store: AppStoreState,
+  args: { worktreeId: string; launchPlatform?: NodeJS.Platform }
+): AgentLaunchExecutionContext | null {
+  const peek = peekAgentLaunchExecutionContext(store, args)
+  if (peek.kind === 'withheld') {
+    toast.error(peek.reason)
+    return null
+  }
+  return peek.context
 }

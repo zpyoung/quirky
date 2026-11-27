@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { buildHandlerRoutes, dispatch, type HandlerContext } from './dispatch'
 import { HANDLER_GROUPS, type HandlerGroup } from './handler-group-manifest'
+import { GENERATED_COMMANDS } from './specs'
 
 // Why: dispatch trusts the manifest's eager key lists to route without loading a
 // group. These tests are the only thing standing between that trust and a
@@ -70,6 +71,34 @@ describe('handler group manifest', () => {
       }
     }
     expect(unroutable).toEqual([])
+  })
+})
+
+describe('public CLI composition', () => {
+  const routes = buildHandlerRoutes(HANDLER_GROUPS)
+  const generatedKeys = new Set(GENERATED_COMMANDS.specs.map((spec) => spec.path.join(' ')))
+
+  it('routes schema, rpc and events', () => {
+    for (const key of ['schema', 'rpc', 'rpc list', 'events']) {
+      expect(routes.has(key), key).toBe(true)
+    }
+  })
+
+  it('routes every generated command to the generated group', () => {
+    for (const key of generatedKeys) {
+      expect(routes.get(key)?.name, key).toBe('generated')
+    }
+  })
+
+  it('registers the generated group after every hand-written group', () => {
+    expect(HANDLER_GROUPS.at(-1)?.name).toBe('generated')
+  })
+
+  it('exposes a handler for every generated key the group declares', async () => {
+    const generated = HANDLER_GROUPS.find((group) => group.name === 'generated')
+    expect(generated?.keys).toEqual([...generatedKeys])
+    const loaded = await generated?.load()
+    expect(Object.keys(loaded ?? {})).toEqual([...generatedKeys])
   })
 })
 

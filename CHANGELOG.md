@@ -12,7 +12,42 @@ releases that build followed.
 This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). It is maintained by the
 `release` skill — see `.claude/skills/release/SKILL.md`.
 
+## [2.0.0-rc.1] - 2026-11-27
+
+First release of Quirky 2, which continues on the Orca codebase as an independent, macOS-only app.
+The v1 line is archived at the `quirky-v1-final` tag.
+
+### Added
+
+- A native chat view built on the agent-session engine.
+- Import your Orca Dev setup (repos, worktrees, automations, hooks) on first launch, before
+  onboarding. Re-running the import reports only projects it hasn't brought over yet.
+- A new graphite and teal theme.
+- An upstream review skill.
+
+### Changed
+
+- Quirky is now macOS only, and release builds are signed, notarized, and auto-update from this repo.
+- The app, CLI, and bundled skills are renamed from Orca to Quirky. The four skills whose names
+  clashed with Orca's (`computer-use`, `jira-tickets`, `linear-tickets`, `orchestration`) now carry a
+  Quirky prefix, so both apps can be installed side by side.
+- Quirky Mobile no longer points at Orca's store listing or servers.
+
+### Fixed
+
+- First launch no longer replaces Orca Dev's Claude and Codex agent hooks.
+- Settings search no longer surfaces removed WSL and relay settings.
+- Bash prompt marks (OSC 133) no longer emit a duplicate command-start marker on Ubuntu 26.04.
+
+### Removed
+
+- Windows, Linux, and WSL support.
+- The hosted relay and the Stably-hosted services.
+- Bitbucket, Gitea, and Azure DevOps integrations.
+
 ## [2.0.0-rc.0] - 2026-11-26
+
+Not published: the build failed. Superseded by 2.0.0-rc.1.
 
 First release of Quirky 2, which continues on the Orca codebase as an independent, macOS-only app.
 The v1 line is archived at the `quirky-v1-final` tag.

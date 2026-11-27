@@ -127,7 +127,7 @@ describe('quirky cli worktree awareness', () => {
         message: '--points[0].x must be between 0 and 1'
       }
     })
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
 
     process.exitCode = priorExitCode
   })

@@ -253,7 +253,7 @@ describe('quirky cli automation launch overrides', () => {
       ok: false,
       error: { code: 'capability_unsupported' }
     })
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(6)
     process.exitCode = priorExitCode
   })
 })

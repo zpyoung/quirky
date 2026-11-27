@@ -161,7 +161,7 @@ describe('quirky worktree create carries the selected host', () => {
     expect(callMock).toHaveBeenCalledTimes(1)
     const printed = [...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')
     expect(printed).toContain('Ambiguous --project-host-setup setup-1')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     process.exitCode = priorExitCode
   })
 

@@ -12,6 +12,9 @@ export type CommandSpec = {
   // Why: repeatability is per-command vocabulary. `--agent` repeats for `search`
   // and is single-valued for `worktree create`, which one global set cannot say.
   repeatableFlags?: string[]
+  // Why: a value-less boolean flag would otherwise swallow the next positional; only the spec knows
+  // which of its flags are presence flags, as the global set cannot name per-command ones.
+  booleanFlags?: string[]
   positionalArgs?: string[]
   variadicPositional?: boolean
   examples?: string[]

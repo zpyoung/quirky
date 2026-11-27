@@ -54,7 +54,8 @@
 import { getAppEnvironment, hasAppEnvironment } from '../../shared/app-environment'
 import {
   QUIRKY_AGENT_SESSION_ID_ENV,
-  QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV
+  QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV,
+  QUIRKY_OUTPUT_ENV
 } from '../../shared/agent-session-caller-env'
 import {
   QUIRKY_SCRUB_SAFE_LAUNCH_ENV,
@@ -126,6 +127,7 @@ function childIdentity(
   const named: Record<string, string> = {
     ...(identity ? { QUIRKY_TERMINAL_HANDLE: identity.handle } : {}),
     [QUIRKY_AGENT_SESSION_ID_ENV]: sessionId,
+    [QUIRKY_OUTPUT_ENV]: 'json',
     [QUIRKY_STRUCTURED_SESSION_ENV]: '1'
   }
   const env = { ...childEnv, ...named }

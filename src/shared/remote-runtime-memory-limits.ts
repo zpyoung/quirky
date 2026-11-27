@@ -3,7 +3,18 @@ import {
   stringifyJsonWithinByteLimit
 } from './node-bounded-json-stringify'
 import { RemoteRuntimeClientError } from './remote-runtime-client-error'
+import type { CallerHint } from './public-rpc/caller-hint'
 import type { RuntimeOrchestrationEnvelope } from './runtime-rpc-envelope'
+
+/** Request-frame fields only the public CLI sends; a frame without them is byte-identical to a legacy one. */
+export type RemoteRuntimePublicRequestFields = {
+  publicContract?: 1
+  confirm?: boolean
+  caller?: CallerHint
+}
+
+export type RemoteRuntimeRequestEnvelope = RuntimeOrchestrationEnvelope &
+  RemoteRuntimePublicRequestFields
 
 export const REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES = 4 * 1024 * 1024
 // Why: a host refuses a larger client frame by closing the socket (1009), failing every call on it.
@@ -74,7 +85,7 @@ export function serializeRemoteRuntimeRpcRequest(args: {
   deviceToken: string
   method: string
   params: unknown
-  envelope?: RuntimeOrchestrationEnvelope
+  envelope?: RemoteRuntimeRequestEnvelope
 }): string {
   return serializeRemoteRuntimePayload({
     id: args.requestId,
@@ -85,7 +96,12 @@ export function serializeRemoteRuntimeRpcRequest(args: {
     orchestrationContractVersion: args.envelope?.orchestrationContractVersion,
     orchestrationRequestId: args.envelope?.orchestrationRequestId,
     compatibilityInvocationId: args.envelope?.compatibilityInvocationId,
-    orchestrationCompatibilityEvidence: args.envelope?.orchestrationCompatibilityEvidence
+    orchestrationCompatibilityEvidence: args.envelope?.orchestrationCompatibilityEvidence,
+    ...(args.envelope?.publicContract === undefined
+      ? {}
+      : { publicContract: args.envelope.publicContract }),
+    ...(args.envelope?.confirm === undefined ? {} : { confirm: args.envelope.confirm }),
+    ...(args.envelope?.caller === undefined ? {} : { caller: args.envelope.caller })
   })
 }
 

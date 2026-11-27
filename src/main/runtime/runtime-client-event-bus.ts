@@ -11,6 +11,7 @@ export class RuntimeClientEventBus {
   private readonly excludedTerminalSideEffectListeners = new Set<
     (event: RuntimeClientEvent) => void
   >()
+  private readonly terminalSideEffectObservers = new Set<(event: RuntimeClientEvent) => void>()
   private readonly titleGateKeysByListener = new Map<
     (event: RuntimeClientEvent) => void,
     Map<string, string>
@@ -18,13 +19,22 @@ export class RuntimeClientEventBus {
 
   constructor(private readonly deps: RuntimeClientEventBusDeps) {}
 
+  /**
+   * `consumesTerminalSideEffects: false` drops terminal side effects for the listener and keeps it
+   * out of the consumer count. `observesTerminalSideEffects: true` (only with that opt-out) also
+   * receives every batch unfiltered while still never counting as a consumer, so it cannot start
+   * the output scanners and sees batches only while another consumer has them running.
+   */
   on(
     listener: (event: RuntimeClientEvent) => void,
-    options?: { consumesTerminalSideEffects?: boolean }
+    options?: { consumesTerminalSideEffects?: boolean; observesTerminalSideEffects?: boolean }
   ): () => void {
     this.listeners.add(listener)
     if (options?.consumesTerminalSideEffects === false) {
       this.excludedTerminalSideEffectListeners.add(listener)
+      if (options.observesTerminalSideEffects === true) {
+        this.terminalSideEffectObservers.add(listener)
+      }
     } else {
       this.titleGateKeysByListener.set(listener, new Map())
     }
@@ -32,6 +42,7 @@ export class RuntimeClientEventBus {
     return () => {
       this.listeners.delete(listener)
       this.excludedTerminalSideEffectListeners.delete(listener)
+      this.terminalSideEffectObservers.delete(listener)
       this.titleGateKeysByListener.delete(listener)
       this.deps.onConsumerAvailabilityChanged()
     }
@@ -68,6 +79,9 @@ export class RuntimeClientEventBus {
     listener: (event: RuntimeClientEvent) => void,
     event: Extract<RuntimeClientEvent, { type: 'terminalSideEffects' }>
   ): Extract<RuntimeClientEvent, { type: 'terminalSideEffects' }> | null {
+    if (this.terminalSideEffectObservers.has(listener)) {
+      return event
+    }
     const titleGateKeys = this.titleGateKeysByListener.get(listener)
     if (!titleGateKeys) {
       return null

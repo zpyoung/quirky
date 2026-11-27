@@ -64,6 +64,7 @@ describe('sealStructuredSessionChild identity', () => {
     expect(env).toEqual({
       PATH: `${join(RESOURCES, 'bin')}:/usr/bin`,
       QUIRKY_AGENT_SESSION_ID: SESSION_ID,
+      QUIRKY_OUTPUT: 'json',
       // For a CLI that predates the id, which refuses on it instead of guessing a sibling.
       QUIRKY_STRUCTURED_SESSION: '1',
       QUIRKY_CLI_COMMAND: join(RESOURCES, 'bin', 'quirky'),

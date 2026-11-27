@@ -1,4 +1,5 @@
 import { NotificationCardStack } from '../components/NotificationCardStack'
+import { GlobalAskPrompt } from '../components/fork-ask-question-tool/GlobalAskPrompt'
 import { Suspense } from 'react'
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 import { translate } from '@/i18n/i18n'
@@ -290,6 +291,7 @@ export function AppRootSurfaces(props: {
         </Suspense>
       ) : null}
       <NotificationCardStack>
+        <GlobalAskPrompt />
         {shouldMountUpdateCard ? (
           <Suspense fallback={null}>
             <OverlayBoundary boundaryId="overlay.update-card" resetKey={activeView}>

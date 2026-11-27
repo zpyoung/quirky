@@ -27,6 +27,7 @@ import { TAB_LABEL_WIDTH_CLASSES } from './tab-width-rules'
 import { useTabStripSlotProps } from './use-tab-strip-slot-props'
 import { useTabStripPointerActivation } from './tab-strip-pointer-activation'
 import { TerminalTabLeadingIcon } from './TerminalTabLeadingIcon'
+import { AgentTouchMarker } from './agent-touch-marker'
 import {
   isTerminalTabActivityLive,
   terminalTabHasUnreadActivity
@@ -235,6 +236,7 @@ export default function SortableTab({
         // Why: a real DOM child keeps both drop-indicator pseudo-elements free and pointer events reaching the tab.
         <span aria-hidden className="pointer-events-none absolute inset-0 bg-amber-500/10" />
       )}
+      <AgentTouchMarker tabIds={[unifiedTabId, tab.id]} />
       <TerminalTabLeadingIcon
         agent={tabAgent}
         activityStatus={activityStatus}

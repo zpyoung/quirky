@@ -35,9 +35,13 @@ import {
 import { ORCHESTRATION_TARGET_PARAM } from '../orchestration/orchestration-party'
 
 const hostRef = vi.hoisted((): { current: unknown } => ({ current: null }))
-vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry', () => ({
-  getStructuredAgentSessionHost: () => hostRef.current
-}))
+vi.mock(
+  '../../native-chat/agent-session-wire/structured-agent-session-registry',
+  async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    getStructuredAgentSessionHost: () => hostRef.current
+  })
+)
 
 // Fields that can name a party: the caller in ORCHESTRATION_CALLER_PARAM, a target in ORCHESTRATION_TARGET_PARAM.
 const PARTY_NAMING_FIELDS = [

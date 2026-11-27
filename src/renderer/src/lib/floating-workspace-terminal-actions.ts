@@ -200,7 +200,11 @@ export function isFloatingWorkspacePanelFocused(
   doc: Pick<Document, 'activeElement'> | null = typeof document === 'undefined' ? null : document
 ): boolean {
   const active = doc?.activeElement
-  return active instanceof HTMLElement && active.closest(FLOATING_WORKSPACE_PANEL_SELECTOR) !== null
+  return (
+    typeof HTMLElement !== 'undefined' &&
+    active instanceof HTMLElement &&
+    active.closest(FLOATING_WORKSPACE_PANEL_SELECTOR) !== null
+  )
 }
 
 // Event-target-aware panel membership (vs isFloatingWorkspacePanelFocused which reads only activeElement).
