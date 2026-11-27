@@ -40,6 +40,16 @@ What this skill needs is a clean checkout whose content **is** `origin/main`. Th
 exactly that, and they hold on a detached `HEAD` as readily as on the branch, so do not additionally
 require `HEAD` to be the branch `main`.
 
+Confirm the signing secrets exist, because the mac build checks them only after about ten minutes
+of gates:
+
+```sh
+gh secret list --repo zpyoung/quirky --json name --jq '.[].name'
+```
+
+It must list `MAC_CERTS`, `MAC_CERTS_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and
+`APPLE_TEAM_ID`. If any is missing, stop with "needs attention" and name the missing secrets.
+
 Then check the latest nightly quirkyd template qualification, which builds the same template the
 release bundles:
 
