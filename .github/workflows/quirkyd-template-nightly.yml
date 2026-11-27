@@ -1,0 +1,51 @@
+name: Nightly quirkyd template qualification
+
+# PR CI never builds the template, so without this a broken template surfaces only after a release
+# is dispatched.
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quirkyd-template-nightly
+  cancel-in-progress: false
+
+jobs:
+  changed:
+    if: github.repository == 'zpyoung/quirky'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.last.outputs.run }}
+    steps:
+      - name: Skip a main that already qualified
+        id: last
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          qualified="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow quirkyd-template-nightly.yml \
+            --status success --limit 1 --json headSha --jq '.[0].headSha // empty')"
+          if [[ "$EVENT" == "schedule" && "$qualified" == "$GITHUB_SHA" ]]; then
+            echo "main $GITHUB_SHA already qualified."
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          fi
+
+  qualify:
+    needs: changed
+    if: needs.changed.outputs.run == 'true'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/node-server-tests.yml
+    with:
+      build_template: true
